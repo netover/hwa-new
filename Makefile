@@ -12,6 +12,10 @@ fmt:
 
 env:
 	# gera .env.example
-	echo "TWS_HOST= https://tws-master:31116" > .env
-	echo "OPENROUTER_API_KEY= sua-chave-openrouter" >> .env
-	echo "MODEL_PATH=/models/gemma-2b-it-GGUF.Q4_K_M.gguf" >> .env
+	echo "MODEL_PATH=/path/to/your/model.gguf" > .env.example
+	echo "TWS_HOST=https://tws-master:31116" >> .env.example
+	echo "TWS_USERNAME=your_tws_user" >> .env.example
+	echo "TWS_PASSWORD=your_tws_password" >> .env.example
+	echo "OPENROUTER_API_KEY=your_openrouter_key" >> .env.example
+	echo "OPENAI_API_KEY=" >> .env.example
+	echo "TWS_MOCK_MODE=True" >> .env.example
