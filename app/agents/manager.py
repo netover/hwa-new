@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from agno.agent import Agent
+from agno.models.base import Model
 
 from app.core.watcher import watch_config_and_reload
 from app.tools.tws_tool_readonly import TWSToolReadOnly
@@ -90,7 +91,8 @@ class AgentManager:
         self.agents.clear()
 
         # Configura o dispatcher com o modelo padrão
-        dispatcher_agent.model = self._config.get("default_model", "openrouter/auto")
+        dispatcher_model_id = self._config.get("default_model", "openrouter/auto")
+        dispatcher_agent.model = Model(id=dispatcher_model_id)
         self.agents["dispatcher"] = dispatcher_agent
 
         # Cria agentes especialistas com base na configuração
@@ -102,10 +104,11 @@ class AgentManager:
                     for tool_name in agent_config.get("tools", [])
                     if tool_name in self.tools
                 ]
+                model_id = agent_config.get("model", dispatcher_model_id)
 
                 self.agents[agent_name] = Agent(
                     name=agent_name,
-                    model=agent_config.get("model", self._config.get("default_model")),
+                    model=Model(id=model_id),
                     tools=agent_tools,
                     role=agent_config.get("role"),
                     instructions=agent_config.get("instructions"),

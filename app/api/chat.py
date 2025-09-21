@@ -45,12 +45,14 @@ async def chat_endpoint(chat_request: ChatRequest) -> ChatResponse:
         )
 
     try:
+        print(f"DEBUG: Chat request received: {chat_request.model_dump_json()}")
         # Roteia a mensagem através do agente dispatcher do AGNO
         result = await agent_manager.dispatcher.run(
             chat_request.message,
             session_id=chat_request.session_id,
             context=chat_request.context,
         )
+        print(f"DEBUG: Result from agent manager: {result}")
     except Exception as e:
         # Captura exceções durante a execução do agente para fornecer um erro claro.
         raise HTTPException(
