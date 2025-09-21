@@ -22,14 +22,14 @@ def mock_config_file(tmp_path: Path) -> Path:
     config_file = config_dir / "runtime.json"
     config_data = {
         "default_model": "mock_model",
-        "agents": [
-            {
-                "name": "TWS_Monitor",
+        "agents": {
+            "TWS_Monitor": {
                 "enabled": True,
+                "provider": "openrouter",
                 "tools": ["tws_readonly"],
                 "role": "Test TWS Monitor",
             }
-        ],
+        },
     }
     config_file.write_text(json.dumps(config_data))
     return config_file
@@ -71,13 +71,13 @@ async def test_manager_reload_agents_from_dict(manager: AgentManager) -> None:
     """
     new_config = {
         "default_model": "reloaded_model",
-        "agents": [
-            {
-                "name": "New_Agent",
+        "agents": {
+            "New_Agent": {
                 "enabled": True,
+                "provider": "openrouter",
                 "role": "A newly reloaded agent",
             }
-        ],
+        },
     }
 
     # Manually initialize tools as initialize() would do
@@ -89,4 +89,5 @@ async def test_manager_reload_agents_from_dict(manager: AgentManager) -> None:
     assert "New_Agent" in manager.agents
     assert "TWS_Monitor" not in manager.agents  # Old agent should be gone
     assert manager.agents["New_Agent"].role == "A newly reloaded agent"
-    assert manager.dispatcher.model == "reloaded_model"
+    assert manager.dispatcher is not None
+    assert manager.dispatcher.model.id == "reloaded_model"

@@ -9,3 +9,5 @@ pypdf>=3.10.0
 httpx
 watchfiles
 sse-starlette
+anthropic
+openai
