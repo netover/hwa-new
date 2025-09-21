@@ -1,7 +1,6 @@
-import asyncio
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -91,3 +90,55 @@ async def test_manager_reload_agents_from_dict(manager: AgentManager) -> None:
     assert manager.agents["New_Agent"].role == "A newly reloaded agent"
     assert manager.dispatcher is not None
     assert manager.dispatcher.model.id == "reloaded_model"
+
+
+@pytest.mark.asyncio
+async def test_tws_monitor_agent_triggers_rag_on_abend(
+    manager: AgentManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Tests the full RAG integration flow for the TWS_Monitor agent.
+    """
+    # 1. Setup Mocks
+    mock_tws_run = AsyncMock(
+        return_value={
+            "jobs_found": 1,
+            "jobs": [{"name": "CRITICAL_JOB", "status": "ABEND"}],
+        }
+    )
+    monkeypatch.setattr("app.tools.tws_tool_readonly.TWSToolReadOnly.run", mock_tws_run)
+
+    mock_kb_search = MagicMock(
+        return_value={"solution": "Restart the database service."}
+    )
+    monkeypatch.setattr(
+        "app.services.knowledge_service.KnowledgeBaseService.search_for_solution",
+        mock_kb_search,
+    )
+
+    # 2. Load the agent configuration
+    # This config enables the TWS_Monitor
+    config = {
+        "agents": {
+            "TWS_Monitor": {"enabled": True, "tools": ["tws_readonly"]},
+        }
+    }
+    await manager.initialize_tools()
+    await manager.reload_agents_from_file(config)
+
+    # 3. Get the enhanced agent and run it
+    tws_agent = manager.agents.get("TWS_Monitor")
+    assert tws_agent is not None
+
+    result = await tws_agent.run("get_job_status", name="CRITICAL_JOB")
+
+    # 4. Assertions
+    # Ensure the TWS tool was called
+    mock_tws_run.assert_awaited_once_with("get_job_status", name="CRITICAL_JOB")
+
+    # Ensure the knowledge base was searched because the job was in ABEND
+    mock_kb_search.assert_called_once_with("CRITICAL_JOB")
+
+    # Ensure the final result is augmented with the RAG info
+    assert "knowledge_base_info" in result
+    assert result["knowledge_base_info"]["solution"] == "Restart the database service."

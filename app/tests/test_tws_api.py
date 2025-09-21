@@ -1,5 +1,7 @@
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import MagicMock
+
 from app.tools.tws_tool_readonly import TWSToolReadOnly
 
 
@@ -60,3 +62,27 @@ async def test_tws_tool_unhandled_mock_operation(tws_tool: TWSToolReadOnly) -> N
     assert result["mock"] is True
     assert result["operation"] == "get_job_history"
     assert result["args"]["job_id"] == 123
+
+
+@pytest.mark.asyncio
+async def test_tws_tool_real_mode_calls_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verifica se a ferramenta, em modo real, chama o cliente otimizado.
+    """
+    # Força o modo não-mock
+    monkeypatch.setattr("app.tools.tws_tool_readonly.settings.TWS_MOCK_MODE", False)
+
+    # Mock do cliente otimizado para não fazer chamadas reais
+    mock_make_request = AsyncMock(return_value={"data": "real_data"})
+    monkeypatch.setattr(
+        "app.services.tws_client.OptimizedTWSClient.make_request",
+        mock_make_request
+    )
+
+    tool = TWSToolReadOnly()
+    await tool.run("get_job_status", workstation="CPU_MASTER")
+
+    # Verifica se o método do cliente foi chamado corretamente
+    mock_make_request.assert_awaited_once_with(
+        "/plan/job", params={"workstation": "CPU_MASTER"}
+    )

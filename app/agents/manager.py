@@ -1,7 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from agno.agent import Agent
 from agno.models.anthropic.claude import Claude
@@ -10,6 +10,7 @@ from agno.models.openai.chat import OpenAIChat
 from agno.models.openrouter.openrouter import OpenRouter
 
 from app.core.watcher import watch_config_and_reload
+from app.services.knowledge_service import KnowledgeBaseService
 from app.tools.tws_tool_readonly import TWSToolReadOnly
 
 # Importa o agente dispatcher pré-configurado
@@ -22,6 +23,7 @@ class AgentManager:
     def __init__(self) -> None:
         self.agents: Dict[str, Agent] = {}
         self.tools: Dict[str, Any] = {}
+        self.knowledge_service: Optional[KnowledgeBaseService] = None
         self._config: Dict[str, Any] = {}
         self._watcher_task: asyncio.Task[None] | None = None
 
@@ -33,6 +35,12 @@ class AgentManager:
     async def initialize_tools(self) -> None:
         """Inicializa e registra as ferramentas disponíveis."""
         self.tools["tws_readonly"] = TWSToolReadOnly()
+
+        # Inicializa e carrega a base de conhecimento
+        # TODO: Tornar o path do arquivo configurável
+        self.knowledge_service = KnowledgeBaseService("config/knowledge_base.xlsx")
+        self.knowledge_service.load_kb()
+        self.tools["knowledge_search"] = self.knowledge_service
 
     async def initialize(self) -> None:
         """
@@ -119,13 +127,56 @@ class AgentManager:
 
         # Cria agentes especialistas
         for agent_name, agent_config in agents_config.items():
-            if agent_name != "dispatcher" and agent_config.get("enabled", False):
-                agent_tools = [
-                    self.tools[tool_name]
-                    for tool_name in agent_config.get("tools", [])
-                    if tool_name in self.tools
-                ]
+            if agent_name == "dispatcher" or not agent_config.get("enabled", False):
+                continue
 
+            agent_tools = [
+                self.tools[tool_name]
+                for tool_name in agent_config.get("tools", [])
+                if tool_name in self.tools
+            ]
+
+            # Lógica especial para o TWS_Monitor com RAG
+            if agent_name == "TWS_Monitor":
+                tws_tool = self.tools.get("tws_readonly")
+                kb_service = self.knowledge_service
+
+                async def tws_rag_run(
+                    operation: str,
+                    *,
+                    tws_tool=tws_tool,
+                    kb_service=kb_service,
+                    **kwargs: Any,
+                ) -> Dict[str, Any]:
+                    print(f"DEBUG: TWS_Monitor RAG run. Op: {operation}, args: {kwargs}")
+                    job_status_result: Dict[str, Any] = await tws_tool.run(
+                        operation, **kwargs
+                    )
+
+                    # Verifica se a operação foi sobre o status de um job e se falhou
+                    if operation == "get_job_status" and job_status_result.get("jobs"):
+                        main_job_info = job_status_result["jobs"][0]
+                        if main_job_info.get("status") == "ABEND":
+                            job_name = main_job_info.get("name")
+                            print(f"DEBUG: Job {job_name} em ABEND. Buscando na base de conhecimento...")
+                            kb_solution = kb_service.search_for_solution(job_name)
+                            if kb_solution:
+                                job_status_result["knowledge_base_info"] = kb_solution
+
+                    return job_status_result
+
+                # Cria o agente, mas sobrescreve o método 'run' pela nossa função com RAG
+                agent = Agent(
+                    name=agent_name,
+                    model=self._get_model_instance(agent_config, default_model_id),
+                    tools=agent_tools, # O agente ainda precisa saber das ferramentas
+                    role=agent_config.get("role"),
+                    instructions=agent_config.get("instructions"),
+                )
+                agent.run = tws_rag_run
+                self.agents[agent_name] = agent
+            else:
+                # Cria outros agentes normalmente
                 self.agents[agent_name] = Agent(
                     name=agent_name,
                     model=self._get_model_instance(agent_config, default_model_id),
@@ -133,7 +184,8 @@ class AgentManager:
                     role=agent_config.get("role"),
                     instructions=agent_config.get("instructions"),
                 )
-                print(f"  -> Agente '{agent_name}' carregado com o modelo '{agent_config.get('model')}'.")
+
+            print(f"  -> Agente '{agent_name}' carregado com o modelo '{agent_config.get('model')}'.")
 
         print("✅ Agentes recarregados com sucesso.")
 

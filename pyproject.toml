@@ -21,6 +21,8 @@ module = [
     "gitdb.*",
     "smmap.*",
     "fastapi.*",
+    "pydantic_settings.*",
+    "pytest.*",
     "pydantic.*",
     "httpx.*"
 ]

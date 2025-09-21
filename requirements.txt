@@ -6,7 +6,7 @@ pandas>=2.1.0
 openpyxl>=3.1.0
 python-docx>=1.0.0
 pypdf>=3.10.0
-httpx
+httpx[http2]
 watchfiles
 sse-starlette
 anthropic

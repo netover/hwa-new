@@ -4,28 +4,26 @@ from typing import Any, Dict, Optional
 from agno.tools.toolkit import Toolkit
 
 from app.core.config import settings
+from app.services.tws_client import OptimizedTWSClient
 
 
 class TWSToolReadOnly(Toolkit):
     def __init__(self) -> None:
         super().__init__(name="tws_readonly")
         self.mock: bool = settings.TWS_MOCK_MODE
-        self.session_token: Optional[str] = None
 
-        if self.mock:
-            print("🔧 TWSToolReadOnly operando em MODO MOCK.")
+        # Apenas inicializa o cliente real se não estiver em modo mock
+        self.client: Optional[OptimizedTWSClient] = None
+        if not self.mock:
+            self.client = OptimizedTWSClient()
+            print("⚡ TWSToolReadOnly operando em MODO REAL com cliente otimizado.")
         else:
-            print("⚡ TWSToolReadOnly operando em MODO REAL.")
+            print("🔧 TWSToolReadOnly operando em MODO MOCK.")
 
     async def run(self, operation: str, **kwargs: Any) -> Dict[str, Any]:
         allowed_operations = {
-            "get_job_status",
-            "get_jobstream_status",
-            "get_engine_status",
-            "get_system_status",
-            "get_job_history",
-            "get_job_output",
-            "search_jobs",
+            "get_job_status", "get_jobstream_status", "get_engine_status",
+            "get_system_status", "get_job_history", "get_job_output", "search_jobs"
         }
 
         if operation not in allowed_operations:
@@ -34,28 +32,35 @@ class TWSToolReadOnly(Toolkit):
                 "details": f"A operação '{operation}' não é permitida. Apenas operações de leitura são ativadas.",
             }
 
-        if self.mock:
+        if self.mock or not self.client:
             return await self._mock_response(operation, **kwargs)
-
-        # Lógica para chamadas reais na API TWS
-        if not self.session_token:
-            await self._authenticate()
 
         return await self._execute_readonly(operation, **kwargs)
 
-    async def _authenticate(self) -> Dict[str, str]:
-        # Esta é uma implementação de mock/placeholder.
-        # A lógica real de autenticação com a API TWS deve ser implementada aqui.
-        print("Authenticating with TWS API (real)...")
-        self.session_token = "real-token-placeholder"  # O token seria obtido da API
-        return {"status": "authenticated"}
-
     async def _execute_readonly(self, operation: str, **kwargs: Any) -> Dict[str, Any]:
-        # Esta é uma implementação de mock/placeholder.
-        # A lógica real para executar as chamadas GET na API TWS seria implementada aqui,
-        # possivelmente usando um cliente HTTP como o httpx.
-        print(f"Executing REAL operation: {operation} with args: {kwargs}")
-        return {"mock": False, "operation": operation, "data": "dados da API real aqui"}
+        """
+        Executa uma operação de leitura na API TWS usando o cliente otimizado.
+        """
+        # Mapeamento de operações para endpoints da API TWS (exemplo)
+        endpoint_map = {
+            "get_job_status": "/plan/job",
+            "get_system_status": "/system/status",
+            # Adicionar outros endpoints aqui
+        }
+
+        endpoint = endpoint_map.get(operation)
+        if not endpoint:
+            return {"error": f"Operação '{operation}' não mapeada para um endpoint."}
+
+        if not self.client:
+            return {"error": "Cliente TWS não inicializado. Verifique se não está em modo mock."}
+
+        try:
+            # Os kwargs podem ser passados como `params` para a requisição GET
+            return await self.client.make_request(endpoint, params=kwargs)
+        except Exception as e:
+            print(f"❌ Erro ao executar operação '{operation}': {e}")
+            return {"error": str(e)}
 
     async def _mock_response(self, operation: str, **kwargs: Any) -> Dict[str, Any]:
         # Respostas simuladas para um ambiente de desenvolvimento/teste.
