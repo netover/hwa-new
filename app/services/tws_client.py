@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 import httpx
 
+from app.core.caching import cache_response
 from app.core.config import settings
 
 
@@ -71,3 +72,26 @@ class OptimizedTWSClient:
 
         # Este ponto não deveria ser alcançado, mas garante que a função sempre retorne ou levante erro.
         raise Exception("Falha na requisição após múltiplas tentativas.")
+
+    async def __aenter__(self) -> "OptimizedTWSClient":
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        await self.close()
+
+    # --- Métodos de Consulta Específicos com Cache ---
+
+    @cache_response(ttl_seconds=30)
+    async def get_system_status(self) -> Dict[str, Any]:
+        """Busca o status geral do sistema."""
+        return await self.make_request("/system/status")
+
+    @cache_response(ttl_seconds=15)
+    async def get_engine_status(self) -> Dict[str, Any]:
+        """Busca o status de todos os motores."""
+        return await self.make_request("/engine/status")
+
+    @cache_response(ttl_seconds=10)
+    async def get_job_status(self, **kwargs: Any) -> Dict[str, Any]:
+        """Busca o status de um ou mais jobs, com base nos filtros."""
+        return await self.make_request("/plan/job", params=kwargs)

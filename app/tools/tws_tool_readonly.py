@@ -39,25 +39,22 @@ class TWSToolReadOnly(Toolkit):
 
     async def _execute_readonly(self, operation: str, **kwargs: Any) -> Dict[str, Any]:
         """
-        Executa uma operação de leitura na API TWS usando o cliente otimizado.
+        Executa uma operação de leitura na API TWS usando os métodos
+        específicos e cacheados do cliente otimizado.
         """
-        # Mapeamento de operações para endpoints da API TWS (exemplo)
-        endpoint_map = {
-            "get_job_status": "/plan/job",
-            "get_system_status": "/system/status",
-            # Adicionar outros endpoints aqui
-        }
-
-        endpoint = endpoint_map.get(operation)
-        if not endpoint:
-            return {"error": f"Operação '{operation}' não mapeada para um endpoint."}
-
         if not self.client:
             return {"error": "Cliente TWS não inicializado. Verifique se não está em modo mock."}
 
         try:
-            # Os kwargs podem ser passados como `params` para a requisição GET
-            return await self.client.make_request(endpoint, params=kwargs)
+            if operation == "get_job_status":
+                return await self.client.get_job_status(**kwargs)
+            elif operation == "get_system_status":
+                return await self.client.get_system_status()
+            elif operation == "get_engine_status":
+                return await self.client.get_engine_status()
+            else:
+                # Fallback para operações não cacheadas ou mais genéricas
+                return {"error": f"A operação real para '{operation}' não está implementada."}
         except Exception as e:
             print(f"❌ Erro ao executar operação '{operation}': {e}")
             return {"error": str(e)}
