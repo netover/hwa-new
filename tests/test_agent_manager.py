@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from resync.core.agent_manager import AgentManager, AgentsConfig
+from resync.core.agent_manager import AgentManager
 
 
 @pytest.fixture

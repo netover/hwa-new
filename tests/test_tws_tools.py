@@ -29,8 +29,18 @@ async def test_tws_status_tool_success(mock_tws_client):
             {"name": "CPU2", "status": "DOWN", "type": "FTA"},
         ],
         jobs=[
-            {"name": "JOB1", "workstation": "CPU1", "status": "SUCC", "job_stream": "JS1"},
-            {"name": "JOB2", "workstation": "CPU2", "status": "ABEND", "job_stream": "JS2"},
+            {
+                "name": "JOB1",
+                "workstation": "CPU1",
+                "status": "SUCC",
+                "job_stream": "JS1",
+            },
+            {
+                "name": "JOB2",
+                "workstation": "CPU2",
+                "status": "ABEND",
+                "job_stream": "JS2",
+            },
         ],
         critical_jobs=[],
     )
@@ -62,8 +72,18 @@ async def test_tws_troubleshooting_tool_finds_failures(mock_tws_client):
             {"name": "CPU2", "status": "DOWN", "type": "FTA"},
         ],
         jobs=[
-            {"name": "JOB1", "workstation": "CPU1", "status": "SUCC", "job_stream": "JS1"},
-            {"name": "JOB2", "workstation": "CPU2", "status": "ABEND", "job_stream": "JS2"},
+            {
+                "name": "JOB1",
+                "workstation": "CPU1",
+                "status": "SUCC",
+                "job_stream": "JS1",
+            },
+            {
+                "name": "JOB2",
+                "workstation": "CPU2",
+                "status": "ABEND",
+                "job_stream": "JS2",
+            },
         ],
         critical_jobs=[],
     )
@@ -89,7 +109,14 @@ async def test_tws_troubleshooting_tool_no_failures(mock_tws_client):
     # Arrange
     mock_status = SystemStatus(
         workstations=[{"name": "CPU1", "status": "LINKED", "type": "FTA"}],
-        jobs=[{"name": "JOB1", "workstation": "CPU1", "status": "SUCC", "job_stream": "JS1"}],
+        jobs=[
+            {
+                "name": "JOB1",
+                "workstation": "CPU1",
+                "status": "SUCC",
+                "job_stream": "JS1",
+            }
+        ],
         critical_jobs=[],
     )
     mock_tws_client.get_system_status.return_value = mock_status

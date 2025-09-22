@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from agno.client import Client
 from agno.tools import Tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
@@ -91,10 +91,12 @@ class AgentManager:
         if not self.tws_client:
             logger.info("Initializing OptimizedTWSClient for the first time.")
             self.tws_client = OptimizedTWSClient(
+                protocol=settings.TWS_PROTOCOL,
                 hostname=settings.TWS_HOST,
                 port=settings.TWS_PORT,
                 username=settings.TWS_USER,
                 password=settings.TWS_PASSWORD,
+                ssl_verify=settings.TWS_SSL_VERIFY,
                 engine_name=settings.TWS_ENGINE_NAME,
                 engine_owner=settings.TWS_ENGINE_OWNER,
             )
@@ -127,7 +129,9 @@ class AgentManager:
             logger.error(f"Error decoding JSON from {config_path}", exc_info=True)
             self.agents = {}
         except Exception:
-            logger.error(f"An unexpected error occurred while loading agents", exc_info=True)
+            logger.error(
+                "An unexpected error occurred while loading agents", exc_info=True
+            )
             self.agents = {}
 
     def _create_agents(self, agent_configs: List[AgentConfig]) -> Dict[str, Any]:
@@ -140,7 +144,11 @@ class AgentManager:
 
         for config in agent_configs:
             try:
-                agent_tools = [self.tools[tool_name] for tool_name in config.tools if tool_name in self.tools]
+                agent_tools = [
+                    self.tools[tool_name]
+                    for tool_name in config.tools
+                    if tool_name in self.tools
+                ]
 
                 # Using agno.Client to create the agent instance
                 agent = Client(
@@ -160,7 +168,9 @@ class AgentManager:
                 agents[config.id] = agent
                 logger.debug(f"Successfully created agent: {config.id}")
             except KeyError as e:
-                logger.warning(f"Tool '{e.args[0]}' not found for agent '{config.id}'. Agent will be created without it.")
+                logger.warning(
+                    f"Tool '{e.args[0]}' not found for agent '{config.id}'. Agent will be created without it."
+                )
             except Exception:
                 logger.error(f"Failed to create agent '{config.id}'", exc_info=True)
         return agents

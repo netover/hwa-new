@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from watchfiles import awatch
 
@@ -31,9 +32,7 @@ async def lifespan(app: FastAPI):
     agent_manager.load_agents_from_config()
 
     # Start the configuration file watcher in the background
-    watcher_task = asyncio.create_task(
-        watch_config_changes(settings.AGENT_CONFIG_PATH)
-    )
+    watcher_task = asyncio.create_task(watch_config_changes(settings.AGENT_CONFIG_PATH))
     logger.info(f"Started configuration watcher for '{settings.AGENT_CONFIG_PATH}'")
 
     yield
@@ -76,21 +75,21 @@ app.include_router(api_router, prefix="/api")
 app.include_router(chat_router)
 
 # Serve static files (CSS, JS) from the 'static' directory
+app.mount("/static", StaticFiles(directory=settings.BASE_DIR / "static"), name="static")
+
+# Serve the main dashboard html file from the 'templates' directory
 app.mount(
-    "/static",
-    StaticFiles(directory=settings.BASE_DIR / "static"),
-    name="static",
+    "/dashboard",
+    StaticFiles(directory=settings.BASE_DIR / "templates", html=True),
+    name="dashboard",
 )
 
 
 # --- Root Endpoint ---
 @app.get("/", include_in_schema=False)
-async def root():
+async def root() -> RedirectResponse:
     """
-
     Redirects the root URL to the main dashboard page.
     This is a convenience for users accessing the base URL.
     """
-    from fastapi.responses import RedirectResponse
-
-    return RedirectResponse(url="/dashboard", status_code=302)
+    return RedirectResponse(url="/dashboard/index.html", status_code=302)

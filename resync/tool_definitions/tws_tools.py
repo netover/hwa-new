@@ -56,7 +56,10 @@ class TWSStatusTool(TWSToolReadOnly):
                 [f"{ws.name} ({ws.status})" for ws in status.workstations]
             )
             job_summary = ", ".join(
-                [f"{job.name} on {job.workstation} ({job.status})" for job in status.jobs]
+                [
+                    f"{job.name} on {job.workstation} ({job.status})"
+                    for job in status.jobs
+                ]
             )
 
             return (
@@ -91,20 +94,28 @@ class TWSTroubleshootingTool(TWSToolReadOnly):
             status = await self.tws_client.get_system_status()
 
             failed_jobs = [j for j in status.jobs if j.status.upper() == "ABEND"]
-            down_workstations = [w for w in status.workstations if w.status.upper() != "LINKED"]
+            down_workstations = [
+                w for w in status.workstations if w.status.upper() != "LINKED"
+            ]
 
             if not failed_jobs and not down_workstations:
-                return "Nenhuma falha crítica encontrada. O ambiente TWS parece estável."
+                return (
+                    "Nenhuma falha crítica encontrada. O ambiente TWS parece estável."
+                )
 
             analysis = "Análise de Problemas no TWS:\n"
             if failed_jobs:
                 analysis += f"- Jobs com Falha ({len(failed_jobs)}): "
-                analysis += ", ".join([f"{j.name} (workstation: {j.workstation})" for j in failed_jobs])
+                analysis += ", ".join(
+                    [f"{j.name} (workstation: {j.workstation})" for j in failed_jobs]
+                )
                 analysis += "\n"
 
             if down_workstations:
                 analysis += f"- Workstations com Problemas ({len(down_workstations)}): "
-                analysis += ", ".join([f"{w.name} (status: {w.status})" for w in down_workstations])
+                analysis += ", ".join(
+                    [f"{w.name} (status: {w.status})" for w in down_workstations]
+                )
                 analysis += "\n"
 
             return analysis

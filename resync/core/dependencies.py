@@ -30,7 +30,9 @@ def get_tws_client() -> Generator[OptimizedTWSClient, None, None]:
     except Exception as e:
         # This is a critical failure, as the application cannot function
         # without a TWS client.
-        logger.error(f"Failed to retrieve TWS client from AgentManager: {e}", exc_info=True)
+        logger.error(
+            f"Failed to retrieve TWS client from AgentManager: {e}", exc_info=True
+        )
         # In a real application, you might raise a specific HTTPException here
         # to prevent the endpoint from executing with a null client.
         # For now, we allow the error to propagate.

@@ -48,7 +48,9 @@ class ConnectionManager:
 
         logger.info(f"Broadcasting message to {len(self.active_connections)} clients.")
         # Create a list of tasks to send messages concurrently
-        tasks = [connection.send_text(message) for connection in self.active_connections]
+        tasks = [
+            connection.send_text(message) for connection in self.active_connections
+        ]
         # In a high-load scenario, you might want to handle exceptions here
         # for failed sends, but for now, we keep it simple.
         for task in tasks:
@@ -66,7 +68,9 @@ class ConnectionManager:
             logger.info("JSON broadcast requested, but no active connections.")
             return
 
-        logger.info(f"Broadcasting JSON data to {len(self.active_connections)} clients.")
+        logger.info(
+            f"Broadcasting JSON data to {len(self.active_connections)} clients."
+        )
         tasks = [connection.send_json(data) for connection in self.active_connections]
         for task in tasks:
             try:
