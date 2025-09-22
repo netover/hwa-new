@@ -7,6 +7,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from resync.core.agent_manager import agent_manager
 from resync.core.connection_manager import connection_manager
+from resync.core.knowledge_graph import knowledge_graph
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ chat_router = APIRouter()
 async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     """
     Handles the WebSocket connection for real-time chat with a specific agent.
+    Enhances responses with RAG (Retrieval-Augmented Generation) using the Knowledge Graph.
     """
     await connection_manager.connect(websocket)
     agent: Client | None = agent_manager.get_agent(agent_id)
@@ -57,10 +59,23 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
                 {"type": "message", "sender": "user", "message": data}
             )
 
+            # --- RAG Enhancement ---
+            # Fetch relevant past solutions from the Knowledge Graph
+            context = knowledge_graph.get_relevant_context(data)
+            logger.debug(f"Retrieved knowledge graph context: {context[:200]}...")
+
             # --- Agent Interaction ---
             # Stream the agent's response back to the client chunk by chunk
+            # Inject the context into the agent's system prompt via the input
+            enhanced_query = f"""
+Contexto de soluções anteriores:
+{context}
+
+Pergunta do usuário:
+{data}
+"""
             response_message = ""
-            async for chunk in agent.stream(data):
+            async for chunk in agent.stream(enhanced_query):
                 response_message += chunk
                 await websocket.send_json(
                     {"type": "stream", "sender": "agent", "message": chunk}
@@ -76,6 +91,15 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
                 }
             )
             logger.info(f"Agent '{agent_id}' full response: {response_message}")
+
+            # --- Store Interaction in Knowledge Graph ---
+            # Log the interaction for continuous learning
+            knowledge_graph.add_conversation(
+                user_query=data,
+                agent_response=response_message,
+                agent_id=agent_id,
+                context={"agent_config": agent_manager.get_agent(agent_id).__dict__ if agent_manager.get_agent(agent_id) else "N/A"}
+            )
 
     except WebSocketDisconnect:
         # Handle client disconnection gracefully

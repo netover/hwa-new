@@ -13,6 +13,7 @@ from resync.api.chat import chat_router
 from resync.api.endpoints import api_router
 from resync.core.agent_manager import agent_manager
 from resync.core.config_watcher import handle_config_change
+from resync.core.knowledge_graph import knowledge_graph  # NEW IMPORT
 from resync.settings import settings
 
 # Configure logging
@@ -35,6 +36,13 @@ async def lifespan(app: FastAPI):
         watch_config_changes(settings.AGENT_CONFIG_PATH)
     )
     logger.info(f"Started configuration watcher for '{settings.AGENT_CONFIG_PATH}'")
+
+    # Initialize the Knowledge Graph (this will also initialize the Qdrant server)
+    # Note: Mem0 will start its own server on localhost:6333
+    logger.info("Initializing Knowledge Graph for continuous learning...")
+    # This instantiation is lightweight and will not block startup
+    # The Qdrant server will start on first use
+    knowledge_graph  # Ensure it's loaded
 
     yield
 
