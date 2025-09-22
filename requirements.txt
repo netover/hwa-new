@@ -11,3 +11,5 @@ watchfiles
 sse-starlette
 anthropic
 openai
+sentence-transformers
+networkx
