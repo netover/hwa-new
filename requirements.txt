@@ -13,3 +13,7 @@ anthropic
 openai
 sentence-transformers
 networkx
+mem0
+redis>=4.0.0
+orjson>=3.8.0
+apscheduler

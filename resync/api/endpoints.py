@@ -1,18 +1,15 @@
 from __future__ import annotations
 
 import logging
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
+from resync.core.agent_manager import AgentConfig, agent_manager
 from resync.core.dependencies import get_tws_client
 from resync.core.metrics import metrics_registry
-from resync.models.tws import (
-    CriticalJob,
-    JobStatus,
-    SystemStatus,
-    WorkstationStatus,
-)
+from resync.models.tws import SystemStatus
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
 
@@ -34,6 +31,15 @@ async def get_dashboard():
         logger.error("Dashboard index.html not found at path: %s", index_path)
         raise HTTPException(status_code=404, detail="Interface do dashboard não encontrada.")
     return index_path.read_text()
+
+
+# --- Agent Endpoints ---
+@api_router.get("/agents", response_model=List[AgentConfig], summary="Get All Agent Configurations")
+def get_all_agents():
+    """
+    Returns the full configuration for all loaded agents.
+    """
+    return agent_manager.get_all_agents()
 
 
 # --- System Status Endpoints ---
@@ -88,7 +94,9 @@ async def get_tws_health(tws_client: OptimizedTWSClient = Depends(get_tws_client
 
 
 # --- Metrics Endpoint ---
-@api_router.get("/metrics", summary="Get Application Metrics")
+@api_router.get("/metrics", summary="Get Application Metrics", response_class=PlainTextResponse)
 def get_metrics():
-    """Returns a snapshot of all collected application metrics."""
-    return metrics_registry.get_metrics()
+    """
+    Returns application metrics in Prometheus text exposition format.
+    """
+    return metrics_registry.generate_prometheus_metrics()

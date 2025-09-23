@@ -1,0 +1,34 @@
+{
+  "workstations_status": [
+    {
+      "name": "CPU_WS",
+      "status": "LINKED",
+      "type": "CPU"
+    },
+    {
+      "name": "FT_WS",
+      "status": "LINKED",
+      "type": "FT"
+    }
+  ],
+  "jobs_status": [
+    {
+      "name": "JOB_A",
+      "workstation": "CPU_WS",
+      "status": "SUCC"
+    },
+    {
+      "name": "JOB_B",
+      "workstation": "FT_WS",
+      "status": "ABEND"
+    }
+  ],
+  "critical_path_status": [
+    {
+      "name": "CRITICAL_JOB_1",
+      "workstation": "CPU_WS",
+      "status": "SUCC"
+    }
+  ],
+  "connection_status": true
+}

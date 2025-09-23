@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import logging
+import asyncio
+
+from resync.core.ia_auditor import analyze_and_flag_memories
 
 from agno.client import Client
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -14,6 +17,17 @@ logger = logging.getLogger(__name__)
 
 # --- APIRouter Initialization ---
 chat_router = APIRouter()
+
+
+async def run_auditor_safely():
+    """
+    Executes the IA auditor in a safe context, catching and logging any exceptions
+    to prevent the background task from dying silently.
+    """
+    try:
+        await analyze_and_flag_memories()
+    except Exception:
+        logger.error("IA Auditor background task failed unexpectedly.", exc_info=True)
 
 
 @chat_router.websocket("/ws/{agent_id}")
@@ -100,6 +114,11 @@ Pergunta do usuário:
                 agent_id=agent_id,
                 context={"agent_config": agent_manager.get_agent(agent_id).__dict__ if agent_manager.get_agent(agent_id) else "N/A"}
             )
+
+            # --- IA Auditor ---
+            # Recommendation 3: Run the auditor in a safe background task
+            logger.info("Scheduling IA Auditor to run in the background.")
+            asyncio.create_task(run_auditor_safely())
 
     except WebSocketDisconnect:
         # Handle client disconnection gracefully

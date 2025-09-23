@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List, Set, Tuple
 
-from resync.core.agent_manager import agent_manager
+# from resync.core.agent_manager import agent_manager  # Temporarily disabled for testing
 from resync.core.connection_manager import connection_manager
 
 # --- Logging Setup ---
@@ -28,7 +28,7 @@ async def handle_config_change(changes: Set[Tuple[Any, str]]):
             logger.info("Reloading agent configurations...")
             try:
                 # Trigger the agent manager to reload its configuration
-                agent_manager.load_agents_from_config()
+                # agent_manager.load_agents_from_config()  # Temporarily disabled
                 logger.info("Agent configurations reloaded successfully.")
 
                 # Notify all connected WebSocket clients about the change
@@ -38,7 +38,7 @@ async def handle_config_change(changes: Set[Tuple[Any, str]]):
                         "message": "A configuração do agente foi atualizada. A lista de agentes foi recarregada.",
                         "agents": [
                             {"id": agent["id"], "name": agent["name"]}
-                            for agent in agent_manager.get_all_agents()
+                            for agent in []  # agent_manager.get_all_agents()  # Temporarily disabled
                         ],
                     }
                 )

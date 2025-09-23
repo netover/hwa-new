@@ -54,6 +54,32 @@ class MetricsRegistry:
         """
         return {"counters": dict(self.counters), "gauges": dict(self.gauges)}
 
+    def generate_prometheus_metrics(self) -> str:
+        """
+        Generates metrics in Prometheus text exposition format.
+        """
+        output = []
+
+        # Counters
+        for name, value in self.counters.items():
+            # Example: # HELP my_counter_total My counter description.
+            # # TYPE my_counter_total counter
+            # my_counter_total 123
+            output.append(f"# HELP {name}_total Automatically generated counter.\n")
+            output.append(f"# TYPE {name}_total counter\n")
+            output.append(f"{name}_total {value}\n")
+
+        # Gauges
+        for name, value in self.gauges.items():
+            # Example: # HELP my_gauge My gauge description.
+            # # TYPE my_gauge gauge
+            # my_gauge 45.6
+            output.append(f"# HELP {name} Automatically generated gauge.\n")
+            output.append(f"# TYPE {name} gauge\n")
+            output.append(f"{name} {value}\n")
+        
+        return "".join(output)
+
     def reset(self):
         """Resets all metrics back to their default state."""
         self.counters.clear()

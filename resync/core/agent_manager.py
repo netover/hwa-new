@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from agno.client import Client
-from agno.tools import Tool
-from pydantic import BaseModel, Field
+# from agno import Agent
+# from agno.tools import Tool
+
 
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
@@ -37,7 +38,9 @@ class AgentConfig(BaseModel):
 
 
 class AgentsConfig(BaseModel):
-    """Represents the top-level structure of the agent configuration file."""
+    """
+    Represents the top-level structure of the agent configuration file.
+    """
 
     agents: List[AgentConfig]
 
@@ -66,9 +69,13 @@ class AgentManager:
             return
         logger.info("Initializing AgentManager singleton.")
         self.agents: Dict[str, Any] = {}
+        self.agent_configs: List[AgentConfig] = [] # Correct initialization
         self.tools: Dict[str, Tool] = self._discover_tools()
         self.tws_client: Optional[OptimizedTWSClient] = None
+        # Async lock to prevent race conditions during TWS client initialization
+        self._tws_init_lock: asyncio.Lock = asyncio.Lock()
         self._initialized = True
+
 
     def _discover_tools(self) -> Dict[str, Tool]:
         """
@@ -82,29 +89,33 @@ class AgentManager:
             "tws_troubleshooting_tool": tws_troubleshooting_tool,
         }
 
-    def _get_tws_client(self) -> OptimizedTWSClient:
+    async def _get_tws_client(self) -> OptimizedTWSClient:
         """
-
         Lazily initializes and returns the TWS client.
-        Ensures a single client instance is reused.
+        Ensures a single client instance is reused with async-safe initialization.
         """
         if not self.tws_client:
-            logger.info("Initializing OptimizedTWSClient for the first time.")
-            self.tws_client = OptimizedTWSClient(
-                hostname=settings.TWS_HOST,
-                port=settings.TWS_PORT,
-                username=settings.TWS_USER,
-                password=settings.TWS_PASSWORD,
-                engine_name=settings.TWS_ENGINE_NAME,
-                engine_owner=settings.TWS_ENGINE_OWNER,
-            )
-            # Inject the client into tools that need it
-            for tool in self.tools.values():
-                if isinstance(tool.model, TWSToolReadOnly):
-                    tool.model.tws_client = self.tws_client
+            # Use async lock to prevent race conditions during initialization
+            async with self._tws_init_lock:
+                # Double-check pattern: verify the client wasn't created while waiting for the lock
+                if not self.tws_client:
+                    logger.info("Initializing OptimizedTWSClient for the first time.")
+                    self.tws_client = OptimizedTWSClient(
+                        hostname=settings.TWS_HOST,
+                        port=settings.TWS_PORT,
+                        username=settings.TWS_USER,
+                        password=settings.TWS_PASSWORD,
+                        engine_name=settings.TWS_ENGINE_NAME,
+                        engine_owner=settings.TWS_ENGINE_OWNER,
+                    )
+                    # Inject the client into tools that need it
+                    for tool in self.tools.values():
+                        if isinstance(tool.model, TWSToolReadOnly):
+                            tool.model.tws_client = self.tws_client
+                    logger.info("TWS client initialization completed successfully.")
         return self.tws_client
 
-    def load_agents_from_config(self, config_path: Path = settings.AGENT_CONFIG_PATH):
+    async def load_agents_from_config(self, config_path: Path = settings.AGENT_CONFIG_PATH):
         """
         Loads agent configurations from a JSON file and initializes them.
         This method is designed to be idempotent.
@@ -113,6 +124,7 @@ class AgentManager:
         if not config_path.exists():
             logger.error(f"Agent configuration file not found at {config_path}")
             self.agents = {}
+            self.agent_configs = [] # Ensure it's reset if config not found
             return
 
         try:
@@ -120,30 +132,33 @@ class AgentManager:
                 config_data = json.load(f)
 
             config = AgentsConfig.parse_obj(config_data)
-            self.agents = self._create_agents(config.agents)
+            self.agent_configs = config.agents # Correct assignment
+            self.agents = await self._create_agents(config.agents)
             logger.info(f"Successfully loaded {len(self.agents)} agents.")
 
         except json.JSONDecodeError:
             logger.error(f"Error decoding JSON from {config_path}", exc_info=True)
             self.agents = {}
+            self.agent_configs = []
         except Exception:
             logger.error(f"An unexpected error occurred while loading agents", exc_info=True)
             self.agents = {}
+            self.agent_configs = []
 
-    def _create_agents(self, agent_configs: List[AgentConfig]) -> Dict[str, Any]:
+    async def _create_agents(self, agent_configs: List[AgentConfig]) -> Dict[str, Any]:
         """
         Creates agent instances based on the provided configurations.
         """
         agents = {}
         # Ensure the TWS client is ready before creating agents that might need it
-        self._get_tws_client()
+        await self._get_tws_client()
 
         for config in agent_configs:
             try:
                 agent_tools = [self.tools[tool_name] for tool_name in config.tools if tool_name in self.tools]
 
-                # Using agno.Client to create the agent instance
-                agent = Client(
+                # Using agno.Agent to create the agent instance
+                agent = Agent(
                     tools=agent_tools,
                     # Note: The 'model' parameter in agno.Client refers to the LLM.
                     # We use 'model_name' from our config.
@@ -169,17 +184,9 @@ class AgentManager:
         """Retrieves a loaded agent by its ID."""
         return self.agents.get(agent_id)
 
-    def get_all_agents(self) -> List[Dict[str, Any]]:
-        """Returns a list of all loaded agents with their details."""
-        # This method needs to be implemented to return agent details
-        # for now, it's a placeholder.
-        # In a real scenario, you'd pull details from the AgentConfig
-        # or the created agent instances.
-        # This is a stub for now.
-        return [
-            {"id": agent_id, "name": agent.system.split(",")[0].replace("You are ", "")}
-            for agent_id, agent in self.agents.items()
-        ]
+    def get_all_agents(self) -> List[AgentConfig]:
+        """Returns the configuration of all loaded agents."""
+        return self.agent_configs
 
 
 # --- Singleton Instance ---

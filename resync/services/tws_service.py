@@ -14,6 +14,7 @@ from resync.models.tws import (
     SystemStatus,
     WorkstationStatus,
 )
+from resync.settings import settings # New import
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -84,7 +85,7 @@ class OptimizedTWSClient:
             timeout=DEFAULT_TIMEOUT,
         )
         # Caching layer to reduce redundant API calls
-        self.cache = SimpleTTLCache(ttl=30)
+        self.cache = SimpleTTLCache(ttl=settings.TWS_CACHE_TTL) # Use setting here
         logger.info("OptimizedTWSClient initialized for base URL: %s", self.base_url)
 
     @asynccontextmanager
