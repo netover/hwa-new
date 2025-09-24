@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import logging
 import asyncio
+import logging
 
-from resync.core.ia_auditor import analyze_and_flag_memories
-
-from agno.client import Client
+from agno.agent import Agent
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from resync.core.agent_manager import agent_manager
 from resync.core.connection_manager import connection_manager
-from resync.core.knowledge_graph import knowledge_graph
+from resync.core.ia_auditor import analyze_and_flag_memories
+from resync.core.knowledge_graph import AsyncKnowledgeGraph as knowledge_graph
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -37,7 +36,7 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     Enhances responses with RAG (Retrieval-Augmented Generation) using the Knowledge Graph.
     """
     await connection_manager.connect(websocket)
-    agent: Client | None = agent_manager.get_agent(agent_id)
+    agent: Agent | None = agent_manager.get_agent(agent_id)
 
     if not agent:
         # If the agent doesn't exist, inform the client and close the connection.
@@ -75,7 +74,7 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
 
             # --- RAG Enhancement ---
             # Fetch relevant past solutions from the Knowledge Graph
-            context = knowledge_graph.get_relevant_context(data)
+            context = await knowledge_graph.get_relevant_context(data)
             logger.debug(f"Retrieved knowledge graph context: {context[:200]}...")
 
             # --- Agent Interaction ---
@@ -108,11 +107,17 @@ Pergunta do usuário:
 
             # --- Store Interaction in Knowledge Graph ---
             # Log the interaction for continuous learning
-            knowledge_graph.add_conversation(
+            await knowledge_graph.add_conversation(
                 user_query=data,
                 agent_response=response_message,
                 agent_id=agent_id,
-                context={"agent_config": agent_manager.get_agent(agent_id).__dict__ if agent_manager.get_agent(agent_id) else "N/A"}
+                context={
+                    "agent_config": (
+                        agent_manager.get_agent(agent_id).__dict__
+                        if agent_manager.get_agent(agent_id)
+                        else "N/A"
+                    )
+                },
             )
 
             # --- IA Auditor ---

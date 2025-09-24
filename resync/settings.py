@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Type
 
-from pydantic import BaseModel as AgnoSettings
 from dotenv import load_dotenv
-from pydantic import Field
 
 # --- Environment Setup ---
 # Load environment variables from .env file if it exists
@@ -27,7 +24,9 @@ if APP_ENV == "development":
 elif APP_ENV == "production":
     from config.production import ProductionSettings as CurrentSettings
 else:
-    raise ValueError(f"Unknown APP_ENV: {APP_ENV}. Must be 'development' or 'production'.")
+    raise ValueError(
+        f"Unknown APP_ENV: {APP_ENV}. Must be 'development' or 'production'."
+    )
 
 # --- Global Settings Instance ---
 settings: CurrentSettings = CurrentSettings()

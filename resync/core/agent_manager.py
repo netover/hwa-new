@@ -6,9 +6,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# from agno import Agent
-# from agno.tools import Tool
-
+from agno.agent import Agent
+from pydantic import BaseModel
 
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
@@ -69,15 +68,14 @@ class AgentManager:
             return
         logger.info("Initializing AgentManager singleton.")
         self.agents: Dict[str, Any] = {}
-        self.agent_configs: List[AgentConfig] = [] # Correct initialization
-        self.tools: Dict[str, Tool] = self._discover_tools()
+        self.agent_configs: List[AgentConfig] = []  # Correct initialization
+        self.tools: Dict[str, Any] = self._discover_tools()
         self.tws_client: Optional[OptimizedTWSClient] = None
         # Async lock to prevent race conditions during TWS client initialization
         self._tws_init_lock: asyncio.Lock = asyncio.Lock()
         self._initialized = True
 
-
-    def _discover_tools(self) -> Dict[str, Tool]:
+    def _discover_tools(self) -> Dict[str, Any]:
         """
         Discovers and registers available tools for the agents.
         This makes the system extensible for new tools.
@@ -110,12 +108,14 @@ class AgentManager:
                     )
                     # Inject the client into tools that need it
                     for tool in self.tools.values():
-                        if isinstance(tool.model, TWSToolReadOnly):
-                            tool.model.tws_client = self.tws_client
+                        if isinstance(tool, TWSToolReadOnly):
+                            tool.tws_client = self.tws_client
                     logger.info("TWS client initialization completed successfully.")
         return self.tws_client
 
-    async def load_agents_from_config(self, config_path: Path = settings.AGENT_CONFIG_PATH):
+    async def load_agents_from_config(
+        self, config_path: Path = settings.AGENT_CONFIG_PATH
+    ) -> None:
         """
         Loads agent configurations from a JSON file and initializes them.
         This method is designed to be idempotent.
@@ -124,7 +124,7 @@ class AgentManager:
         if not config_path.exists():
             logger.error(f"Agent configuration file not found at {config_path}")
             self.agents = {}
-            self.agent_configs = [] # Ensure it's reset if config not found
+            self.agent_configs = []  # Ensure it's reset if config not found
             return
 
         try:
@@ -132,7 +132,7 @@ class AgentManager:
                 config_data = json.load(f)
 
             config = AgentsConfig.parse_obj(config_data)
-            self.agent_configs = config.agents # Correct assignment
+            self.agent_configs = config.agents  # Correct assignment
             self.agents = await self._create_agents(config.agents)
             logger.info(f"Successfully loaded {len(self.agents)} agents.")
 
@@ -141,7 +141,9 @@ class AgentManager:
             self.agents = {}
             self.agent_configs = []
         except Exception:
-            logger.error(f"An unexpected error occurred while loading agents", exc_info=True)
+            logger.error(
+                "An unexpected error occurred while loading agents", exc_info=True
+            )
             self.agents = {}
             self.agent_configs = []
 
@@ -155,7 +157,11 @@ class AgentManager:
 
         for config in agent_configs:
             try:
-                agent_tools = [self.tools[tool_name] for tool_name in config.tools if tool_name in self.tools]
+                agent_tools = [
+                    self.tools[tool_name]
+                    for tool_name in config.tools
+                    if tool_name in self.tools
+                ]
 
                 # Using agno.Agent to create the agent instance
                 agent = Agent(
@@ -164,18 +170,20 @@ class AgentManager:
                     # We use 'model_name' from our config.
                     model=config.model_name,
                     # system prompt is constructed from agent personality
-                    system=(
+                    instructions=(
                         f"You are {config.name}, a specialized AI agent. "
                         f"Your role is: {config.role}. "
                         f"Your primary goal is: {config.goal}. "
                         f"Your backstory: {config.backstory}"
                     ),
-                    verbose=config.verbose,
                 )
+
                 agents[config.id] = agent
                 logger.debug(f"Successfully created agent: {config.id}")
             except KeyError as e:
-                logger.warning(f"Tool '{e.args[0]}' not found for agent '{config.id}'. Agent will be created without it.")
+                logger.warning(
+                    f"Tool '{e.args[0]}' not found for agent '{config.id}'. Agent will be created without it."
+                )
             except Exception:
                 logger.error(f"Failed to create agent '{config.id}'", exc_info=True)
         return agents

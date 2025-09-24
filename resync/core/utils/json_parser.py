@@ -5,13 +5,14 @@ This module provides enhanced JSON parsing capabilities with multiple fallback s
 for handling malformed or inconsistent JSON responses from language models.
 """
 
-import re
 import json
 import logging
-from typing import Any, Dict, Optional, Tuple, List
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import orjson
+
     ORJSON_AVAILABLE = True
 except ImportError:
     ORJSON_AVAILABLE = False
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class JSONParseError(Exception):
     """Exception raised when JSON parsing fails."""
+
     pass
 
 
@@ -39,20 +41,23 @@ class RobustJSONParser:
         """Initialize the parser with regex patterns for JSON extraction."""
         # Common patterns for JSON in LLM responses
         self.json_patterns = [
-            r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',  # Simple JSON object
+            r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}",  # Simple JSON object
             r'\{(?:[^{}]|"(?:[^"\\]|\\.)*"|[^{}]*\{[^{}]*\}[^{}]*)*\}',  # Complex JSON with nested objects
-            r'\{[^{}]*\}',  # Basic object pattern
-            r'\{.*\}',  # Greedy pattern as last resort
+            r"\{[^{}]*\}",  # Basic object pattern
+            r"\{.*\}",  # Greedy pattern as last resort
         ]
 
         # Common prefixes/suffixes to strip
         self.strip_prefixes = [
-            '```json\n', '```json', 'json\n', '```\n',
-            'Here is the JSON:\n', 'JSON:\n', 'Response:\n'
+            "```json\n",
+            "```json",
+            "json\n",
+            "```\n",
+            "Here is the JSON:\n",
+            "JSON:\n",
+            "Response:\n",
         ]
-        self.strip_suffixes = [
-            '\n```', '```', '\n', ' '
-        ]
+        self.strip_suffixes = ["\n```", "```", "\n", " "]
 
     def clean_llm_response(self, response: str) -> str:
         """
@@ -67,19 +72,19 @@ class RobustJSONParser:
         cleaned = response.strip()
 
         # Remove common markdown formatting
-        if cleaned.startswith('```'):
-            cleaned = cleaned.replace('```json', '').replace('```', '').strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.replace("```json", "").replace("```", "").strip()
 
         # Remove common prefixes
         for prefix in self.strip_prefixes:
             if cleaned.startswith(prefix):
-                cleaned = cleaned[len(prefix):].strip()
+                cleaned = cleaned[len(prefix) :].strip()
                 break
 
         # Remove common suffixes
         for suffix in self.strip_suffixes:
             if cleaned.endswith(suffix):
-                cleaned = cleaned[:-len(suffix)].strip()
+                cleaned = cleaned[: -len(suffix)].strip()
                 break
 
         return cleaned
@@ -110,7 +115,9 @@ class RobustJSONParser:
 
         return unique_candidates
 
-    def parse_json_safe(self, json_str: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def parse_json_safe(
+        self, json_str: str
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
         Safely parse a JSON string with comprehensive error handling.
 
@@ -136,7 +143,9 @@ class RobustJSONParser:
 
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             error_msg = f"JSON decode error: {str(e)}"
-            logger.debug(f"Failed to parse JSON: {error_msg}. Input: {json_str[:100]}...")
+            logger.debug(
+                f"Failed to parse JSON: {error_msg}. Input: {json_str[:100]}..."
+            )
             return None, error_msg
 
     def try_fix_common_json_issues(self, json_str: str) -> List[str]:
@@ -152,7 +161,7 @@ class RobustJSONParser:
         fixes = [json_str]  # Original first
 
         # Fix trailing commas
-        fixed = re.sub(r',(\s*[}\]])', r'\1', json_str)
+        fixed = re.sub(r",(\s*[}\]])", r"\1", json_str)
         if fixed != json_str:
             fixes.append(fixed)
 
@@ -162,21 +171,23 @@ class RobustJSONParser:
             fixes.append(fixed)
 
         # Fix missing quotes around keys
-        fixed = re.sub(r'(\w+):', r'"\1":', json_str)
+        fixed = re.sub(r"(\w+):", r'"\1":', json_str)
         if fixed != json_str:
             fixes.append(fixed)
 
         # Try to balance braces if they're unbalanced
-        open_braces = json_str.count('{')
-        close_braces = json_str.count('}')
+        open_braces = json_str.count("{")
+        close_braces = json_str.count("}")
         if open_braces > close_braces:
-            fixes.append(json_str + '}')
+            fixes.append(json_str + "}")
         elif close_braces > open_braces:
-            fixes.append('{' + json_str)
+            fixes.append("{" + json_str)
 
         return fixes
 
-    def extract_and_parse_json(self, text: str, max_candidates: int = 5) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def extract_and_parse_json(
+        self, text: str, max_candidates: int = 5
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
         Extract and parse JSON from LLM response with multiple fallback strategies.
 
@@ -188,16 +199,19 @@ class RobustJSONParser:
             Tuple of (parsed_json, error_message). Returns None, error_msg if all parsing fails.
         """
         if not text or not text.strip():
+            logger.debug("JSON parsing failed: Empty response text")
             return None, "Empty response text"
 
         # Clean the response
         cleaned_text = self.clean_llm_response(text)
         if not cleaned_text:
+            logger.debug("JSON parsing failed: Response became empty after cleaning")
             return None, "Response became empty after cleaning"
 
         # Try parsing the cleaned text directly first
         parsed, error = self.parse_json_safe(cleaned_text)
         if parsed is not None:
+            logger.debug("JSON parsing succeeded with direct parsing")
             return parsed, None
 
         # Extract JSON candidates from the cleaned text
@@ -205,26 +219,41 @@ class RobustJSONParser:
 
         # Limit candidates to avoid excessive processing
         candidates = candidates[:max_candidates]
+        logger.debug(f"Extracted {len(candidates)} JSON candidates from response")
 
         # Try each candidate
-        for candidate in candidates:
+        for i, candidate in enumerate(candidates):
+            logger.debug(f"Trying candidate {i + 1}: {candidate[:100]}...")
             # Try the candidate as-is
             parsed, error = self.parse_json_safe(candidate)
             if parsed is not None:
+                logger.debug(f"JSON parsing succeeded with candidate {i + 1}")
                 return parsed, None
 
             # Try to fix common issues
             fixed_candidates = self.try_fix_common_json_issues(candidate)
-            for fixed in fixed_candidates:
+            for j, fixed in enumerate(fixed_candidates):
                 if fixed != candidate:  # Only try if different
+                    logger.debug(
+                        f"Trying fixed candidate {i + 1}.{j + 1}: {fixed[:100]}..."
+                    )
                     parsed, error = self.parse_json_safe(fixed)
                     if parsed is not None:
+                        logger.debug(
+                            f"JSON parsing succeeded with fixed candidate {i + 1}.{j + 1}"
+                        )
                         return parsed, None
 
         # If all parsing failed, return the best error message
-        return None, f"Failed to extract valid JSON from response. Tried {len(candidates)} candidates."
+        error_msg = f"Failed to extract valid JSON from response. Tried {len(candidates)} candidates."
+        logger.warning(
+            f"JSON parsing failed: {error_msg}. Original text: {text[:200]}..."
+        )
+        return None, error_msg
 
-    def parse_with_schema_validation(self, text: str, required_keys: List[str]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def parse_with_schema_validation(
+        self, text: str, required_keys: List[str]
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
         Parse JSON and validate it contains required keys.
 
@@ -237,6 +266,7 @@ class RobustJSONParser:
         """
         parsed, error = self.extract_and_parse_json(text)
         if parsed is None:
+            logger.debug(f"Schema validation failed: Could not parse JSON - {error}")
             return None, error
 
         missing_keys = []
@@ -245,8 +275,13 @@ class RobustJSONParser:
                 missing_keys.append(key)
 
         if missing_keys:
-            return None, f"Missing required keys: {missing_keys}"
+            error_msg = f"Missing required keys: {missing_keys}"
+            logger.warning(
+                f"Schema validation failed: {error_msg}. Parsed keys: {list(parsed.keys())}"
+            )
+            return None, error_msg
 
+        logger.debug("Schema validation succeeded: All required keys present")
         return parsed, None
 
 
@@ -254,7 +289,9 @@ class RobustJSONParser:
 json_parser = RobustJSONParser()
 
 
-def parse_llm_json_response(response: str, required_keys: List[str] = None) -> Dict[str, Any]:
+def parse_llm_json_response(
+    response: str, required_keys: List[str] = None
+) -> Dict[str, Any]:
     """
     Convenience function to parse JSON from LLM response.
 
@@ -269,7 +306,9 @@ def parse_llm_json_response(response: str, required_keys: List[str] = None) -> D
         JSONParseError: If parsing fails or required keys are missing.
     """
     if required_keys:
-        parsed, error = json_parser.parse_with_schema_validation(response, required_keys)
+        parsed, error = json_parser.parse_with_schema_validation(
+            response, required_keys
+        )
     else:
         parsed, error = json_parser.extract_and_parse_json(response)
 
@@ -279,7 +318,9 @@ def parse_llm_json_response(response: str, required_keys: List[str] = None) -> D
     return parsed
 
 
-def safe_parse_llm_json_response(response: str, required_keys: List[str] = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def safe_parse_llm_json_response(
+    response: str, required_keys: List[str] = None
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Safe version of parse_llm_json_response that doesn't raise exceptions.
 
@@ -291,6 +332,9 @@ def safe_parse_llm_json_response(response: str, required_keys: List[str] = None)
         Tuple of (parsed_json, error_message).
     """
     try:
-        return json_parser.extract_and_parse_json(response, required_keys)
+        if required_keys:
+            return json_parser.parse_with_schema_validation(response, required_keys)
+        else:
+            return json_parser.extract_and_parse_json(response)
     except Exception as e:
         return None, str(e)

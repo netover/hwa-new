@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Set, Tuple
+from typing import Any, Set, Tuple
 
 # from resync.core.agent_manager import agent_manager  # Temporarily disabled for testing
 from resync.core.connection_manager import connection_manager

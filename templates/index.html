@@ -56,6 +56,16 @@
                     Conexão do Chat: <span id="ws-status-text">Desconectado</span>
                 </div>
             </section>
+
+            <section id="rag-upload" class="card">
+                <h2>Ingestão de Documentos (RAG)</h2>
+                <p>Envie um documento (.pdf, .docx, .xlsx) para a base de conhecimento.</p>
+                <div class="upload-area">
+                    <input type="file" id="file-input" accept=".pdf,.docx,.xlsx">
+                    <button id="upload-button">Enviar Documento</button>
+                </div>
+                <div id="upload-status"></div>
+            </section>
         </main>
 
         <footer>

@@ -36,7 +36,7 @@ After careful analysis of the current TWS (Trading Workstation) integration arch
 **Security Implications and Mitigations:**
 
 - **Development Risk Assessment**: While SSL verification is disabled, the development environment's network isolation and lack of sensitive data processing minimize potential security risks.
-- **Production Readiness Path**: The architecture is designed to easily enable SSL verification in production environments by simply changing `verify=False` to `verify=True` when deploying to production.
+- **Production Readiness Path**: The architecture is designed to easily enable SSL verification in production environments by simply changing `verify=False` to `verify=True` when deploying to production and configuring the appropriate certificate authority bundle via environment variables (e.g., `SSL_CERT_FILE` or `REQUESTS_CA_BUNDLE`).
 - **Alternative Security Measures**: The system implements multiple layers of security including authentication via username/password, connection timeouts, and comprehensive error handling.
 
 **Implementation Notes:**
@@ -49,9 +49,9 @@ After careful analysis of the current TWS (Trading Workstation) integration arch
 
 When moving to production environments, SSL verification should be enabled by:
 1. Setting `verify=True` in the `httpx.AsyncClient` constructor
-2. Ensuring proper SSL certificates are installed and configured
+2. Ensuring proper SSL certificates are installed and configured, with the certificate authority bundle explicitly specified via environment variable (e.g., `SSL_CERT_FILE=/path/to/ca-bundle.crt`) for portability across deployment targets
 3. Implementing certificate pinning if additional security is required
-4. Adding comprehensive SSL/TLS configuration management
+4. Adding comprehensive SSL/TLS configuration management, including automated certificate rotation and monitoring for certificate expiration
 
 ### 4. [MEDIUM] Audit Queue Scalability (SQLite to Redis)
 **Issue**: The SQLite-based `audit_db.py` is not designed for high-concurrency write loads. Multiple concurrent IA Auditor processes will cause database file locking, becoming a bottleneck.

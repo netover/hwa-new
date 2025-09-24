@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from agno.tools import Tool
 from pydantic import BaseModel, Field
 
 from resync.services.tws_service import OptimizedTWSClient
@@ -56,7 +55,10 @@ class TWSStatusTool(TWSToolReadOnly):
                 [f"{ws.name} ({ws.status})" for ws in status.workstations]
             )
             job_summary = ", ".join(
-                [f"{job.name} on {job.workstation} ({job.status})" for job in status.jobs]
+                [
+                    f"{job.name} on {job.workstation} ({job.status})"
+                    for job in status.jobs
+                ]
             )
 
             return (
@@ -91,20 +93,28 @@ class TWSTroubleshootingTool(TWSToolReadOnly):
             status = await self.tws_client.get_system_status()
 
             failed_jobs = [j for j in status.jobs if j.status.upper() == "ABEND"]
-            down_workstations = [w for w in status.workstations if w.status.upper() != "LINKED"]
+            down_workstations = [
+                w for w in status.workstations if w.status.upper() != "LINKED"
+            ]
 
             if not failed_jobs and not down_workstations:
-                return "Nenhuma falha crítica encontrada. O ambiente TWS parece estável."
+                return (
+                    "Nenhuma falha crítica encontrada. O ambiente TWS parece estável."
+                )
 
             analysis = "Análise de Problemas no TWS:\n"
             if failed_jobs:
                 analysis += f"- Jobs com Falha ({len(failed_jobs)}): "
-                analysis += ", ".join([f"{j.name} (workstation: {j.workstation})" for j in failed_jobs])
+                analysis += ", ".join(
+                    [f"{j.name} (workstation: {j.workstation})" for j in failed_jobs]
+                )
                 analysis += "\n"
 
             if down_workstations:
                 analysis += f"- Workstations com Problemas ({len(down_workstations)}): "
-                analysis += ", ".join([f"{w.name} (status: {w.status})" for w in down_workstations])
+                analysis += ", ".join(
+                    [f"{w.name} (status: {w.status})" for w in down_workstations]
+                )
                 analysis += "\n"
 
             return analysis
@@ -116,14 +126,6 @@ class TWSTroubleshootingTool(TWSToolReadOnly):
 
 # --- Tool Instantiation ---
 # Create single, reusable instances of the tools.
-tws_status_tool = Tool(
-    name="tws_status_tool",
-    description="Obtém o status geral de workstations e jobs no ambiente TWS.",
-    model=TWSStatusTool,
-)
+tws_status_tool = TWSStatusTool()
 
-tws_troubleshooting_tool = Tool(
-    name="tws_troubleshooting_tool",
-    description="Analisa jobs com falha e workstations offline para diagnosticar problemas.",
-    model=TWSTroubleshootingTool,
-)
+tws_troubleshooting_tool = TWSTroubleshootingTool()

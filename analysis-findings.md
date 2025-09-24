@@ -33,11 +33,10 @@ The data flow (user -> WebSocket -> AgentManager -> TWS Tools -> KnowledgeGraph 
 ### 1.3 TWS Integration (`resync/services/tws_service.py`)
 **Strengths:**
 - Excellent use of `httpx.AsyncClient` for connection pooling.
-- Robust caching layer (`SimpleTTLCache`) with TTL-based expiration.
+- ✅ **RESOLVED**: Robust caching layer now uses `AsyncTTLCache` with truly asynchronous operations, eliminating blocking I/O.
 - Proper error handling with `httpx` exceptions.
 
 **Critical Issues:**
-- **Blocking I/O in Cache**: The `SimpleTTLCache` uses `asyncio.get_running_loop().time()` for timestamping, but its `get` and `set` methods are **not asynchronous**. If the cache is used heavily, these synchronous operations could block the event loop.
 - **SSL Verification**: The `verify=False` setting in `httpx.AsyncClient` is a critical security flaw for production environments. This must be configurable. **Decision Documented**: The system will maintain `verify=False` for development environments to accommodate TWS API constraints with self-signed certificates, while implementing proper SSL verification for production deployments.
 
 ### 1.4 Knowledge Graph (`resync/core/knowledge_graph.py`)
@@ -81,6 +80,7 @@ The data flow (user -> WebSocket -> AgentManager -> TWS Tools -> KnowledgeGraph 
 
 | Priority | Area | Risk | Impact |
 |----------|------|------|--------|
+| ✅ **RESOLVED** | Blocking I/O in TWS Cache | System-wide freezing | Critical |
 | **High** | Blocking I/O in IA Auditor and Knowledge Graph | System-wide freezing | Critical |
 | **Medium** | TWS Client SSL Verification | Security breach (documented decision for development) | High |
 | **High** | Race Condition in IA Auditor | Duplicate flagging, data corruption | High |

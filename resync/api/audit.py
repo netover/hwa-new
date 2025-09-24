@@ -1,21 +1,29 @@
 # resync/api/audit.py
+from typing import Any, Dict, List, Optional  # Added Optional for Query parameters
+
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from resync.core.knowledge_graph import knowledge_graph
+
 from resync.core.audit_queue import audit_queue
-from typing import List, Dict, Any, Optional # Added Optional for Query parameters
+from resync.core.knowledge_graph import AsyncKnowledgeGraph as knowledge_graph
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
+
 
 class ReviewAction(BaseModel):
     memory_id: str
     action: str  # "approve" or "reject"
 
+
 @router.get("/flags", response_model=List[Dict[str, Any]])
 def get_flagged_memories(
-    status: str = Query("pending", description="Filter by audit status (pending, approved, rejected, all)"),
-    query: Optional[str] = Query(None, description="Search query in user_query or agent_response")
+    status: str = Query(
+        "pending",
+        description="Filter by audit status (pending, approved, rejected, all)",
+    ),
+    query: Optional[str] = Query(
+        None, description="Search query in user_query or agent_response"
+    ),
 ):
     """
     Retrieves memories from the audit queue based on status and search query.
@@ -30,17 +38,21 @@ def get_flagged_memories(
             # Filter in Python for now, can be pushed to DB later
             query_lower = query.lower()
             memories = [
-                m for m in memories
-                if query_lower in m.get("user_query", "").lower() or
-                   query_lower in m.get("agent_response", "").lower()
+                m
+                for m in memories
+                if query_lower in m.get("user_query", "").lower()
+                or query_lower in m.get("agent_response", "").lower()
             ]
-        
+
         return memories
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving flagged memories: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving flagged memories: {e}"
+        ) from e
+
 
 @router.post("/review")
-def review_memory(review: ReviewAction):
+async def review_memory(review: ReviewAction):
     """
     Processes a human review action for a flagged memory, updating its status in the database.
     """
@@ -48,28 +60,32 @@ def review_memory(review: ReviewAction):
         try:
             if not audit_queue.update_audit_status_sync(review.memory_id, "approved"):
                 raise HTTPException(status_code=404, detail="Audit record not found.")
-            
-            knowledge_graph.client.add_observations(
-                entity_name=review.memory_id,
-                observations=["MANUALLY_APPROVED_BY_ADMIN"]
+
+            await knowledge_graph.client.add_observations(
+                review.memory_id, ["MANUALLY_APPROVED_BY_ADMIN"]
             )
             return {"status": "approved", "memory_id": review.memory_id}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error approving memory: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Error approving memory: {e}"
+            ) from e
 
     elif review.action == "reject":
         try:
             if not audit_queue.update_audit_status_sync(review.memory_id, "rejected"):
                 raise HTTPException(status_code=404, detail="Audit record not found.")
-            
-            knowledge_graph.client.delete(review.memory_id)
+
+            await knowledge_graph.client.delete(review.memory_id)
             return {"status": "rejected", "memory_id": review.memory_id}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error rejecting memory: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Error rejecting memory: {e}"
+            ) from e
 
     raise HTTPException(status_code=400, detail="Invalid action")
 
-@router.get("/metrics", response_model=Dict[str, int]) # New endpoint for metrics
+
+@router.get("/metrics", response_model=Dict[str, int])  # New endpoint for metrics
 def get_audit_metrics():
     """
     Returns metrics for the audit queue (total pending, approved, rejected).
@@ -78,4 +94,6 @@ def get_audit_metrics():
         metrics = audit_queue.get_audit_metrics_sync()
         return metrics
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving audit metrics: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving audit metrics: {e}"
+        ) from e

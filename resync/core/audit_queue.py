@@ -1,4 +1,3 @@
-import os
 """
 Redis-based Audit Queue for Resync
 
@@ -8,12 +7,14 @@ The audit queue manages memories that need to be reviewed by administrators.
 
 import json
 import logging
-from typing import Dict, Any, Optional, List
+import os
 from datetime import datetime
+from typing import Any, Dict, List
 
 import redis
 from redis.asyncio import Redis as AsyncRedis
 
+from resync.core.audit_lock import DistributedAuditLock
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -34,14 +35,19 @@ class AsyncAuditQueue:
         Args:
             redis_url: Redis connection URL. Defaults to environment variable or localhost.
         """
-        self.redis_url = redis_url or os.environ.get("REDIS_URL", "redis://localhost:6379")
+        self.redis_url = redis_url or os.environ.get(
+            "REDIS_URL", "redis://localhost:6379"
+        )
         self.sync_client = redis.from_url(self.redis_url)
         self.async_client = AsyncRedis.from_url(self.redis_url)
+
+        # Use the new distributed audit lock for consistency
+        self.distributed_lock = DistributedAuditLock(self.redis_url)
 
         # Redis keys
         self.audit_queue_key = "resync:audit_queue"
         self.audit_status_key = "resync:audit_status"  # Hash for memory_id -> status
-        self.audit_data_key = "resync:audit_data"      # Hash for memory_id -> JSON data
+        self.audit_data_key = "resync:audit_data"  # Hash for memory_id -> JSON data
 
         logger.info(f"AsyncAuditQueue initialized with Redis at {self.redis_url}")
 
@@ -55,22 +61,24 @@ class AsyncAuditQueue:
         Returns:
             True if successfully added, False if already exists.
         """
-        memory_id = memory['id']
+        memory_id = memory["id"]
 
         # Check if already exists
         if await self.async_client.hexists(self.audit_status_key, memory_id):
-            logger.warning(f"Memory {memory_id} already exists in audit queue. Skipping.")
+            logger.warning(
+                f"Memory {memory_id} already exists in audit queue. Skipping."
+            )
             return False
 
         # Store memory data as JSON
         memory_data = {
             "memory_id": memory_id,
-            "user_query": memory['user_query'],
-            "agent_response": memory['agent_response'],
-            "ia_audit_reason": memory.get('ia_audit_reason'),
-            "ia_audit_confidence": memory.get('ia_audit_confidence'),
+            "user_query": memory["user_query"],
+            "agent_response": memory["agent_response"],
+            "ia_audit_reason": memory.get("ia_audit_reason"),
+            "ia_audit_confidence": memory.get("ia_audit_confidence"),
             "status": "pending",
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
         }
 
         async with self.async_client.pipeline() as pipe:
@@ -104,13 +112,15 @@ class AsyncAuditQueue:
         # Get data for pending items only
         pending_audits = []
         for memory_id in memory_ids:
-            memory_id_str = memory_id.decode('utf-8')
+            memory_id_str = memory_id.decode("utf-8")
             status = await self.async_client.hget(self.audit_status_key, memory_id_str)
 
-            if status and status.decode('utf-8') == 'pending':
-                data_json = await self.async_client.hget(self.audit_data_key, memory_id_str)
+            if status and status.decode("utf-8") == "pending":
+                data_json = await self.async_client.hget(
+                    self.audit_data_key, memory_id_str
+                )
                 if data_json:
-                    data = json.loads(data_json.decode('utf-8'))
+                    data = json.loads(data_json.decode("utf-8"))
                     pending_audits.append(data)
 
         return pending_audits
@@ -138,7 +148,7 @@ class AsyncAuditQueue:
             # Add reviewed timestamp to data
             data_json = await self.async_client.hget(self.audit_data_key, memory_id)
             if data_json:
-                data = json.loads(data_json.decode('utf-8'))
+                data = json.loads(data_json.decode("utf-8"))
                 data["status"] = status
                 data["reviewed_at"] = datetime.utcnow().isoformat()
                 pipe.hset(self.audit_data_key, memory_id, json.dumps(data))
@@ -158,7 +168,7 @@ class AsyncAuditQueue:
             True if approved, False otherwise.
         """
         status = await self.async_client.hget(self.audit_status_key, memory_id)
-        return status and status.decode('utf-8') == 'approved'
+        return status and status.decode("utf-8") == "approved"
 
     async def delete_audit_record(self, memory_id: str) -> bool:
         """
@@ -212,17 +222,19 @@ class AsyncAuditQueue:
         all_ids = await self.async_client.hkeys(self.audit_status_key)
 
         for memory_id_bytes in all_ids:
-            memory_id = memory_id_bytes.decode('utf-8')
+            memory_id = memory_id_bytes.decode("utf-8")
             status = await self.async_client.hget(self.audit_status_key, memory_id)
 
-            if status and status.decode('utf-8') in ['approved', 'rejected']:
+            if status and status.decode("utf-8") in ["approved", "rejected"]:
                 # Check if old enough
                 data_json = await self.async_client.hget(self.audit_data_key, memory_id)
                 if data_json:
-                    data = json.loads(data_json.decode('utf-8'))
-                    reviewed_at_str = data.get('reviewed_at')
+                    data = json.loads(data_json.decode("utf-8"))
+                    reviewed_at_str = data.get("reviewed_at")
                     if reviewed_at_str:
-                        reviewed_at = datetime.fromisoformat(reviewed_at_str.replace('Z', '+00:00')).timestamp()
+                        reviewed_at = datetime.fromisoformat(
+                            reviewed_at_str.replace("Z", "+00:00")
+                        ).timestamp()
                         if reviewed_at < cutoff_date:
                             await self.delete_audit_record(memory_id)
                             cleaned_count += 1
@@ -232,9 +244,11 @@ class AsyncAuditQueue:
 
     # --- Distributed Locking for Race Condition Prevention ---
 
-    async def acquire_lock(self, lock_key: str, lock_value: str, timeout: int = 30) -> bool:
+    async def acquire_lock(
+        self, lock_key: str, lock_value: str, timeout: int = 30
+    ) -> bool:
         """
-        Acquires a distributed lock using Redis SET with NX and PX options.
+        Acquires a distributed lock using the new DistributedAuditLock.
 
         Args:
             lock_key: Unique identifier for the lock
@@ -244,16 +258,16 @@ class AsyncAuditQueue:
         Returns:
             True if lock acquired, False if already locked
         """
-        return await self.async_client.set(
-            lock_key,
-            lock_value,
-            nx=True,
-            px=timeout * 1000  # Convert to milliseconds
-        )
+        # Use the new distributed audit lock
+        try:
+            async with await self.distributed_lock.acquire(lock_key, timeout):
+                return True
+        except Exception:
+            return False
 
     async def release_lock(self, lock_key: str, lock_value: str) -> bool:
         """
-        Releases a distributed lock if owned by this instance.
+        Releases a distributed lock using the new DistributedAuditLock.
 
         Args:
             lock_key: The lock key to release
@@ -262,53 +276,30 @@ class AsyncAuditQueue:
         Returns:
             True if lock released, False if not owned or doesn't exist
         """
-        # Use Lua script for atomic check-and-delete
-        lua_script = """
-        if redis.call("get", KEYS[1]) == ARGV[1] then
-            return redis.call("del", KEYS[1])
-        else
-            return 0
-        end
-        """
-        return await self.async_client.eval(lua_script, 1, lock_key, lock_value) == 1
+        # Use the new distributed audit lock for release
+        try:
+            await self.distributed_lock.force_release(lock_key)
+            return True
+        except Exception:
+            return False
 
     async def with_lock(self, lock_key: str, timeout: int = 30):
         """
-        Context manager for distributed locking.
+        Context manager for distributed locking using the new DistributedAuditLock.
 
         Usage:
             async with audit_queue.with_lock(f"memory:{memory_id}"):
                 # Critical section - memory processing
                 pass
         """
-        class LockContext:
-            def __init__(self, queue, lock_key, timeout):
-                self.queue = queue
-                self.lock_key = lock_key
-                self.timeout = timeout
-                self.lock_value = None
+        # Delegate to the new distributed audit lock
+        return await self.distributed_lock.acquire(lock_key, timeout)
 
-            async def __aenter__(self):
-                import uuid
-                self.lock_value = str(uuid.uuid4())
-                success = await self.queue.acquire_lock(
-                    self.lock_key,
-                    self.lock_value,
-                    self.timeout
-                )
-                if not success:
-                    raise Exception(f"Could not acquire lock: {self.lock_key}")
-                return self
-
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                if self.lock_value:
-                    await self.queue.release_lock(self.lock_key, self.lock_value)
-
-        return LockContext(self, lock_key, timeout)
-
-    async def cleanup_expired_locks(self, lock_prefix: str = "memory:", max_age: int = 60):
+    async def cleanup_expired_locks(
+        self, lock_prefix: str = "memory:", max_age: int = 60
+    ):
         """
-        Cleans up expired locks to prevent deadlocks.
+        Cleans up expired locks to prevent deadlocks using the new DistributedAuditLock.
 
         Args:
             lock_prefix: Prefix for lock keys to clean up
@@ -317,52 +308,12 @@ class AsyncAuditQueue:
         Returns:
             Number of locks cleaned up
         """
-        try:
-            import time
-            current_time = time.time()
-            cleaned_count = 0
-
-            # Get all lock keys with the prefix
-            lock_pattern = f"{lock_prefix}*"
-            lock_keys = await self.async_client.keys(lock_pattern)
-
-            for lock_key_bytes in lock_keys:
-                lock_key = lock_key_bytes.decode('utf-8')
-
-                # Check if lock is old enough to be considered expired
-                lock_value = await self.async_client.get(lock_key)
-                if lock_value:
-                    # Try to decode timestamp from lock value (if it contains one)
-                    try:
-                        # If lock value is a UUID, we can't determine age, so skip
-                        # This is a simple cleanup for basic cases
-                        pass
-                    except:
-                        pass
-
-                    # For now, we'll implement a simple TTL-based cleanup
-                    # In production, you might want to store creation time in lock value
-                    ttl = await self.async_client.ttl(lock_key)
-                    if ttl == -1:  # No TTL set
-                        # Force expire locks older than max_age
-                        await self.async_client.expire(lock_key, max_age)
-                    elif ttl > max_age:
-                        # Remove locks that are too old
-                        await self.async_client.delete(lock_key)
-                        cleaned_count += 1
-
-            if cleaned_count > 0:
-                logger.info(f"Cleaned up {cleaned_count} expired locks")
-
-            return cleaned_count
-
-        except Exception as e:
-            logger.error(f"Error cleaning up expired locks: {e}")
-            return 0
+        # Delegate to the new distributed audit lock
+        return await self.distributed_lock.cleanup_expired_locks(max_age)
 
     async def force_release_lock(self, lock_key: str) -> bool:
         """
-        Forcefully releases a lock (for administrative purposes).
+        Forcefully releases a lock using the new DistributedAuditLock (for administrative purposes).
 
         Args:
             lock_key: The lock key to force release
@@ -371,10 +322,7 @@ class AsyncAuditQueue:
             True if lock was released, False if not found
         """
         try:
-            result = await self.async_client.delete(lock_key)
-            if result:
-                logger.warning(f"Forcefully released lock: {lock_key}")
-            return bool(result)
+            return await self.distributed_lock.force_release(lock_key)
         except Exception as e:
             logger.error(f"Error force releasing lock {lock_key}: {e}")
             return False
@@ -394,10 +342,10 @@ class AsyncAuditQueue:
 
         all_audits = []
         for memory_id_bytes in memory_ids:
-            memory_id = memory_id_bytes.decode('utf-8')
+            memory_id = memory_id_bytes.decode("utf-8")
             data_json = await self.async_client.hget(self.audit_data_key, memory_id)
             if data_json:
-                data = json.loads(data_json.decode('utf-8'))
+                data = json.loads(data_json.decode("utf-8"))
                 all_audits.append(data)
 
         return all_audits
@@ -420,13 +368,15 @@ class AsyncAuditQueue:
 
         filtered_audits = []
         for memory_id_bytes in memory_ids:
-            memory_id = memory_id_bytes.decode('utf-8')
-            current_status = await self.async_client.hget(self.audit_status_key, memory_id)
+            memory_id = memory_id_bytes.decode("utf-8")
+            current_status = await self.async_client.hget(
+                self.audit_status_key, memory_id
+            )
 
-            if current_status and current_status.decode('utf-8') == status:
+            if current_status and current_status.decode("utf-8") == status:
                 data_json = await self.async_client.hget(self.audit_data_key, memory_id)
                 if data_json:
-                    data = json.loads(data_json.decode('utf-8'))
+                    data = json.loads(data_json.decode("utf-8"))
                     filtered_audits.append(data)
 
         return filtered_audits
@@ -442,26 +392,16 @@ class AsyncAuditQueue:
         memory_ids = await self.async_client.hkeys(self.audit_status_key)
 
         if not memory_ids:
-            return {
-                "total": 0,
-                "pending": 0,
-                "approved": 0,
-                "rejected": 0
-            }
+            return {"total": 0, "pending": 0, "approved": 0, "rejected": 0}
 
-        metrics = {
-            "total": len(memory_ids),
-            "pending": 0,
-            "approved": 0,
-            "rejected": 0
-        }
+        metrics = {"total": len(memory_ids), "pending": 0, "approved": 0, "rejected": 0}
 
         for memory_id_bytes in memory_ids:
-            memory_id = memory_id_bytes.decode('utf-8')
+            memory_id = memory_id_bytes.decode("utf-8")
             status = await self.async_client.hget(self.audit_status_key, memory_id)
 
             if status:
-                status_str = status.decode('utf-8')
+                status_str = status.decode("utf-8")
                 if status_str in metrics:
                     metrics[status_str] += 1
 
@@ -496,55 +436,59 @@ class AsyncAuditQueue:
                 "redis_version": info.get("redis_version", "unknown"),
                 "connected_clients": info.get("connected_clients", 0),
                 "used_memory": info.get("used_memory_human", "unknown"),
-                "uptime_days": info.get("uptime_in_days", 0)
+                "uptime_days": info.get("uptime_in_days", 0),
             }
         except Exception as e:
             logger.error(f"Error getting Redis connection info: {e}")
-            return {
-                "connected": False,
-                "host": self.redis_url,
-                "error": str(e)
-            }
+            return {"connected": False, "host": self.redis_url, "error": str(e)}
 
     def health_check_sync(self) -> bool:
         """Synchronous wrapper for health_check"""
         import asyncio
+
         return asyncio.run(self.health_check())
 
     def get_connection_info_sync(self) -> Dict[str, Any]:
         """Synchronous wrapper for get_connection_info"""
         import asyncio
+
         return asyncio.run(self.get_connection_info())
 
     # Synchronous wrappers for FastAPI compatibility
     def get_all_audits_sync(self) -> List[Dict[str, Any]]:
         """Synchronous wrapper for get_all_audits"""
         import asyncio
+
         return asyncio.run(self.get_all_audits())
 
     def get_audits_by_status_sync(self, status: str) -> List[Dict[str, Any]]:
         """Synchronous wrapper for get_audits_by_status"""
         import asyncio
+
         return asyncio.run(self.get_audits_by_status(status))
 
     def get_audit_metrics_sync(self) -> Dict[str, int]:
         """Synchronous wrapper for get_audit_metrics"""
         import asyncio
+
         return asyncio.run(self.get_audit_metrics())
 
     def update_audit_status_sync(self, memory_id: str, status: str) -> bool:
         """Synchronous wrapper for update_audit_status"""
         import asyncio
+
         return asyncio.run(self.update_audit_status(memory_id, status))
 
     def delete_audit_record_sync(self, memory_id: str) -> bool:
         """Synchronous wrapper for delete_audit_record"""
         import asyncio
+
         return asyncio.run(self.delete_audit_record(memory_id))
 
     def is_memory_approved_sync(self, memory_id: str) -> bool:
         """Synchronous wrapper for is_memory_approved"""
         import asyncio
+
         return asyncio.run(self.is_memory_approved(memory_id))
 
 
@@ -560,7 +504,6 @@ async def migrate_from_sqlite():
     """
     try:
         import sqlite3
-        from pathlib import Path
 
         sqlite_path = settings.BASE_DIR / "audit_queue.db"
         if not sqlite_path.exists():
@@ -579,11 +522,11 @@ async def migrate_from_sqlite():
         migrated_count = 0
         for row in rows:
             memory = {
-                'id': row['memory_id'],
-                'user_query': row['user_query'],
-                'agent_response': row['agent_response'],
-                'ia_audit_reason': row['ia_audit_reason'],
-                'ia_audit_confidence': row['ia_audit_confidence']
+                "id": row["memory_id"],
+                "user_query": row["user_query"],
+                "agent_response": row["agent_response"],
+                "ia_audit_reason": row["ia_audit_reason"],
+                "ia_audit_confidence": row["ia_audit_confidence"],
             }
 
             success = await audit_queue.add_audit_record(memory)
@@ -591,10 +534,14 @@ async def migrate_from_sqlite():
                 migrated_count += 1
 
                 # Update status if not pending
-                if row['status'] != 'pending':
-                    await audit_queue.update_audit_status(row['memory_id'], row['status'])
+                if row["status"] != "pending":
+                    await audit_queue.update_audit_status(
+                        row["memory_id"], row["status"]
+                    )
 
-        logger.info(f"Migration completed: {migrated_count} records migrated from SQLite to Redis.")
+        logger.info(
+            f"Migration completed: {migrated_count} records migrated from SQLite to Redis."
+        )
         conn.close()
 
     except Exception as e:

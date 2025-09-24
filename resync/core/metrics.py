@@ -77,7 +77,7 @@ class MetricsRegistry:
             output.append(f"# HELP {name} Automatically generated gauge.\n")
             output.append(f"# TYPE {name} gauge\n")
             output.append(f"{name} {value}\n")
-        
+
         return "".join(output)
 
     def reset(self):

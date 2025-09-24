@@ -29,12 +29,16 @@ async def get_dashboard():
     index_path = settings.BASE_DIR / "templates" / "index.html"
     if not index_path.exists():
         logger.error("Dashboard index.html not found at path: %s", index_path)
-        raise HTTPException(status_code=404, detail="Interface do dashboard não encontrada.")
+        raise HTTPException(
+            status_code=404, detail="Interface do dashboard não encontrada."
+        )
     return index_path.read_text()
 
 
 # --- Agent Endpoints ---
-@api_router.get("/agents", response_model=List[AgentConfig], summary="Get All Agent Configurations")
+@api_router.get(
+    "/agents", response_model=List[AgentConfig], summary="Get All Agent Configurations"
+)
 def get_all_agents():
     """
     Returns the full configuration for all loaded agents.
@@ -67,7 +71,7 @@ async def get_system_status(tws_client: OptimizedTWSClient = Depends(get_tws_cli
         metrics_registry.increment_counter("tws_status_requests_failed")
         raise HTTPException(
             status_code=503, detail=f"Falha ao comunicar com o TWS: {e}"
-        )
+        ) from e
 
 
 # --- Health Check Endpoints ---
@@ -87,14 +91,18 @@ async def get_tws_health(tws_client: OptimizedTWSClient = Depends(get_tws_client
         if is_connected:
             return {"status": "ok", "message": "Conexão com o TWS bem-sucedida."}
         else:
-            raise HTTPException(status_code=503, detail="A verificação da conexão com o TWS falhou.")
+            raise HTTPException(
+                status_code=503, detail="A verificação da conexão com o TWS falhou."
+            )
     except Exception as e:
         logger.error("TWS health check failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=503, detail=f"Falha na conexão com o TWS: {e}")
+        raise HTTPException(status_code=503, detail=f"Falha na conexão com o TWS: {e}") from e
 
 
 # --- Metrics Endpoint ---
-@api_router.get("/metrics", summary="Get Application Metrics", response_class=PlainTextResponse)
+@api_router.get(
+    "/metrics", summary="Get Application Metrics", response_class=PlainTextResponse
+)
 def get_metrics():
     """
     Returns application metrics in Prometheus text exposition format.

@@ -1,0 +1,50 @@
+name: Mutation Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'resync/core/**'
+      - 'tests/**'
+      - 'scripts/mutation_test.py'
+      - 'requirements.txt'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'resync/core/**'
+      - 'tests/**'
+      - 'scripts/mutation_test.py'
+      - 'requirements.txt'
+
+jobs:
+  mutation-test:
+    runs-on: ubuntu-latest  # Linux environment for mutmut compatibility
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run unit and integration tests
+      run: |
+        pytest tests/ --tb=short -x
+
+    - name: Run mutation tests
+      run: |
+        python scripts/mutation_test.py
+
+    - name: Upload mutation results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: mutation-results
+        path: reports/mutation_results.json

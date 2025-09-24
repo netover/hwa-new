@@ -25,6 +25,7 @@ from resync.core.utils.json_parser import (
 )
 from resync.core.agent_manager import AgentManager
 from resync.core.connection_manager import connection_manager
+from tests.async_iterator_mock import AsyncIteratorMock, create_text_stream
 
 
 class TestAsyncKnowledgeGraph:
@@ -572,22 +573,7 @@ class TestIntegrationPerformance:
             assert mock_call_llm.call_count == 100
 
 
-class AsyncIteratorMock:
-    """Proper async iterator mock that implements the async iterator protocol."""
 
-    def __init__(self, items):
-        self.items = items
-        self.index = 0
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        if self.index >= len(self.items):
-            raise StopAsyncIteration
-        item = self.items[self.index]
-        self.index += 1
-        return item
 
 
 class BackgroundTaskManager:
@@ -648,7 +634,7 @@ class TestEndToEndIntegration:
         async def mock_stream(enhanced_query):
             # Return a simple test response using proper async iterator
             response_text = "Test response from agent"
-            async for chunk in AsyncIteratorMock([chunk + " " for chunk in response_text.split()]):
+            async for chunk in create_text_stream(response_text, chunk_size=10, delay=0.01):
                 yield chunk
 
         mock_agent.stream = mock_stream
@@ -713,7 +699,7 @@ class TestEndToEndIntegration:
         # Create a regular function that returns our AsyncIteratorMock directly
         # This is needed because async for requires an object with __aiter__ method
         def mock_stream(enhanced_query):
-            return AsyncIteratorMock(["Test response from agent"])
+            return create_text_stream("Test response from agent", chunk_size=20, delay=0.01)
         
         mock_agent.stream = mock_stream
 
@@ -1189,3 +1175,93 @@ class TestIntegrationPerformance:
 # Run the tests
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestBackgroundTasksFixture:
+    """Test the background tasks fixture functionality."""
+    
+    @pytest.mark.asyncio
+    async def test_background_tasks_fixture_capture(self, background_tasks):
+        """Test that the background tasks fixture can capture asyncio.create_task calls."""
+        # Start capturing tasks
+        background_tasks.start_capturing()
+        
+        # Define a simple async function
+        async def sample_task():
+            return "task_completed"
+        
+        # Create a background task (this should be captured, not executed)
+        task = asyncio.create_task(sample_task())
+        
+        # Verify task was captured
+        assert background_tasks.task_count == 1
+        assert len(background_tasks.captured_tasks) == 1
+        
+        # Verify the captured task is our sample_task function
+        captured_coro, args, kwargs = background_tasks.captured_tasks[0]
+        assert asyncio.iscoroutine(captured_coro) or callable(captured_coro)
+        
+        # Reset and verify it's cleared
+        background_tasks.reset()
+        assert background_tasks.task_count == 0
+    
+    @pytest.mark.asyncio
+    async def test_background_tasks_manual_execution(self, background_tasks):
+        """Test manual execution of captured background tasks."""
+        # Start capturing tasks
+        background_tasks.start_capturing()
+        
+        # Define async functions to test
+        results = []
+        
+        async def task_one():
+            results.append("one")
+            return "result_one"
+        
+        async def task_two():
+            results.append("two")
+            return "result_two"
+        
+        # Create background tasks (these should be captured, not executed)
+        asyncio.create_task(task_one())
+        asyncio.create_task(task_two())
+        
+        # Verify tasks were captured
+        assert background_tasks.task_count == 2
+        
+        # Execute tasks manually
+        execution_results = await background_tasks.run_all_async()
+        
+        # Verify results
+        assert len(execution_results) == 2
+        assert "result_one" in execution_results
+        assert "result_two" in execution_results
+        
+        # Verify the tasks actually ran
+        assert "one" in results
+        assert "two" in results
+    
+    @pytest.mark.asyncio
+    async def test_background_tasks_with_chat_api(self, background_tasks):
+        """Test background tasks fixture with the chat API's use of asyncio.create_task."""
+        from resync.api.chat import run_auditor_safely
+        
+        # Start capturing tasks
+        background_tasks.start_capturing()
+        
+        # Mock the analyze_and_flag_memories function to avoid actual processing
+        with patch("resync.api.chat.analyze_and_flag_memories") as mock_analyze:
+            mock_analyze.return_value = {"processed": 1, "deleted": 0, "flagged": 0}
+            
+            # Create a background task as done in the chat API
+            task = asyncio.create_task(run_auditor_safely())
+            
+            # Verify task was captured
+            assert background_tasks.task_count == 1
+            
+            # Execute the task manually
+            results = await background_tasks.run_all_async()
+            
+            # Verify the task executed
+            assert len(results) == 1
+            mock_analyze.assert_called_once()

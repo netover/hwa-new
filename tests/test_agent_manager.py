@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from resync.core.agent_manager import AgentManager, AgentsConfig
+from resync.core.agent_manager import AgentManager
 
 
 @pytest.fixture
@@ -103,6 +104,7 @@ def test_load_agents_from_invalid_json(
     # Assert
     assert agent_manager_instance.agents == {}
 
+
 @pytest.mark.asyncio
 async def test_tws_client_race_condition_prevention():
     """
@@ -116,28 +118,26 @@ async def test_tws_client_race_condition_prevention():
 
     # Mock the OptimizedTWSClient to track initialization calls
     init_call_count = 0
-    original_init = None
 
-    async def mock_tws_init(self, hostname, port, username, password, engine_name, engine_owner):
+    def mock_tws_init(self, hostname, port, username, password, engine_name, engine_owner):
         nonlocal init_call_count
         init_call_count += 1
-        # Simulate some async work
-        await asyncio.sleep(0.1)
-        return original_init(self, hostname, port, username, password, engine_name, engine_owner)
+        # Simulate some initialization work
+        import time
+        time.sleep(0.01)  # Small delay to simulate initialization time
+
+    # Create a mock instance that will be returned
+    mock_instance = MagicMock()
 
     with patch("resync.core.agent_manager.OptimizedTWSClient") as mock_tws_class:
-        # Store original __init__ method
-        original_init = mock_tws_class.__init__
-        # Replace with our counting version
-        mock_tws_class.__init__ = mock_tws_init
-
-        # Create a mock instance
-        mock_instance = MagicMock()
-        mock_tws_class.return_value = mock_instance
+        # Configure the mock class to track initialization and return our instance
+        mock_tws_class.side_effect = lambda *args, **kwargs: (
+            mock_tws_init(mock_instance, *args, **kwargs) or mock_instance
+        )
 
         # Act - Create multiple concurrent tasks that all try to initialize the TWS client
         tasks = []
-        for i in range(5):
+        for _ in range(5):
             task = asyncio.create_task(agent_manager._get_tws_client())
             tasks.append(task)
 
@@ -147,7 +147,7 @@ async def test_tws_client_race_condition_prevention():
         # Assert
         # All tasks should return the same client instance
         assert all(result is mock_instance for result in results)
-        # But the initialization should only happen once
+        # But the initialization should only happen once due to the async lock
         assert init_call_count == 1
         # The client should be stored in the agent manager
         assert agent_manager.tws_client is mock_instance
@@ -162,20 +162,6 @@ async def test_async_agent_loading():
     AgentManager._instance = None
     AgentManager._initialized = False
     agent_manager = AgentManager()
-
-    config_content = {
-        "agents": [
-            {
-                "id": "test-agent-1",
-                "name": "Test Agent 1",
-                "role": "Testing",
-                "goal": "To be tested",
-                "backstory": "Born in a test",
-                "tools": ["tws_status_tool"],
-                "model_name": "test-model",
-            }
-        ]
-    }
 
     with patch("resync.core.agent_manager.OptimizedTWSClient") as mock_tws_client:
         mock_instance = MagicMock()

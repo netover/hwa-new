@@ -13,6 +13,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const wsStatusTextEl = document.getElementById('ws-status-text');
     const websocketStatusEl = document.getElementById('websocket-status');
 
+    // RAG Upload Elements
+    const fileInputEl = document.getElementById('file-input');
+    const uploadButtonEl = document.getElementById('upload-button');
+    const uploadStatusEl = document.getElementById('upload-status');
+
     let websocket = null;
 
     // --- UI Update Functions ---
@@ -78,8 +83,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fetchAgents = async () => {
         try {
-            // This endpoint needs to be created in the backend
-            // For now, it's a placeholder. Let's assume it exists.
             const response = await fetch('/api/agents');
             if (!response.ok) throw new Error('Failed to fetch agents');
             const agents = await response.json();
@@ -94,6 +97,43 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Failed to fetch agents:', error);
             agentSelectEl.innerHTML = '<option value="">Falha ao carregar agentes</option>';
+        }
+    };
+
+    // --- RAG File Upload ---
+    const uploadFile = async () => {
+        const file = fileInputEl.files[0];
+        if (!file) {
+            uploadStatusEl.textContent = 'Por favor, selecione um arquivo.';
+            uploadStatusEl.className = 'upload-status error';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        uploadStatusEl.textContent = 'Enviando arquivo...';
+        uploadStatusEl.className = 'upload-status info';
+
+        try {
+            const response = await fetch('/api/rag/upload', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                uploadStatusEl.textContent = `Arquivo '${result.filename}' enviado com sucesso!`;
+                uploadStatusEl.className = 'upload-status success';
+                fileInputEl.value = ''; // Clear the input
+            } else {
+                throw new Error(result.detail || 'Falha no envio do arquivo.');
+            }
+        } catch (error) {
+            console.error('File upload error:', error);
+            uploadStatusEl.textContent = `Erro: ${error.message}`;
+            uploadStatusEl.className = 'upload-status error';
         }
     };
 
@@ -172,6 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
             sendMessage();
         }
     });
+    uploadButtonEl.addEventListener('click', uploadFile);
 
     // --- Initial Load ---
     const initializeDashboard = () => {

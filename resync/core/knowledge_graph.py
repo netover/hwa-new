@@ -7,9 +7,8 @@ conversations, outcomes, and solutions to build a self-improving system.
 """
 
 import logging
-import asyncio
-from typing import Dict, Any, Optional, List
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import httpx
 from pydantic import BaseModel
@@ -23,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class MemoryConfig(BaseModel):
     """Configuration for the async Mem0 client."""
+
     storage_provider: str = "qdrant"
     storage_host: str = "localhost"
     storage_port: int = 6333
@@ -69,9 +69,7 @@ class AsyncMem0Client:
         """
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
-                f"{self.base_url}/memories",
-                json=memory_content,
-                headers=self.headers
+                f"{self.base_url}/memories", json=memory_content, headers=self.headers
             )
             response.raise_for_status()
             return response.json()["id"]
@@ -90,9 +88,7 @@ class AsyncMem0Client:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             params = {"query": query, "limit": limit}
             response = await client.get(
-                f"{self.base_url}/search",
-                params=params,
-                headers=self.headers
+                f"{self.base_url}/search", params=params, headers=self.headers
             )
             response.raise_for_status()
             return response.json()["results"]
@@ -112,7 +108,7 @@ class AsyncMem0Client:
             response = await client.patch(
                 f"{self.base_url}/memories/{memory_id}",
                 json=updates,
-                headers=self.headers
+                headers=self.headers,
             )
             response.raise_for_status()
             return response.json()
@@ -126,8 +122,7 @@ class AsyncMem0Client:
         """
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.delete(
-                f"{self.base_url}/memories/{memory_id}",
-                headers=self.headers
+                f"{self.base_url}/memories/{memory_id}", headers=self.headers
             )
             response.raise_for_status()
 
@@ -144,7 +139,7 @@ class AsyncMem0Client:
             response = await client.post(
                 f"{self.base_url}/memories/{memory_id}/observations",
                 json=data,
-                headers=self.headers
+                headers=self.headers,
             )
             response.raise_for_status()
 
@@ -186,9 +181,17 @@ class AsyncKnowledgeGraph:
 
         # Initialize async Mem0 client
         self.client = AsyncMem0Client(config=mem0_config)
-        logger.info(f"AsyncKnowledgeGraph initialized with data directory: {self.data_dir}")
+        logger.info(
+            f"AsyncKnowledgeGraph initialized with data directory: {self.data_dir}"
+        )
 
-    async def add_conversation(self, user_query: str, agent_response: str, agent_id: str, context: Dict[str, Any] = None) -> str:
+    async def add_conversation(
+        self,
+        user_query: str,
+        agent_response: str,
+        agent_id: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """
         Stores a conversation between a user and an agent in the knowledge graph.
 
@@ -207,7 +210,7 @@ class AsyncKnowledgeGraph:
             "user_query": user_query,
             "agent_response": agent_response,
             "agent_id": agent_id,
-            "context": context or {}
+            "context": context or {},
         }
 
         # Store in Mem0 using truly async client
@@ -215,7 +218,9 @@ class AsyncKnowledgeGraph:
         logger.info(f"Added conversation to knowledge graph. Memory ID: {memory_id}")
         return memory_id
 
-    async def search_similar_issues(self, query: str, limit: int = 5) -> list:
+    async def search_similar_issues(
+        self, query: str, limit: int = 5
+    ) -> List[Dict[str, Any]]:
         """
         Searches the knowledge graph for similar past issues and solutions.
 
@@ -230,7 +235,13 @@ class AsyncKnowledgeGraph:
         logger.info(f"Found {len(memories)} similar issues for query: {query}")
         return memories
 
-    async def search_conversations(self, query: str = "type:conversation", limit: int = 100, sort_by: str = "created_at", sort_order: str = "desc") -> list:
+    async def search_conversations(
+        self,
+        query: str = "type:conversation",
+        limit: int = 100,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> List[Dict[str, Any]]:
         """
         Optimized search method for conversations with better defaults and sorting.
 
@@ -254,8 +265,8 @@ class AsyncKnowledgeGraph:
         # Sort memories by creation time if available (in-memory sort for better performance)
         try:
             memories.sort(
-                key=lambda x: x.get('created_at', ''),
-                reverse=(sort_order.lower() == 'desc')
+                key=lambda x: x.get("created_at", ""),
+                reverse=(sort_order.lower() == "desc"),
             )
         except Exception as e:
             logger.warning(f"Could not sort memories by {sort_by}: {e}")
@@ -276,7 +287,9 @@ class AsyncKnowledgeGraph:
         await self.client.update(memory_id, {"feedback": feedback, "rating": rating})
         logger.info(f"Added feedback to memory {memory_id}: {rating}/5 - {feedback}")
 
-    async def get_all_recent_conversations(self, limit: int = 100) -> list:
+    async def get_all_recent_conversations(
+        self, limit: int = 100
+    ) -> List[Dict[str, Any]]:
         """
         Retrieves all recent conversation-type memories for auditing.
 
@@ -293,7 +306,7 @@ class AsyncKnowledgeGraph:
             query="type:conversation",
             limit=limit,
             sort_by="created_at",
-            sort_order="desc"
+            sort_order="desc",
         )
 
     async def get_relevant_context(self, user_query: str) -> str:
@@ -312,14 +325,16 @@ class AsyncKnowledgeGraph:
 
         context_parts = []
         for mem in similar_issues:
-            if mem.get('content', {}).get('type') == 'conversation':
-                content = mem['content']
-                context_parts.append(f"""
+            if mem.get("content", {}).get("type") == "conversation":
+                content = mem["content"]
+                context_parts.append(
+                    f"""
 --- Problema Similar ---
-Usuário: {content.get('user_query')}
-Solução: {content.get('agent_response')}
-Avaliação: {content.get('metadata', {}).get('rating', 'N/A')}/5
-""")
+Usuário: {content.get("user_query")}
+Solução: {content.get("agent_response")}
+Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
+"""
+                )
 
         return "\n".join(context_parts)
 
@@ -400,15 +415,17 @@ Avaliação: {content.get('metadata', {}).get('rating', 'N/A')}/5
             observations = memories[0].get("observations", [])
             # Check for any processing indicators
             return any(
-                "FLAGGED_BY_IA" in str(obs) or
-                "MANUALLY_APPROVED_BY_ADMIN" in str(obs) or
-                "PROCESSED_BY_IA_AUDITOR" in str(obs)
+                "FLAGGED_BY_IA" in str(obs)
+                or "MANUALLY_APPROVED_BY_ADMIN" in str(obs)
+                or "PROCESSED_BY_IA_AUDITOR" in str(obs)
                 for obs in observations
             )
 
         return False
 
-    async def atomic_check_and_flag(self, memory_id: str, reason: str, confidence: float) -> bool:
+    async def atomic_check_and_flag(
+        self, memory_id: str, reason: str, confidence: float
+    ) -> bool:
         """
         Atomically checks if memory is already processed, and if not, flags it.
 
@@ -430,9 +447,9 @@ Avaliação: {content.get('metadata', {}).get('rating', 'N/A')}/5
 
         # Check if already processed
         if any(
-            "FLAGGED_BY_IA" in str(obs) or
-            "MANUALLY_APPROVED_BY_ADMIN" in str(obs) or
-            "PROCESSED_BY_IA_AUDITOR" in str(obs)
+            "FLAGGED_BY_IA" in str(obs)
+            or "MANUALLY_APPROVED_BY_ADMIN" in str(obs)
+            or "PROCESSED_BY_IA_AUDITOR" in str(obs)
             for obs in observations
         ):
             logger.info(f"Memory {memory_id} already processed, skipping flagging.")
@@ -442,7 +459,9 @@ Avaliação: {content.get('metadata', {}).get('rating', 'N/A')}/5
         flag_observation = f"FLAGGED_BY_IA: {reason} (Confidence: {confidence:.2f})"
         await self.client.add_observations(memory_id, [flag_observation])
 
-        logger.info(f"Successfully flagged memory {memory_id} with confidence {confidence:.2f}")
+        logger.info(
+            f"Successfully flagged memory {memory_id} with confidence {confidence:.2f}"
+        )
         return True
 
     async def atomic_check_and_delete(self, memory_id: str) -> bool:
@@ -465,19 +484,16 @@ Avaliação: {content.get('metadata', {}).get('rating', 'N/A')}/5
 
         # Check if already processed
         if any(
-            "FLAGGED_BY_IA" in str(obs) or
-            "MANUALLY_APPROVED_BY_ADMIN" in str(obs) or
-            "PROCESSED_BY_IA_AUDITOR" in str(obs)
+            "FLAGGED_BY_IA" in str(obs)
+            or "MANUALLY_APPROVED_BY_ADMIN" in str(obs)
+            or "PROCESSED_BY_IA_AUDITOR" in str(obs)
             for obs in observations
         ):
             logger.info(f"Memory {memory_id} already processed, skipping deletion.")
             return False
 
         # Mark as processed to prevent future processing
-        await self.client.add_observations(
-            memory_id,
-            ["PROCESSED_BY_IA_AUDITOR"]
-        )
+        await self.client.add_observations(memory_id, ["PROCESSED_BY_IA_AUDITOR"])
 
         # Delete the memory
         await self.client.delete(memory_id)

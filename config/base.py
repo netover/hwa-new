@@ -84,6 +84,20 @@ class Settings(AgnoSettings):
         default=int(os.environ.get("TWS_CACHE_TTL", 60)), # Default to 60 seconds
         description="Time-To-Live (TTL) for TWS API responses in cache (in seconds).",
     )
+
+    # --- Cache Hierarchy Configuration ---
+    CACHE_HIERARCHY_L1_MAX_SIZE: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_L1_MAX_SIZE", 1000)),
+        description="Maximum number of entries in L1 cache before LRU eviction.",
+    )
+    CACHE_HIERARCHY_L2_TTL: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_L2_TTL", 300)),
+        description="Time-To-Live (TTL) for L2 cache entries in seconds.",
+    )
+    CACHE_HIERARCHY_L2_CLEANUP_INTERVAL: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_L2_CLEANUP_INTERVAL", 30)),
+        description="Cleanup interval for L2 cache in seconds.",
+    )
     # These settings are critical for connecting to the HCL Workload Automation server
     # They MUST be provided in the .env file for security
     TWS_HOST: str = Field(default="", description="Hostname or IP address of the TWS server.")

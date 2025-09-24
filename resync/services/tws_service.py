@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from typing import List
 
 import httpx
-from pydantic import BaseModel
 
+from resync.core.cache_hierarchy import get_cache_hierarchy
 from resync.models.tws import (
     CriticalJob,
     JobStatus,
     SystemStatus,
     WorkstationStatus,
 )
-from resync.settings import settings # New import
+from resync.settings import settings  # New import
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -25,36 +24,9 @@ DEFAULT_TIMEOUT = 30.0
 
 
 # --- Caching Mechanism ---
-class CacheEntry(BaseModel):
-    """Represents a single entry in the cache."""
-    data: Any
-    timestamp: float
+# CacheEntry and SimpleTTLCache moved to resync.core.async_cache
+# Now using AsyncTTLCache for truly async operations
 
-class SimpleTTLCache:
-    """A simple in-memory cache with a Time-To-Live (TTL) for entries."""
-    def __init__(self, ttl: int = 30):
-        self.ttl = ttl
-        self.cache: Dict[str, CacheEntry] = {}
-
-    async def get(self, key: str) -> Any | None:
-        """Retrieves an item from the cache if it exists and has not expired."""
-        entry = self.cache.get(key)
-        if entry:
-            loop = asyncio.get_running_loop()
-            if (loop.time() - entry.timestamp) < self.ttl:
-                logger.debug(f"Cache HIT for key: {key}")
-                return entry.data
-            else:
-                logger.debug(f"Cache EXPIRED for key: {key}")
-                del self.cache[key]
-        logger.debug(f"Cache MISS for key: {key}")
-        return None
-
-    async def set(self, key: str, value: Any):
-        """Adds an item to the cache."""
-        loop = asyncio.get_running_loop()
-        self.cache[key] = CacheEntry(data=value, timestamp=loop.time())
-        logger.debug(f"Cache SET for key: {key}")
 
 # --- TWS Client ---
 class OptimizedTWSClient:
@@ -84,8 +56,8 @@ class OptimizedTWSClient:
             verify=False,  # Note: In production, consider using proper SSL verification
             timeout=DEFAULT_TIMEOUT,
         )
-        # Caching layer to reduce redundant API calls
-        self.cache = SimpleTTLCache(ttl=settings.TWS_CACHE_TTL) # Use setting here
+        # Caching layer to reduce redundant API calls - now using cache hierarchy
+        self.cache = get_cache_hierarchy()
         logger.info("OptimizedTWSClient initialized for base URL: %s", self.base_url)
 
     @asynccontextmanager
@@ -126,7 +98,9 @@ class OptimizedTWSClient:
         url = f"/model/workstation?engineName={self.engine_name}&engineOwner={self.engine_owner}"
         async with self._api_request("GET", url) as data:
             workstations = [WorkstationStatus(**ws) for ws in data]
-            await self.cache.set(cache_key, workstations)
+            await self.cache.set_from_source(
+                cache_key, workstations, ttl_seconds=settings.TWS_CACHE_TTL
+            )
             return workstations
 
     async def get_jobs_status(self) -> List[JobStatus]:
@@ -139,7 +113,9 @@ class OptimizedTWSClient:
         url = f"/model/jobdefinition?engineName={self.engine_name}&engineOwner={self.engine_owner}"
         async with self._api_request("GET", url) as data:
             jobs = [JobStatus(**job) for job in data]
-            await self.cache.set(cache_key, jobs)
+            await self.cache.set_from_source(
+                cache_key, jobs, ttl_seconds=settings.TWS_CACHE_TTL
+            )
             return jobs
 
     async def get_critical_path_status(self) -> List[CriticalJob]:
@@ -152,7 +128,9 @@ class OptimizedTWSClient:
         url = "/plan/current/criticalpath"
         async with self._api_request("GET", url) as data:
             critical_jobs = [CriticalJob(**job) for job in data.get("jobs", [])]
-            await self.cache.set(cache_key, critical_jobs)
+            await self.cache.set_from_source(
+                cache_key, critical_jobs, ttl_seconds=settings.TWS_CACHE_TTL
+            )
             return critical_jobs
 
     async def get_system_status(self) -> SystemStatus:
