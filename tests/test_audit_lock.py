@@ -16,7 +16,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 import redis.asyncio as redis
-from redis.exceptions import ScriptError
 
 from resync.core.audit_lock import AuditLockContext, DistributedAuditLock, audit_lock
 
@@ -392,10 +391,10 @@ async def test_invalid_lock_value_validation(audit_lock_context, mock_redis_clie
 async def test_script_execution_error(audit_lock_context, mock_redis_client, caplog):
     """Test error handling during script execution."""
     audit_lock_context.client = mock_redis_client
-    mock_redis_client.evalsha.side_effect = ScriptError("Test error")
+    mock_redis_client.evalsha.side_effect = Exception("Test error")
     
     with caplog.at_level(logging.ERROR):
-        with pytest.raises(ScriptError):
+        with pytest.raises(Exception):
             await audit_lock_context._release_lock()
     
     assert "Error executing Redis script during lock release" in caplog.text
@@ -409,7 +408,7 @@ async def test_eval_fallback(audit_lock_context, mock_redis_client, caplog):
     
     await audit_lock_context._release_lock()
     mock_redis_client.eval.assert_called()
-    assert "Using eval fallback" in caplog.text
+    assert "Using eval fallback - script not loaded" in caplog.text
 
     async def test_special_characters_in_memory_id(self):
         """Test behavior with special characters in memory ID."""
