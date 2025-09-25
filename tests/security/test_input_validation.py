@@ -42,15 +42,15 @@ class TestInputValidation:
         xss_payloads = security_test_data["xss_payloads"]
 
         for payload in xss_payloads:
-            # Test endpoints that might reflect user input
-            response = self.client.post("/review", json={"content": payload})
+            # Test /api/chat endpoint
+            response = self.client.post("/api/chat", json={"message": payload})
             assert response.status_code in [200, 400, 422]
 
             # Verify response doesn't contain unescaped script tags
             if response.status_code == 200:
                 response_data = response.json()
                 response_str = json.dumps(response_data)
-                assert "<script>" not in response_str or "<script>" in response_str
+                assert "<script>" not in response_str
 
     @pytest.mark.security
     def test_path_traversal_prevention(self):
@@ -101,12 +101,12 @@ class TestInputValidation:
     @pytest.mark.security
     def test_large_payload_handling(self):
         """Test handling of oversized payloads."""
-        # Create a very large payload
-        large_payload = {"data": "x" * (10 * 1024 * 1024)}  # 10MB
+        # Create a payload that exceeds max_length
+        large_payload = {"content": "x" * 1001}  # Exceeds max_length=1000
 
-        response = self.client.post("/review", json=large_payload)
-        # Should reject or handle gracefully
-        assert response.status_code in [400, 413, 422, 500]
+        response = self.client.post("/api/review", json=large_payload)
+        # Should reject due to validation
+        assert response.status_code == 422
 
     @pytest.mark.security
     def test_invalid_json_handling(self):
@@ -121,10 +121,10 @@ class TestInputValidation:
         ]
 
         for payload in invalid_json_payloads:
-            response = self.client.post("/review", data=payload,
+            response = self.client.post("/api/review", data=payload,
                                       headers={"Content-Type": "application/json"})
             # Should handle invalid JSON gracefully
-            assert response.status_code in [400, 422]
+            assert response.status_code == 422
 
     @pytest.mark.security
     def test_unicode_handling(self):
@@ -139,9 +139,9 @@ class TestInputValidation:
         ]
 
         for payload in unicode_payloads:
-            response = self.client.post("/review", json=payload)
+            response = self.client.post("/api/review", json=payload)
             # Should handle Unicode properly
-            assert response.status_code in [200, 400, 422]
+            assert response.status_code == 200
 
     @pytest.mark.security
     def test_rate_limiting(self):
@@ -171,14 +171,14 @@ class TestInputValidation:
     def test_content_type_validation(self):
         """Test content type validation."""
         # Test with wrong content type
-        response = self.client.post("/review", data="not json",
+        response = self.client.post("/api/review", data="not json",
                                   headers={"Content-Type": "text/plain"})
-        assert response.status_code in [400, 422]
+        assert response.status_code == 422
 
         # Test with no content type
-        response = self.client.post("/review", json={"content": "test"})
+        response = self.client.post("/api/review", json={"content": "test"})
         # Should work with proper JSON
-        assert response.status_code in [200, 400, 422]
+        assert response.status_code == 200
 
 
 class TestAuthenticationSecurity:
@@ -199,9 +199,9 @@ class TestAuthenticationSecurity:
 
         for token in invalid_tokens:
             headers = {"Authorization": f"Bearer {token}"}
-            response = self.client.get("/protected", headers=headers)
+            response = self.client.get("/api/protected", headers=headers)
             # Should reject invalid tokens
-            assert response.status_code in [401, 403]
+            assert response.status_code == 401
 
     @pytest.mark.security
     def test_expired_token_handling(self):
@@ -210,8 +210,8 @@ class TestAuthenticationSecurity:
         expired_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE1MTYyMzkwMjJ9.fake"
 
         headers = {"Authorization": f"Bearer {expired_token}"}
-        response = self.client.get("/protected", headers=headers)
-        assert response.status_code in [401, 403]
+        response = self.client.get("/api/protected", headers=headers)
+        assert response.status_code == 401
 
     @pytest.mark.security
     def test_privilege_escalation_prevention(self):
@@ -220,47 +220,43 @@ class TestAuthenticationSecurity:
         user_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwicm9sZSI6InVzZXIifQ.fake"
 
         headers = {"Authorization": f"Bearer {user_token}"}
-        response = self.client.get("/admin/users", headers=headers)
+        response = self.client.get("/api/admin/users", headers=headers)
         # Should deny access to admin endpoints
-        assert response.status_code in [401, 403, 404]
+        assert response.status_code == 403
 
 
 class TestEncryptionSecurity:
     """Test encryption and data protection measures."""
 
+    def setup_method(self):
+        self.client = TestClient(app)
+
     @pytest.mark.security
     def test_sensitive_data_encryption(self):
         """Test that sensitive data is properly encrypted."""
-        # This test would verify that sensitive data like passwords,
-        # API keys, etc. are encrypted when stored
-
-        sensitive_data = {
-            "password": "secret123",
-            "api_key": "sk-1234567890abcdef",
-            "token": "ghp_abcdefghijklmnopqrstuvwxyz"
-        }
+        from resync.core.encryption_service import EncryptionService
 
         # Mock the encryption service
-        with patch('resync.core.encryption_service.encrypt') as mock_encrypt:
-            mock_encrypt.return_value = "encrypted_data"
+        with patch.object(EncryptionService, 'encrypt') as mock_encrypt:
+            mock_encrypt.return_value = "encrypted_test"
 
-            # Test that sensitive data gets encrypted
-            # This would depend on actual implementation
+            # POST to sensitive endpoint which uses encryption
+            response = self.client.post("/api/sensitive", json={"data": "test"})
+            assert response.status_code == 200
             assert mock_encrypt.called
-            assert mock_encrypt.call_count == len(sensitive_data)
+            assert "encrypted_test" in response.json()["encrypted"]
 
     @pytest.mark.security
     def test_data_masking_in_logs(self):
         """Test that sensitive data is masked in logs."""
-        sensitive_info = "password=secret123&api_key=sk-123456"
-
-        # Mock logging to capture log output
-        with patch('resync.core.logger.log_info') as mock_log:
-            # Simulate logging with sensitive data
-            mock_log(f"Request with: {sensitive_info}")
+        # Mock the underlying logger.info to capture masked log output
+        with patch('resync.core.logger.logger.info') as mock_log:
+            # POST to sensitive endpoint which logs the data
+            response = self.client.post("/api/sensitive", json={"data": "password=secret123"})
+            assert response.status_code == 200
 
             # Verify that sensitive data is masked in logs
+            assert mock_log.called
             logged_message = mock_log.call_args[0][0]
             assert "secret123" not in logged_message
-            assert "sk-123456" not in logged_message
-            assert "password=***" in logged_message or "password=REDACTED" in logged_message
+            assert "***" in logged_message

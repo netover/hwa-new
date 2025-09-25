@@ -49,7 +49,8 @@ def test_singleton_pattern(agent_manager_instance: AgentManager):
 
 
 @patch("resync.core.agent_manager.OptimizedTWSClient")
-def test_load_agents_from_config(
+@pytest.mark.asyncio
+async def test_load_agents_from_config(
     mock_tws_client: MagicMock,
     agent_manager_instance: AgentManager,
     mock_config_file: Path,
@@ -62,7 +63,7 @@ def test_load_agents_from_config(
     agent_manager_instance.tws_client = mock_tws_client
 
     # Act
-    agent_manager_instance.load_agents_from_config(config_path=mock_config_file)
+    await agent_manager_instance.load_agents_from_config(config_path=mock_config_file)
 
     # Assert
     assert "test-agent-1" in agent_manager_instance.agents
@@ -73,7 +74,8 @@ def test_load_agents_from_config(
     assert "tws_status_tool" in [t.name for t in agent.tools]
 
 
-def test_load_agents_from_nonexistent_file(agent_manager_instance: AgentManager):
+@pytest.mark.asyncio
+async def test_load_agents_from_nonexistent_file(agent_manager_instance: AgentManager):
     """
     Tests that the agent manager handles a missing configuration file gracefully.
     """
@@ -82,13 +84,14 @@ def test_load_agents_from_nonexistent_file(agent_manager_instance: AgentManager)
     assert not non_existent_path.exists()
 
     # Act
-    agent_manager_instance.load_agents_from_config(config_path=non_existent_path)
+    await agent_manager_instance.load_agents_from_config(config_path=non_existent_path)
 
     # Assert
     assert agent_manager_instance.agents == {}
 
 
-def test_load_agents_from_invalid_json(
+@pytest.mark.asyncio
+async def test_load_agents_from_invalid_json(
     agent_manager_instance: AgentManager, tmp_path: Path
 ):
     """
@@ -99,7 +102,7 @@ def test_load_agents_from_invalid_json(
     invalid_json_file.write_text("{'invalid': 'json',}")  # Malformed JSON
 
     # Act
-    agent_manager_instance.load_agents_from_config(config_path=invalid_json_file)
+    await agent_manager_instance.load_agents_from_config(config_path=invalid_json_file)
 
     # Assert
     assert agent_manager_instance.agents == {}

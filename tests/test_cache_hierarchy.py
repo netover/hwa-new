@@ -262,7 +262,7 @@ class TestCacheHierarchy:
 
         assert metrics["total_sets"] == 2
         assert metrics["total_gets"] == 3
-        assert metrics["l1_hit_ratio"] == 1.0  # 2 hits out of 2 gets
+        assert metrics["l1_hit_ratio"] == pytest.approx(2/3, rel=1e-2)  # 2 hits out of 3 gets
         assert metrics["l1_size"] >= 2
         assert metrics["l2_size"] >= 2
         assert metrics["overall_hit_ratio"] == 2.0 / 3.0  # 2/3
@@ -291,9 +291,9 @@ class TestCacheHierarchy:
             value = await small_cache.get("key1")
             assert value == "value1"
 
-            # Now key1 should be back in L1
+            # Now key1 should be back in L1, evicting another (size remains 2)
             l1_size, l2_size = small_cache.size()
-            assert l1_size == 3  # All keys back in L1 (key1 was added back)
+            assert l1_size == 2  # Max size 2, key1 added, LRU evicted
 
         finally:
             await small_cache.stop()

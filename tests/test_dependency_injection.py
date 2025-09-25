@@ -22,7 +22,8 @@ class TestDependencyInjection:
             mock_agent_manager_module._get_tws_client.return_value = MagicMock()
 
             # Test that we can get TWS client
-            client = get_tws_client()
+            gen = get_tws_client()
+            client = next(gen)
             assert client is not None
 
     @pytest.mark.di
@@ -34,7 +35,8 @@ class TestDependencyInjection:
                 mock_agent_manager._mock_tws_client = MagicMock()
 
                 # Test that mock client is returned when TWS_MOCK_MODE is True
-                client = get_tws_client()
+                gen = get_tws_client()
+                client = next(gen)
                 assert client is not None
 
     @pytest.mark.di
@@ -44,8 +46,9 @@ class TestDependencyInjection:
             # Simulate agent manager failure
             mock_agent_manager._get_tws_client.side_effect = Exception("TWS client unavailable")
 
+            gen = get_tws_client()
             with pytest.raises(Exception, match="TWS client unavailable"):
-                list(get_tws_client())
+                next(gen)
 
     @pytest.mark.di
     def test_dependency_caching(self):
@@ -61,11 +64,13 @@ class TestDependencyInjection:
             mock_agent_manager._get_tws_client.side_effect = mock_tws_factory
 
             # First call should create new instance
-            client1 = list(get_tws_client())[0]
+            gen1 = get_tws_client()
+            client1 = next(gen1)
             assert call_count == 1
 
             # Second call should reuse cached instance
-            client2 = list(get_tws_client())[0]
+            gen2 = get_tws_client()
+            client2 = next(gen2)
             assert call_count == 1  # Should still be 1, not 2
 
     @pytest.mark.di
@@ -77,7 +82,7 @@ class TestDependencyInjection:
                 mock_settings.TWS_MOCK_MODE = True
                 mock_agent_manager._mock_tws_client = MagicMock()
 
-                client = list(get_tws_client())[0]
+                client = next(get_tws_client())
                 assert client is not None
 
 
@@ -87,10 +92,11 @@ class TestAgentManager:
     @pytest.mark.di
     def test_agent_manager_initialization(self):
         """Test AgentManager initialization."""
-        manager = AgentManager()
-        assert manager is not None
-        assert manager.agents == {}
-        assert manager.agent_configs == []
+        with patch.object(AgentManager, 'load_agents_from_config', return_value=[]):
+            manager = AgentManager()
+            assert manager is not None
+            assert manager.agents == {}
+            assert manager.agent_configs == []
 
     @pytest.mark.di
     def test_agent_manager_singleton_behavior(self):
@@ -109,9 +115,10 @@ class TestAgentManager:
     @pytest.mark.di
     def test_agent_manager_get_all_agents(self):
         """Test AgentManager get_all_agents method."""
-        manager = AgentManager()
-        agents = manager.get_all_agents()
-        assert agents == []
+        with patch.object(AgentManager, 'load_agents_from_config', return_value=[]):
+            manager = AgentManager()
+            agents = manager.get_all_agents()
+            assert agents == []
 
     @pytest.mark.di
     def test_agent_manager_tools_discovery(self):

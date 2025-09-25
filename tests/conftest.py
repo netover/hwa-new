@@ -6,6 +6,7 @@ This module provides shared fixtures for all tests in the project.
 import asyncio
 from typing import Any, Callable, List, Tuple
 from unittest.mock import patch, MagicMock
+from unittest.mock import AsyncMock
 import pytest
 
 
@@ -246,3 +247,39 @@ def async_test_context():
         "timeout": 30.0,
         "max_concurrent": 10
     }
+import redis
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_redis_global():
+    """Global mock for Redis clients to prevent real connections in tests."""
+    with (
+        patch('redis.asyncio.Redis', new_callable=AsyncMock) as mock_async_redis,
+        patch('redis.Redis', new_callable=MagicMock) as mock_sync_redis
+    ):
+        # Configure async mock
+        mock_async_redis.return_value.ping.return_value = True
+        mock_async_redis.return_value.set.return_value = True
+        mock_async_redis.return_value.get.return_value = None
+        mock_async_redis.return_value.delete.return_value = 1
+        mock_async_redis.return_value.eval.return_value = 1
+        mock_async_redis.return_value.evalsha.return_value = 1
+        mock_async_redis.return_value.script_load.return_value = "mock_sha"
+        mock_async_redis.return_value.keys.return_value = []
+        mock_async_redis.return_value.ttl.return_value = 0
+        mock_async_redis.return_value.flushdb.return_value = True
+        mock_async_redis.return_value.aclose.return_value = None
+        
+        # Configure sync mock (if used)
+        mock_sync_redis.return_value.ping.return_value = True
+        mock_sync_redis.return_value.set.return_value = True
+        mock_sync_redis.return_value.get.return_value = None
+        mock_sync_redis.return_value.delete.return_value = 1
+        mock_sync_redis.return_value.eval.return_value = 1
+        mock_sync_redis.return_value.evalsha.return_value = 1
+        mock_sync_redis.return_value.script_load.return_value = "mock_sha"
+        mock_sync_redis.return_value.keys.return_value = []
+        mock_sync_redis.return_value.ttl.return_value = 0
+        mock_sync_redis.return_value.flushdb.return_value = True
+        mock_sync_redis.return_value.close.return_value = None
+        
+        yield

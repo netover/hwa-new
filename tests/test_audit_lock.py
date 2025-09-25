@@ -326,13 +326,14 @@ class TestGlobalAuditLock:
     async def test_global_convenience_function(self):
         """Test the distributed_audit_lock convenience function."""
         from resync.core.audit_lock import distributed_audit_lock
-
+    
         memory_id = "test_convenience_function"
-
-        async with distributed_audit_lock(memory_id, timeout=5):
-            assert await audit_lock.is_locked(memory_id)
-
-        assert not await audit_lock.is_locked(memory_id)
+    
+        lock = DistributedAuditLock()
+        async with await lock.acquire(memory_id, timeout=5):
+            assert await lock.is_locked(memory_id)
+    
+        assert not await lock.is_locked(memory_id)
 
 
 class TestEdgeCases:
@@ -403,9 +404,11 @@ async def test_script_execution_error(audit_lock_context, mock_redis_client, cap
 async def test_eval_fallback(audit_lock_context, mock_redis_client, caplog):
     """Test fallback to eval when script not loaded."""
     audit_lock_context.client = mock_redis_client
+    audit_lock_context._locked = True
+    audit_lock_context.lock_value = str(uuid.uuid4())
     audit_lock_context.release_script_sha = None
     mock_redis_client.eval.return_value = 1
-    
+
     await audit_lock_context._release_lock()
     mock_redis_client.eval.assert_called()
     assert "Using eval fallback - script not loaded" in caplog.text

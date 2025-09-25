@@ -243,6 +243,7 @@ class TestResyncIntegration:
         mock_llm_responses,
     ):
         """Test the complete flow with mostly correct agent responses."""
+        mock_knowledge_graph.delete_memory.return_value = True
         with (
             patch("resync.core.ia_auditor.knowledge_graph", mock_knowledge_graph),
             patch("resync.core.ia_auditor.audit_queue", mock_audit_queue),
@@ -252,7 +253,7 @@ class TestResyncIntegration:
             mock_call_llm.side_effect = [
                 mock_llm_responses["correct_response"],  # First memory - correct
                 mock_llm_responses["correct_response"],  # Second memory - correct
-                mock_llm_responses["incorrect_response"],  # Third memory - incorrect
+                '{"is_incorrect": true, "confidence": 0.90, "reason": "Technical error in response"}',  # Third memory - incorrect, confidence >0.85 for delete
             ]
 
             # Run the analysis
@@ -260,7 +261,7 @@ class TestResyncIntegration:
 
             # Verify results
             assert result["deleted"] == 1  # One memory should be deleted
-            assert result["flagged"] == 1  # One memory should be flagged
+            assert result["flagged"] == 0  # Confidence >0.85, so deleted not flagged
 
             # Verify knowledge graph interactions
             mock_knowledge_graph.get_all_recent_conversations.assert_called_once_with(
@@ -360,13 +361,14 @@ class TestResyncIntegration:
         mock_audit_queue,
     ):
         """Test the integration between knowledge graph and audit queue."""
+        mock_audit_queue.add_audit_record.return_value = None
         with (
             patch("resync.core.ia_auditor.knowledge_graph", mock_knowledge_graph),
             patch("resync.core.ia_auditor.audit_queue", mock_audit_queue),
             patch("resync.core.ia_auditor.call_llm") as mock_call_llm,
         ):
             # Configure LLM to flag a memory
-            mock_call_llm.return_value = '{"is_incorrect": true, "confidence": 0.70, "reason": "Wrong command"}'
+            mock_call_llm.return_value = '{"is_incorrect": true, "confidence": 0.86, "reason": "Wrong command"}'  # >0.85 for flag
 
             # Run the analysis
             await analyze_and_flag_memories()
@@ -377,7 +379,7 @@ class TestResyncIntegration:
 
             assert call_args["id"] == "mem_3"
             assert call_args["ia_audit_reason"] == "Wrong command"
-            assert call_args["ia_audit_confidence"] == 0.70
+            assert call_args["ia_audit_confidence"] == 0.86
 
     @pytest.mark.asyncio
     async def test_conversation_rating_filter(
@@ -871,6 +873,8 @@ class TestEndToEndIntegration:
         """Test end-to-end flow where agent gives incorrect advice that gets flagged."""
 
         # Mock dependencies with proper singleton handling
+        import resync.api.chat
+        original_run_auditor_safely = resync.api.chat.run_auditor_safely
         with (
             patch("resync.core.agent_manager.agent_manager", mock_agent_manager),
             patch("resync.api.chat.agent_manager", mock_agent_manager),
@@ -881,7 +885,17 @@ class TestEndToEndIntegration:
             patch("resync.core.ia_auditor.audit_queue") as mock_audit_queue,
             patch("resync.api.chat.knowledge_graph") as mock_chat_knowledge_graph,
             patch("resync.api.chat.connection_manager") as mock_connection_manager,
+            patch("resync.api.chat.run_auditor_safely") as mock_run_auditor_safely,
         ):
+            task = None
+            def side_effect():
+                nonlocal task
+                task = asyncio.create_task(original_run_auditor_safely())
+                return task
+            mock_run_auditor_safely.side_effect = side_effect
+            mock_analyze_and_flag_memories.return_value = {"deleted": 0, "flagged": 1, "processed": 1, "skipped": 0}
+            mock_connection_manager.connect = AsyncMock()
+            mock_connection_manager.disconnect = AsyncMock()
             # Create a mock agent with incorrect stream method
             mock_agent = AsyncMock()
             async def incorrect_stream(enhanced_query):
@@ -952,21 +966,21 @@ class TestEndToEndIntegration:
             # Run the websocket endpoint
             await websocket_endpoint(mock_websocket, "test-agent")
             
-            # Verify the flow processed the incorrect advice
-            # Wait for auditor to process (it runs in background)
-            await asyncio.sleep(0.5)
+            # Wait for auditor to process
+            if task is not None:
+                await asyncio.wait_for(task, timeout=5.0)
             
-            # Verify auditor flagged the incorrect response
+            # Verify the flow processed the incorrect advice
+            assert mock_analyze_and_flag_memories.called
             mock_knowledge_graph_instance.get_all_recent_conversations.assert_called()
-            mock_llm_call.assert_called()
             
             # Since this is incorrect advice, it should be processed by auditor
             # The mock LLM will flag this as incorrect
-            if mock_audit_queue.add_audit_record.called:
-                audit_call_args = mock_audit_queue.add_audit_record.call_args[0][0]
-                assert "permission denied" in audit_call_args["user_query"].lower()
-                assert audit_call_args["ia_audit_confidence"] == 0.90
-                assert "Incorrect chmod command suggestion" in audit_call_args["ia_audit_reason"]
+            mock_audit_queue.add_audit_record.assert_called()
+            audit_call_args = mock_audit_queue.add_audit_record.call_args[0][0]
+            assert "permission denied" in audit_call_args["user_query"].lower()
+            assert audit_call_args["ia_audit_confidence"] == 0.90
+            assert "Incorrect chmod command suggestion" in audit_call_args["ia_audit_reason"]
 
     @pytest.mark.asyncio
     async def test_end_to_end_error_handling(

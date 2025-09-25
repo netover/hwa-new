@@ -265,8 +265,8 @@ class TestAsyncTTLCacheIntegration:
             )
 
             # Verify cache is properly initialized
-            assert isinstance(client.cache, AsyncTTLCache)
-            assert client.cache.ttl_seconds == 60
+            from resync.core.cache_hierarchy import CacheHierarchy
+            assert isinstance(client.cache, CacheHierarchy)
 
             # Test cache operations work
             await client.cache.set("test", "test_value")

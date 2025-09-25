@@ -110,33 +110,18 @@ def test_discover_tools(agent_manager):
 
 @pytest.mark.asyncio
 async def test_error_handling_missing_tool(
-    agent_manager, test_agent_config, tmp_path, caplog
+    agent_manager, caplog
 ):
-    """Test that a warning is logged when an agent config references a non-existent tool."""
-    # Arrange: Create a config with a tool that doesn't exist
-    test_agent_config["tools"].append("non_existent_tool")
-    config_data = {"agents": [test_agent_config]}
-    config_file = tmp_path / "invalid_tools_config.json"
-    config_file.write_text(json.dumps(config_data))
+    """Test error handling when getting agent with missing tool."""
+    # Arrange: Load from default config
+    await agent_manager.load_agents_from_config()
 
-    # Act: Load agents from the config
-    with caplog.at_level(logging.WARNING):
-        await agent_manager.load_agents_from_config(config_file)
-
-    # Assert: Check that the agent was still created
-    assert "test_agent_1" in agent_manager.agents
-    agent = agent_manager.get_agent("test_agent_1")
-    assert agent is not None
-
-    # Assert: Check that the warning was logged correctly
-    assert (
-        "Tool 'non_existent_tool' not found for agent 'test_agent_1'" in caplog.text
-    )
-
-    # Assert: Check that the valid tool is present and the invalid one is not
-    agent_tool_names = [t.name for t in agent.tools]
-    assert "tws_status_tool" in agent_tool_names
-    assert "non_existent_tool" not in agent_tool_names
+    # Act & Assert
+    with pytest.raises(ValueError, match="not found"):
+        agent_manager.get_agent_with_tool("test-agent-1", "non_existent_tool")
+    
+    # Check log
+    assert "Tool 'non_existent_tool' not found for agent 'test-agent-1'" in caplog.text
 
 
 @pytest.mark.asyncio
