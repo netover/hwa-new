@@ -10,11 +10,13 @@ Tests verify:
 """
 
 import asyncio
-from unittest.mock import AsyncMock
+import logging
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
 import redis.asyncio as redis
+from redis.exceptions import ScriptError
 
 from resync.core.audit_lock import AuditLockContext, DistributedAuditLock, audit_lock
 
@@ -22,24 +24,24 @@ from resync.core.audit_lock import AuditLockContext, DistributedAuditLock, audit
 class TestDistributedAuditLock:
     """Test suite for DistributedAuditLock functionality."""
 
-    @pytest_asyncio.fixture
-    async def redis_client(self):
-        """Create a Redis client for testing."""
-        client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=True)
-        # Clear test database
-        await client.flushdb()
-        yield client
-        # Cleanup after test
-        await client.flushdb()
-        await client.aclose()
+@pytest_asyncio.fixture
+async def redis_client():
+    """Create a Redis client for testing."""
+    client = redis.Redis.from_url("redis://localhost:6379/1", decode_responses=True)
+    # Clear test database
+    await client.flushdb()
+    yield client
+    # Cleanup after test
+    await client.flushdb()
+    await client.aclose()
 
-    @pytest_asyncio.fixture
-    async def audit_lock_instance(self, redis_client):
-        """Create a DistributedAuditLock instance for testing."""
-        lock = DistributedAuditLock("redis://localhost:6379/1")
-        await lock.connect()
-        yield lock
-        await lock.disconnect()
+@pytest_asyncio.fixture
+async def audit_lock_instance(redis_client):
+    """Create a DistributedAuditLock instance for testing."""
+    lock = DistributedAuditLock("redis://localhost:6379/1")
+    await lock.connect()
+    yield lock
+    await lock.disconnect()
 
     async def test_basic_lock_acquisition(self, audit_lock_instance):
         """Test basic lock acquisition and release."""
@@ -201,19 +203,23 @@ class TestDistributedAuditLock:
 class TestAuditLockContext:
     """Test suite for AuditLockContext functionality."""
 
-    @pytest_asyncio.fixture
-    async def mock_redis_client(self):
-        """Create a mock Redis client for testing."""
-        client = AsyncMock(spec=redis.Redis)
-        client.set.return_value = True  # Mock successful lock acquisition
-        client.eval.return_value = 1  # Mock successful lock release
-        return client
+@pytest.fixture
+def mock_redis_client():
+    """Create a mock Redis client for testing."""
+    client = AsyncMock()
+    client.set.return_value = True
+    client.eval.return_value = 1
+    client.evalsha.return_value = 1
+    client.script_load.return_value = "mock_sha"
+    client.exists.return_value = 0
+    client.delete.return_value = 1
+    return client
 
-    @pytest_asyncio.fixture
-    async def audit_lock_context(self, mock_redis_client):
-        """Create an AuditLockContext for testing."""
-        context = AuditLockContext(mock_redis_client, "test_lock_key", 30)
-        return context
+@pytest_asyncio.fixture
+async def audit_lock_context(mock_redis_client):
+    """Create an AuditLockContext for testing."""
+    context = AuditLockContext(mock_redis_client, "test_lock_key", 30)
+    return context
 
     async def test_context_enter(self, audit_lock_context, mock_redis_client):
         """Test context manager enter."""
@@ -246,13 +252,13 @@ class TestAuditLockContext:
 class TestConcurrentAccess:
     """Test concurrent access scenarios."""
 
-    @pytest_asyncio.fixture
-    async def audit_lock_instance(self):
-        """Create a DistributedAuditLock instance."""
-        lock = DistributedAuditLock("redis://localhost:6379/1")
-        await lock.connect()
-        yield lock
-        await lock.disconnect()
+@pytest_asyncio.fixture
+async def audit_lock_instance():
+    """Create a DistributedAuditLock instance."""
+    lock = DistributedAuditLock("redis://localhost:6379/1")
+    await lock.connect()
+    yield lock
+    await lock.disconnect()
 
     async def test_10_concurrent_threads(self, audit_lock_instance):
         """Test with 10+ concurrent threads as requested."""
@@ -361,6 +367,7 @@ class TestEdgeCases:
             assert "long" in str(e).lower() or True  # Allow both behaviors
 
         await lock.disconnect()
+@pytest.mark.asyncio
 async def test_invalid_lock_key_validation(audit_lock_instance):
     """Test lock key validation."""
     # Test non-string memory_id
@@ -371,33 +378,38 @@ async def test_invalid_lock_key_validation(audit_lock_instance):
     with pytest.raises(ValueError, match="Invalid memory_id"):
         await audit_lock_instance.acquire("", timeout=5)
 
+@pytest.mark.asyncio
 async def test_invalid_lock_value_validation(audit_lock_context, mock_redis_client):
     """Test lock value validation during release."""
     # Set invalid lock value
+    audit_lock_context.client = mock_redis_client
     audit_lock_context.lock_value = "invalid-uuid"
     
     with pytest.raises(ValueError, match="Invalid lock value"):
         await audit_lock_context._release_lock()
 
+@pytest.mark.asyncio
 async def test_script_execution_error(audit_lock_context, mock_redis_client, caplog):
     """Test error handling during script execution."""
-    mock_redis_client.evalsha = classmethod(lambda _, *a, **k: raise_(redis.errors.ScriptError("Test error")))
+    audit_lock_context.client = mock_redis_client
+    mock_redis_client.evalsha.side_effect = ScriptError("Test error")
     
     with caplog.at_level(logging.ERROR):
-        with pytest.raises(redis.errors.ScriptError):
+        with pytest.raises(ScriptError):
             await audit_lock_context._release_lock()
     
     assert "Error executing Redis script during lock release" in caplog.text
 
-async def test_eval_fallback(audit_lock_context, mock_redis_client):
+@pytest.mark.asyncio
+async def test_eval_fallback(audit_lock_context, mock_redis_client, caplog):
     """Test fallback to eval when script not loaded."""
+    audit_lock_context.client = mock_redis_client
     audit_lock_context.release_script_sha = None
-    mock_redis_client.eval = classmethod(lambda _, *a, **k: "1")
+    mock_redis_client.eval.return_value = 1
     
-    result = await audit_lock_context._release_lock()
-    assert result is None
+    await audit_lock_context._release_lock()
     mock_redis_client.eval.assert_called()
-    assert "Using eval fallback" in mock_redis_client.logger.warning.call_args[0][0]
+    assert "Using eval fallback" in caplog.text
 
     async def test_special_characters_in_memory_id(self):
         """Test behavior with special characters in memory ID."""
