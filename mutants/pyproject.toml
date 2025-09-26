@@ -1,0 +1,63 @@
+[project]
+name = "resync"
+version = "0.1.0"
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+namespace_packages = true
+strict = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "agno.*",
+    "pandas.*",
+    "openpyxl.*",
+    "docx.*",
+    "pypdf.*",
+    "watchfiles.*",
+    "sse_starlette.*",
+    "starlette.*",
+    "git.*",
+    "gitdb.*",
+    "smmap.*",
+    "fastapi.*",
+    "pydantic.*",
+    "pydantic_settings.*",
+    "httpx.*",
+    "pytest.*",
+    "sentence_transformers.*",
+    "networkx.*",
+    "anthropic.*",
+    "openai.*"
+]
+ignore_missing_imports = true
+
+[tool.black]
+line-length = 88
+target-version = ['py313']
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+]
+ignore = ["E501"]
+
+[tool.setuptools.packages.find]
+include = ["resync*", "config*"]
+
+[tool.mutmut]
+paths_to_mutate = ["resync/"]
+tests_dir = ["tests/"]
+debug = true

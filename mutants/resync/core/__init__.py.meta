@@ -1,0 +1,27 @@
+{
+    "exit_code_by_key": {
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_1": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_2": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_3": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_4": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_5": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_6": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_7": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_8": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_9": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_10": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_11": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_12": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_13": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_14": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_15": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_16": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_17": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_18": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_19": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_20": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_21": null,
+        "resync.core.x_mask_sensitive_data_in_logs__mutmut_22": null
+    },
+    "hash_by_function_name": {}
+}
