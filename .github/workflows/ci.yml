@@ -1,0 +1,221 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12', '3.13']
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-mock pytest-cov hypofuzz
+
+    - name: Run unit tests with coverage and hypofuzz
+      run: |
+        pytest tests/ -v --tb=short --cov=resync/core --cov-report=xml --hypofuzz
+
+    - name: Run mutation tests with mutmut
+      run: |
+        mutmut run resync/ --no-progress-bar --fail-when-survivors
+
+    - name: Run integration tests
+      run: |
+        pytest tests/test_integration.py -v --tb=short
+
+    - name: Run audit lock tests
+      run: |
+        pytest tests/test_audit_lock.py -v --tb=short
+
+    - name: Run load tests (with 120s timeout)
+      run: |
+        pytest tests/load/test_audit_load.py::test_audit_load_test --timeout=120 -v --tb=short
+      continue-on-error: false
+
+    - name: Run async cache tests
+      run: |
+        pytest tests/test_async_cache.py -v --tb=short
+
+    - name: Generate coverage report
+      run: |
+        coverage report -m
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12', '3.13']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install linting dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black mypy bandit flake8 flake8-async
+
+    - name: Run Black formatter check
+      run: |
+        black --check --diff resync/ tests/ scripts/
+
+    - name: Run MyPy type checking
+      run: |
+        mypy resync/ --strict
+
+    - name: Run Flake8 linting
+      run: |
+        flake8 resync/ --quiet --max-line-length 88 --max-complexity 10
+    - name: Install Safety
+      run: pip install safety
+
+    - name: Run Safety check
+      run: safety check --only-critical -r requirements.txt
+  security:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+
+    - name: Install security dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety
+
+    - name: Run Bandit security scan
+      run: |
+        bandit -r resync/ -f json -o bandit-report.json || true
+        bandit -r resync/
+
+    - name: Run Safety dependency check
+      run: |
+        safety check
+
+    - name: Install Semgrep
+      run: pip install semgrep
+
+    - name: Run Semgrep security scan
+      run: |
+        semgrep --config=p/r2c/python-config resync/ --quiet --severity=ERROR
+    - name: Upload Bandit report
+      uses: actions/upload-artifact@v3
+      with:
+        name: bandit-report
+        path: bandit-report.json
+
+  load-test:
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    strategy:
+      matrix:
+        python-version: ['3.13']
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install locust uvicorn
+
+    - name: Start application server
+      run: |
+        uvicorn resync.main:app --host 0.0.0.0 --port 8000 --reload &
+        sleep 10  # Wait for server to start
+
+    - name: Run Locust load tests
+      run: |
+        locust -f locustfile.py --headless -u 50 -r 10 --run-time 1m --html=locust-report.html --host=http://localhost:8000
+
+    - name: Upload Locust report
+      uses: actions/upload-artifact@v3
+      with:
+        name: locust-report
+        path: locust-report.html
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build Docker image
+      run: |
+        docker build -t resync-app:latest .
+
+    - name: Test Docker image
+      run: |
+        docker run --rm resync-app:latest python -c "import resync; print('Docker build successful')"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [test, lint, security, docker, load-test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production..."
+        # Add your deployment commands here
+        # e.g., docker push, kubectl apply, etc.

@@ -1,0 +1,5 @@
+# ["auditor", "ai", "knowledge-graph", "automation"]
+{"feature": "IA Auditor", "description": "Audits AI agent responses for accuracy using an LLM to evaluate technical correctness", "schedule": "Runs nightly at 2 AM and on startup via APScheduler", "storage": "Uses Mem0 knowledge graph to store conversations and audit results", "actions": "Deletes low-confidence incorrect responses (>0.85) and flags medium-confidence ones (>0.6) for human review"}
+
+# storage knowledge-graph mem0 qdrant
+{"feature": "Knowledge Graph Storage", "description": "Uses Mem0 with Qdrant as the storage provider for the knowledge graph", "configuration": {"MEM0_STORAGE_PROVIDER": "qdrant", "MEM0_STORAGE_HOST": "localhost", "MEM0_STORAGE_PORT": 6333}, "note": "Qdrant is a vector database, not a traditional NoSQL database"}

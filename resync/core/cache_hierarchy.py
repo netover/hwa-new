@@ -1,0 +1,347 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+from collections import OrderedDict
+from dataclasses import dataclass
+from time import time as time_func
+from typing import Any, Dict, Optional, Tuple
+
+from resync.core.async_cache import AsyncTTLCache
+from resync.settings import settings
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class CacheMetrics:
+    """Tracks cache performance metrics."""
+
+    l1_hits: int = 0
+    l1_misses: int = 0
+    l2_hits: int = 0
+    l2_misses: int = 0
+    total_gets: int = 0
+    total_sets: int = 0
+    l1_evictions: int = 0
+    l1_get_latency: float = 0.0
+    l2_get_latency: float = 0.0
+    miss_latency: float = 0.0
+
+    @property
+    def l1_hit_ratio(self) -> float:
+        """Calculate L1 hit ratio."""
+        total = self.l1_hits + self.l1_misses
+        return self.l1_hits / total if total > 0 else 0.0
+
+    @property
+    def l2_hit_ratio(self) -> float:
+        """Calculate L2 hit ratio."""
+        total = self.l2_hits + self.l2_misses
+        return self.l2_hits / total if total > 0 else 0.0
+
+    @property
+    def overall_hit_ratio(self) -> float:
+        """Calculate overall hit ratio."""
+        total = self.total_gets
+        hits = self.l1_hits + self.l2_hits
+        return hits / total if total > 0 else 0.0
+
+
+class L1Cache:
+    """
+    In-memory L1 cache with LRU eviction and asyncio.Lock protection.
+    """
+
+    def __init__(self, max_size: int = 1000):
+        """
+        Initialize L1 cache.
+
+        Args:
+            max_size: Maximum number of entries before LRU eviction
+        """
+        self.max_size = max_size
+        self.cache: OrderedDict[str, Tuple[Any, float]] = OrderedDict()
+        self.lock = asyncio.Lock()
+
+    async def get(self, key: str) -> Optional[Any]:
+        """
+        Get value from L1 cache.
+
+        Args:
+            key: Cache key
+
+        Returns:
+            Cached value if exists and not expired, None otherwise
+        """
+        async with self.lock:
+            if key in self.cache:
+                value, timestamp = self.cache[key]
+
+                # Check if entry is still valid (no TTL in L1, just LRU)
+                self.cache.move_to_end(key)  # Move to most recently used
+                logger.debug(f"L1 cache HIT for key: {key}")
+                return value
+
+            logger.debug(f"L1 cache MISS for key: {key}")
+            return None
+
+    async def set(self, key: str, value: Any) -> None:
+        """
+        Set value in L1 cache with LRU eviction if needed.
+
+        Args:
+            key: Cache key
+            value: Value to cache
+        """
+        async with self.lock:
+            current_time = time_func()
+
+            # Add or update entry
+            self.cache[key] = (value, current_time)
+            self.cache.move_to_end(key)  # Move to most recently used
+
+            # Check if we need to evict
+            if len(self.cache) > self.max_size:
+                evicted_key, _ = self.cache.popitem(last=False)  # Remove LRU
+                logger.debug(f"L1 cache EVICTION for key: {evicted_key}")
+
+    async def delete(self, key: str) -> bool:
+        """
+        Delete key from L1 cache.
+
+        Args:
+            key: Cache key to delete
+
+        Returns:
+            True if key was found and deleted, False otherwise
+        """
+        async with self.lock:
+            if key in self.cache:
+                del self.cache[key]
+                logger.debug(f"L1 cache DELETE for key: {key}")
+                return True
+            return False
+
+    async def clear(self) -> None:
+        """Clear all entries from L1 cache."""
+        async with self.lock:
+            self.cache.clear()
+            logger.debug("L1 cache CLEARED")
+
+    def size(self) -> int:
+        """Get current size of L1 cache."""
+        return len(self.cache)
+
+
+class CacheHierarchy:
+    """
+    Two-tier cache hierarchy with L1 (in-memory) and L2 (Redis-backed).
+
+    Priority: L1 read → if miss → L2 read → if miss → fetch from source → write to L2 → write to L1
+    Write-through: All writes go to L2 first, then L1
+    """
+
+    def __init__(
+        self,
+        l1_max_size: int = 1000,
+        l2_ttl_seconds: int = 300,
+        l2_cleanup_interval: int = 30,
+    ):
+        """
+        Initialize cache hierarchy.
+
+        Args:
+            l1_max_size: Maximum entries in L1 cache before LRU eviction
+            l2_ttl_seconds: TTL for L2 cache entries
+            l2_cleanup_interval: Cleanup interval for L2 cache
+        """
+        self.l1_cache = L1Cache(max_size=l1_max_size)
+        self.l2_cache = AsyncTTLCache(
+            ttl_seconds=l2_ttl_seconds, cleanup_interval=l2_cleanup_interval
+        )
+        self.metrics = CacheMetrics()
+        self.is_running = False
+
+    async def start(self) -> None:
+        """Start the cache hierarchy."""
+        if not self.is_running:
+            self.is_running = True
+            logger.info("CacheHierarchy started")
+
+    async def stop(self) -> None:
+        """Stop the cache hierarchy."""
+        if self.is_running:
+            self.is_running = False
+            await self.l2_cache.stop()
+            logger.info("CacheHierarchy stopped")
+
+    async def get(self, key: str) -> Optional[Any]:
+        """
+        Get value from cache hierarchy with priority L1 → L2.
+
+        Args:
+            key: Cache key
+
+        Returns:
+            Cached value if found, None otherwise
+        """
+        start_time = time_func()
+        self.metrics.total_gets += 1
+
+        # Try L1 first (fastest)
+        l1_start = time_func()
+        l1_value = await self.l1_cache.get(key)
+        l1_latency = time_func() - l1_start
+        self.metrics.l1_get_latency = (
+            self.metrics.l1_get_latency + l1_latency
+        ) / 2  # Running average
+
+        if l1_value is not None:
+            self.metrics.l1_hits += 1
+            logger.debug(
+                f"Cache HIERARCHY HIT (L1) for key: {key}, latency: {l1_latency * 1000:.2f}ms"
+            )
+            return l1_value
+
+        self.metrics.l1_misses += 1
+
+        # Try L2 if L1 miss
+        l2_start = time_func()
+        l2_value = await self.l2_cache.get(key)
+        l2_latency = time_func() - l2_start
+        self.metrics.l2_get_latency = (
+            self.metrics.l2_get_latency + l2_latency
+        ) / 2  # Running average
+
+        if l2_value is not None:
+            self.metrics.l2_hits += 1
+            # Write through to L1 for hot data
+            await self.l1_cache.set(key, l2_value)
+            logger.debug(
+                f"Cache HIERARCHY HIT (L2) for key: {key}, latency: {l2_latency * 1000:.2f}ms"
+            )
+            return l2_value
+
+        self.metrics.l2_misses += 1
+        miss_latency = time_func() - start_time
+        self.metrics.miss_latency = (
+            self.metrics.miss_latency + miss_latency
+        ) / 2  # Running average
+
+        logger.debug(
+            f"Cache HIERARCHY MISS for key: {key}, total latency: {miss_latency * 1000:.2f}ms"
+        )
+        return None
+
+    async def set(
+        self, key: str, value: Any, ttl_seconds: Optional[int] = None
+    ) -> None:
+        """
+        Set value in cache hierarchy with write-through pattern.
+
+        Args:
+            key: Cache key
+            value: Value to cache
+            ttl_seconds: Optional TTL override (affects L2 only)
+        """
+        self.metrics.total_sets += 1
+
+        # Write to L2 first (persistent)
+        await self.l2_cache.set(key, value, ttl_seconds)
+
+        # Write to L1 (fast access)
+        await self.l1_cache.set(key, value)
+
+        logger.debug(f"Cache HIERARCHY SET for key: {key}")
+
+    async def set_from_source(
+        self, key: str, value: Any, ttl_seconds: Optional[int] = None
+    ) -> None:
+        """
+        Set value after fetching from source (bypasses normal write-through).
+
+        Args:
+            key: Cache key
+            value: Value to cache
+            ttl_seconds: Optional TTL override (affects L2 only)
+        """
+        self.metrics.total_sets += 1
+
+        # Write to L2 first (persistent)
+        await self.l2_cache.set(key, value, ttl_seconds)
+
+        # Write to L1 (fast access)
+        await self.l1_cache.set(key, value)
+
+        logger.debug(f"Cache HIERARCHY SET_FROM_SOURCE for key: {key}")
+
+    async def delete(self, key: str) -> bool:
+        """
+        Delete key from both cache tiers.
+
+        Args:
+            key: Cache key to delete
+
+        Returns:
+            True if key was found in at least one tier
+        """
+        l1_deleted = await self.l1_cache.delete(key)
+        l2_deleted = await self.l2_cache.delete(key)
+
+        if l1_deleted or l2_deleted:
+            logger.debug(f"Cache HIERARCHY DELETE for key: {key}")
+            return True
+        return False
+
+    async def clear(self) -> None:
+        """Clear all entries from both cache tiers."""
+        await self.l1_cache.clear()
+        await self.l2_cache.clear()
+        logger.debug("Cache HIERARCHY CLEARED")
+
+    def size(self) -> Tuple[int, int]:
+        """Get sizes of both cache tiers."""
+        return self.l1_cache.size(), self.l2_cache.size()
+
+    def get_metrics(self) -> Dict[str, Any]:
+        """Get comprehensive cache metrics."""
+        l1_size, l2_size = self.size()
+        return {
+            "l1_size": l1_size,
+            "l2_size": l2_size,
+            "l1_hit_ratio": self.metrics.l1_hit_ratio,
+            "l2_hit_ratio": self.metrics.l2_hit_ratio,
+            "overall_hit_ratio": self.metrics.overall_hit_ratio,
+            "total_gets": self.metrics.total_gets,
+            "total_sets": self.metrics.total_sets,
+            "l1_evictions": self.metrics.l1_evictions,
+            "avg_l1_get_latency_ms": self.metrics.l1_get_latency * 1000,
+            "avg_l2_get_latency_ms": self.metrics.l2_get_latency * 1000,
+            "avg_miss_latency_ms": self.metrics.miss_latency * 1000,
+        }
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        await self.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+        await self.stop()
+
+
+# Global cache hierarchy instance
+cache_hierarchy: Optional[CacheHierarchy] = None
+
+
+def get_cache_hierarchy() -> CacheHierarchy:
+    """Get or create global cache hierarchy instance."""
+    global cache_hierarchy
+    if cache_hierarchy is None:
+        cache_hierarchy = CacheHierarchy(
+            l1_max_size=settings.CACHE_HIERARCHY_L1_MAX_SIZE,
+            l2_ttl_seconds=settings.CACHE_HIERARCHY_L2_TTL,
+            l2_cleanup_interval=settings.CACHE_HIERARCHY_L2_CLEANUP_INTERVAL,
+        )
+    return cache_hierarchy
