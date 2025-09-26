@@ -14,7 +14,12 @@ class MockAuditQueue(AsyncAuditQueue):
         super().__init__()
         self.add_audit_record = AsyncMock(return_value=True)
         self.get_audit_metrics = AsyncMock(
-            return_value={"total": 0, "pending": 0, "approved": 0, "rejected": 0}
+            return_value={
+                "total": 0,
+                "pending": 0,
+                "approved": 0,
+                "rejected": 0,
+            }
         )
         self.update_audit_status = AsyncMock()
         self.get_queue_length = AsyncMock(return_value=0)
@@ -41,7 +46,14 @@ def mock_ia_auditor():
     mock = AsyncMock()
     # Mock the analyze_memory function to return a simple success for flagging
     # It should return a tuple (action, value)
-    mock.analyze_memory.return_value = ("flag", {"id": "mock_id", "ia_audit_reason": "mock_reason", "ia_audit_confidence": 0.95})
+    mock.analyze_memory.return_value = (
+        "flag",
+        {
+            "id": "mock_id",
+            "ia_audit_reason": "mock_reason",
+            "ia_audit_confidence": 0.95,
+        },
+    )
     return mock
 
 
@@ -83,7 +95,8 @@ async def test_audit_load_test(mock_audit_queue, mock_ia_auditor, metrics_collec
     mock_kg = MockKnowledgeGraph()
     # Configure get_all_recent_conversations to return a list of mock memories
     mock_kg.get_all_recent_conversations.return_value = [
-        {"id": mid, "user_query": "query", "agent_response": "response"} for mid in memory_ids
+        {"id": mid, "user_query": "query", "agent_response": "response"}
+        for mid in memory_ids
     ]
 
     async def process_audit(memory_id: str):
@@ -108,7 +121,13 @@ async def test_audit_load_test(mock_audit_queue, mock_ia_auditor, metrics_collec
                 # Simulate IA auditor processing
                 # The analyze_memory function expects a dict with 'id', 'user_query', 'agent_response'
                 # For this mock, we only need 'id'
-                audit_action, audit_data = await mock_ia_auditor.analyze_memory({"id": memory_id, "user_query": "mock", "agent_response": "mock"})
+                audit_action, audit_data = await mock_ia_auditor.analyze_memory(
+                    {
+                        "id": memory_id,
+                        "user_query": "mock",
+                        "agent_response": "mock",
+                    }
+                )
 
                 # Verify no duplicate flagging
                 if audit_action == "flag":
@@ -130,15 +149,27 @@ async def test_audit_load_test(mock_audit_queue, mock_ia_auditor, metrics_collec
                             "error": "queue_add_failed",
                         }
 
-                    return {"memory_id": memory_id, "success": True, "error": None}
+                    return {
+                        "memory_id": memory_id,
+                        "success": True,
+                        "error": None,
+                    }
                 else:
                     # If not flagged, consider it successful for the purpose of this load test
-                    return {"memory_id": memory_id, "success": True, "error": None}
+                    return {
+                        "memory_id": memory_id,
+                        "success": True,
+                        "error": None,
+                    }
 
             except Exception as e:
                 if "lock" in str(e).lower() or "timeout" in str(e).lower():
                     lock_contention += 1
-                return {"memory_id": memory_id, "success": False, "error": str(e)}
+                return {
+                    "memory_id": memory_id,
+                    "success": False,
+                    "error": str(e),
+                }
 
         except Exception as e:
             return {"memory_id": memory_id, "success": False, "error": str(e)}
@@ -147,7 +178,9 @@ async def test_audit_load_test(mock_audit_queue, mock_ia_auditor, metrics_collec
     with patch("resync.core.ia_auditor.knowledge_graph", mock_kg):
         tasks = [process_audit(memory_id) for memory_id in memory_ids]
         start_time = time.perf_counter()
-        responses = await asyncio.wait_for(asyncio.gather(*tasks), timeout=TIMEOUT_SECONDS)
+        responses = await asyncio.wait_for(
+            asyncio.gather(*tasks), timeout=TIMEOUT_SECONDS
+        )
         end_time = time.perf_counter()
 
     total_time = end_time - start_time
@@ -173,15 +206,15 @@ async def test_audit_load_test(mock_audit_queue, mock_ia_auditor, metrics_collec
 
     # Verify system invariants
     duplicate_flagging = sum(1 for r in responses if r["error"] == "duplicate_flagging")
-    assert duplicate_flagging == 0, (
-        f"Found {duplicate_flagging} duplicate flagging incidents"
-    )
+    assert (
+        duplicate_flagging == 0
+    ), f"Found {duplicate_flagging} duplicate flagging incidents"
 
     assert error_rate < 0.01, f"Error rate {error_rate:.2%} exceeds 1% threshold"
     assert p99 < 0.5, f"P99 latency {p99:.3f}s exceeds 500ms threshold"
-    assert lock_contention <= (NUM_CONCURRENT_REQUESTS * 0.01), (
-        f"Lock contention {lock_contention} exceeds 1% of requests"
-    )
+    assert lock_contention <= (
+        NUM_CONCURRENT_REQUESTS * 0.01
+    ), f"Lock contention {lock_contention} exceeds 1% of requests"
 
     # Log results
     print("\n📊 LOAD TEST RESULTS:")
@@ -202,9 +235,9 @@ async def test_audit_load_test(mock_audit_queue, mock_ia_auditor, metrics_collec
     print("   Mock memory usage: stable (no leaks detected)")
 
     # Assert overall system health
-    assert failed <= 1, (
-        "System should handle 100+ concurrent audits with <1% error rate"
-    )
+    assert (
+        failed <= 1
+    ), "System should handle 100+ concurrent audits with <1% error rate"
     assert total_time < 60, "System should process 120 audits in under 60 seconds"
 
     # Verify metrics collector was called

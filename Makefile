@@ -36,13 +36,22 @@ format:
 
 .PHONY: lint
 lint:
+	@echo "--- Linting with Flake8 ---"
+	$(PYTHON) -m flake8 $(SRC_DIR)
 	@echo "--- Linting with Ruff ---"
 	$(PYTHON) -m ruff check $(SRC_DIR)
 	@echo "--- Type-checking with MyPy ---"
 	$(PYTHON) -m mypy $(SRC_DIR)
 
+.PHONY: security
+security:
+	@echo "--- Running Bandit security scan ---"
+	$(PYTHON) -m bandit -r resync/ tests/ -c pyproject.toml
+	@echo "--- Running Safety vulnerability check ---"
+	$(PYTHON) -m safety check --full-report
+
 .PHONY: check
-check: format lint
+check: format lint security
 
 # --- Application Lifecycle ---
 .PHONY: run
@@ -83,8 +92,9 @@ help:
 	@echo "  venv          - Create a Python virtual environment."
 	@echo "  install       - Install all project dependencies."
 	@echo "  format        - Format code using Black and Ruff."
-	@echo "  lint          - Lint code with Ruff and type-check with MyPy."
-	@echo "  check         - Run both format and lint."
+	@echo "  lint          - Lint code with Flake8, Ruff, and type-check with MyPy."
+	@echo "  security      - Run Bandit and Safety security checks."
+	@echo "  check         - Run format, lint, and security checks."
 	@echo "  run           - Start the FastAPI application."
 	@echo "  run-llm       - Start the local LLM server."
 	@echo "  env           - Generate the .env.example file."

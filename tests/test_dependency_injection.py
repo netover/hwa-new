@@ -5,11 +5,12 @@ This module tests the dependency injection patterns implemented in the applicati
 ensuring proper AgentManager instance management and dependency resolution.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
-from fastapi import Depends
-from resync.core.dependencies import get_tws_client
+
+import pytest
+
 from resync.core.agent_manager import AgentManager
+from resync.core.dependencies import get_tws_client
 
 
 class TestDependencyInjection:
@@ -18,7 +19,9 @@ class TestDependencyInjection:
     @pytest.mark.di
     def test_tws_client_dependency_injection(self, mock_agent_manager):
         """Test TWS client dependency injection."""
-        with patch('resync.core.dependencies.agent_manager') as mock_agent_manager_module:
+        with patch(
+            "resync.core.dependencies.agent_manager"
+        ) as mock_agent_manager_module:
             mock_agent_manager_module._get_tws_client.return_value = MagicMock()
 
             # Test that we can get TWS client
@@ -29,8 +32,8 @@ class TestDependencyInjection:
     @pytest.mark.di
     def test_tws_client_mock_mode(self):
         """Test TWS client in mock mode."""
-        with patch('resync.core.dependencies.settings') as mock_settings:
-            with patch('resync.core.dependencies.agent_manager') as mock_agent_manager:
+        with patch("resync.core.dependencies.settings") as mock_settings:
+            with patch("resync.core.dependencies.agent_manager") as mock_agent_manager:
                 mock_settings.TWS_MOCK_MODE = True
                 mock_agent_manager._mock_tws_client = MagicMock()
 
@@ -42,9 +45,11 @@ class TestDependencyInjection:
     @pytest.mark.di
     def test_dependency_error_handling(self):
         """Test error handling in dependency injection."""
-        with patch('resync.core.dependencies.agent_manager') as mock_agent_manager:
+        with patch("resync.core.dependencies.agent_manager") as mock_agent_manager:
             # Simulate agent manager failure
-            mock_agent_manager._get_tws_client.side_effect = Exception("TWS client unavailable")
+            mock_agent_manager._get_tws_client.side_effect = Exception(
+                "TWS client unavailable"
+            )
 
             gen = get_tws_client()
             with pytest.raises(Exception, match="TWS client unavailable"):
@@ -60,7 +65,7 @@ class TestDependencyInjection:
             call_count += 1
             return MagicMock()
 
-        with patch('resync.core.dependencies.agent_manager') as mock_agent_manager:
+        with patch("resync.core.dependencies.agent_manager") as mock_agent_manager:
             mock_agent_manager._get_tws_client.side_effect = mock_tws_factory
 
             # First call should create new instance
@@ -76,8 +81,8 @@ class TestDependencyInjection:
     @pytest.mark.di
     def test_environment_specific_dependencies(self):
         """Test environment-specific dependency configuration."""
-        with patch('resync.core.dependencies.settings') as mock_settings:
-            with patch('resync.core.dependencies.agent_manager') as mock_agent_manager:
+        with patch("resync.core.dependencies.settings") as mock_settings:
+            with patch("resync.core.dependencies.agent_manager") as mock_agent_manager:
                 # Test with mock mode enabled
                 mock_settings.TWS_MOCK_MODE = True
                 mock_agent_manager._mock_tws_client = MagicMock()
@@ -92,7 +97,7 @@ class TestAgentManager:
     @pytest.mark.di
     def test_agent_manager_initialization(self):
         """Test AgentManager initialization."""
-        with patch.object(AgentManager, 'load_agents_from_config', return_value=[]):
+        with patch.object(AgentManager, "load_agents_from_config", return_value=[]):
             manager = AgentManager()
             assert manager is not None
             assert manager.agents == {}
@@ -115,7 +120,7 @@ class TestAgentManager:
     @pytest.mark.di
     def test_agent_manager_get_all_agents(self):
         """Test AgentManager get_all_agents method."""
-        with patch.object(AgentManager, 'load_agents_from_config', return_value=[]):
+        with patch.object(AgentManager, "load_agents_from_config", return_value=[]):
             manager = AgentManager()
             agents = manager.get_all_agents()
             assert agents == []

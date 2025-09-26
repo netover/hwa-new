@@ -6,7 +6,10 @@ import pytest
 
 from resync.models.tws import SystemStatus
 from resync.services.tws_service import OptimizedTWSClient
-from resync.tool_definitions.tws_tools import TWSStatusTool, TWSTroubleshootingTool
+from resync.tool_definitions.tws_tools import (
+    TWSStatusTool,
+    TWSTroubleshootingTool,
+)
 
 
 @pytest.fixture

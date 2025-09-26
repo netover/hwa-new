@@ -1,5 +1,6 @@
 from .base import Settings
 
+
 class DevelopmentSettings(Settings):
     TWS_MOCK_MODE: bool = True
     # Override other settings for development if needed

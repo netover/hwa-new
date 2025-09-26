@@ -79,7 +79,7 @@ async def test_audit_queue_integration():
         audit_queue = AsyncAuditQueue(settings.REDIS_URL)
 
         # Test that the audit queue has the distributed lock instance
-        assert hasattr(audit_queue, 'distributed_lock')
+        assert hasattr(audit_queue, "distributed_lock")
         assert isinstance(audit_queue.distributed_lock, DistributedAuditLock)
         print("✅ AsyncAuditQueue properly initialized with DistributedAuditLock")
 
@@ -127,12 +127,12 @@ async def test_configuration():
 
     try:
         # Test that Redis URL is configured
-        assert hasattr(settings, 'REDIS_URL')
+        assert hasattr(settings, "REDIS_URL")
         assert settings.REDIS_URL
         print(f"✅ Redis URL configured: {settings.REDIS_URL}")
 
         # Test that required environment variables are accessible
-        assert settings.REDIS_URL.startswith(('redis://', 'rediss://'))
+        assert settings.REDIS_URL.startswith(("redis://", "rediss://"))
         print("✅ Redis URL format is valid")
 
         return True

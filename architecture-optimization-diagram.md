@@ -27,7 +27,7 @@ graph TD
         M --> L
         S --> M
     end
-    
+
     subgraph "AI / Data Layer"
         I[Agent Config<br>config/runtime.json]
         J[TWS Tools<br>resync/tool_definitions/tws_tools.py]

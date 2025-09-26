@@ -6,14 +6,11 @@ user flow from TWS data ingestion through knowledge graph storage and audit proc
 """
 
 import asyncio
-import json
 import time
-import resync.core.ia_auditor
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
-
 from fastapi import WebSocket
 
 from resync.core.audit_queue import AsyncAuditQueue
@@ -23,9 +20,7 @@ from resync.core.utils.json_parser import (
     JSONParseError,
     parse_llm_json_response,
 )
-from resync.core.agent_manager import AgentManager
-from resync.core.connection_manager import connection_manager
-from tests.async_iterator_mock import AsyncIteratorMock, create_text_stream
+from tests.async_iterator_mock import create_text_stream
 
 
 class TestAsyncKnowledgeGraph:
@@ -45,7 +40,10 @@ class TestAsyncKnowledgeGraph:
             return [
                 {
                     "id": "mock_memory_1",
-                    "content": {"type": "conversation", "user_query": "test query"},
+                    "content": {
+                        "type": "conversation",
+                        "user_query": "test query",
+                    },
                     "observations": [],
                 }
             ]
@@ -286,7 +284,9 @@ class TestResyncIntegration:
             patch("resync.core.ia_auditor.call_llm") as mock_call_llm,
         ):
             # Configure LLM to return malformed JSON
-            mock_call_llm.return_value = "This is not JSON at all, just plain text response."
+            mock_call_llm.return_value = (
+                "This is not JSON at all, just plain text response."
+            )
 
             # Run the analysis
             result = await analyze_and_flag_memories()
@@ -338,7 +338,11 @@ class TestResyncIntegration:
     ):
         """Test that already flagged/approved memories are skipped."""
         # Configure one memory to be already flagged
-        mock_knowledge_graph.is_memory_flagged.side_effect = [True, False, False]
+        mock_knowledge_graph.is_memory_flagged.side_effect = [
+            True,
+            False,
+            False,
+        ]
 
         with (
             patch("resync.core.ia_auditor.knowledge_graph", mock_knowledge_graph),
@@ -575,9 +579,6 @@ class TestIntegrationPerformance:
             assert mock_call_llm.call_count == 100
 
 
-
-
-
 class BackgroundTaskManager:
     """Manages background tasks for testing synchronization."""
 
@@ -636,16 +637,16 @@ class TestEndToEndIntegration:
         async def mock_stream(enhanced_query):
             # Return a simple test response using proper async iterator
             response_text = "Test response from agent"
-            async for chunk in create_text_stream(response_text, chunk_size=10, delay=0.01):
+            async for chunk in create_text_stream(
+                response_text, chunk_size=10, delay=0.01
+            ):
                 yield chunk
 
         mock_agent.stream = mock_stream
 
         # Set up the mock manager
         mock_manager.agents = {"test-agent": mock_agent}
-        mock_manager.agent_configs = [
-            MagicMock(id="test-agent", name="Test Agent")
-        ]
+        mock_manager.agent_configs = [MagicMock(id="test-agent", name="Test Agent")]
         mock_manager.get_agent = MagicMock(return_value=mock_agent)
         mock_manager.get_all_agents.return_value = mock_manager.agent_configs
 
@@ -659,15 +660,15 @@ class TestEndToEndIntegration:
         mock_client.get_system_status.return_value = MagicMock(
             workstations=[
                 MagicMock(name="CPU_WS", status="LINKED", type="CPU"),
-                MagicMock(name="FT_WS", status="LINKED", type="FT")
+                MagicMock(name="FT_WS", status="LINKED", type="FT"),
             ],
             jobs=[
                 MagicMock(name="JOB_A", workstation="CPU_WS", status="SUCC"),
-                MagicMock(name="JOB_B", workstation="FT_WS", status="ABEND")
+                MagicMock(name="JOB_B", workstation="FT_WS", status="ABEND"),
             ],
             critical_jobs=[
                 MagicMock(name="CRITICAL_JOB_1", workstation="CPU_WS", status="SUCC")
-            ]
+            ],
         )
         return mock_client
 
@@ -675,15 +676,23 @@ class TestEndToEndIntegration:
     async def mock_llm_call(self):
         """Create a mock LLM call function."""
         mock_call_llm = AsyncMock()
+
         # Configure the mock to return different responses based on prompt content
-        async def side_effect(prompt, model, max_tokens=200, temperature=0.1, max_retries=3, initial_backoff=1.0):
+        async def side_effect(
+            prompt,
+            model,
+            max_tokens=200,
+            temperature=0.1,
+            max_retries=3,
+            initial_backoff=1.0,
+        ):
             if "permission denied" in prompt.lower():
                 return '{"is_incorrect": true, "confidence": 0.90, "reason": "Incorrect chmod command suggestion"}'
             elif "restart" in prompt.lower():
                 return '{"is_incorrect": false, "confidence": 0.95, "reason": "Correct restart procedure"}'
             else:
                 return '{"is_incorrect": false, "confidence": 0.85, "reason": "General response acceptable"}'
-        
+
         mock_call_llm.side_effect = side_effect
         return mock_call_llm
 
@@ -698,11 +707,14 @@ class TestEndToEndIntegration:
 
         # Create a mock agent with proper stream method
         mock_agent = AsyncMock()
+
         # Create a regular function that returns our AsyncIteratorMock directly
         # This is needed because async for requires an object with __aiter__ method
         def mock_stream(enhanced_query):
-            return create_text_stream("Test response from agent", chunk_size=20, delay=0.01)
-        
+            return create_text_stream(
+                "Test response from agent", chunk_size=20, delay=0.01
+            )
+
         mock_agent.stream = mock_stream
 
         # Configure mock_agent_manager to return our mock_agent when get_agent is called
@@ -712,10 +724,17 @@ class TestEndToEndIntegration:
         with (
             patch("resync.core.agent_manager.agent_manager", mock_agent_manager),
             patch("resync.api.chat.agent_manager", mock_agent_manager),
-            patch("resync.core.agent_manager.OptimizedTWSClient", return_value=mock_tws_client),
+            patch(
+                "resync.core.agent_manager.OptimizedTWSClient",
+                return_value=mock_tws_client,
+            ),
             patch("resync.core.ia_auditor.call_llm", mock_llm_call),
-            patch("resync.core.ia_auditor.analyze_and_flag_memories") as mock_analyze_and_flag_memories,
-            patch("resync.core.knowledge_graph.AsyncKnowledgeGraph") as mock_knowledge_graph_class,
+            patch(
+                "resync.core.ia_auditor.analyze_and_flag_memories"
+            ) as mock_analyze_and_flag_memories,
+            patch(
+                "resync.core.knowledge_graph.AsyncKnowledgeGraph"
+            ) as mock_knowledge_graph_class,
             patch("resync.core.ia_auditor.audit_queue") as mock_audit_queue,
             patch("resync.api.chat.knowledge_graph") as mock_chat_knowledge_graph,
             patch("resync.api.chat.connection_manager") as mock_connection_manager,
@@ -723,22 +742,35 @@ class TestEndToEndIntegration:
         ):
             # Make the mock_run_auditor_safely call the real function and capture the task
             from resync.api.chat import run_auditor_safely
+
             task = None
+
             def side_effect():
                 nonlocal task
                 task = asyncio.create_task(run_auditor_safely())
                 return task
+
             mock_run_auditor_safely.side_effect = side_effect
 
             # Add a side_effect to analyze_and_flag_memories to see if it's being called
             async def analyze_side_effect():
                 print("analyze_and_flag_memories was called!")
-                return {"deleted": 0, "flagged": 0, "processed": 1, "skipped": 0}
+                return {
+                    "deleted": 0,
+                    "flagged": 0,
+                    "processed": 1,
+                    "skipped": 0,
+                }
+
             mock_analyze_and_flag_memories.side_effect = analyze_side_effect
-# Setup mock knowledge graph for chat endpoint
-            mock_chat_knowledge_graph.get_relevant_context = AsyncMock(return_value="Previous context about job troubleshooting")
-            mock_chat_knowledge_graph.add_conversation = AsyncMock(return_value="mock_memory_id_123")
-            
+            # Setup mock knowledge graph for chat endpoint
+            mock_chat_knowledge_graph.get_relevant_context = AsyncMock(
+                return_value="Previous context about job troubleshooting"
+            )
+            mock_chat_knowledge_graph.add_conversation = AsyncMock(
+                return_value="mock_memory_id_123"
+            )
+
             # Setup mock knowledge graph for auditor
             mock_knowledge_graph_instance = AsyncMock()
             mock_knowledge_graph_instance.get_all_recent_conversations.return_value = [
@@ -754,32 +786,39 @@ class TestEndToEndIntegration:
             mock_knowledge_graph_instance.is_memory_approved.return_value = False
             mock_knowledge_graph_instance.delete_memory = AsyncMock()
             mock_knowledge_graph_instance.add_observations = AsyncMock()
-            mock_knowledge_graph_instance.is_memory_already_processed = AsyncMock(return_value=False)
-            mock_knowledge_graph_instance.atomic_check_and_delete = AsyncMock(return_value=True)
-            mock_knowledge_graph_instance.atomic_check_and_flag = AsyncMock(return_value=True)
-            
+            mock_knowledge_graph_instance.is_memory_already_processed = AsyncMock(
+                return_value=False
+            )
+            mock_knowledge_graph_instance.atomic_check_and_delete = AsyncMock(
+                return_value=True
+            )
+            mock_knowledge_graph_instance.atomic_check_and_flag = AsyncMock(
+                return_value=True
+            )
+
             # Make the class return our mock instance
             mock_knowledge_graph_class.return_value = mock_knowledge_graph_instance
-            
+
             # Setup mock audit queue
             mock_audit_queue.is_memory_approved.return_value = False
             mock_audit_queue.add_audit_record = AsyncMock()
-            
+
             # Setup mock connection manager
             mock_connection_manager.connect = AsyncMock()
             mock_connection_manager.disconnect = AsyncMock()
             mock_connection_manager.broadcast_json = AsyncMock()
-            
+
             # Simulate WebSocket connection and message processing
             # Import the websocket_endpoint function directly
             from resync.api.chat import websocket_endpoint
-            
+
             # Create mock WebSocket that simulates receiving one message then disconnecting
             mock_websocket = AsyncMock(spec=WebSocket)
             mock_websocket.accept = AsyncMock()
-            
+
             # Mock receive_text to return one message, allow processing, then disconnect
             message_count = 0
+
             async def mock_receive_text():
                 nonlocal message_count
                 if message_count == 0:
@@ -788,40 +827,42 @@ class TestEndToEndIntegration:
                 else:
                     # Simulate client disconnect after message processing is complete
                     from fastapi import WebSocketDisconnect
+
                     raise WebSocketDisconnect(code=1000, reason="Client disconnected")
-            
+
             mock_websocket.receive_text = mock_receive_text
             mock_websocket.send_json = AsyncMock()
             mock_websocket.send_text = AsyncMock()
             mock_websocket.close = AsyncMock()
             mock_websocket.client = "test_client"
-            
+
             # Run the websocket endpoint (this will process one message then disconnect)
             try:
                 await websocket_endpoint(mock_websocket, "test-agent")
             except Exception as e:
                 # Expect WebSocketDisconnect after processing
                 from fastapi import WebSocketDisconnect
+
                 if not isinstance(e, WebSocketDisconnect):
                     raise
-            
+
             # Verify the complete flow
             # Check if get_agent was called
             print(f"get_agent called: {mock_agent_manager.get_agent.called}")
             if mock_agent_manager.get_agent.called:
                 print(f"get_agent call args: {mock_agent_manager.get_agent.call_args}")
-            
+
             # Since mock_agent.stream is now a function, we can't directly check call_count
             # Instead, we'll check if get_agent was called and assume the stream method would be called
             print("Stream method verification skipped for function-based mock")
-            
+
             # Verify knowledge graph was updated
             mock_chat_knowledge_graph.add_conversation.assert_called_once()
             kg_call_args = mock_chat_knowledge_graph.add_conversation.call_args
             assert kg_call_args[1]["user_query"] == "How do I restart a job in TWS?"
             assert "Test response from agent" in kg_call_args[1]["agent_response"]
             assert kg_call_args[1]["agent_id"] == "test-agent"
-            
+
             # Wait for auditor to process (it runs in background)
             print("Waiting for auditor to process...")
             # Await the task created by run_auditor_safely
@@ -833,14 +874,22 @@ class TestEndToEndIntegration:
 
             # Verify auditor processed the memory
             # Check if analyze_and_flag_memories was called (this is the main auditor function)
-            print(f"analyze_and_flag_memories called: {mock_analyze_and_flag_memories.called}")
+            print(
+                f"analyze_and_flag_memories called: {mock_analyze_and_flag_memories.called}"
+            )
             if mock_analyze_and_flag_memories.called:
-                print(f"analyze_and_flag_memories call args: {mock_analyze_and_flag_memories.call_args}")
+                print(
+                    f"analyze_and_flag_memories call args: {mock_analyze_and_flag_memories.call_args}"
+                )
             else:
                 # If not, check if get_all_recent_conversations was called directly
-                print(f"get_all_recent_conversations called: {mock_knowledge_graph_instance.get_all_recent_conversations.called}")
+                print(
+                    f"get_all_recent_conversations called: {mock_knowledge_graph_instance.get_all_recent_conversations.called}"
+                )
                 if mock_knowledge_graph_instance.get_all_recent_conversations.called:
-                    call_args = mock_knowledge_graph_instance.get_all_recent_conversations.call_args
+                    call_args = (
+                        mock_knowledge_graph_instance.get_all_recent_conversations.call_args
+                    )
                     print(f"get_all_recent_conversations call args: {call_args}")
 
             # Verify run_auditor_safely was called
@@ -849,12 +898,17 @@ class TestEndToEndIntegration:
 
             # Debug: Print the actual call_llm function being used in the real analyze_and_flag_memories
             import resync.core.ia_auditor
-            print(f"Real call_llm in ia_auditor module: {resync.core.ia_auditor.call_llm}")
+
+            print(
+                f"Real call_llm in ia_auditor module: {resync.core.ia_auditor.call_llm}"
+            )
             print(f"Mock call_llm object: {mock_llm_call}")
-            print(f"Are they the same object? {resync.core.ia_auditor.call_llm is mock_llm_call}")
+            print(
+                f"Are they the same object? {resync.core.ia_auditor.call_llm is mock_llm_call}"
+            )
 
             mock_llm_call.assert_called()
-            
+
             # Verify audit queue was updated (should not flag this correct response)
             # Since our mock LLM returns is_incorrect=false for restart queries,
             # no audit record should be added
@@ -874,44 +928,66 @@ class TestEndToEndIntegration:
 
         # Mock dependencies with proper singleton handling
         import resync.api.chat
+
         original_run_auditor_safely = resync.api.chat.run_auditor_safely
         with (
             patch("resync.core.agent_manager.agent_manager", mock_agent_manager),
             patch("resync.api.chat.agent_manager", mock_agent_manager),
-            patch("resync.core.agent_manager.OptimizedTWSClient", return_value=mock_tws_client),
+            patch(
+                "resync.core.agent_manager.OptimizedTWSClient",
+                return_value=mock_tws_client,
+            ),
             patch("resync.core.ia_auditor.call_llm", mock_llm_call),
-            patch("resync.core.ia_auditor.analyze_and_flag_memories") as mock_analyze_and_flag_memories,
-            patch("resync.core.knowledge_graph.AsyncKnowledgeGraph") as mock_knowledge_graph_class,
+            patch(
+                "resync.core.ia_auditor.analyze_and_flag_memories"
+            ) as mock_analyze_and_flag_memories,
+            patch(
+                "resync.core.knowledge_graph.AsyncKnowledgeGraph"
+            ) as mock_knowledge_graph_class,
             patch("resync.core.ia_auditor.audit_queue") as mock_audit_queue,
             patch("resync.api.chat.knowledge_graph") as mock_chat_knowledge_graph,
             patch("resync.api.chat.connection_manager") as mock_connection_manager,
             patch("resync.api.chat.run_auditor_safely") as mock_run_auditor_safely,
         ):
             task = None
+
             def side_effect():
                 nonlocal task
                 task = asyncio.create_task(original_run_auditor_safely())
                 return task
+
             mock_run_auditor_safely.side_effect = side_effect
-            mock_analyze_and_flag_memories.return_value = {"deleted": 0, "flagged": 1, "processed": 1, "skipped": 0}
+            mock_analyze_and_flag_memories.return_value = {
+                "deleted": 0,
+                "flagged": 1,
+                "processed": 1,
+                "skipped": 0,
+            }
             mock_connection_manager.connect = AsyncMock()
             mock_connection_manager.disconnect = AsyncMock()
             # Create a mock agent with incorrect stream method
             mock_agent = AsyncMock()
+
             async def incorrect_stream(enhanced_query):
-                incorrect_response = "To fix permission denied errors, run: chmod 777 /etc/passwd"
+                incorrect_response = (
+                    "To fix permission denied errors, run: chmod 777 /etc/passwd"
+                )
                 for chunk in incorrect_response.split():
                     yield chunk + " "
-            
+
             mock_agent.stream = incorrect_stream
-            
+
             # Configure mock_agent_manager to return our mock_agent when get_agent is called
             mock_agent_manager.get_agent.return_value = mock_agent
-            
+
             # Setup mock knowledge graph for chat endpoint
-            mock_chat_knowledge_graph.get_relevant_context.return_value = "Previous context about permission issues"
-            mock_chat_knowledge_graph.add_conversation.return_value = "mock_memory_id_456"
-            
+            mock_chat_knowledge_graph.get_relevant_context.return_value = (
+                "Previous context about permission issues"
+            )
+            mock_chat_knowledge_graph.add_conversation.return_value = (
+                "mock_memory_id_456"
+            )
+
             # Setup mock knowledge graph for auditor
             mock_knowledge_graph_instance = AsyncMock()
             mock_knowledge_graph_instance.get_all_recent_conversations.return_value = [
@@ -927,26 +1003,33 @@ class TestEndToEndIntegration:
             mock_knowledge_graph_instance.is_memory_approved.return_value = False
             mock_knowledge_graph_instance.delete_memory = AsyncMock()
             mock_knowledge_graph_instance.add_observations = AsyncMock()
-            mock_knowledge_graph_instance.is_memory_already_processed = AsyncMock(return_value=False)
-            mock_knowledge_graph_instance.atomic_check_and_delete = AsyncMock(return_value=True)
-            mock_knowledge_graph_instance.atomic_check_and_flag = AsyncMock(return_value=True)
-            
+            mock_knowledge_graph_instance.is_memory_already_processed = AsyncMock(
+                return_value=False
+            )
+            mock_knowledge_graph_instance.atomic_check_and_delete = AsyncMock(
+                return_value=True
+            )
+            mock_knowledge_graph_instance.atomic_check_and_flag = AsyncMock(
+                return_value=True
+            )
+
             # Make the class return our mock instance
             mock_knowledge_graph_class.return_value = mock_knowledge_graph_instance
-            
+
             # Setup mock audit queue
             mock_audit_queue.is_memory_approved.return_value = False
             mock_audit_queue.add_audit_record = AsyncMock()
-            
+
             # Simulate WebSocket connection and message processing
             from resync.api.chat import websocket_endpoint
-            
+
             # Create mock WebSocket that simulates receiving one message then disconnecting
             mock_websocket = AsyncMock(spec=WebSocket)
             mock_websocket.accept = AsyncMock()
-            
+
             # Mock receive_text to return one message then raise WebSocketDisconnect
             message_count = 0
+
             async def mock_receive_text():
                 nonlocal message_count
                 if message_count == 0:
@@ -955,32 +1038,36 @@ class TestEndToEndIntegration:
                 else:
                     # Simulate client disconnect after first message
                     from fastapi import WebSocketDisconnect
+
                     raise WebSocketDisconnect(code=1000, reason="Client disconnected")
-            
+
             mock_websocket.receive_text = mock_receive_text
             mock_websocket.send_json = AsyncMock()
             mock_websocket.send_text = AsyncMock()
             mock_websocket.close = AsyncMock()
             mock_websocket.client = "test_client"
-            
+
             # Run the websocket endpoint
             await websocket_endpoint(mock_websocket, "test-agent")
-            
+
             # Wait for auditor to process
             if task is not None:
                 await asyncio.wait_for(task, timeout=5.0)
-            
+
             # Verify the flow processed the incorrect advice
             assert mock_analyze_and_flag_memories.called
             mock_knowledge_graph_instance.get_all_recent_conversations.assert_called()
-            
+
             # Since this is incorrect advice, it should be processed by auditor
             # The mock LLM will flag this as incorrect
             mock_audit_queue.add_audit_record.assert_called()
             audit_call_args = mock_audit_queue.add_audit_record.call_args[0][0]
             assert "permission denied" in audit_call_args["user_query"].lower()
             assert audit_call_args["ia_audit_confidence"] == 0.90
-            assert "Incorrect chmod command suggestion" in audit_call_args["ia_audit_reason"]
+            assert (
+                "Incorrect chmod command suggestion"
+                in audit_call_args["ia_audit_reason"]
+            )
 
     @pytest.mark.asyncio
     async def test_end_to_end_error_handling(
@@ -989,48 +1076,53 @@ class TestEndToEndIntegration:
         mock_tws_client,
     ):
         """Test end-to-end flow with error handling scenarios."""
-        
+
         # Test with non-existent agent
         from resync.api.chat import websocket_endpoint
-        
+
         # Create mock WebSocket
         mock_websocket = AsyncMock(spec=WebSocket)
         mock_websocket.accept = AsyncMock()
         mock_websocket.send_json = AsyncMock()
         mock_websocket.close = AsyncMock()
         mock_websocket.client = "test_client"
-        
+
         # Test with non-existent agent
         await websocket_endpoint(mock_websocket, "non-existent-agent")
-        
+
         # Verify error response was sent
         mock_websocket.send_json.assert_called()
         error_call = mock_websocket.send_json.call_args_list[0]
         assert error_call[0][0]["type"] == "error"
         assert "não encontrado" in error_call[0][0]["message"]
-        
+
         # Test with TWS client failure
-        mock_tws_client.check_connection.side_effect = Exception("TWS connection failed")
-        
+        mock_tws_client.check_connection.side_effect = Exception(
+            "TWS connection failed"
+        )
+
         with (
             patch("resync.core.agent_manager.agent_manager", mock_agent_manager),
             patch("resync.api.chat.agent_manager", mock_agent_manager),
-            patch("resync.core.agent_manager.OptimizedTWSClient", return_value=mock_tws_client),
+            patch(
+                "resync.core.agent_manager.OptimizedTWSClient",
+                return_value=mock_tws_client,
+            ),
             patch("resync.api.chat.connection_manager") as mock_connection_manager,
         ):
             mock_connection_manager.connect = AsyncMock()
             mock_connection_manager.disconnect = AsyncMock()
-            
+
             # Reset mock
             mock_websocket.send_json.reset_mock()
             mock_websocket.close.reset_mock()
-            
+
             # This should handle the TWS failure gracefully
             try:
                 await websocket_endpoint(mock_websocket, "test-agent")
             except Exception:
                 pass
-            
+
             # Should still connect successfully even if TWS fails
             # The connection should be established before TWS is used
             mock_connection_manager.connect.assert_called_once()
@@ -1044,27 +1136,25 @@ class TestIntegrationPerformance:
         """Create a mock agent manager with a test agent."""
         # Create a completely mock agent manager
         mock_manager = AsyncMock()
-        
+
         # Mock the agent to return predictable responses
         mock_agent = AsyncMock()
-        
+
         # Configure stream to return test response as async iterator
         async def mock_stream(enhanced_query):
             # Return a simple test response
             response_text = "Test response from agent"
             for chunk in response_text.split():
                 yield chunk + " "
-        
+
         mock_agent.stream = mock_stream
-        
+
         # Set up the mock manager
         mock_manager.agents = {"test-agent": mock_agent}
-        mock_manager.agent_configs = [
-            MagicMock(id="test-agent", name="Test Agent")
-        ]
+        mock_manager.agent_configs = [MagicMock(id="test-agent", name="Test Agent")]
         mock_manager.get_agent = MagicMock(return_value=mock_agent)
         mock_manager.get_all_agents.return_value = mock_manager.agent_configs
-        
+
         return mock_manager
 
     @pytest_asyncio.fixture
@@ -1075,15 +1165,15 @@ class TestIntegrationPerformance:
         mock_client.get_system_status.return_value = MagicMock(
             workstations=[
                 MagicMock(name="CPU_WS", status="LINKED", type="CPU"),
-                MagicMock(name="FT_WS", status="LINKED", type="FT")
+                MagicMock(name="FT_WS", status="LINKED", type="FT"),
             ],
             jobs=[
                 MagicMock(name="JOB_A", workstation="CPU_WS", status="SUCC"),
-                MagicMock(name="JOB_B", workstation="FT_WS", status="ABEND")
+                MagicMock(name="JOB_B", workstation="FT_WS", status="ABEND"),
             ],
             critical_jobs=[
                 MagicMock(name="CRITICAL_JOB_1", workstation="CPU_WS", status="SUCC")
-            ]
+            ],
         )
         return mock_client
 
@@ -1094,11 +1184,14 @@ class TestIntegrationPerformance:
         mock_tws_client,
     ):
         """Test handling multiple concurrent WebSocket connections."""
-        
+
         with (
             patch("resync.core.agent_manager.agent_manager", mock_agent_manager),
             patch("resync.api.chat.agent_manager", mock_agent_manager),
-            patch("resync.core.agent_manager.OptimizedTWSClient", return_value=mock_tws_client),
+            patch(
+                "resync.core.agent_manager.OptimizedTWSClient",
+                return_value=mock_tws_client,
+            ),
             patch("resync.api.chat.connection_manager") as mock_connection_manager,
             patch("resync.api.chat.knowledge_graph") as mock_chat_knowledge_graph,
         ):
@@ -1106,34 +1199,36 @@ class TestIntegrationPerformance:
             mock_connection_manager.disconnect = AsyncMock()
             mock_chat_knowledge_graph.get_relevant_context.return_value = "Context"
             mock_chat_knowledge_graph.add_conversation.return_value = "memory_id"
-            
+
             # Create multiple concurrent connections
             async def simulate_user_connection(user_id):
                 from resync.api.chat import websocket_endpoint
-                
+
                 # Create mock WebSocket
                 mock_websocket = AsyncMock(spec=WebSocket)
                 mock_websocket.accept = AsyncMock()
-                mock_websocket.receive_text = AsyncMock(return_value=f"Question from user {user_id}")
+                mock_websocket.receive_text = AsyncMock(
+                    return_value=f"Question from user {user_id}"
+                )
                 mock_websocket.send_json = AsyncMock()
                 mock_websocket.send_text = AsyncMock()
                 mock_websocket.close = AsyncMock()
                 mock_websocket.client = f"user_{user_id}"
-                
+
                 try:
                     await websocket_endpoint(mock_websocket, "test-agent")
                 except Exception:
                     pass
-                
+
                 return mock_websocket
-            
+
             # Run multiple connections concurrently
             tasks = [simulate_user_connection(i) for i in range(5)]
             results = await asyncio.gather(*tasks)
-            
+
             # Verify all connections were handled
             assert len(results) == 5
-            
+
             # Verify connection manager was called for each connection
             assert mock_connection_manager.connect.call_count >= 5
 
@@ -1145,27 +1240,31 @@ class TestIntegrationPerformance:
         mock_llm_call,
     ):
         """Test system behavior under high memory load."""
-        
+
         # Create a large number of memories
         large_memory_batch = []
         for i in range(500):
-            large_memory_batch.append({
-                "id": f"mem_{i}",
-                "user_query": f"Query {i} about TWS operations?",
-                "agent_response": f"Response {i} with TWS advice.",
-                "rating": 2 if i % 2 == 0 else 3,
-                "observations": [],
-            })
-        
-        mock_knowledge_graph.get_all_recent_conversations.return_value = large_memory_batch
+            large_memory_batch.append(
+                {
+                    "id": f"mem_{i}",
+                    "user_query": f"Query {i} about TWS operations?",
+                    "agent_response": f"Response {i} with TWS advice.",
+                    "rating": 2 if i % 2 == 0 else 3,
+                    "observations": [],
+                }
+            )
+
+        mock_knowledge_graph.get_all_recent_conversations.return_value = (
+            large_memory_batch
+        )
         mock_knowledge_graph.is_memory_flagged.side_effect = [False] * 500
         mock_knowledge_graph.is_memory_approved.side_effect = [False] * 500
         mock_knowledge_graph.delete_memory = AsyncMock()
         mock_knowledge_graph.add_observations = AsyncMock()
-        
+
         mock_audit_queue.is_memory_approved.side_effect = [False] * 500
         mock_audit_queue.add_audit_record = AsyncMock()
-        
+
         with (
             patch("resync.core.ia_auditor.knowledge_graph", mock_knowledge_graph),
             patch("resync.core.ia_auditor.audit_queue", mock_audit_queue),
@@ -1174,14 +1273,14 @@ class TestIntegrationPerformance:
             start_time = time.time()
             result = await analyze_and_flag_memories()
             end_time = time.time()
-            
+
             # Verify processing completed in reasonable time (less than 30 seconds for 500 memories)
             assert end_time - start_time < 30.0
-            
+
             # Verify results are reasonable
             assert result["processed"] == 500
             assert result["deleted"] + result["flagged"] + result["skipped"] == 500
-            
+
             # Verify all LLM calls were made
             assert mock_llm_call.call_count == 500
 
@@ -1193,89 +1292,93 @@ if __name__ == "__main__":
 
 class TestBackgroundTasksFixture:
     """Test the background tasks fixture functionality."""
-    
+
     @pytest.mark.asyncio
     async def test_background_tasks_fixture_capture(self, background_tasks):
         """Test that the background tasks fixture can capture asyncio.create_task calls."""
         # Start capturing tasks
         background_tasks.start_capturing()
-        
+
         # Define a simple async function
         async def sample_task():
             return "task_completed"
-        
+
         # Create a background task (this should be captured, not executed)
         task = asyncio.create_task(sample_task())
-        
+
         # Verify task was captured
         assert background_tasks.task_count == 1
         assert len(background_tasks.captured_tasks) == 1
-        
+
         # Verify the captured task is our sample_task function
         captured_coro, args, kwargs = background_tasks.captured_tasks[0]
         assert asyncio.iscoroutine(captured_coro) or callable(captured_coro)
-        
+
         # Reset and verify it's cleared
         background_tasks.reset()
         assert background_tasks.task_count == 0
-    
+
     @pytest.mark.asyncio
     async def test_background_tasks_manual_execution(self, background_tasks):
         """Test manual execution of captured background tasks."""
         # Start capturing tasks
         background_tasks.start_capturing()
-        
+
         # Define async functions to test
         results = []
-        
+
         async def task_one():
             results.append("one")
             return "result_one"
-        
+
         async def task_two():
             results.append("two")
             return "result_two"
-        
+
         # Create background tasks (these should be captured, not executed)
         asyncio.create_task(task_one())
         asyncio.create_task(task_two())
-        
+
         # Verify tasks were captured
         assert background_tasks.task_count == 2
-        
+
         # Execute tasks manually
         execution_results = await background_tasks.run_all_async()
-        
+
         # Verify results
         assert len(execution_results) == 2
         assert "result_one" in execution_results
         assert "result_two" in execution_results
-        
+
         # Verify the tasks actually ran
         assert "one" in results
         assert "two" in results
-    
+
     @pytest.mark.asyncio
     async def test_background_tasks_with_chat_api(self, background_tasks):
         """Test background tasks fixture with the chat API's use of asyncio.create_task."""
         from resync.api.chat import run_auditor_safely
-        
+
         # Start capturing tasks
         background_tasks.start_capturing()
-        
+
         # Mock the analyze_and_flag_memories function to avoid actual processing
         with patch("resync.api.chat.analyze_and_flag_memories") as mock_analyze:
-            mock_analyze.return_value = {"processed": 1, "deleted": 0, "flagged": 0}
-            
+            mock_analyze.return_value = {
+                "processed": 1,
+                "deleted": 0,
+                "flagged": 0,
+            }
+
             # Create a background task as done in the chat API
             task = asyncio.create_task(run_auditor_safely())
-            
+
             # Verify task was captured
             assert background_tasks.task_count == 1
-            
+
             # Execute the task manually
             results = await background_tasks.run_all_async()
-            
+
             # Verify the task executed
             assert len(results) == 1
             mock_analyze.assert_called_once()

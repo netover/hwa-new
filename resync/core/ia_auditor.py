@@ -4,7 +4,9 @@ import logging
 
 from resync.core import audit_queue
 from resync.core.audit_lock import audit_lock
-from resync.core.knowledge_graph import AsyncKnowledgeGraph as knowledge_graph
+from resync.core.knowledge_graph import (  # noqa: N813
+    AsyncKnowledgeGraph as knowledge_graph,
+)
 from resync.core.utils.json_parser import parse_llm_json_response
 from resync.core.utils.llm import call_llm
 from resync.settings import settings
@@ -41,7 +43,7 @@ async def _validate_memory_for_analysis(mem: dict) -> bool:
 
 async def _get_llm_analysis(user_query: str, agent_response: str) -> dict | None:
     """Gets the analysis of a memory from the LLM."""
-    prompt = f'''
+    prompt = f"""
     You are an expert TWS (IBM MQ/Workload Scheduler) auditor.
     Evaluate if the agent's response is correct for the user's query.
 
@@ -55,7 +57,7 @@ async def _get_llm_analysis(user_query: str, agent_response: str) -> dict | None
 
     Return ONLY a JSON object in the format:
     {{ "is_incorrect": true/false, "confidence": 0.0-1.0, "reason": "string" }}
-    '''
+    """
     try:
         # Increased max_tokens from 200 to 500 to allow for more detailed analysis
         # and comprehensive reasoning in the auditor's evaluation of agent responses
@@ -74,7 +76,9 @@ async def _get_llm_analysis(user_query: str, agent_response: str) -> dict | None
         return None
 
 
-async def _perform_action_on_memory(mem: dict, analysis: dict) -> tuple[str, dict] | None:
+async def _perform_action_on_memory(
+    mem: dict, analysis: dict
+) -> tuple[str, dict] | None:
     """Performs the appropriate action on a memory based on the LLM analysis."""
     memory_id = mem["id"]
     if analysis.get("is_incorrect") and analysis.get("confidence", 0) > 0.85:
@@ -111,11 +115,15 @@ async def analyze_memory(mem: dict) -> tuple[str, dict] | None:
 
             # Check if memory is already flagged or approved before LLM analysis
             if await knowledge_graph.is_memory_flagged(memory_id):
-                logger.debug(f"Memory {memory_id} already flagged by IA, skipping analysis.")
+                logger.debug(
+                    f"Memory {memory_id} already flagged by IA, skipping analysis."
+                )
                 return None
 
             if await knowledge_graph.is_memory_approved(memory_id):
-                logger.debug(f"Memory {memory_id} already approved by human, skipping analysis.")
+                logger.debug(
+                    f"Memory {memory_id} already approved by human, skipping analysis."
+                )
                 return None
 
             analysis = await _get_llm_analysis(
@@ -128,7 +136,8 @@ async def analyze_memory(mem: dict) -> tuple[str, dict] | None:
 
     except Exception as e:
         logger.error(
-            f"IA Auditor: Error analyzing memory {memory_id}: {e}", exc_info=True
+            f"IA Auditor: Error analyzing memory {memory_id}: {e}",
+            exc_info=True,
         )
         return None
 

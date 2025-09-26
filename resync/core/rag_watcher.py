@@ -25,7 +25,7 @@ async def watch_rag_directory():
         async for changes in awatch(RAG_DIRECTORY):
             for change_type, path_str in changes:
                 # We only care about new files being added.
-                if change_type.name == 'added':
+                if change_type.name == "added":
                     file_path = Path(path_str)
                     logger.info(f"New file detected in RAG directory: {file_path.name}")
                     # Schedule ingestion as a background task to avoid blocking the watcher

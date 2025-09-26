@@ -75,7 +75,9 @@ async def test_load_agents_from_config(
 
 
 @pytest.mark.asyncio
-async def test_load_agents_from_nonexistent_file(agent_manager_instance: AgentManager):
+async def test_load_agents_from_nonexistent_file(
+    agent_manager_instance: AgentManager,
+):
     """
     Tests that the agent manager handles a missing configuration file gracefully.
     """
@@ -122,11 +124,14 @@ async def test_tws_client_race_condition_prevention():
     # Mock the OptimizedTWSClient to track initialization calls
     init_call_count = 0
 
-    def mock_tws_init(self, hostname, port, username, password, engine_name, engine_owner):
+    def mock_tws_init(
+        self, hostname, port, username, password, engine_name, engine_owner
+    ):
         nonlocal init_call_count
         init_call_count += 1
         # Simulate some initialization work
         import time
+
         time.sleep(0.01)  # Small delay to simulate initialization time
 
     # Create a mock instance that will be returned

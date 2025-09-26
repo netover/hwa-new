@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from typing import DefaultDict
+from typing import Any, DefaultDict
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -17,13 +17,13 @@ class MetricsRegistry:
     as a lightweight, built-in tool for tracking key application events.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initializes the registry with empty dictionaries for counters and gauges."""
         self.counters: DefaultDict[str, int] = defaultdict(int)
         self.gauges: DefaultDict[str, float] = defaultdict(float)
         logger.info("MetricsRegistry initialized.")
 
-    def increment_counter(self, name: str, value: int = 1):
+    def increment_counter(self, name: str, value: int = 1) -> None:
         """
         Increments a counter metric by a given value.
 
@@ -34,7 +34,7 @@ class MetricsRegistry:
         self.counters[name] += value
         logger.debug(f"Counter '{name}' incremented to {self.counters[name]}")
 
-    def set_gauge(self, name: str, value: float):
+    def set_gauge(self, name: str, value: float) -> None:
         """
         Sets a gauge metric to a specific value.
 
@@ -45,7 +45,7 @@ class MetricsRegistry:
         self.gauges[name] = value
         logger.debug(f"Gauge '{name}' set to {self.gauges[name]}")
 
-    def get_metrics(self) -> dict:
+    def get_metrics(self) -> dict[str, Any]:
         """
         Returns a snapshot of all current metrics.
 
@@ -80,7 +80,7 @@ class MetricsRegistry:
 
         return "".join(output)
 
-    def reset(self):
+    def reset(self) -> None:
         """Resets all metrics back to their default state."""
         self.counters.clear()
         self.gauges.clear()

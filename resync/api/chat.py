@@ -9,7 +9,9 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from resync.core.agent_manager import agent_manager
 from resync.core.connection_manager import connection_manager
 from resync.core.ia_auditor import analyze_and_flag_memories
-from resync.core.knowledge_graph import AsyncKnowledgeGraph as knowledge_graph
+from resync.core.knowledge_graph import (  # noqa: N813
+    AsyncKnowledgeGraph as knowledge_graph,
+)
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -49,7 +51,7 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
             }
         )
         await websocket.close(code=1008)
-        connection_manager.disconnect(websocket)
+        await connection_manager.disconnect(websocket)
         return
 
     try:
@@ -144,4 +146,4 @@ Pergunta do usuário:
             pass
     finally:
         # Ensure the connection is cleaned up
-        connection_manager.disconnect(websocket)
+        await connection_manager.disconnect(websocket)

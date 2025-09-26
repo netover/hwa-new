@@ -53,7 +53,7 @@ class OptimizedTWSClient:
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             auth=self.auth,
-            verify=False,  # Note: In production, consider using proper SSL verification
+            verify=True,
             timeout=DEFAULT_TIMEOUT,
         )
         # Caching layer to reduce redundant API calls - now using cache hierarchy
@@ -70,7 +70,9 @@ class OptimizedTWSClient:
             yield response.json()
         except httpx.HTTPStatusError as e:
             logger.error(
-                "HTTP error occurred: %s - %s", e.response.status_code, e.response.text
+                "HTTP error occurred: %s - %s",
+                e.response.status_code,
+                e.response.text,
             )
             raise ConnectionError(f"HTTP error: {e.response.status_code}") from e
         except httpx.RequestError as e:

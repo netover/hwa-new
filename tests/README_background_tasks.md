@@ -26,20 +26,20 @@ import pytest
 async def test_my_background_task(background_tasks):
     # Start capturing background tasks
     background_tasks.start_capturing()
-    
+
     # Define an async function
     async def my_task():
         return "task_result"
-    
+
     # Create a background task (will be captured, not executed)
     asyncio.create_task(my_task())
-    
+
     # Verify the task was captured
     assert background_tasks.task_count == 1
-    
+
     # Execute the task manually
     results = await background_tasks.run_all_async()
-    
+
     # Verify the result
     assert results[0] == "task_result"
 ```
@@ -54,23 +54,23 @@ from unittest.mock import patch
 @pytest.mark.asyncio
 async def test_chat_api_background_task(background_tasks):
     from resync.api.chat import run_auditor_safely
-    
+
     # Start capturing tasks
     background_tasks.start_capturing()
-    
+
     # Mock dependencies to avoid actual processing
     with patch("resync.api.chat.analyze_and_flag_memories") as mock_analyze:
         mock_analyze.return_value = {"processed": 1, "deleted": 0, "flagged": 0}
-        
+
         # Create the background task as done in the chat API
         asyncio.create_task(run_auditor_safely())
-        
+
         # Verify task was captured
         assert background_tasks.task_count == 1
-        
+
         # Execute the task manually
         results = await background_tasks.run_all_async()
-        
+
         # Verify execution
         assert len(results) == 1
         mock_analyze.assert_called_once()

@@ -394,7 +394,12 @@ class AsyncAuditQueue:
         if not memory_ids:
             return {"total": 0, "pending": 0, "approved": 0, "rejected": 0}
 
-        metrics = {"total": len(memory_ids), "pending": 0, "approved": 0, "rejected": 0}
+        metrics = {
+            "total": len(memory_ids),
+            "pending": 0,
+            "approved": 0,
+            "rejected": 0,
+        }
 
         for memory_id_bytes in memory_ids:
             memory_id = memory_id_bytes.decode("utf-8")
@@ -440,7 +445,11 @@ class AsyncAuditQueue:
             }
         except Exception as e:
             logger.error(f"Error getting Redis connection info: {e}")
-            return {"connected": False, "host": self.redis_url, "error": str(e)}
+            return {
+                "connected": False,
+                "host": self.redis_url,
+                "error": str(e),
+            }
 
     def health_check_sync(self) -> bool:
         """Synchronous wrapper for health_check"""

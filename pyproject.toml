@@ -35,6 +35,14 @@ module = [
 ]
 ignore_missing_imports = true
 
+[tool.flake8]
+max-line-length = 88
+max-complexity = 10
+
+[tool.bandit]
+targets = ["resync/", "tests/"]
+exclude = [".venv", "build", "dist", "__pycache__", "*.egg-info"]
+
 [tool.black]
 line-length = 88
 target-version = ['py313']
@@ -56,3 +64,8 @@ ignore = ["E501"]
 
 [tool.setuptools.packages.find]
 include = ["resync*", "config*"]
+
+[tool.mutmut]
+paths_to_mutate = ["resync/"]
+tests_dir = ["tests/"]
+debug = true

@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (query) {
                 url += `&query=${encodeURIComponent(query)}`;
             }
-            
+
             const response = await fetch(url);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);

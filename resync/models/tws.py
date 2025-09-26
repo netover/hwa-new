@@ -24,7 +24,8 @@ class JobStatus(BaseModel):
     name: str = Field(..., description="The name of the job.")
     workstation: str = Field(..., description="The workstation where the job runs.")
     status: str = Field(
-        ..., description="The current status of the job (e.g., 'SUCC', 'ABEND')."
+        ...,
+        description="The current status of the job (e.g., 'SUCC', 'ABEND').",
     )
     job_stream: str = Field(..., description="The job stream the job belongs to.")
 

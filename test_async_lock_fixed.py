@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 import asyncio
-import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
 from pydantic import BaseModel, Field
+
 
 # Mock the TWS service
 class MockOptimizedTWSClient:
@@ -19,6 +19,7 @@ class MockOptimizedTWSClient:
         self.engine_name = engine_name
         self.engine_owner = engine_owner
 
+
 # Mock settings
 class MockSettings:
     TWS_HOST = "localhost"
@@ -28,28 +29,37 @@ class MockSettings:
     TWS_ENGINE_NAME = "test_engine"
     TWS_ENGINE_OWNER = "test_owner"
 
+
 # Mock TWS tools
 class MockTWSToolReadOnly(BaseModel):
     tws_client: Optional[Any] = Field(default=None, exclude=True)
+
 
 class MockTWSStatusTool(MockTWSToolReadOnly):
     async def get_tws_status(self) -> str:
         return "Mock TWS Status"
 
+
 class MockTWSTroubleshootingTool(MockTWSToolReadOnly):
     async def analyze_failures(self) -> str:
         return "Mock Troubleshooting"
 
+
 # Create mock tools
 mock_tws_status_tool = MagicMock()
 mock_tws_status_tool.name = "tws_status_tool"
-mock_tws_status_tool.description = "Obtém o status geral de workstations e jobs no ambiente TWS."
+mock_tws_status_tool.description = (
+    "Obtém o status geral de workstations e jobs no ambiente TWS."
+)
 mock_tws_status_tool.model = MockTWSStatusTool()
 
 mock_tws_troubleshooting_tool = MagicMock()
 mock_tws_troubleshooting_tool.name = "tws_troubleshooting_tool"
-mock_tws_troubleshooting_tool.description = "Analisa jobs com falha e workstations offline para diagnosticar problemas."
+mock_tws_troubleshooting_tool.description = (
+    "Analisa jobs com falha e workstations offline para diagnosticar problemas."
+)
 mock_tws_troubleshooting_tool.model = MockTWSTroubleshootingTool()
+
 
 # Mock Agent and Tool classes for testing
 class MockAgent:
@@ -59,15 +69,18 @@ class MockAgent:
         self.system = system
         self.verbose = verbose
 
+
 class MockTool:
     def __init__(self, name, description, model):
         self.name = name
         self.description = description
         self.model = model
 
+
 # Pydantic Models for Agent Configuration
 class AgentConfig(BaseModel):
     """Represents the configuration for a single AI agent."""
+
     id: str
     name: str
     role: str
@@ -78,11 +91,14 @@ class AgentConfig(BaseModel):
     memory: bool = True
     verbose: bool = False
 
+
 class AgentsConfig(BaseModel):
     """
     Represents the top-level structure of the agent configuration file.
     """
+
     agents: List[AgentConfig]
+
 
 # Agent Manager Class with Async Lock
 class AgentManager:
@@ -90,10 +106,11 @@ class AgentManager:
     Manages the lifecycle and operations of AI agents.
     This class is a singleton, ensuring a single source of truth for agent state.
     """
-    _instance: Optional['AgentManager'] = None
+
+    _instance: Optional["AgentManager"] = None
     _initialized: bool = False
 
-    def __new__(cls, *args, **kwargs) -> 'AgentManager':
+    def __new__(cls, *args, **kwargs) -> "AgentManager":
         if not cls._instance:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -145,7 +162,7 @@ class AgentManager:
                     )
                     # Inject the client into tools that need it
                     for tool in self.tools.values():
-                        if hasattr(tool.model, 'tws_client'):
+                        if hasattr(tool.model, "tws_client"):
                             tool.model.tws_client = self.tws_client
                     logger.info("TWS client initialization completed successfully.")
         return self.tws_client
@@ -164,7 +181,7 @@ class AgentManager:
             goal="To be tested",
             backstory="Test agent",
             tools=["tws_status_tool"],
-            model_name="test-model"
+            model_name="test-model",
         )
         self.agent_configs = [mock_config]
         self.agents = await self._create_agents([mock_config])
@@ -180,22 +197,28 @@ class AgentManager:
 
         for config in agent_configs:
             try:
-                agent_tools = [self.tools[tool_name] for tool_name in config.tools if tool_name in self.tools]
+                agent_tools = [
+                    self.tools[tool_name]
+                    for tool_name in config.tools
+                    if tool_name in self.tools
+                ]
 
                 # Using MockAgent to create the agent instance
                 agent = MockAgent(
                     tools=agent_tools,
                     model=config.model_name,
                     system=f"You are {config.name}, a specialized AI agent. "
-                          f"Your role is: {config.role}. "
-                          f"Your primary goal is: {config.goal}. "
-                          f"Your backstory: {config.backstory}",
+                    f"Your role is: {config.role}. "
+                    f"Your primary goal is: {config.goal}. "
+                    f"Your backstory: {config.backstory}",
                     verbose=config.verbose,
                 )
                 agents[config.id] = agent
                 logger.debug(f"Successfully created agent: {config.id}")
             except KeyError as e:
-                logger.warning(f"Tool '{e.args[0]}' not found for agent '{config.id}'. Agent will be created without it.")
+                logger.warning(
+                    f"Tool '{e.args[0]}' not found for agent '{config.id}'. Agent will be created without it."
+                )
             except Exception:
                 logger.error(f"Failed to create agent '{config.id}'", exc_info=True)
         return agents
@@ -208,8 +231,10 @@ class AgentManager:
         """Returns the configuration of all loaded agents."""
         return self.agent_configs
 
+
 # Logging Setup
 logger = logging.getLogger(__name__)
+
 
 async def test_async_lock_functionality():
     """Test that the async lock prevents race conditions during TWS client initialization."""
@@ -224,16 +249,23 @@ async def test_async_lock_functionality():
     init_call_count = 0
     mock_client_instance = None
 
-    def mock_tws_init(self, hostname, port, username, password, engine_name, engine_owner):
+    def mock_tws_init(
+        self, hostname, port, username, password, engine_name, engine_owner
+    ):
         nonlocal init_call_count, mock_client_instance
         init_call_count += 1
         # Create a single mock instance
         if mock_client_instance is None:
-            mock_client_instance = MockOptimizedTWSClient(hostname, port, username, password, engine_name, engine_owner)
+            mock_client_instance = MockOptimizedTWSClient(
+                hostname, port, username, password, engine_name, engine_owner
+            )
         return mock_client_instance
 
-    with patch.object(MockOptimizedTWSClient, '__init__', mock_tws_init):
-        with patch("test_async_lock_fixed.MockOptimizedTWSClient", MockOptimizedTWSClient):
+    with patch.object(MockOptimizedTWSClient, "__init__", mock_tws_init):
+        with patch(
+            "test_async_lock_fixed.MockOptimizedTWSClient",
+            MockOptimizedTWSClient,
+        ):
             # Act - Create multiple concurrent tasks that all try to initialize the TWS client
             tasks = []
             for i in range(5):
@@ -245,15 +277,22 @@ async def test_async_lock_functionality():
 
             # Assert
             # All tasks should return the same client instance
-            assert all(result is mock_client_instance for result in results), "All tasks should return the same instance"
+            assert all(
+                result is mock_client_instance for result in results
+            ), "All tasks should return the same instance"
             # But the initialization should only happen once
-            assert init_call_count == 1, f"Initialization should only happen once, but happened {init_call_count} times"
+            assert (
+                init_call_count == 1
+            ), f"Initialization should only happen once, but happened {init_call_count} times"
             # The client should be stored in the agent manager
-            assert agent_manager.tws_client is mock_client_instance, "Client should be stored in agent manager"
+            assert (
+                agent_manager.tws_client is mock_client_instance
+            ), "Client should be stored in agent manager"
 
     print("✅ Async lock test passed!")
     print("✅ Race condition prevention working correctly!")
     return True
+
 
 async def test_agent_creation():
     """Test that agents can be created with async TWS client initialization."""
@@ -265,7 +304,9 @@ async def test_agent_creation():
     agent_manager = AgentManager()
 
     # Mock the TWS client
-    mock_client = MockOptimizedTWSClient("localhost", 8080, "user", "pass", "engine", "owner")
+    mock_client = MockOptimizedTWSClient(
+        "localhost", 8080, "user", "pass", "engine", "owner"
+    )
     agent_manager.tws_client = mock_client
 
     # Test agent loading
@@ -281,19 +322,24 @@ async def test_agent_creation():
     print("✅ Agent creation test passed!")
     return True
 
+
 async def main():
     try:
         success1 = await test_async_lock_functionality()
         success2 = await test_agent_creation()
 
         if success1 and success2:
-            print("\n🎉 All tests passed! Async lock implementation is working correctly.")
+            print(
+                "\n🎉 All tests passed! Async lock implementation is working correctly."
+            )
             print("📋 Summary of implemented features:")
             print("   ✅ Added asyncio.Lock to prevent race conditions")
             print("   ✅ Implemented double-check pattern in _get_tws_client()")
             print("   ✅ Made TWS client initialization async-safe")
             print("   ✅ Added comprehensive tests for race condition prevention")
-            print("   ✅ Updated _create_agents and load_agents_from_config to be async")
+            print(
+                "   ✅ Updated _create_agents and load_agents_from_config to be async"
+            )
             return True
         else:
             print("❌ Some tests failed")
@@ -301,8 +347,10 @@ async def main():
     except Exception as e:
         print(f"❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 if __name__ == "__main__":
     success = asyncio.run(main())

@@ -9,13 +9,14 @@ comprehensive configuration options.
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional, Union, AsyncIterator
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, List, Optional, Union
 
 
 class StreamChunkType(Enum):
     """Types of data that can be streamed."""
+
     TEXT = "text"
     JSON = "json"
     DICT = "dict"
@@ -25,6 +26,7 @@ class StreamChunkType(Enum):
 @dataclass
 class StreamChunk:
     """Represents a single chunk in the stream with optional metadata."""
+
     content: Any
     chunk_type: StreamChunkType = StreamChunkType.TEXT
     metadata: Optional[Dict[str, Any]] = None
@@ -82,7 +84,7 @@ class AsyncIteratorMock:
         error_at_index: Optional[int] = None,
         error_type: Optional[Exception] = None,
         auto_convert_types: bool = True,
-        chunk_size: Optional[int] = None
+        chunk_size: Optional[int] = None,
     ):
         """
         Initialize the AsyncIteratorMock.
@@ -108,10 +110,18 @@ class AsyncIteratorMock:
         self.index = 0
 
         # Validate error configuration
-        if error_at_index is not None and (error_at_index < 0 or error_at_index >= len(self.chunks)):
-            raise ValueError(f"error_at_index {error_at_index} is out of range [0, {len(self.chunks)-1}]")
+        if error_at_index is not None and (
+            error_at_index < 0 or error_at_index >= len(self.chunks)
+        ):
+            raise ValueError(
+                f"error_at_index {error_at_index} is out of range [0, {len(self.chunks)-1}]"
+            )
 
-    def _process_items(self, items: Union[List[Any], List[StreamChunk]], chunk_size: Optional[int]) -> List[StreamChunk]:
+    def _process_items(
+        self,
+        items: Union[List[Any], List[StreamChunk]],
+        chunk_size: Optional[int],
+    ) -> List[StreamChunk]:
         """Process raw items into StreamChunk objects."""
         chunks = []
 
@@ -126,11 +136,26 @@ class AsyncIteratorMock:
 
                 # Split large content if chunk_size is specified
                 if chunk_size and isinstance(item, str) and len(item) > chunk_size:
-                    split_items = [item[i:i+chunk_size] for i in range(0, len(item), chunk_size)]
+                    split_items = [
+                        item[i : i + chunk_size]
+                        for i in range(0, len(item), chunk_size)
+                    ]
                     for split_item in split_items:
-                        chunks.append(StreamChunk(split_item, chunk_type, delay_before=self.delay_between_chunks))
+                        chunks.append(
+                            StreamChunk(
+                                split_item,
+                                chunk_type,
+                                delay_before=self.delay_between_chunks,
+                            )
+                        )
                 else:
-                    chunks.append(StreamChunk(item, chunk_type, delay_before=self.delay_between_chunks))
+                    chunks.append(
+                        StreamChunk(
+                            item,
+                            chunk_type,
+                            delay_before=self.delay_between_chunks,
+                        )
+                    )
 
         return chunks
 
@@ -143,7 +168,7 @@ class AsyncIteratorMock:
         else:
             return StreamChunkType.TEXT
 
-    def __aiter__(self) -> 'AsyncIteratorMock':
+    def __aiter__(self) -> "AsyncIteratorMock":
         """Return the asynchronous iterator object."""
         return self
 
@@ -182,12 +207,13 @@ class AsyncIteratorMock:
             # For JSON chunks, convert dict/list to JSON string
             if isinstance(chunk.content, (dict, list)):
                 import json
+
                 return json.dumps(chunk.content)
             return chunk.content
         elif chunk.chunk_type == StreamChunkType.BYTES:
             # Ensure bytes content is properly handled
             if isinstance(chunk.content, str):
-                return chunk.content.encode('utf-8')
+                return chunk.content.encode("utf-8")
             return chunk.content
         else:
             # Text and other types
@@ -211,8 +237,8 @@ class AsyncIteratorMock:
         text: str,
         chunk_size: int = 50,
         delay_between_chunks: float = 0.0,
-        **kwargs
-    ) -> 'AsyncIteratorMock':
+        **kwargs,
+    ) -> "AsyncIteratorMock":
         """
         Create an AsyncIteratorMock from text, splitting it into chunks.
 
@@ -227,14 +253,16 @@ class AsyncIteratorMock:
         """
         chunks = []
         for i in range(0, len(text), chunk_size):
-            chunk_text = text[i:i+chunk_size]
+            chunk_text = text[i : i + chunk_size]
             delay = delay_between_chunks if i > 0 else 0.0  # No delay for first chunk
-            chunks.append(StreamChunk(chunk_text, StreamChunkType.TEXT, delay_before=delay))
+            chunks.append(
+                StreamChunk(chunk_text, StreamChunkType.TEXT, delay_before=delay)
+            )
 
         return cls(chunks, **kwargs)
 
     @classmethod
-    def from_chunks(cls, chunks: List[StreamChunk]) -> 'AsyncIteratorMock':
+    def from_chunks(cls, chunks: List[StreamChunk]) -> "AsyncIteratorMock":
         """
         Create an AsyncIteratorMock from a list of StreamChunk objects.
 
@@ -282,26 +310,39 @@ class AsyncIteratorMock:
 
 
 # Convenience functions for common use cases
-def create_text_stream(text: str, chunk_size: int = 50, delay: float = 0.0) -> AsyncIteratorMock:
+def create_text_stream(
+    text: str, chunk_size: int = 50, delay: float = 0.0
+) -> AsyncIteratorMock:
     """Create a text stream mock from a string."""
     return AsyncIteratorMock.from_text(text, chunk_size, delay)
 
 
-def create_json_stream(data: Union[Dict, List], delay: float = 0.0) -> AsyncIteratorMock:
+def create_json_stream(
+    data: Union[Dict, List], delay: float = 0.0
+) -> AsyncIteratorMock:
     """Create a JSON stream mock from structured data."""
     import json
+
     json_str = json.dumps(data)
-    return AsyncIteratorMock.from_text(json_str, chunk_size=100, delay_between_chunks=delay)
+    return AsyncIteratorMock.from_text(
+        json_str, chunk_size=100, delay_between_chunks=delay
+    )
 
 
-def create_mixed_stream(chunks: List[Union[str, Dict, StreamChunk]], delay: float = 0.0) -> AsyncIteratorMock:
+def create_mixed_stream(
+    chunks: List[Union[str, Dict, StreamChunk]], delay: float = 0.0
+) -> AsyncIteratorMock:
     """Create a mixed-type stream with different content types."""
     processed_chunks = []
     for chunk in chunks:
         if isinstance(chunk, StreamChunk):
             processed_chunks.append(chunk)
         elif isinstance(chunk, dict):
-            processed_chunks.append(StreamChunk(chunk, StreamChunkType.JSON, delay_before=delay))
+            processed_chunks.append(
+                StreamChunk(chunk, StreamChunkType.JSON, delay_before=delay)
+            )
         else:
-            processed_chunks.append(StreamChunk(chunk, StreamChunkType.TEXT, delay_before=delay))
+            processed_chunks.append(
+                StreamChunk(chunk, StreamChunkType.TEXT, delay_before=delay)
+            )
     return AsyncIteratorMock(processed_chunks)

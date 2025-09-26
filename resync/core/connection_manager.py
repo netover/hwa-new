@@ -29,7 +29,7 @@ class ConnectionManager:
         logger.info(f"New WebSocket connection accepted: {websocket.client}")
         logger.info(f"Total active connections: {len(self.active_connections)}")
 
-    def disconnect(self, websocket: WebSocket):
+    async def disconnect(self, websocket: WebSocket):
         """
         Removes a WebSocket connection from the active list.
         """

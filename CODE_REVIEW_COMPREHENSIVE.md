@@ -116,7 +116,7 @@ class AgentManager:
 @router.get("/flags")
 def get_flagged_memories():  # Sync function
     memories = audit_queue.get_all_audits_sync()  # Sync call
-    
+
 @router.post("/review")
 async def review_memory():  # Async function
     await knowledge_graph.client.add_observations()  # Async call

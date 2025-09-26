@@ -3,10 +3,7 @@ WebSocket tests using TestClient properly to avoid event loop conflicts.
 This file demonstrates the proper way to test WebSocket endpoints.
 """
 
-import pytest
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import asyncio
 
 from resync.main import app
 

@@ -6,7 +6,22 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from agno.agent import Agent
+try:
+    from agno.agent import Agent
+except ImportError:
+
+    class Agent:
+        """Mock Agent class for testing when agno is not available."""
+
+        def __init__(self, tools=None, model=None, instructions=None, **kwargs):
+            self.tools = tools or []
+            self.model = model
+            self.instructions = instructions
+            # Mock methods that might be called
+            self.run = self._mock_run
+            self._mock_run = lambda *args, **kwargs: None
+
+
 from pydantic import BaseModel
 
 from resync.services.tws_service import OptimizedTWSClient
@@ -142,7 +157,8 @@ class AgentManager:
             self.agent_configs = []
         except Exception:
             logger.error(
-                "An unexpected error occurred while loading agents", exc_info=True
+                "An unexpected error occurred while loading agents",
+                exc_info=True,
             )
             self.agents = {}
             self.agent_configs = []
@@ -195,6 +211,19 @@ class AgentManager:
     def get_all_agents(self) -> List[AgentConfig]:
         """Returns the configuration of all loaded agents."""
         return self.agent_configs
+
+    def get_agent_with_tool(self, agent_id: str, tool_name: str) -> Optional[Any]:
+        """Retrieves an agent that has the specified tool, raising ValueError if not found."""
+        agent = self.get_agent(agent_id)
+        if agent is None:
+            logger.warning(f"Agent '{agent_id}' not found")
+            raise ValueError(f"Agent {agent_id} not found")
+
+        if any(t.name == tool_name for t in agent.tools):
+            return agent
+        else:
+            logger.warning(f"Tool '{tool_name}' not found for agent '{agent_id}'")
+            raise ValueError(f"Tool {tool_name} not found for agent {agent_id}")
 
 
 # --- Singleton Instance ---

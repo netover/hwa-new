@@ -1,6 +1,8 @@
 from .base import Settings
 
+
 class ProductionSettings(Settings):
+    pass
     # Override settings for production
     # TWS credentials MUST be set via environment variables in production
     # TWS_HOST: str = "your_prod_tws_host"

@@ -2,10 +2,10 @@
 import asyncio
 import logging  # Use logging instead of print
 
-from openai import (
+from openai import (  # Import OpenAIError for specific exception handling
     AsyncOpenAI,
     OpenAIError,
-)  # Import OpenAIError for specific exception handling
+)
 
 from resync.settings import settings
 
@@ -14,8 +14,6 @@ logger = logging.getLogger(__name__)
 
 class LLMCallError(Exception):
     """Custom exception for LLM call failures."""
-
-    pass
 
 
 async def call_llm(

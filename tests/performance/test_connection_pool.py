@@ -5,15 +5,13 @@ This module tests connection pool performance, Redis queue throughput,
 and memory usage under various load conditions.
 """
 
-import pytest
 import asyncio
 import time
-import psutil
-import redis
 from unittest.mock import MagicMock, patch
-from httpx import AsyncClient
-from resync.core.connection_manager import ConnectionManager
-from resync.core.audit_queue import AsyncAuditQueue
+
+import psutil
+import pytest
+
 from resync.main import app
 
 
@@ -50,13 +48,15 @@ class TestConnectionPoolPerformance:
 
             # Check execution time is reasonable
             execution_time = end_time - start_time
-            assert execution_time < n_conn * 0.1  # Should be much faster than sequential
+            assert (
+                execution_time < n_conn * 0.1
+            )  # Should be much faster than sequential
 
     @pytest.mark.performance
     @pytest.mark.slow
     def test_connection_reuse_efficiency(self):
         """Test efficiency of connection reuse."""
-        with patch('resync.core.connection_manager.ConnectionManager') as mock_manager:
+        with patch("resync.core.connection_manager.ConnectionManager") as mock_manager:
             mock_manager.return_value.get_connection.return_value = MagicMock()
 
             # Simulate multiple operations reusing connections
@@ -102,7 +102,9 @@ class TestConnectionPoolPerformance:
 
         # Simulate queue operations
         for i in range(0, queue_operations, batch_size):
-            batch = [f"message_{j}" for j in range(i, min(i + batch_size, queue_operations))]
+            batch = [
+                f"message_{j}" for j in range(i, min(i + batch_size, queue_operations))
+            ]
 
             # Simulate Redis operations
             await self._simulate_redis_batch_operations(batch)
@@ -121,9 +123,11 @@ class TestConnectionPoolPerformance:
     @pytest.mark.slow
     async def test_connection_pool_timeout_handling(self):
         """Test connection pool timeout behavior."""
-        with patch('resync.core.connection_manager.ConnectionManager') as mock_manager:
+        with patch("resync.core.connection_manager.ConnectionManager") as mock_manager:
             mock_connection = MagicMock()
-            mock_connection.execute.side_effect = asyncio.TimeoutError("Connection timeout")
+            mock_connection.execute.side_effect = asyncio.TimeoutError(
+                "Connection timeout"
+            )
             mock_manager.return_value.get_connection.return_value = mock_connection
 
             # Test timeout handling
@@ -155,7 +159,7 @@ class TestAuditQueuePerformance:
                 "id": f"audit_{i}",
                 "timestamp": time.time(),
                 "action": "test_action",
-                "data": {"test": f"value_{i}"}
+                "data": {"test": f"value_{i}"},
             }
             for i in range(queue_size)
         ]
@@ -182,8 +186,7 @@ class TestAuditQueuePerformance:
         """Test audit queue backpressure handling."""
         # Simulate high load that exceeds processing capacity
         high_load_records = [
-            {"id": f"record_{i}", "data": "x" * 1000}
-            for i in range(2000)
+            {"id": f"record_{i}", "data": "x" * 1000} for i in range(2000)
         ]
 
         start_time = time.time()
@@ -253,6 +256,7 @@ class TestMemoryLeakDetection:
 
             # Force garbage collection
             import gc
+
             gc.collect()
 
             # Check memory usage periodically
@@ -273,7 +277,7 @@ class TestMemoryLeakDetection:
     @pytest.mark.slow
     def test_connection_cleanup_memory(self):
         """Test that connections are properly cleaned up."""
-        with patch('resync.core.connection_manager.ConnectionManager') as mock_manager:
+        with patch("resync.core.connection_manager.ConnectionManager") as mock_manager:
             connections = []
 
             # Create many connections
@@ -286,6 +290,7 @@ class TestMemoryLeakDetection:
 
             # Force garbage collection
             import gc
+
             gc.collect()
 
             # Verify connections can be garbage collected
@@ -304,7 +309,7 @@ class TestMemoryLeakDetection:
         processed_chunks = []
 
         for i in range(0, len(large_dataset), chunk_size):
-            chunk = large_dataset[i:i + chunk_size]
+            chunk = large_dataset[i : i + chunk_size]
             processed_chunk = [item for item in chunk if item["id"] % 2 == 0]
             processed_chunks.append(processed_chunk)
 
@@ -326,16 +331,21 @@ class TestConcurrentLoadHandling:
     @pytest.mark.slow
     async def test_concurrent_request_handling(self):
         """Test handling of many concurrent requests."""
+
     async def make_concurrent_requests(n_requests):
         """Make multiple concurrent requests."""
         # Use TestClient for FastAPI testing without server
         from fastapi.testclient import TestClient
+
         test_client = TestClient(app)
-        
+
         # Simulate concurrent requests using thread pool
         import concurrent.futures
+
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(test_client.get, "/health") for _ in range(n_requests)]
+            futures = [
+                executor.submit(test_client.get, "/health") for _ in range(n_requests)
+            ]
             responses = [future.result() for future in futures]
         return responses
 

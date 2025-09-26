@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import asyncio
-import logging
 from typing import Optional
+
 
 # Simple demonstration of async lock functionality
 class AsyncLockDemo:
@@ -27,6 +27,7 @@ class AsyncLockDemo:
 
         return self.value
 
+
 async def test_race_condition_prevention():
     """Test that multiple concurrent calls only initialize once."""
     print("🧪 Testing race condition prevention...")
@@ -49,11 +50,14 @@ async def test_race_condition_prevention():
     print(f"   - Sample result: {results[0]}")
 
     # Assertions
-    assert demo.init_count == 1, f"Should initialize only once, but initialized {demo.init_count} times"
+    assert (
+        demo.init_count == 1
+    ), f"Should initialize only once, but initialized {demo.init_count} times"
     assert len(set(results)) == 1, "All results should be identical"
 
     print("✅ Race condition prevention test passed!")
     return True
+
 
 async def main():
     print("🚀 Demonstrating Async Lock Implementation")
@@ -84,8 +88,10 @@ async def main():
     except Exception as e:
         print(f"❌ Error during testing: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 if __name__ == "__main__":
     success = asyncio.run(main())

@@ -10,9 +10,9 @@ Usage:
     python scripts/mutation_test.py
 """
 
-import sys
-import subprocess
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import List
 
@@ -22,7 +22,7 @@ CORE_MODULES: List[str] = [
     "resync/core/ia_auditor.py",
     "resync/core/async_cache.py",
     "resync/core/audit_lock.py",
-    "resync/core/cache_hierarchy.py"
+    "resync/core/cache_hierarchy.py",
 ]
 
 # Define mutmut configuration
@@ -36,9 +36,10 @@ MUTMUT_CONFIG = {
         "scripts/*",
         "docs/*",
         "static/*",
-        "templates/*"
-    ]
+        "templates/*",
+    ],
 }
+
 
 def run_mutation_test() -> int:
     """
@@ -55,9 +56,12 @@ def run_mutation_test() -> int:
     cmd = [
         "mutmut",
         "run",
-        "--runner", MUTMUT_CONFIG["runner"],
-        "--timeout", str(MUTMUT_CONFIG["timeout"]),
-        "--output-file", MUTMUT_CONFIG["output_file"]
+        "--runner",
+        MUTMUT_CONFIG["runner"],
+        "--timeout",
+        str(MUTMUT_CONFIG["timeout"]),
+        "--output-file",
+        MUTMUT_CONFIG["output_file"],
     ]
 
     # Add exclude patterns
@@ -88,23 +92,30 @@ def run_mutation_test() -> int:
             print(f"Stdout: {result.stdout}")
             print(f"Stderr: {result.stderr}")
             return result.returncode
-
-        except FileNotFoundError:
-        print("❌ mutmut not found. Please ensure it is installed with 'pip install mutmut'")
+    except FileNotFoundError:
+        print(
+            "❌ mutmut not found. Please ensure it is installed with 'pip install mutmut'"
+        )
         return 1
     except ModuleNotFoundError as e:
         if "resource" in str(e):
-            print("❌ mutmut has compatibility issues on Windows due to missing 'resource' module.")
-            print("💡 Workaround: Run mutation testing in a Linux environment or use WSL.")
-            print("   Alternatively, consider using pytest with coverage instead for Windows.")
+            print(
+                "❌ mutmut has compatibility issues on Windows due to missing 'resource' module."
+            )
+            print(
+                "💡 Workaround: Run mutation testing in a Linux environment or use WSL."
+            )
+            print(
+                "   Alternatively, consider using pytest with coverage instead for Windows."
+            )
             return 1
         else:
             print(f"❌ Module not found: {e}")
             return 1
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
-        return 1</search>
-</search_and_replace>
+        return 1
+
 
 def check_success_criteria() -> bool:
     """
@@ -120,11 +131,11 @@ def check_success_criteria() -> bool:
         return False
 
     try:
-        with open(output_file, 'r') as f:
+        with open(output_file, "r") as f:
             results = json.load(f)
 
-        mutation_score = results.get('mutation_score', 0)
-        survived_mutants = results.get('survived_mutants', 0)
+        mutation_score = results.get("mutation_score", 0)
+        survived_mutants = results.get("survived_mutants", 0)
 
         print(f"📊 Mutation score: {mutation_score:.1f}%")
         print(f"💥 Survived mutants: {survived_mutants}")
@@ -140,6 +151,7 @@ def check_success_criteria() -> bool:
     except Exception as e:
         print(f"❌ Error reading mutation results: {e}")
         return False
+
 
 def main():
     """Main entry point for mutation testing script."""
@@ -158,7 +170,10 @@ def main():
         sys.exit(1)
 
     print("🎉 Mutation testing completed successfully!")
-    print("✅ Test coverage depth validated. Code quality and test robustness confirmed.")
+    print(
+        "✅ Test coverage depth validated. Code quality and test robustness confirmed."
+    )
+
 
 if __name__ == "__main__":
     main()

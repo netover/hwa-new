@@ -262,7 +262,9 @@ class TestCacheHierarchy:
 
         assert metrics["total_sets"] == 2
         assert metrics["total_gets"] == 3
-        assert metrics["l1_hit_ratio"] == pytest.approx(2/3, rel=1e-2)  # 2 hits out of 3 gets
+        assert metrics["l1_hit_ratio"] == pytest.approx(
+            2 / 3, rel=1e-2
+        )  # 2 hits out of 3 gets
         assert metrics["l1_size"] >= 2
         assert metrics["l2_size"] >= 2
         assert metrics["overall_hit_ratio"] == 2.0 / 3.0  # 2/3
@@ -345,9 +347,9 @@ class TestCacheHierarchyPerformance:
             l1_time = time.time() - l1_start
 
             # L1 should be faster than initial L2 access (at least 2x faster)
-            assert l1_time < l2_time * 0.5, (
-                f"L1 hit not faster than L2: L1={l1_time * 1000:.3f}ms, L2={l2_time * 1000:.3f}ms"
-            )
+            assert (
+                l1_time < l2_time * 0.5
+            ), f"L1 hit not faster than L2: L1={l1_time * 1000:.3f}ms, L2={l2_time * 1000:.3f}ms"
 
         finally:
             await cache.stop()

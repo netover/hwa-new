@@ -261,11 +261,15 @@ class TestAsyncTTLCacheIntegration:
         # Mock the settings to avoid needing real TWS credentials
         with patch.object(settings, "TWS_CACHE_TTL", 60):
             client = OptimizedTWSClient(
-                hostname="localhost", port=31116, username="test", password="test"
+                hostname="localhost",
+                port=31116,
+                username="test",
+                password="test",
             )
 
             # Verify cache is properly initialized
             from resync.core.cache_hierarchy import CacheHierarchy
+
             assert isinstance(client.cache, CacheHierarchy)
 
             # Test cache operations work

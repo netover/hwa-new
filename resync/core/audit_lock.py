@@ -32,9 +32,11 @@ class DistributedAuditLock:
         Args:
             redis_url: Redis connection URL. Defaults to environment variable or localhost.
         """
-        self.redis_url: str = str(redis_url or getattr(
-            settings, "REDIS_URL", "redis://localhost:6379/1"
-        ) or "redis://localhost:6379/1")
+        self.redis_url: str = str(
+            redis_url
+            or getattr(settings, "REDIS_URL", "redis://localhost:6379/1")
+            or "redis://localhost:6379/1"
+        )
         self.client: Optional[AsyncRedis] = None
         self._lock_prefix: str = "audit_lock"
         self.release_script_sha: Optional[str] = None
@@ -189,7 +191,13 @@ class AuditLockContext:
             pass
     """
 
-    def __init__(self, client: AsyncRedis, lock_key: str, timeout: int, release_script_sha: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        client: AsyncRedis,
+        lock_key: str,
+        timeout: int,
+        release_script_sha: Optional[str] = None,
+    ) -> None:
         """
         Initialize the lock context.
 
@@ -205,7 +213,7 @@ class AuditLockContext:
         self._locked: bool = False
         self.release_script_sha: Optional[str] = release_script_sha
 
-    async def __aenter__(self) -> 'AuditLockContext':
+    async def __aenter__(self) -> "AuditLockContext":
         """Acquire the lock."""
         self.lock_value = str(uuid.uuid4())
 
@@ -282,7 +290,9 @@ class AuditLockContext:
 
 
 @asynccontextmanager
-async def distributed_audit_lock(memory_id: str, timeout: int = 5) -> AsyncIterator[None]:
+async def distributed_audit_lock(
+    memory_id: str, timeout: int = 5
+) -> AsyncIterator[None]:
     """
     Convenience context manager for distributed audit locking.
 

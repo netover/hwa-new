@@ -15,6 +15,7 @@ sys.path.insert(0, str(project_root))
 
 from resync.core.audit_queue import migrate_from_sqlite
 
+
 async def main():
     """Run the migration from SQLite to Redis."""
     print("Starting audit queue migration from SQLite to Redis...")
@@ -25,6 +26,7 @@ async def main():
     except Exception as e:
         print(f"Migration failed: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

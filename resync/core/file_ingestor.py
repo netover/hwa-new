@@ -15,7 +15,10 @@ logger = logging.getLogger(__name__)
 
 # --- Text Chunking --- #
 
-def chunk_text(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> Iterator[str]:
+
+def chunk_text(
+    text: str, chunk_size: int = 1000, chunk_overlap: int = 200
+) -> Iterator[str]:
     """Splits a long text into smaller chunks with overlap."""
     if not text:
         return
@@ -26,18 +29,23 @@ def chunk_text(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> I
         yield text[start:end]
         start += chunk_size - chunk_overlap
 
+
 # --- File Readers --- #
+
 
 def read_pdf(file_path: Path) -> str:
     """Extracts text from a PDF file."""
     logger.info(f"Reading PDF file: {file_path}")
     try:
         reader = pypdf.PdfReader(file_path)
-        text = "".join(page.extract_text() for page in reader.pages if page.extract_text())
+        text = "".join(
+            page.extract_text() for page in reader.pages if page.extract_text()
+        )
         return text
     except Exception as e:
         logger.error(f"Failed to read PDF {file_path}: {e}", exc_info=True)
         return ""
+
 
 def read_docx(file_path: Path) -> str:
     """Extracts text from a DOCX file."""
@@ -49,6 +57,7 @@ def read_docx(file_path: Path) -> str:
     except Exception as e:
         logger.error(f"Failed to read DOCX {file_path}: {e}", exc_info=True)
         return ""
+
 
 def read_excel(file_path: Path) -> str:
     """Extracts text from an XLSX file, iterating through all sheets and cells."""
@@ -71,6 +80,7 @@ def read_excel(file_path: Path) -> str:
         logger.error(f"Failed to read Excel {file_path}: {e}", exc_info=True)
         return ""
 
+
 # --- Main Ingestion Logic --- #
 
 FILE_READERS = {
@@ -78,6 +88,7 @@ FILE_READERS = {
     ".docx": read_docx,
     ".xlsx": read_excel,
 }
+
 
 async def ingest_file(file_path: Path):
     """Ingests a single file into the knowledge graph."""

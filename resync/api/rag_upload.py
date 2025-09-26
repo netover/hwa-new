@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import logging
-import shutil
+import os
 
 # Using a simple filename sanitization approach instead of external package
 import re
-import os
+import shutil
+
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from resync.settings import settings
@@ -26,7 +27,7 @@ async def upload_document(file: UploadFile = File(...)):
     # Remove any path components and sanitize the filename
     basename = os.path.basename(file.filename)
     # Remove any characters that aren't alphanumeric, dots, underscores, or hyphens
-    safe_filename = re.sub(r'[^\w\-_.]', '', basename)
+    safe_filename = re.sub(r"[^\w\-_.]", "", basename)
     if not safe_filename:
         raise HTTPException(status_code=400, detail="Invalid filename.")
 
@@ -42,7 +43,9 @@ async def upload_document(file: UploadFile = File(...)):
         logger.info(f"Successfully saved file to {destination}")
 
     except Exception as e:
-        logger.error(f"Failed to save uploaded file {safe_filename}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to save uploaded file {safe_filename}: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=500,
             detail=f"Could not save file: {e}",

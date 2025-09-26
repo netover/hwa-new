@@ -1,5 +1,4 @@
 import json
-import logging
 from pathlib import Path
 
 import pytest
@@ -109,9 +108,7 @@ def test_discover_tools(agent_manager):
 
 
 @pytest.mark.asyncio
-async def test_error_handling_missing_tool(
-    agent_manager, caplog
-):
+async def test_error_handling_missing_tool(agent_manager, caplog):
     """Test error handling when getting agent with missing tool."""
     # Arrange: Load from default config
     await agent_manager.load_agents_from_config()
@@ -119,7 +116,7 @@ async def test_error_handling_missing_tool(
     # Act & Assert
     with pytest.raises(ValueError, match="not found"):
         agent_manager.get_agent_with_tool("test-agent-1", "non_existent_tool")
-    
+
     # Check log
     assert "Tool 'non_existent_tool' not found for agent 'test-agent-1'" in caplog.text
 

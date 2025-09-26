@@ -41,7 +41,9 @@ class TestJWSCompliance(unittest.TestCase):
         # Sign token - must fail with InvalidCritHeaderParameterNameError
         with self.assertRaises(InvalidCritHeaderParameterNameError) as context:
             self.jws.serialize_compact(
-                protected_header, json.dumps(payload).encode("utf-8"), self.secret
+                protected_header,
+                json.dumps(payload).encode("utf-8"),
+                self.secret,
             )
 
         # Verify it fails for the right reason
@@ -68,7 +70,10 @@ class TestJWSCompliance(unittest.TestCase):
 
     def test_token_with_empty_crit_list(self):
         """Test: Token with empty crit list - should be accepted"""
-        protected_header = {"alg": "HS256", "crit": []}  # Empty list - valid per RFC
+        protected_header = {
+            "alg": "HS256",
+            "crit": [],
+        }  # Empty list - valid per RFC
 
         payload = {"sub": "123", "role": "user", "exp": 9999999999}
 
@@ -87,14 +92,19 @@ class TestJWSCompliance(unittest.TestCase):
 
     def test_token_with_non_array_crit(self):
         """Test: Token with non-array crit - must be rejected"""
-        protected_header = {"alg": "HS256", "crit": "cnf"}  # Invalid: must be array
+        protected_header = {
+            "alg": "HS256",
+            "crit": "cnf",
+        }  # Invalid: must be array
 
         payload = {"sub": "123", "role": "user", "exp": 9999999999}
 
         # Sign token - must fail with InvalidHeaderParameterNameError
         with self.assertRaises(InvalidHeaderParameterNameError) as context:
             self.jws.serialize_compact(
-                protected_header, json.dumps(payload).encode("utf-8"), self.secret
+                protected_header,
+                json.dumps(payload).encode("utf-8"),
+                self.secret,
             )
 
         self.assertIn("crit", str(context.exception))

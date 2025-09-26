@@ -6,13 +6,13 @@ This script tests the core functionality of the Redis audit queue implementation
 
 import asyncio
 import sys
-import os
 from pathlib import Path
 
 # Add the project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from resync.core.audit_queue import audit_queue
+
 
 async def test_redis_audit_queue():
     """Test the Redis audit queue functionality."""
@@ -39,7 +39,7 @@ async def test_redis_audit_queue():
         "user_query": "How do I restart a job in TWS?",
         "agent_response": "You can restart a job using the 'rerun' command.",
         "ia_audit_reason": "Incorrect command suggestion",
-        "ia_audit_confidence": 0.85
+        "ia_audit_confidence": 0.85,
     }
 
     success = await audit_queue.add_audit_record(test_memory)
@@ -98,6 +98,7 @@ async def test_redis_audit_queue():
 
     print("\n🎉 All Redis audit queue tests completed successfully!")
     return True
+
 
 if __name__ == "__main__":
     try:

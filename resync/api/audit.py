@@ -1,11 +1,18 @@
 # resync/api/audit.py
-from typing import Any, Dict, List, Optional  # Added Optional for Query parameters
+from typing import (  # Added Optional for Query parameters
+    Any,
+    Dict,
+    List,
+    Optional,
+)
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from resync.core.audit_queue import audit_queue
-from resync.core.knowledge_graph import AsyncKnowledgeGraph as knowledge_graph
+from resync.core.knowledge_graph import (  # noqa: N813
+    AsyncKnowledgeGraph as knowledge_graph,
+)
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
@@ -22,7 +29,8 @@ def get_flagged_memories(
         description="Filter by audit status (pending, approved, rejected, all)",
     ),
     query: Optional[str] = Query(
-        None, description="Search query in user_query or agent_response"
+        None,
+        description="Search query in user_query or agent_response",
     ),
 ):
     """

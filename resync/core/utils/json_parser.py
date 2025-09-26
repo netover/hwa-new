@@ -23,8 +23,6 @@ logger = logging.getLogger(__name__)
 class JSONParseError(Exception):
     """Exception raised when JSON parsing fails."""
 
-    pass
-
 
 class RobustJSONParser:
     """
@@ -37,7 +35,7 @@ class RobustJSONParser:
     - Support for various malformed JSON formats
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the parser with regex patterns for JSON extraction."""
         # Common patterns for JSON in LLM responses
         self.json_patterns = [
@@ -290,7 +288,7 @@ json_parser = RobustJSONParser()
 
 
 def parse_llm_json_response(
-    response: str, required_keys: List[str] = None
+    response: str, required_keys: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Convenience function to parse JSON from LLM response.
@@ -319,7 +317,7 @@ def parse_llm_json_response(
 
 
 def safe_parse_llm_json_response(
-    response: str, required_keys: List[str] = None
+    response: str, required_keys: Optional[List[str]] = None
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Safe version of parse_llm_json_response that doesn't raise exceptions.

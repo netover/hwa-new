@@ -1,12 +1,16 @@
 from __future__ import annotations
+
 import os
 from datetime import datetime, timedelta
 from typing import Optional
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from passlib.context import CryptContext
 from pydantic import BaseModel
-from resync.settings import settings
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # --- JWT Configuration ---
 # These values should be read from settings in production
@@ -17,13 +21,16 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 # --- OAuth2 Setup ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+
 # --- Token Models ---
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+
 class TokenData(BaseModel):
     username: Optional[str] = None
+
 
 # --- Simulated User Database ---
 # In a real application, this would connect to a user database
@@ -32,10 +39,11 @@ fake_users_db = {
         "username": "johndoe",
         "full_name": "John Doe",
         "email": "johndoe@example.com",
-        "hashed_password": "secret_password_hash",
+        "hashed_password": "$2b$12$gSr1dl6RMwezmdFTjwvLmuRJTmh5WuV5K7t9kTPB6Z7vju1zLzgRG",
         "disabled": False,
     }
 }
+
 
 # --- Token Functions ---
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -45,19 +53,21 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
 def get_user(db, username: str):
     if username in db:
-        user_data = db[username]
-        return {"username": user_data["username"]}
+        return db[username]
+
 
 def authenticate_user(fake_db, username: str, password: str):
     user = get_user(fake_db, username)
     if not user:
         return False
     # In real application, compare password with hashed_password
-    if password != "secret_password_hash":
+    if not pwd_context.verify(password, user["hashed_password"]):
         return False
     return user
+
 
 def verify_oauth2_token(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(

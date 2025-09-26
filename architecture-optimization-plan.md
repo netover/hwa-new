@@ -66,7 +66,7 @@ When moving to production environments, SSL verification should be enabled by:
 ### 6. [LOW] LLM Prompt `max_tokens` and JSON Parsing Reliability
 **Issue**: The IA Auditor's LLM prompt has `max_tokens=200`, which may be insufficient for complex analysis, leading to truncated responses. The JSON parser is robust, but the LLM's response format is fragile.
 
-**Optimization**: 
+**Optimization**:
 - Increase `max_tokens` to 500 for the IA Auditor model to ensure complete analysis.
 - Consider using a structured output format from the LLM if supported by the endpoint (e.g., JSON Schema) to eliminate parsing failures entirely.
 

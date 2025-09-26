@@ -8,7 +8,7 @@ conversations, outcomes, and solutions to build a self-improving system.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 from pydantic import BaseModel
@@ -50,10 +50,10 @@ class AsyncMem0Client:
         """
         self.config = config
         self.base_url = f"http://{config.storage_host}:{config.storage_port}"
-        self.headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config.api_key}" if config.api_key else None,
-        }
+        headers_list = [("Content-Type", "application/json")]
+        if config.api_key:
+            headers_list.append(("Authorization", f"Bearer {config.api_key}"))
+        self.headers = httpx.Headers(headers_list)
         self.timeout = httpx.Timeout(30.0, connect=10.0)
         logger.info(f"AsyncMem0Client initialized with base URL: {self.base_url}")
 
@@ -69,10 +69,12 @@ class AsyncMem0Client:
         """
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
-                f"{self.base_url}/memories", json=memory_content, headers=self.headers
+                f"{self.base_url}/memories",
+                json=memory_content,
+                headers=self.headers,
             )
             response.raise_for_status()
-            return response.json()["id"]
+            return cast(str, response.json()["id"])
 
     async def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """

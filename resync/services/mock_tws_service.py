@@ -151,7 +151,7 @@ class MockTWSClient:
             workstations=workstations, jobs=jobs, critical_jobs=critical_jobs
         )
 
-    async def close(self):
+    async def close(self) -> None:
         """
         Mocks closing the client connection.
 
