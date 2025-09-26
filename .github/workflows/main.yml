@@ -1,0 +1,44 @@
+name: Mutation Testing
+
+on:
+  push:
+    branches: [ feature/code-audit-and-refactor ]
+  pull_request:
+    branches: [ feature/code-audit-and-refactor ]
+
+jobs:
+  mutation-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'   # compatível com o projeto
+
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install mutmut pytest
+
+    - name: Run test suite baseline
+      run: pytest
+
+    - name: Run mutation testing (mutmut)
+      run: mutmut run --paths-to-mutate resync/ --tests-dir tests/ --no-progress --CI
+
+    - name: Show mutation score/results
+      run: mutmut results
+
+    - name: Generate HTML mutation report
+      run: mutmut html
+
+    - name: Upload HTML mutation report
+      uses: actions/upload-artifact@v3
+      with:
+        name: mutmut-html-report
+        path: html/
