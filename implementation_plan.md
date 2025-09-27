@@ -1,102 +1,52 @@
-## Implementation Plan
+# Otimização e Melhoria Contínua - Resync
 
-This project presents a thorough code review of HCL Workload Automation (WA) Real-Time Monitoring Dashboard that encompasses key recommendations for optimization.
+Este documento descreve o plano para implementar as otimizações identificadas no projeto.
 
-### Implemented Codebase Reviews
+## 1. Implementação de Injeção de Dependências (Concluído)
 
-Following steps outline a review for refactoring improvements made.
+-   **Objetivo:** Eliminar o padrão Singleton global e implementar um sistema de injeção de dependências.
+-   **Ação:** Criar um container de DI e refatorar os componentes principais para usar injeção de dependências.
+-   **Passos:**
+    1.  ✅ Criar módulo `resync/core/di_container.py` com implementação do container DI.
+    2.  ✅ Definir interfaces para os componentes principais em `resync/core/interfaces.py`.
+    3.  ✅ Refatorar `AgentManager`, `ConnectionManager`, `AsyncKnowledgeGraph` e `AsyncAuditQueue` para usar DI.
+    4.  ✅ Integrar o container DI com o sistema de dependências do FastAPI.
+    5.  ✅ Atualizar endpoints para usar injeção de dependências.
+    6.  ✅ Criar testes unitários para o container DI e exemplos de uso em testes.
+    7.  ✅ Documentar o padrão de DI implementado.
 
-### Overview
+## 2. Tratamento de Erros no Cliente TWS (Alta Prioridade)
 
- Major parts of the project include:
- - Naming convention management.
- - Tasking with proper and verified dependency injection.
- - Refactoring management tasks with pattern scripts.
- - Memory leakages and outages resolved
+-   **Objetivo:** Aumentar a robustez da comunicação com a API do TWS, tratando erros transientes de rede.
+-   **Ação:** Implementar um mecanismo de retentativas (retry) com backoff exponencial no `OptimizedTWSClient`.
+-   **Ferramenta:** Utilizar a biblioteca `tenacity`.
+-   **Passos:**
+    1.  Adicionar `tenacity` ao `requirements.txt`.
+    2.  Aplicar o decorador `@retry` da `tenacity` ao método `_api_request` em `resync/services/tws_service.py`.
+    3.  Configurar o `retry` para tratar exceções de conexão (ex: `httpx.RequestError`) e aguardar um tempo crescente entre as tentativas.
+    4.  Criar/ajustar testes para validar o comportamento de retry.
 
-### Types
+## 3. Otimização de Locks no Cache (Média Prioridade)
 
-Singletons, CLASS --  Control Pattern setting:
+-   **Objetivo:** Reduzir a contenção e melhorar a performance do cache em cenários de alta concorrência.
+-   **Ação:** Substituir o lock único por um mecanismo de locks particionados (sharded locks) nas classes `AsyncTTLCache` and `L1Cache`.
+-   **Passos:**
+    1.  Modificar as classes de cache para manter uma lista de locks.
+    2.  Implementar uma função de hash para mapear uma chave de cache a um lock específico.
+    3.  Atualizar os métodos `get`, `set`, `delete` para usar o lock particionado correto.
+    4.  Analisar o impacto na complexidade e na performance.
 
-Fix  API mime types absolutely asynchronous matter
-- complete database analysis stats, fix patterns with the testing procedures.
+## 4. Evolução do Cache Hierárquico (Baixa Prioridade)
 
-Relevant endpoint analysis:
- - central analysis, on these line
-  - audit checks
-  - refactoring a standard API mods
-```"<<<code>
+-   **Objetivo:** Melhorar a eficiência do cache.
+-   **Ação:** Pesquisar e potencialmente implementar algoritmos de evicção mais avançados (ex: LFU, ARC) ou uma política de write-back.
+-   **Passos:**
+    1.  Analisar os padrões de acesso ao cache na aplicação.
+    2.  Comparar o desempenho dos algoritmos alternativos com o LRU atual.
+    3.  Implementar a política de cache escolhida se o ganho de performance justificar a complexidade adicional.
 
-"""
+## 5. Inicialização Paralela (A ser considerado no futuro)
 
-dealings
-Replacement with whatever fix structure,
-
-### Files
-
-█ required file implementations:
- - simplified core files: Modules for removing dependency introduces wrapping with Script annotations.
- - complete the versions: __ main
- - Misc dependable "utilities" provision resolving requested files.
-
-Recommend adding to structure:
-	Dependencies :
-
-  -Resolving: showing abridging reflecting Algorithm data protocol.
-
-Improvements with defined path resolver:
-
- motivating software applications:
-Subtraction: changing errors are fine.
-
-
-### Functions
-
-```
-Adding necessary Function tasks as Upgraded:
-Sample:
- - agents_section, get imports, updated methods
-  - Comprehensive async heap handling
-
-### Classes
-
-Removing agent_singleton
-
-class int {
-Method import_{agent_singleton: depend/ __actions library knowledge sensors}
-class added:
-   converted to managable methods for breakdowns
-}
-
-depend fare loading
-  - Organization scripts for token management
-
-### Depedencies
-
-Sample dependencies installed as:
-
- -- mongo db,  validator/ motivate.pkg dependencies modules
-    -- JSON node_args
-    -data validation
-1) adjusted: from Repo install python fastAPIs
-2) requests analysis on API Checks
-
-### Testing
-
-Introduced to instantiation:
-- updated module loads, caching, async request valdiations
-- complex solutions justifiable flow ..increased refit stability
-
-### Implementation Order
-
-Finally completed.
- - Going through implementing aft tasks across:
-    mapping through Updates, Testing: identified updates
- - infrastructure testing.
-Thus looking through these updates across: ending syntactic considerations,
-```python
-while True:~
- sample tests output with test script pyramid
- ```
- Ended: tasks aggregated solutions.
-**:)
+-   **Objetivo:** Acelerar o tempo de inicialização da aplicação.
+-   **Ação:** Identificar componentes independentes que possam ser inicializados em paralelo.
+-   **Status:** Atualmente, o lazy loading já oferece uma boa performance. Esta é uma otimização a ser considerada conforme o sistema cresce.

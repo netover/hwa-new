@@ -5,9 +5,9 @@ import logging
 from collections import OrderedDict
 from dataclasses import dataclass
 from time import time as time_func
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
-from resync.core.async_cache import AsyncTTLCache
+from resync.core.enhanced_async_cache import EnhancedAsyncTTLCache
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -50,19 +50,27 @@ class CacheMetrics:
 
 class L1Cache:
     """
-    In-memory L1 cache with LRU eviction and asyncio.Lock protection.
+    In-memory L1 cache with LRU eviction and sharded asyncio.Lock protection.
     """
 
-    def __init__(self, max_size: int = 1000):
+    def __init__(self, max_size: int = 1000, num_shards: int = 16):
         """
         Initialize L1 cache.
 
         Args:
             max_size: Maximum number of entries before LRU eviction
+            num_shards: Number of shards for the cache and locks
         """
         self.max_size = max_size
-        self.cache: OrderedDict[str, Tuple[Any, float]] = OrderedDict()
-        self.lock = asyncio.Lock()
+        self.num_shards = num_shards
+        self.shards: List[OrderedDict[str, Tuple[Any, float]]] = [OrderedDict() for _ in range(num_shards)]
+        self.shard_locks = [asyncio.Lock() for _ in range(num_shards)]
+        self.shard_max_size = max_size // num_shards if num_shards > 0 else max_size
+
+    def _get_shard(self, key: str) -> Tuple[OrderedDict[str, Tuple[Any, float]], asyncio.Lock]:
+        """Get the shard and lock for a given key."""
+        shard_index = hash(key) % self.num_shards
+        return self.shards[shard_index], self.shard_locks[shard_index]
 
     async def get(self, key: str) -> Optional[Any]:
         """
@@ -74,16 +82,17 @@ class L1Cache:
         Returns:
             Cached value if exists and not expired, None otherwise
         """
-        async with self.lock:
-            if key in self.cache:
-                value, timestamp = self.cache[key]
+        shard, lock = self._get_shard(key)
+        async with lock:
+            if key in shard:
+                value, timestamp = shard[key]
 
                 # Check if entry is still valid (no TTL in L1, just LRU)
-                self.cache.move_to_end(key)  # Move to most recently used
-                logger.debug(f"L1 cache HIT for key: {key}")
+                shard.move_to_end(key)  # Move to most recently used
+                logger.debug("L1 cache HIT for key: %s", key)
                 return value
 
-            logger.debug(f"L1 cache MISS for key: {key}")
+            logger.debug("L1 cache MISS for key: %s", key)
             return None
 
     async def set(self, key: str, value: Any) -> None:
@@ -94,17 +103,18 @@ class L1Cache:
             key: Cache key
             value: Value to cache
         """
-        async with self.lock:
+        shard, lock = self._get_shard(key)
+        async with lock:
             current_time = time_func()
 
             # Add or update entry
-            self.cache[key] = (value, current_time)
-            self.cache.move_to_end(key)  # Move to most recently used
+            shard[key] = (value, current_time)
+            shard.move_to_end(key)  # Move to most recently used
 
             # Check if we need to evict
-            if len(self.cache) > self.max_size:
-                evicted_key, _ = self.cache.popitem(last=False)  # Remove LRU
-                logger.debug(f"L1 cache EVICTION for key: {evicted_key}")
+            if self.shard_max_size > 0 and len(shard) > self.shard_max_size:
+                evicted_key, _ = shard.popitem(last=False)  # Remove LRU
+                logger.debug("L1 cache EVICTION for key: %s", evicted_key)
 
     async def delete(self, key: str) -> bool:
         """
@@ -116,22 +126,26 @@ class L1Cache:
         Returns:
             True if key was found and deleted, False otherwise
         """
-        async with self.lock:
-            if key in self.cache:
-                del self.cache[key]
-                logger.debug(f"L1 cache DELETE for key: {key}")
+        shard, lock = self._get_shard(key)
+        async with lock:
+            if key in shard:
+                del shard[key]
+                logger.debug("L1 cache DELETE for key: %s", key)
                 return True
             return False
 
     async def clear(self) -> None:
         """Clear all entries from L1 cache."""
-        async with self.lock:
-            self.cache.clear()
-            logger.debug("L1 cache CLEARED")
+        for i in range(self.num_shards):
+            shard = self.shards[i]
+            lock = self.shard_locks[i]
+            async with lock:
+                shard.clear()
+        logger.debug("L1 cache CLEARED")
 
     def size(self) -> int:
         """Get current size of L1 cache."""
-        return len(self.cache)
+        return sum(len(shard) for shard in self.shards)
 
 
 class CacheHierarchy:
@@ -156,9 +170,14 @@ class CacheHierarchy:
             l2_ttl_seconds: TTL for L2 cache entries
             l2_cleanup_interval: Cleanup interval for L2 cache
         """
-        self.l1_cache = L1Cache(max_size=l1_max_size)
-        self.l2_cache = AsyncTTLCache(
-            ttl_seconds=l2_ttl_seconds, cleanup_interval=l2_cleanup_interval
+        # Use settings from the project configuration
+        from resync.settings import settings
+        self.l1_cache = L1Cache(max_size=settings.CACHE_HIERARCHY_L1_MAX_SIZE)
+        self.l2_cache = EnhancedAsyncTTLCache(
+            ttl_seconds=settings.CACHE_HIERARCHY_L2_TTL,
+            cleanup_interval=settings.CACHE_HIERARCHY_L2_CLEANUP_INTERVAL,
+            num_shards=getattr(settings, "CACHE_HIERARCHY_NUM_SHARDS", 16),
+            max_workers=getattr(settings, "CACHE_HIERARCHY_MAX_WORKERS", 4)
         )
         self.metrics = CacheMetrics()
         self.is_running = False
@@ -321,12 +340,12 @@ class CacheHierarchy:
             "avg_miss_latency_ms": self.metrics.miss_latency * 1000,
         }
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "CacheHierarchy":
         """Async context manager entry."""
         await self.start()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Async context manager exit."""
         await self.stop()
 

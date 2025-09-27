@@ -70,7 +70,7 @@ async def test_load_agents_from_config(
     agent = agent_manager_instance.get_agent("test-agent-1")
     assert agent is not None
     # Check if the system prompt was constructed correctly
-    assert "You are Test Agent 1" in agent.system
+    assert "You are Test Agent 1" in agent.instructions
     assert "tws_status_tool" in [t.name for t in agent.tools]
 
 

@@ -245,49 +245,25 @@ async def test_async_lock_functionality():
     AgentManager._initialized = False
     agent_manager = AgentManager()
 
-    # Track initialization calls
-    init_call_count = 0
-    mock_client_instance = None
+    with patch("__main__.MockOptimizedTWSClient") as mock_tws_client_class:
+        mock_instance = MagicMock()
+        mock_tws_client_class.return_value = mock_instance
 
-    def mock_tws_init(
-        self, hostname, port, username, password, engine_name, engine_owner
-    ):
-        nonlocal init_call_count, mock_client_instance
-        init_call_count += 1
-        # Create a single mock instance
-        if mock_client_instance is None:
-            mock_client_instance = MockOptimizedTWSClient(
-                hostname, port, username, password, engine_name, engine_owner
-            )
-        return mock_client_instance
+        # Act - Create multiple concurrent tasks that all try to initialize the TWS client
+        tasks = [asyncio.create_task(agent_manager._get_tws_client()) for _ in range(5)]
+        results = await asyncio.gather(*tasks)
 
-    with patch.object(MockOptimizedTWSClient, "__init__", mock_tws_init):
-        with patch(
-            "test_async_lock_fixed.MockOptimizedTWSClient",
-            MockOptimizedTWSClient,
-        ):
-            # Act - Create multiple concurrent tasks that all try to initialize the TWS client
-            tasks = []
-            for i in range(5):
-                task = asyncio.create_task(agent_manager._get_tws_client())
-                tasks.append(task)
-
-            # Wait for all tasks to complete
-            results = await asyncio.gather(*tasks)
-
-            # Assert
-            # All tasks should return the same client instance
-            assert all(
-                result is mock_client_instance for result in results
-            ), "All tasks should return the same instance"
-            # But the initialization should only happen once
-            assert (
-                init_call_count == 1
-            ), f"Initialization should only happen once, but happened {init_call_count} times"
-            # The client should be stored in the agent manager
-            assert (
-                agent_manager.tws_client is mock_client_instance
-            ), "Client should be stored in agent manager"
+        # Assert
+        # All tasks should return the same client instance
+        assert all(
+            result is mock_instance for result in results
+        ), "All tasks should return the same instance"
+        # The class should only be instantiated once
+        mock_tws_client_class.assert_called_once()
+        # The client should be stored in the agent manager
+        assert (
+            agent_manager.tws_client is mock_instance
+        ), "Client should be stored in agent manager"
 
     print("✅ Async lock test passed!")
     print("✅ Race condition prevention working correctly!")

@@ -248,13 +248,11 @@ async def test_async_lock_functionality():
     # Mock the OptimizedTWSClient to track initialization calls
     init_call_count = 0
 
-    async def mock_tws_init(
+    def mock_tws_init(
         self, hostname, port, username, password, engine_name, engine_owner
     ):
         nonlocal init_call_count
         init_call_count += 1
-        # Simulate some async work
-        await asyncio.sleep(0.1)
         # Initialize as a proper mock
         self.hostname = hostname
         self.port = port

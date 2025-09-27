@@ -1310,9 +1310,9 @@ class TestBackgroundTasksFixture:
         assert background_tasks.task_count == 1
         assert len(background_tasks.captured_tasks) == 1
 
-        # Verify the captured task is our sample_task function
-        captured_coro, args, kwargs = background_tasks.captured_tasks[0]
-        assert asyncio.iscoroutine(captured_coro) or callable(captured_coro)
+        # Verify the captured task is a task
+        captured_task = background_tasks.captured_tasks[0]
+        assert isinstance(captured_task, asyncio.Task)
 
         # Reset and verify it's cleared
         background_tasks.reset()

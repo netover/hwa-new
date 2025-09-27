@@ -1,18 +1,16 @@
 # resync/api/audit.py
-from typing import (  # Added Optional for Query parameters
+from typing import (
     Any,
     Dict,
     List,
     Optional,
 )
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from resync.core.audit_queue import audit_queue
-from resync.core.knowledge_graph import (  # noqa: N813
-    AsyncKnowledgeGraph as knowledge_graph,
-)
+from resync.core.fastapi_di import get_audit_queue, get_knowledge_graph
+from resync.core.interfaces import IAuditQueue, IKnowledgeGraph
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
@@ -32,6 +30,7 @@ def get_flagged_memories(
         None,
         description="Search query in user_query or agent_response",
     ),
+    audit_queue: IAuditQueue = Depends(get_audit_queue),
 ):
     """
     Retrieves memories from the audit queue based on status and search query.
@@ -60,7 +59,11 @@ def get_flagged_memories(
 
 
 @router.post("/review")
-async def review_memory(review: ReviewAction):
+async def review_memory(
+    review: ReviewAction,
+    audit_queue: IAuditQueue = Depends(get_audit_queue),
+    knowledge_graph: IKnowledgeGraph = Depends(get_knowledge_graph),
+):
     """
     Processes a human review action for a flagged memory, updating its status in the database.
     """
@@ -94,7 +97,9 @@ async def review_memory(review: ReviewAction):
 
 
 @router.get("/metrics", response_model=Dict[str, int])  # New endpoint for metrics
-def get_audit_metrics():
+def get_audit_metrics(
+    audit_queue: IAuditQueue = Depends(get_audit_queue),
+):
     """
     Returns metrics for the audit queue (total pending, approved, rejected).
     """

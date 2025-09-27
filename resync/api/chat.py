@@ -4,20 +4,51 @@ import asyncio
 import logging
 
 from agno.agent import Agent
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from resync.core.agent_manager import agent_manager
-from resync.core.connection_manager import connection_manager
-from resync.core.ia_auditor import analyze_and_flag_memories
-from resync.core.knowledge_graph import (  # noqa: N813
-    AsyncKnowledgeGraph as knowledge_graph,
+from resync.core.exceptions import (
+    AgentError,
+    AuditError,
+    DatabaseError,
+    KnowledgeGraphError,
+    NetworkError,
+    ProcessingError,
+    WebSocketError,
 )
+from resync.core.fastapi_di import get_agent_manager, get_connection_manager, get_knowledge_graph
+from resync.core.ia_auditor import analyze_and_flag_memories
+from resync.core.interfaces import IAgentManager, IConnectionManager, IKnowledgeGraph
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
 
 # --- APIRouter Initialization ---
 chat_router = APIRouter()
+
+
+async def send_error_message(websocket: WebSocket, message: str) -> None:
+    """
+    Helper function to send error messages to the client.
+    Handles exceptions if the WebSocket connection is already closed.
+    """
+    try:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "sender": "system",
+                "message": message,
+            }
+        )
+    except WebSocketDisconnect:
+        logger.debug("Failed to send error message, WebSocket disconnected.")
+    except RuntimeError as e:
+        # This typically happens when the WebSocket is already closed
+        logger.debug("Failed to send error message, WebSocket runtime error: %s", e)
+    except ConnectionError as e:
+        logger.debug("Failed to send error message, connection error: %s", e)
+    except Exception as e:
+        # Keep a generic handler as a last resort to prevent any issues
+        logger.debug("Failed to send error message, unexpected error: %s", e)
 
 
 async def run_auditor_safely():
@@ -27,12 +58,27 @@ async def run_auditor_safely():
     """
     try:
         await analyze_and_flag_memories()
-    except Exception:
-        logger.error("IA Auditor background task failed unexpectedly.", exc_info=True)
+    except asyncio.TimeoutError:
+        logger.error("IA Auditor timed out during execution.", exc_info=True)
+    except KnowledgeGraphError:
+        logger.error("IA Auditor encountered a knowledge graph error.", exc_info=True)
+    except DatabaseError:
+        logger.error("IA Auditor encountered a database error.", exc_info=True)
+    except AuditError:
+        logger.error("IA Auditor encountered an audit-specific error.", exc_info=True)
+    except Exception as e:
+        logger.error("IA Auditor background task failed unexpectedly: %s", str(e), exc_info=True)
+        # Still catch general exceptions as a last resort to prevent task from dying
 
 
 @chat_router.websocket("/ws/{agent_id}")
-async def websocket_endpoint(websocket: WebSocket, agent_id: str):
+async def websocket_endpoint(
+    websocket: WebSocket, 
+    agent_id: str, 
+    agent_manager: IAgentManager = Depends(get_agent_manager),
+    connection_manager: IConnectionManager = Depends(get_connection_manager),
+    knowledge_graph: IKnowledgeGraph = Depends(get_knowledge_graph),
+):
     """
     Handles the WebSocket connection for real-time chat with a specific agent.
     Enhances responses with RAG (Retrieval-Augmented Generation) using the Knowledge Graph.
@@ -130,20 +176,25 @@ Pergunta do usuário:
     except WebSocketDisconnect:
         # Handle client disconnection gracefully
         logger.info(f"Client disconnected from agent '{agent_id}'.")
+    except KnowledgeGraphError as e:
+        logger.error(f"Knowledge graph error for agent '{agent_id}': {e}", exc_info=True)
+        await send_error_message(websocket, f"Erro no grafo de conhecimento: {e}")
+    except AgentError as e:
+        logger.error(f"Agent error for '{agent_id}': {e}", exc_info=True)
+        await send_error_message(websocket, f"Erro no agente: {e}")
+    except asyncio.TimeoutError as e:
+        logger.error(f"Timeout in WebSocket for agent '{agent_id}': {e}", exc_info=True)
+        await send_error_message(websocket, "A operação excedeu o tempo limite.")
+    except WebSocketError as e:
+        logger.error(f"WebSocket error for agent '{agent_id}': {e}", exc_info=True)
+        # No need to send message as the WebSocket is likely broken
+    except NetworkError as e:
+        logger.error(f"Network error for agent '{agent_id}': {e}", exc_info=True)
+        await send_error_message(websocket, f"Erro de conexão: {e}")
     except Exception as e:
-        # Handle unexpected errors during the chat
-        logger.error(f"Error in WebSocket for agent '{agent_id}': {e}", exc_info=True)
-        try:
-            await websocket.send_json(
-                {
-                    "type": "error",
-                    "sender": "system",
-                    "message": f"Ocorreu um erro inesperado: {e}",
-                }
-            )
-        except Exception:
-            # If sending fails, the connection is likely already dead.
-            pass
+        # Handle truly unexpected errors during the chat as a last resort
+        logger.error(f"Unexpected error in WebSocket for agent '{agent_id}': {e}", exc_info=True)
+        await send_error_message(websocket, f"Ocorreu um erro inesperado: {e}")
     finally:
         # Ensure the connection is cleaned up
         await connection_manager.disconnect(websocket)

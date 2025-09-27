@@ -11,6 +11,7 @@ Tests verify:
 
 import asyncio
 import logging
+import uuid
 from unittest.mock import AsyncMock
 
 import pytest

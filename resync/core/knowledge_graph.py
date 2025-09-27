@@ -15,6 +15,8 @@ from pydantic import BaseModel
 
 # Import settings
 from ..settings import settings
+from resync.core.exceptions import KnowledgeGraphError
+from resync.core.interfaces import IKnowledgeGraph
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -88,12 +90,12 @@ class AsyncMem0Client:
             List of matching memories.
         """
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            params = {"query": query, "limit": limit}
+            params: Dict[str, str | int] = {"query": query, "limit": str(limit)}
             response = await client.get(
                 f"{self.base_url}/search", params=params, headers=self.headers
             )
             response.raise_for_status()
-            return response.json()["results"]
+            return response.json()["results"]  # type: ignore[no-any-return]
 
     async def update(self, memory_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -113,7 +115,7 @@ class AsyncMem0Client:
                 headers=self.headers,
             )
             response.raise_for_status()
-            return response.json()
+            return response.json()  # type: ignore[no-any-return]
 
     async def delete(self, memory_id: str) -> None:
         """
@@ -161,24 +163,26 @@ class AsyncKnowledgeGraph:
     All methods are truly async without any blocking I/O operations.
     """
 
-    def __init__(self, data_dir: Path = Path(".mem0")):
+    def __init__(self, data_dir: Path = Path(".mem0"), settings_module: Any = settings):
         """
         Initialize the AsyncKnowledgeGraph with Mem0 configuration.
 
         Args:
             data_dir: Directory to store persistent memory data.
+            settings_module: The settings module to use (default: global settings).
         """
+        self.settings = settings_module
         self.data_dir = data_dir
         self.data_dir.mkdir(exist_ok=True)
 
         # Configure async Mem0 client
         mem0_config = MemoryConfig(
-            storage_host=settings.MEM0_STORAGE_HOST,
-            storage_port=settings.MEM0_STORAGE_PORT,
-            embedding_provider=settings.MEM0_EMBEDDING_PROVIDER,
-            embedding_model=settings.MEM0_EMBEDDING_MODEL,
-            llm_provider=settings.MEM0_LLM_PROVIDER,
-            llm_model=settings.MEM0_LLM_MODEL,
+            storage_host=self.settings.MEM0_STORAGE_HOST,
+            storage_port=self.settings.MEM0_STORAGE_PORT,
+            embedding_provider=self.settings.MEM0_EMBEDDING_PROVIDER,
+            embedding_model=self.settings.MEM0_EMBEDDING_MODEL,
+            llm_provider=self.settings.MEM0_LLM_PROVIDER,
+            llm_model=self.settings.MEM0_LLM_MODEL,
         )
 
         # Initialize async Mem0 client
@@ -270,13 +274,21 @@ class AsyncKnowledgeGraph:
                 key=lambda x: x.get("created_at", ""),
                 reverse=(sort_order.lower() == "desc"),
             )
+        except TypeError as e:
+            logger.warning("Type error sorting memories by %s: %s", sort_by, e)
+        except KeyError as e:
+            logger.warning("Key error sorting memories by %s: %s", sort_by, e)
+        except ValueError as e:
+            logger.warning("Value error sorting memories by %s: %s", sort_by, e)
         except Exception as e:
-            logger.warning(f"Could not sort memories by {sort_by}: {e}")
+            logger.warning("Unexpected error sorting memories by %s: %s", sort_by, e)
+            # Keep this generic handler but with better logging
+            # Don't raise since this is not critical functionality
 
-        logger.info(f"Found {len(memories)} conversations for query: {query}")
+        logger.info("Found %d conversations for query: %s", len(memories), query)
         return memories
 
-    async def add_solution_feedback(self, memory_id: str, feedback: str, rating: int):
+    async def add_solution_feedback(self, memory_id: str, feedback: str, rating: int) -> None:
         """
         Adds user feedback to a specific memory in the knowledge graph.
 
@@ -378,7 +390,7 @@ Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
 
         return False
 
-    async def delete_memory(self, memory_id: str):
+    async def delete_memory(self, memory_id: str) -> None:
         """
         Deletes a memory from the knowledge graph.
 
@@ -386,9 +398,9 @@ Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
             memory_id: The ID of the memory to delete.
         """
         await self.client.delete(memory_id)
-        logger.info(f"Deleted memory {memory_id} from knowledge graph")
+        logger.info("Deleted memory %s from knowledge graph", memory_id)
 
-    async def add_observations(self, memory_id: str, observations: list):
+    async def add_observations(self, memory_id: str, observations: List[str]) -> None:
         """
         Adds observations to a memory in the knowledge graph.
 
@@ -503,6 +515,21 @@ Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
         return True
 
 
-# --- Global Instance ---
-# Create a single, globally accessible instance of the AsyncKnowledgeGraph.
-knowledge_graph = AsyncKnowledgeGraph()
+# Factory function for creating AsyncKnowledgeGraph instances
+def create_knowledge_graph(
+    data_dir: Path = Path(".mem0"), settings_module: Any = settings
+) -> AsyncKnowledgeGraph:
+    """Create and return a new AsyncKnowledgeGraph instance."""
+    return AsyncKnowledgeGraph(data_dir=data_dir, settings_module=settings_module)
+
+
+# Legacy compatibility: create a default instance
+# This will be removed once all code is migrated to DI
+import warnings
+warnings.warn(
+    "The global knowledge_graph instance is deprecated and will be removed in a future version. "
+    "Use dependency injection with IKnowledgeGraph instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+knowledge_graph = create_knowledge_graph()

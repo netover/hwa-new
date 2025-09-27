@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from typing import List
+from typing import Any, AsyncGenerator, List
 
 import httpx
 
 from resync.core.cache_hierarchy import get_cache_hierarchy
+from resync.core.retry import http_retry
 from resync.models.tws import (
     CriticalJob,
     JobStatus,
@@ -60,13 +61,19 @@ class OptimizedTWSClient:
         self.cache = get_cache_hierarchy()
         logger.info("OptimizedTWSClient initialized for base URL: %s", self.base_url)
 
+    @http_retry(max_attempts=3, min_wait=1.0, max_wait=5.0)
+    async def _make_request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """Makes an HTTP request with retry logic."""
+        logger.debug("Making request: %s %s", method.upper(), url)
+        response = await self.client.request(method, url, **kwargs)
+        response.raise_for_status()
+        return response
+
     @asynccontextmanager
-    async def _api_request(self, method: str, url: str, **kwargs) -> any:
+    async def _api_request(self, method: str, url: str, **kwargs: Any) -> AsyncGenerator[Any, None]:
         """A context manager for making robust API requests."""
-        logger.debug(f"Request: {method.upper()} {url}")
         try:
-            response = await self.client.request(method, url, **kwargs)
-            response.raise_for_status()
+            response = await self._make_request(method, url, **kwargs)
             yield response.json()
         except httpx.HTTPStatusError as e:
             logger.error(
@@ -76,8 +83,8 @@ class OptimizedTWSClient:
             )
             raise ConnectionError(f"HTTP error: {e.response.status_code}") from e
         except httpx.RequestError as e:
-            logger.error("Request error occurred: %s", e)
-            raise ConnectionError(f"Request failed: {e}") from e
+            logger.error("Network error during API request: %s", str(e))
+            raise ConnectionError(f"Network error: {str(e)}") from e
         except Exception as e:
             logger.error("An unexpected error occurred during API request: %s", e)
             raise
@@ -144,7 +151,7 @@ class OptimizedTWSClient:
             workstations=workstations, jobs=jobs, critical_jobs=critical_jobs
         )
 
-    async def close(self):
+    async def close(self) -> None:
         """Closes the underlying HTTPX client and its connections."""
         if not self.client.is_closed:
             await self.client.aclose()

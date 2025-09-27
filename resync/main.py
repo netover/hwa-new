@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncGenerator
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request
@@ -18,6 +20,8 @@ from resync.api.endpoints import api_router
 from resync.api.rag_upload import router as rag_upload_router
 from resync.core.agent_manager import agent_manager
 from resync.core.config_watcher import handle_config_change
+from resync.core.exceptions import ConfigError, FileProcessingError, NetworkError
+from resync.core.fastapi_di import inject_container
 from resync.core.ia_auditor import analyze_and_flag_memories
 from resync.core.rag_watcher import watch_rag_directory
 from resync.settings import settings
@@ -28,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Asynchronous context manager for FastAPI application lifecycle events.
     Handles startup and shutdown procedures.
@@ -41,7 +45,7 @@ async def lifespan(app: FastAPI):
     config_watcher_task = asyncio.create_task(
         watch_config_changes(settings.AGENT_CONFIG_PATH)
     )
-    logger.info(f"Started configuration watcher for '{settings.AGENT_CONFIG_PATH}'")
+    logger.info("Started configuration watcher for '%s'", settings.AGENT_CONFIG_PATH)
 
     rag_watcher_task = asyncio.create_task(watch_rag_directory())
     logger.info("Started RAG directory watcher.")
@@ -83,15 +87,28 @@ async def lifespan(app: FastAPI):
         logger.info("TWS client closed.")
 
 
-async def watch_config_changes(config_path: Path):
+async def watch_config_changes(config_path: Path) -> None:
     """
     Watches the agent configuration file for changes and triggers a reload.
     """
     try:
         async for changes in awatch(config_path):
             await handle_config_change(changes)
+    except FileNotFoundError as e:
+        logger.error("Configuration file not found: %s", e, exc_info=True)
+        raise ConfigError(f"Configuration file not found: {config_path}") from e
+    except PermissionError as e:
+        logger.error("Permission denied accessing configuration file: %s", e, exc_info=True)
+        raise ConfigError(f"Permission denied accessing configuration file: {config_path}") from e
+    except OSError as e:
+        logger.error("OS error watching configuration file: %s", e, exc_info=True)
+        raise FileProcessingError(f"OS error watching configuration file: {config_path}") from e
+    except asyncio.CancelledError:
+        # Re-raise CancelledError for proper task cancellation
+        raise
     except Exception as e:
-        logger.error(f"Error in configuration watcher: {e}", exc_info=True)
+        logger.error("Unexpected error in configuration watcher: %s", e, exc_info=True)
+        raise ConfigError(f"Unexpected error watching configuration file: {str(e)}") from e
 
 
 # --- FastAPI App Initialization ---
@@ -104,6 +121,9 @@ app = FastAPI(
 
 # --- Middleware Setup ---
 # app.middleware("http")(oauth2_middleware)
+
+# --- Dependency Injection Setup ---
+inject_container(app)
 
 # --- Template Engine ---
 templates = Jinja2Templates(directory=settings.BASE_DIR / "templates")

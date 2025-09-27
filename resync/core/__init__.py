@@ -4,6 +4,8 @@ Core Package Initialization for Resync
 This module initializes and exposes the core components of the Resync application.
 """
 
+from typing import Any
+
 from .async_cache import AsyncTTLCache
 from .config_watcher import handle_config_change
 
@@ -43,7 +45,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def mask_sensitive_data_in_logs(record):
+def mask_sensitive_data_in_logs(record: Any) -> bool:
     """Mask sensitive data in log records."""
     if hasattr(record, "msg") and "password" in str(record.msg).lower():
         record.msg = str(record.msg).replace("password", "***")

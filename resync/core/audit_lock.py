@@ -11,7 +11,9 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Optional, cast
 
 from redis.asyncio import Redis as AsyncRedis
+from redis.exceptions import RedisError
 
+from resync.core.exceptions import AuditError, DatabaseError
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -172,13 +174,22 @@ class DistributedAuditLock:
                     cleaned_count += 1
 
             if cleaned_count > 0:
-                logger.info(f"Cleaned up {cleaned_count} expired audit locks")
+                logger.info("Cleaned up %d expired audit locks", cleaned_count)
 
             return cleaned_count
 
+        except RedisError as e:
+            logger.error("Redis error cleaning up expired audit locks: %s", e)
+            raise DatabaseError(f"Redis error during audit lock cleanup: {e}") from e
+        except UnicodeDecodeError as e:
+            logger.error("Unicode decode error in audit lock cleanup: %s", e)
+            raise AuditError(f"Unicode decode error in audit lock cleanup: {e}") from e
+        except ValueError as e:
+            logger.error("Value error in audit lock cleanup: %s", e)
+            raise AuditError(f"Value error in audit lock cleanup: {e}") from e
         except Exception as e:
-            logger.error(f"Error cleaning up expired audit locks: {e}")
-            return 0
+            logger.error("Unexpected error cleaning up expired audit locks: %s", e)
+            raise AuditError(f"Unexpected error during audit lock cleanup: {e}") from e
 
 
 class AuditLockContext:
@@ -227,10 +238,10 @@ class AuditLockContext:
 
         if success:
             self._locked = True
-            logger.debug(f"Acquired audit lock: {self.lock_key}")
+            logger.debug("Acquired audit lock: %s", self.lock_key)
             return self
         else:
-            raise Exception(f"Could not acquire audit lock: {self.lock_key}")
+            raise AuditError(f"Could not acquire audit lock: {self.lock_key}")
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Release the lock."""
@@ -280,9 +291,15 @@ class AuditLockContext:
                     f"Failed to release audit lock: {self.lock_key} (may have expired)"
                 )
 
+        except RedisError as e:
+            logger.error("Redis error during lock release: %s", e)
+            raise DatabaseError(f"Redis error during lock release: {e}") from e
+        except ValueError as e:
+            logger.error("Value error during lock release: %s", e)
+            raise AuditError(f"Value error during lock release: {e}") from e
         except Exception as e:
-            logger.error(f"Error executing Redis script during lock release: {str(e)}")
-            raise
+            logger.error("Unexpected error during lock release: %s", e)
+            raise AuditError(f"Unexpected error during lock release: {e}") from e
 
     async def release(self) -> None:
         """Manually release the lock."""

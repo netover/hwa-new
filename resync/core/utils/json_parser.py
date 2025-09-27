@@ -17,10 +17,12 @@ try:
 except ImportError:
     ORJSON_AVAILABLE = False
 
+from resync.core.exceptions import DataParsingError
+
 logger = logging.getLogger(__name__)
 
 
-class JSONParseError(Exception):
+class JSONParseError(DataParsingError):
     """Exception raised when JSON parsing fails."""
 
 
@@ -334,5 +336,18 @@ def safe_parse_llm_json_response(
             return json_parser.parse_with_schema_validation(response, required_keys)
         else:
             return json_parser.extract_and_parse_json(response)
-    except Exception as e:
+    except JSONParseError as e:
+        logger.warning("JSON parse error in safe_parse_llm_json_response: %s", e)
         return None, str(e)
+    except ValueError as e:
+        logger.warning("Value error in safe_parse_llm_json_response: %s", e)
+        return None, f"Value error: {str(e)}"
+    except TypeError as e:
+        logger.warning("Type error in safe_parse_llm_json_response: %s", e)
+        return None, f"Type error: {str(e)}"
+    except KeyError as e:
+        logger.warning("Key error in safe_parse_llm_json_response: %s", e)
+        return None, f"Missing key: {str(e)}"
+    except Exception as e:
+        logger.error("Unexpected error in safe_parse_llm_json_response: %s", e)
+        return None, f"Unexpected error: {str(e)}"

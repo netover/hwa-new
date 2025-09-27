@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
-from resync.core.agent_manager import AgentConfig, agent_manager
-from resync.core.dependencies import get_tws_client
+from resync.core.agent_manager import AgentConfig
+from resync.core.fastapi_di import get_agent_manager, get_service
+from resync.core.interfaces import IAgentManager
 from resync.core.metrics import metrics_registry
 from resync.models.tws import SystemStatus
 from resync.services.tws_service import OptimizedTWSClient
@@ -42,7 +43,9 @@ async def get_dashboard():
     response_model=List[AgentConfig],
     summary="Get All Agent Configurations",
 )
-def get_all_agents():
+def get_all_agents(
+    agent_manager: IAgentManager = Depends(get_agent_manager),
+):
     """
     Returns the full configuration for all loaded agents.
     """
@@ -52,7 +55,7 @@ def get_all_agents():
 # --- System Status Endpoints ---
 @api_router.get("/status", response_model=SystemStatus)
 async def get_system_status(
-    tws_client: OptimizedTWSClient = Depends(get_tws_client),
+    tws_client: ITWSClient = Depends(get_tws_client),
 ):
     """
     Provides a comprehensive status of the TWS environment, including
@@ -88,7 +91,7 @@ def get_app_health():
 
 @api_router.get("/health/tws", summary="Check TWS Connection Health")
 async def get_tws_health(
-    tws_client: OptimizedTWSClient = Depends(get_tws_client),
+    tws_client: ITWSClient = Depends(get_tws_client),
 ):
     """
     Performs a quick check to verify the connection to the TWS server is active.
