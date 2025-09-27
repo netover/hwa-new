@@ -3,9 +3,8 @@ Common test fixtures for the Resync application.
 """
 
 import asyncio
-import os
 from pathlib import Path
-from typing import Any, Dict, Generator, List
+from typing import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -15,12 +14,12 @@ from fastapi.testclient import TestClient
 from resync.core.agent_manager import AgentManager
 from resync.core.audit_queue import AsyncAuditQueue
 from resync.core.connection_manager import ConnectionManager
-from resync.core.di_container import DIContainer, ServiceScope
+from resync.core.di_container import DIContainer
 from resync.core.file_ingestor import FileIngestor
 from resync.core.interfaces import (
-    IAgentManager, 
-    IAuditQueue, 
-    IConnectionManager, 
+    IAgentManager,
+    IAuditQueue,
+    IConnectionManager,
     IFileIngestor,
     IKnowledgeGraph,
     ITWSClient,
@@ -28,10 +27,10 @@ from resync.core.interfaces import (
 from resync.core.knowledge_graph import AsyncKnowledgeGraph
 from resync.services.tws_service import OptimizedTWSClient
 from resync.main import app as main_app
-from resync.settings import settings
 
 
 # --- Mock Service Fixtures ---
+
 
 @pytest.fixture
 def mock_agent_manager() -> MagicMock:
@@ -117,6 +116,7 @@ def mock_audit_queue() -> MagicMock:
 
 # --- DI Container Fixtures ---
 
+
 @pytest.fixture
 def test_container(
     mock_agent_manager: MagicMock,
@@ -128,7 +128,7 @@ def test_container(
 ) -> DIContainer:
     """Create a test DI container with mock services."""
     container = DIContainer()
-    
+
     # Register interfaces with mock implementations
     container.register_instance(IAgentManager, mock_agent_manager)
     container.register_instance(IConnectionManager, mock_connection_manager)
@@ -136,7 +136,7 @@ def test_container(
     container.register_instance(IAuditQueue, mock_audit_queue)
     container.register_instance(ITWSClient, mock_tws_client)
     container.register_instance(IFileIngestor, mock_file_ingestor)
-    
+
     # Register concrete types as well
     container.register_instance(AgentManager, mock_agent_manager)
     container.register_instance(ConnectionManager, mock_connection_manager)
@@ -144,7 +144,7 @@ def test_container(
     container.register_instance(AsyncAuditQueue, mock_audit_queue)
     container.register_instance(OptimizedTWSClient, mock_tws_client)
     container.register_instance(FileIngestor, mock_file_ingestor)
-    
+
     return container
 
 
@@ -152,17 +152,17 @@ def test_container(
 def app_with_di_container(test_container: DIContainer) -> FastAPI:
     """Create a FastAPI app with the test DI container."""
     from resync.core.fastapi_di import inject_container
-    
+
     # Create a copy of the main app
     app = FastAPI()
-    
+
     # Copy routes from the main app
     for route in main_app.routes:
         app.routes.append(route)
-    
+
     # Inject the test container
     inject_container(app, test_container)
-    
+
     return app
 
 
@@ -173,6 +173,7 @@ def test_client(app_with_di_container: FastAPI) -> TestClient:
 
 
 # --- Legacy Fixtures and Patches ---
+
 
 @pytest.fixture
 def mock_settings() -> MagicMock:
@@ -197,7 +198,9 @@ def mock_settings() -> MagicMock:
 @pytest.fixture
 def patch_settings(mock_settings: MagicMock) -> Generator[None, None, None]:
     """Patch the global settings with a mock."""
-    with patch("resync.core.agent_manager.settings", mock_settings), \
-         patch("resync.core.knowledge_graph.settings", mock_settings), \
-         patch("resync.core.audit_queue.settings", mock_settings):
+    with (
+        patch("resync.core.agent_manager.settings", mock_settings),
+        patch("resync.core.knowledge_graph.settings", mock_settings),
+        patch("resync.core.audit_queue.settings", mock_settings),
+    ):
         yield

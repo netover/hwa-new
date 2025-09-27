@@ -2,15 +2,18 @@
 Tests for the retry functionality.
 """
 
-import asyncio
-import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 from tenacity import RetryError
 
-from resync.core.retry import http_retry, database_retry, external_service_retry, retry_on_result
+from resync.core.retry import (
+    database_retry,
+    external_service_retry,
+    http_retry,
+    retry_on_result,
+)
 
 
 class TestRetryDecorators:
@@ -23,18 +26,20 @@ class TestRetryDecorators:
         mock_response.json.return_value = {"success": True}
 
         # Mock function that fails twice then succeeds
-        mock_func = AsyncMock(side_effect=[
-            httpx.RequestError("Connection error"),
-            httpx.RequestError("Timeout error"),
-            mock_response
-        ])
+        mock_func = AsyncMock(
+            side_effect=[
+                httpx.RequestError("Connection error"),
+                httpx.RequestError("Timeout error"),
+                mock_response,
+            ]
+        )
 
         @http_retry(max_attempts=3)
         async def test_func():
             return await mock_func()
 
         result = await test_func()
-        
+
         # Should have been called exactly 3 times
         assert mock_func.call_count == 3
         # Should return the successful response
@@ -53,7 +58,7 @@ class TestRetryDecorators:
         # Should raise RetryError after exhausting retries
         with pytest.raises(RetryError):
             await test_func()
-        
+
         # Should have been called exactly 3 times
         assert mock_func.call_count == 3
 
@@ -61,17 +66,19 @@ class TestRetryDecorators:
     async def test_database_retry(self):
         """Test database_retry with a temporary database error."""
         # Mock function that fails once then succeeds
-        mock_func = AsyncMock(side_effect=[
-            ConnectionError("Database connection lost"),
-            {"data": "success"}
-        ])
+        mock_func = AsyncMock(
+            side_effect=[
+                ConnectionError("Database connection lost"),
+                {"data": "success"},
+            ]
+        )
 
         @database_retry(max_attempts=2)
         async def test_func():
             return await mock_func()
 
         result = await test_func()
-        
+
         # Should have been called exactly 2 times
         assert mock_func.call_count == 2
         # Should return the successful response
@@ -81,21 +88,23 @@ class TestRetryDecorators:
     async def test_external_service_retry(self):
         """Test external_service_retry with a rate limit error."""
         # Mock function that fails with rate limit then succeeds
-        mock_func = AsyncMock(side_effect=[
-            httpx.HTTPStatusError(
-                "Rate limited",
-                request=MagicMock(),
-                response=MagicMock(status_code=429)
-            ),
-            {"data": "success"}
-        ])
+        mock_func = AsyncMock(
+            side_effect=[
+                httpx.HTTPStatusError(
+                    "Rate limited",
+                    request=MagicMock(),
+                    response=MagicMock(status_code=429),
+                ),
+                {"data": "success"},
+            ]
+        )
 
         @external_service_retry(max_attempts=2, wait_time=0.1)
         async def test_func():
             return await mock_func()
 
         result = await test_func()
-        
+
         # Should have been called exactly 2 times
         assert mock_func.call_count == 2
         # Should return the successful response
@@ -104,11 +113,13 @@ class TestRetryDecorators:
     def test_retry_on_result(self):
         """Test retry_on_result with an undesirable result."""
         # Mock function that returns bad result twice then good result
-        mock_func = MagicMock(side_effect=[
-            {"status": "pending"},
-            {"status": "processing"},
-            {"status": "completed"}
-        ])
+        mock_func = MagicMock(
+            side_effect=[
+                {"status": "pending"},
+                {"status": "processing"},
+                {"status": "completed"},
+            ]
+        )
 
         # Retry if status is not "completed"
         def is_not_completed(result):
@@ -119,7 +130,7 @@ class TestRetryDecorators:
             return mock_func()
 
         result = test_func()
-        
+
         # Should have been called exactly 3 times
         assert mock_func.call_count == 3
         # Should return the successful response
@@ -130,35 +141,32 @@ class TestRetryDecorators:
 async def test_tws_client_retry_integration():
     """Integration test for TWS client with retry functionality."""
     from resync.services.tws_service import OptimizedTWSClient
-    
+
     # Create a client with test credentials
     client = OptimizedTWSClient(
-        hostname="http://test-host",
-        port=8080,
-        username="test",
-        password="test"
+        hostname="http://test-host", port=8080, username="test", password="test"
     )
-    
+
     # Mock the httpx client's request method
     with patch.object(client.client, "request") as mock_request:
         # Setup the mock to fail twice then succeed
         mock_response = MagicMock()
         mock_response.json.return_value = {"planId": "test-plan"}
         mock_response.raise_for_status = MagicMock()
-        
+
         mock_request.side_effect = [
             httpx.RequestError("Connection refused"),
             httpx.RequestError("Timeout"),
-            mock_response
+            mock_response,
         ]
-        
+
         # Test the check_connection method which uses _api_request internally
         result = await client.check_connection()
-        
+
         # Should have been called exactly 3 times
         assert mock_request.call_count == 3
         # Should return True as the connection check succeeded
         assert result is True
-    
+
     # Clean up
     await client.close()

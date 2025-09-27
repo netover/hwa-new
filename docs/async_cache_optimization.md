@@ -29,7 +29,7 @@ async def get(self, key: str) -> Any | None:
     entry = shard.data.get(key)
     if entry and not expired(entry):
         return entry.data
-        
+
     # If optimistic read fails, use proper key-level locking
     key_lock = await self.lock_manager.acquire_key_lock(shard_id, key)
     async with key_lock:
@@ -63,13 +63,13 @@ Modified the cleanup process to run in parallel across shards:
 async def _remove_expired_entries_parallel(self) -> int:
     # Create cleanup tasks for each shard
     cleanup_tasks = [
-        shard.remove_expired_entries() 
+        shard.remove_expired_entries()
         for shard in self.shards
     ]
-    
+
     # Run all cleanup tasks concurrently
     results = await asyncio.gather(*cleanup_tasks)
-    
+
     # Sum up the results
     return sum(results)
 ```

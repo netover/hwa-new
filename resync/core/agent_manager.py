@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional
 
 try:
     from agno.agent import Agent
@@ -13,7 +13,13 @@ except ImportError:
     class MockAgent:
         """Mock Agent class for testing when agno is not available."""
 
-        def __init__(self, tools: Any = None, model: Any = None, instructions: Any = None, **kwargs: Any) -> None:
+        def __init__(
+            self,
+            tools: Any = None,
+            model: Any = None,
+            instructions: Any = None,
+            **kwargs: Any,
+        ) -> None:
             self.tools = tools or []
             self.model = model
             self.instructions = instructions
@@ -32,7 +38,6 @@ from resync.core.exceptions import (
     MissingConfigError,
     NetworkError,
 )
-from resync.core.interfaces import IAgentManager
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
@@ -78,7 +83,7 @@ class AgentManager:
     def __init__(self, settings_module: Any = settings) -> None:
         """
         Initializes the AgentManager with dependencies.
-        
+
         Args:
             settings_module: The settings module to use (default: global settings).
         """
@@ -130,9 +135,7 @@ class AgentManager:
                     logger.info("TWS client initialization completed successfully.")
         return self.tws_client
 
-    async def load_agents_from_config(
-        self, config_path: Path = None
-    ) -> None:
+    async def load_agents_from_config(self, config_path: Path = None) -> None:
         """
         Loads agent configurations from a JSON file and initializes them.
         This method is designed to be idempotent.
@@ -156,20 +159,32 @@ class AgentManager:
             logger.info(f"Successfully loaded {len(self.agents)} agents.")
 
         except json.JSONDecodeError as e:
-            logger.error("Error decoding JSON from %s: %s", config_path, e, exc_info=True)
+            logger.error(
+                "Error decoding JSON from %s: %s", config_path, e, exc_info=True
+            )
             self.agents = {}
             self.agent_configs = []
-            raise DataParsingError(f"Invalid JSON format in agent configuration file: {config_path}") from e
+            raise DataParsingError(
+                f"Invalid JSON format in agent configuration file: {config_path}"
+            ) from e
         except FileNotFoundError as e:
             logger.error("Agent configuration file not found: %s", e, exc_info=True)
             self.agents = {}
             self.agent_configs = []
-            raise MissingConfigError(f"Agent configuration file not found: {config_path}") from e
+            raise MissingConfigError(
+                f"Agent configuration file not found: {config_path}"
+            ) from e
         except PermissionError as e:
-            logger.error("Permission denied accessing agent configuration file: %s", e, exc_info=True)
+            logger.error(
+                "Permission denied accessing agent configuration file: %s",
+                e,
+                exc_info=True,
+            )
             self.agents = {}
             self.agent_configs = []
-            raise ConfigError(f"Permission denied accessing agent configuration file: {config_path}") from e
+            raise ConfigError(
+                f"Permission denied accessing agent configuration file: {config_path}"
+            ) from e
         except ValueError as e:
             logger.error("Invalid agent configuration data: %s", e, exc_info=True)
             self.agents = {}
@@ -177,7 +192,8 @@ class AgentManager:
             raise InvalidConfigError(f"Invalid agent configuration data: {e}") from e
         except Exception as e:
             logger.error(
-                "An unexpected error occurred while loading agents: %s", e,
+                "An unexpected error occurred while loading agents: %s",
+                e,
                 exc_info=True,
             )
             self.agents = {}
@@ -220,22 +236,48 @@ class AgentManager:
             except KeyError as e:
                 logger.warning(
                     "Tool '%s' not found for agent '%s'. Agent will be created without it.",
-                    e.args[0], config.id
+                    e.args[0],
+                    config.id,
                 )
             except ImportError as e:
-                logger.error("Failed to import dependency for agent '%s': %s", config.id, e, exc_info=True)
-                raise AgentError(f"Failed to import dependency for agent '{config.id}': {e}") from e
+                logger.error(
+                    "Failed to import dependency for agent '%s': %s",
+                    config.id,
+                    e,
+                    exc_info=True,
+                )
+                raise AgentError(
+                    f"Failed to import dependency for agent '{config.id}': {e}"
+                ) from e
             except ValueError as e:
-                logger.error("Invalid configuration for agent '%s': %s", config.id, e, exc_info=True)
-                raise AgentError(f"Invalid configuration for agent '{config.id}': {e}") from e
+                logger.error(
+                    "Invalid configuration for agent '%s': %s",
+                    config.id,
+                    e,
+                    exc_info=True,
+                )
+                raise AgentError(
+                    f"Invalid configuration for agent '{config.id}': {e}"
+                ) from e
             except TypeError as e:
-                logger.error("Type error creating agent '%s': %s", config.id, e, exc_info=True)
+                logger.error(
+                    "Type error creating agent '%s': %s", config.id, e, exc_info=True
+                )
                 raise AgentError(f"Type error creating agent '{config.id}': {e}") from e
             except NetworkError as e:
-                logger.error("Network error initializing agent '%s': %s", config.id, e, exc_info=True)
-                raise AgentError(f"Network error initializing agent '{config.id}': {e}") from e
+                logger.error(
+                    "Network error initializing agent '%s': %s",
+                    config.id,
+                    e,
+                    exc_info=True,
+                )
+                raise AgentError(
+                    f"Network error initializing agent '{config.id}': {e}"
+                ) from e
             except Exception as e:
-                logger.error("Failed to create agent '%s': %s", config.id, e, exc_info=True)
+                logger.error(
+                    "Failed to create agent '%s': %s", config.id, e, exc_info=True
+                )
                 raise AgentError(f"Failed to create agent '{config.id}': {e}") from e
         return agents
 
@@ -270,6 +312,7 @@ def create_agent_manager(settings_module: Any = settings) -> AgentManager:
 # Legacy compatibility: create a default instance
 # This will be removed once all code is migrated to DI
 import warnings
+
 warnings.warn(
     "The global agent_manager instance is deprecated and will be removed in a future version. "
     "Use dependency injection with IAgentManager instead.",

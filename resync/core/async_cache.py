@@ -4,7 +4,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from time import time
-from typing import Any, Dict, Optional, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from resync.core.exceptions import CacheError
 
@@ -31,7 +31,9 @@ class AsyncTTLCache:
     - Time-based eviction using asyncio.sleep()
     """
 
-    def __init__(self, ttl_seconds: int = 60, cleanup_interval: int = 30, num_shards: int = 16):
+    def __init__(
+        self, ttl_seconds: int = 60, cleanup_interval: int = 30, num_shards: int = 16
+    ):
         """
         Initialize the async cache.
 
@@ -44,9 +46,14 @@ class AsyncTTLCache:
         # Assuming get_config() reads from config.yaml
         try:
             from your_config_module import get_config  # Replace your_config_module
+
             config = get_config()
-            self.ttl_seconds = config.get("async_cache", {}).get("ttl_seconds", ttl_seconds)
-            self.cleanup_interval = config.get("async_cache", {}).get("cleanup_interval", cleanup_interval)
+            self.ttl_seconds = config.get("async_cache", {}).get(
+                "ttl_seconds", ttl_seconds
+            )
+            self.cleanup_interval = config.get("async_cache", {}).get(
+                "cleanup_interval", cleanup_interval
+            )
         except ImportError:
             # Handle the case where your_config_module is not available
             self.ttl_seconds = ttl_seconds
@@ -113,9 +120,7 @@ class AsyncTTLCache:
                 total_removed += len(expired_keys)
 
         if total_removed > 0:
-            logger.debug(
-                "Cleaned up %d expired cache entries", total_removed
-            )
+            logger.debug("Cleaned up %d expired cache entries", total_removed)
 
     async def get(self, key: str) -> Any | None:
         """

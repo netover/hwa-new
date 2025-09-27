@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
@@ -20,7 +19,7 @@ from resync.api.endpoints import api_router
 from resync.api.rag_upload import router as rag_upload_router
 from resync.core.agent_manager import agent_manager
 from resync.core.config_watcher import handle_config_change
-from resync.core.exceptions import ConfigError, FileProcessingError, NetworkError
+from resync.core.exceptions import ConfigError, FileProcessingError
 from resync.core.fastapi_di import inject_container
 from resync.core.ia_auditor import analyze_and_flag_memories
 from resync.core.rag_watcher import watch_rag_directory
@@ -98,17 +97,25 @@ async def watch_config_changes(config_path: Path) -> None:
         logger.error("Configuration file not found: %s", e, exc_info=True)
         raise ConfigError(f"Configuration file not found: {config_path}") from e
     except PermissionError as e:
-        logger.error("Permission denied accessing configuration file: %s", e, exc_info=True)
-        raise ConfigError(f"Permission denied accessing configuration file: {config_path}") from e
+        logger.error(
+            "Permission denied accessing configuration file: %s", e, exc_info=True
+        )
+        raise ConfigError(
+            f"Permission denied accessing configuration file: {config_path}"
+        ) from e
     except OSError as e:
         logger.error("OS error watching configuration file: %s", e, exc_info=True)
-        raise FileProcessingError(f"OS error watching configuration file: {config_path}") from e
+        raise FileProcessingError(
+            f"OS error watching configuration file: {config_path}"
+        ) from e
     except asyncio.CancelledError:
         # Re-raise CancelledError for proper task cancellation
         raise
     except Exception as e:
         logger.error("Unexpected error in configuration watcher: %s", e, exc_info=True)
-        raise ConfigError(f"Unexpected error watching configuration file: {str(e)}") from e
+        raise ConfigError(
+            f"Unexpected error watching configuration file: {str(e)}"
+        ) from e
 
 
 # --- FastAPI App Initialization ---

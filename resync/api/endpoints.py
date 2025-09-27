@@ -8,11 +8,10 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from resync.core.agent_manager import AgentConfig
-from resync.core.fastapi_di import get_agent_manager, get_service
-from resync.core.interfaces import IAgentManager
+from resync.core.fastapi_di import get_agent_manager, get_tws_client
+from resync.core.interfaces import IAgentManager, ITWSClient
 from resync.core.metrics import metrics_registry
 from resync.models.tws import SystemStatus
-from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
 
 # --- Logging Setup ---

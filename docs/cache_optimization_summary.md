@@ -74,7 +74,7 @@ Based on benchmark results:
    entry = shard.data.get(key)
    if entry and not expired(entry):
        return entry.data
-       
+
    # If optimistic read fails, use proper locking
    ```
 

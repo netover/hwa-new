@@ -22,7 +22,6 @@ from resync.core.exceptions import (
     DataParsingError,
     FileProcessingError,
 )
-from resync.core.interfaces import IAuditQueue
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -46,7 +45,12 @@ class AsyncAuditQueue:
         """
         self.settings = settings_module
         self.redis_url = redis_url or os.environ.get(
-            "REDIS_URL", self.settings.REDIS_URL if hasattr(self.settings, "REDIS_URL") else "redis://localhost:6379"
+            "REDIS_URL",
+            (
+                self.settings.REDIS_URL
+                if hasattr(self.settings, "REDIS_URL")
+                else "redis://localhost:6379"
+            ),
         )
         self.sync_client = redis.from_url(self.redis_url)
         self.async_client = AsyncRedis.from_url(self.redis_url)
@@ -562,7 +566,9 @@ class AsyncAuditQueue:
 
 
 # Factory function for creating AsyncAuditQueue instances
-def create_audit_queue(redis_url: str = None, settings_module: Any = settings) -> AsyncAuditQueue:
+def create_audit_queue(
+    redis_url: str = None, settings_module: Any = settings
+) -> AsyncAuditQueue:
     """Create and return a new AsyncAuditQueue instance."""
     return AsyncAuditQueue(redis_url=redis_url, settings_module=settings_module)
 
@@ -570,6 +576,7 @@ def create_audit_queue(redis_url: str = None, settings_module: Any = settings) -
 # Legacy compatibility: create a default instance
 # This will be removed once all code is migrated to DI
 import warnings
+
 warnings.warn(
     "The global audit_queue instance is deprecated and will be removed in a future version. "
     "Use dependency injection with IAuditQueue instead.",
@@ -628,8 +635,12 @@ async def migrate_from_sqlite():
         conn.close()
 
     except ImportError as e:
-        logger.error("Import error during SQLite to Redis migration: %s", e, exc_info=True)
-        raise FileProcessingError(f"Import error during SQLite to Redis migration: {e}") from e
+        logger.error(
+            "Import error during SQLite to Redis migration: %s", e, exc_info=True
+        )
+        raise FileProcessingError(
+            f"Import error during SQLite to Redis migration: {e}"
+        ) from e
     except sqlite3.Error as e:
         logger.error("SQLite error during migration: %s", e, exc_info=True)
         raise DatabaseError(f"SQLite error during migration: {e}") from e
@@ -643,5 +654,9 @@ async def migrate_from_sqlite():
         logger.error("File not found during migration: %s", e, exc_info=True)
         raise FileProcessingError(f"File not found during migration: {e}") from e
     except Exception as e:
-        logger.error("Unexpected error during SQLite to Redis migration: %s", e, exc_info=True)
-        raise AuditError(f"Unexpected error during SQLite to Redis migration: {e}") from e
+        logger.error(
+            "Unexpected error during SQLite to Redis migration: %s", e, exc_info=True
+        )
+        raise AuditError(
+            f"Unexpected error during SQLite to Redis migration: {e}"
+        ) from e

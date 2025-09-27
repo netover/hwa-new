@@ -12,10 +12,13 @@ from resync.core.exceptions import (
     DatabaseError,
     KnowledgeGraphError,
     NetworkError,
-    ProcessingError,
     WebSocketError,
 )
-from resync.core.fastapi_di import get_agent_manager, get_connection_manager, get_knowledge_graph
+from resync.core.fastapi_di import (
+    get_agent_manager,
+    get_connection_manager,
+    get_knowledge_graph,
+)
 from resync.core.ia_auditor import analyze_and_flag_memories
 from resync.core.interfaces import IAgentManager, IConnectionManager, IKnowledgeGraph
 
@@ -67,14 +70,16 @@ async def run_auditor_safely():
     except AuditError:
         logger.error("IA Auditor encountered an audit-specific error.", exc_info=True)
     except Exception as e:
-        logger.error("IA Auditor background task failed unexpectedly: %s", str(e), exc_info=True)
+        logger.error(
+            "IA Auditor background task failed unexpectedly: %s", str(e), exc_info=True
+        )
         # Still catch general exceptions as a last resort to prevent task from dying
 
 
 @chat_router.websocket("/ws/{agent_id}")
 async def websocket_endpoint(
-    websocket: WebSocket, 
-    agent_id: str, 
+    websocket: WebSocket,
+    agent_id: str,
     agent_manager: IAgentManager = Depends(get_agent_manager),
     connection_manager: IConnectionManager = Depends(get_connection_manager),
     knowledge_graph: IKnowledgeGraph = Depends(get_knowledge_graph),
@@ -177,7 +182,9 @@ Pergunta do usuário:
         # Handle client disconnection gracefully
         logger.info(f"Client disconnected from agent '{agent_id}'.")
     except KnowledgeGraphError as e:
-        logger.error(f"Knowledge graph error for agent '{agent_id}': {e}", exc_info=True)
+        logger.error(
+            f"Knowledge graph error for agent '{agent_id}': {e}", exc_info=True
+        )
         await send_error_message(websocket, f"Erro no grafo de conhecimento: {e}")
     except AgentError as e:
         logger.error(f"Agent error for '{agent_id}': {e}", exc_info=True)
@@ -193,7 +200,9 @@ Pergunta do usuário:
         await send_error_message(websocket, f"Erro de conexão: {e}")
     except Exception as e:
         # Handle truly unexpected errors during the chat as a last resort
-        logger.error(f"Unexpected error in WebSocket for agent '{agent_id}': {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error in WebSocket for agent '{agent_id}': {e}", exc_info=True
+        )
         await send_error_message(websocket, f"Ocorreu um erro inesperado: {e}")
     finally:
         # Ensure the connection is cleaned up

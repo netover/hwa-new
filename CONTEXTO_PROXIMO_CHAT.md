@@ -22,7 +22,7 @@ Manter logging específico para cada tipo de erro.
 
 #### **2.1 Análise de Exceções por Arquivo**
 - [ ] **resync/main.py** - 2 ocorrências
-- [ ] **resync/api/chat.py** - 3 ocorrências  
+- [ ] **resync/api/chat.py** - 3 ocorrências
 - [ ] **resync/core/agent_manager.py** - 2 ocorrências
 - [ ] **resync/core/async_cache.py** - 1 ocorrência
 - [ ] **resync/core/audit_lock.py** - 1 ocorrência
@@ -90,7 +90,7 @@ Reduzir de 30+ ocorrências de `except Exception` para 0, implementando tratamen
 
 ---
 
-**Status**: 🔄 Pronto para TASK 2  
-**Progresso TASK 1**: ✅ 25% de melhoria alcançada  
-**Próximo**: Corrigir exceções genéricas  
+**Status**: 🔄 Pronto para TASK 2
+**Progresso TASK 1**: ✅ 25% de melhoria alcançada
+**Próximo**: Corrigir exceções genéricas
 **Tempo Estimado**: 1-2 dias

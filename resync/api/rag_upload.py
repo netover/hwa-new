@@ -1,8 +1,8 @@
 # resync/api/rag_upload.py
 from __future__ import annotations
 
-import logging
 import asyncio
+import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
@@ -28,14 +28,14 @@ async def upload_document(
             file_name=file.filename,
             file_content=file.file,
         )
-        
+
         # Start file ingestion in the background
         # We don't want to block the response while processing potentially large files
         asyncio.create_task(file_ingestor.ingest_file(destination))
-        
+
         # Get the filename from the path
         safe_filename = destination.name
-        
+
         return {
             "filename": safe_filename,
             "content_type": file.content_type,

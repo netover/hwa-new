@@ -4,10 +4,6 @@ import logging
 from typing import Any, Dict, List
 
 from fastapi import WebSocket, WebSocketDisconnect
-from starlette.websockets import WebSocketState
-
-from resync.core.exceptions import NetworkError, WebSocketError
-from resync.core.interfaces import IConnectionManager
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -101,7 +97,9 @@ class ConnectionManager:
             except RuntimeError as e:
                 # WebSocket in wrong state
                 if "websocket state" in str(e).lower():
-                    logger.warning("WebSocket in wrong state during JSON broadcast: %s", e)
+                    logger.warning(
+                        "WebSocket in wrong state during JSON broadcast: %s", e
+                    )
                 else:
                     logger.warning("Runtime error during JSON broadcast: %s", e)
             except ValueError as e:
@@ -123,6 +121,7 @@ def create_connection_manager() -> ConnectionManager:
 # Legacy compatibility: create a default instance
 # This will be removed once all code is migrated to DI
 import warnings
+
 warnings.warn(
     "The global connection_manager instance is deprecated and will be removed in a future version. "
     "Use dependency injection with IConnectionManager instead.",

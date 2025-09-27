@@ -6,20 +6,19 @@ ensuring consistent behavior and proper logging of retry attempts.
 """
 
 import logging
-from functools import wraps
-from typing import Any, Callable, Type, Union, List, Optional, TypeVar
+from typing import Any, Callable, List, Optional, Type, TypeVar, Union
 
 import httpx
 from tenacity import (
+    RetryCallState,
+    before_sleep_log,
     retry,
     retry_if_exception_type,
+    retry_if_result,
     stop_after_attempt,
     stop_after_delay,
     wait_exponential,
     wait_fixed,
-    before_sleep_log,
-    RetryCallState,
-    retry_if_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,9 +35,11 @@ def log_retry_attempt(retry_state: RetryCallState) -> None:
         logger.warning(
             "Retry attempt %d/%d after %0.2fs for %s: %s",
             retry_state.attempt_number,
-            retry_state.retry_object.stop.max_attempt_number
-            if hasattr(retry_state.retry_object.stop, "max_attempt_number")
-            else "∞",
+            (
+                retry_state.retry_object.stop.max_attempt_number
+                if hasattr(retry_state.retry_object.stop, "max_attempt_number")
+                else "∞"
+            ),
             retry_state.seconds_since_start,
             retry_state.fn.__qualname__,
             exc,
@@ -47,9 +48,11 @@ def log_retry_attempt(retry_state: RetryCallState) -> None:
         logger.warning(
             "Retry attempt %d/%d after %0.2fs for %s due to unexpected result",
             retry_state.attempt_number,
-            retry_state.retry_object.stop.max_attempt_number
-            if hasattr(retry_state.retry_object.stop, "max_attempt_number")
-            else "∞",
+            (
+                retry_state.retry_object.stop.max_attempt_number
+                if hasattr(retry_state.retry_object.stop, "max_attempt_number")
+                else "∞"
+            ),
             retry_state.seconds_since_start,
             retry_state.fn.__qualname__,
         )

@@ -1,6 +1,6 @@
 import asyncio
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
@@ -10,53 +10,55 @@ from resync.core.enhanced_async_cache import EnhancedAsyncTTLCache, ConsistentHa
 
 class TestConsistentHash:
     """Test suite for ConsistentHash functionality."""
-    
+
     def test_consistent_distribution(self):
         """Test that keys are distributed evenly across shards."""
         num_shards = 16
         hasher = ConsistentHash(num_shards=num_shards)
-        
+
         # Generate a large number of keys
         keys = [f"test_key_{i}" for i in range(10000)]
-        
+
         # Count distribution
         distribution = [0] * num_shards
         for key in keys:
             shard_id = hasher.get_shard(key)
             distribution[shard_id] += 1
-        
+
         # Check that no shard is empty and distribution is relatively even
         for count in distribution:
             assert count > 0
-        
+
         # Standard deviation should be relatively low for even distribution
         mean = sum(distribution) / len(distribution)
         variance = sum((x - mean) ** 2 for x in distribution) / len(distribution)
-        std_dev = variance ** 0.5
-        
+        std_dev = variance**0.5
+
         # Standard deviation should be less than 10% of mean for good distribution
         assert std_dev < mean * 0.1
-        
+
     def test_consistent_after_changes(self):
         """Test that most keys stay on the same shard when number of shards changes."""
         # Start with 16 shards
         hasher_16 = ConsistentHash(num_shards=16)
-        
+
         # Generate test keys
         keys = [f"test_key_{i}" for i in range(1000)]
-        
+
         # Get initial mapping
         initial_mapping = {key: hasher_16.get_shard(key) for key in keys}
-        
+
         # Create new hasher with 20 shards
         hasher_20 = ConsistentHash(num_shards=20)
-        
+
         # Get new mapping
         new_mapping = {key: hasher_20.get_shard(key % 20) for key in keys}
-        
+
         # Count how many keys changed shards
-        changed = sum(1 for key in keys if new_mapping.get(key) != initial_mapping.get(key))
-        
+        changed = sum(
+            1 for key in keys if new_mapping.get(key) != initial_mapping.get(key)
+        )
+
         # With consistent hashing, only about 20% of keys should change
         # (proportional to the change in number of shards)
         assert changed < len(keys) * 0.3
@@ -190,28 +192,28 @@ class TestEnhancedAsyncTTLCache:
             # Add many items with short TTL
             for i in range(100):
                 await cache.set(f"short_ttl_{i}", f"value_{i}", ttl_seconds=0.1)
-            
+
             # Add some items with longer TTL
             for i in range(50):
                 await cache.set(f"long_ttl_{i}", f"long_value_{i}", ttl_seconds=1)
 
             # Verify initial count
             assert cache.size() == 150
-            
+
             # Wait for short TTL to expire and cleanup to run
-            start_time = time.time()
+            time.time()
             await asyncio.sleep(0.3)
-            
+
             # Short TTL items should be gone, long TTL should remain
             assert cache.size() <= 50  # Should be around 50 (long TTL items)
-            
+
             # Get metrics to verify cleanup happened
             metrics = cache.get_metrics()
             assert metrics["expired"] >= 100  # At least 100 items expired
-            
+
             # Check cleanup duration is reasonable (should be faster with parallel cleanup)
             assert metrics["cleanup_duration_ms"] > 0
-            
+
         finally:
             await cache.stop()
 
@@ -220,21 +222,21 @@ class TestEnhancedAsyncTTLCache:
         """Test optimistic read for high-read scenarios."""
         # Set up a value
         await cache.set("optimistic_key", "optimistic_value")
-        
+
         # Mock the shard.get method to track if it's called
         original_get = cache._get_shard("optimistic_key").get
         mock_get = MagicMock(side_effect=original_get)
         cache._get_shard("optimistic_key").get = mock_get
-        
+
         # First get should use optimistic read and not call shard.get
         value = await cache.get("optimistic_key")
         assert value == "optimistic_value"
         mock_get.assert_not_called()
-        
+
         # For a non-existent key, should fall back to shard.get
         value = await cache.get("nonexistent_key")
         assert value is None
-        
+
         # Restore original method
         cache._get_shard("optimistic_key").get = original_get
 
@@ -247,10 +249,10 @@ class TestEnhancedAsyncTTLCache:
         await cache.get("nonexistent_key")
         await cache.set("metrics_key2", "value2")
         await cache.delete("metrics_key1")
-        
+
         # Get metrics
         metrics = cache.get_metrics()
-        
+
         # Verify metrics are tracked
         assert metrics["gets"] == 2
         assert metrics["hits"] == 1
@@ -258,7 +260,7 @@ class TestEnhancedAsyncTTLCache:
         assert metrics["sets"] == 2
         assert metrics["deletes"] == 1
         assert metrics["size"] == 1
-        
+
         # Hit ratio should be 0.5 (1 hit, 1 miss)
         assert metrics["hit_ratio"] == 0.5
 
@@ -291,7 +293,7 @@ class TestEnhancedAsyncTTLCache:
         # Cache should still be functional after stress test
         await cache.set("final_test", "final_value")
         assert await cache.get("final_test") == "final_value"
-        
+
         # Check metrics after stress test
         metrics = cache.get_metrics()
         assert metrics["gets"] > 0

@@ -13,7 +13,17 @@ but can also be used standalone.
 import inspect
 import logging
 from enum import Enum, auto
-from typing import Any, Callable, Dict, Generic, Optional, Type, TypeVar, cast, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Optional,
+    Type,
+    TypeVar,
+    cast,
+    get_type_hints,
+)
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -34,7 +44,7 @@ class ServiceScope(Enum):
 class ServiceRegistration(Generic[TInterface, TImplementation]):
     """
     Represents a service registration in the container.
-    
+
     Attributes:
         interface: The interface type that will be requested.
         implementation: The concrete implementation type that will be instantiated.
@@ -60,7 +70,7 @@ class ServiceRegistration(Generic[TInterface, TImplementation]):
 class DIContainer:
     """
     A lightweight dependency injection container.
-    
+
     The container manages service registrations and their lifecycles,
     resolving dependencies when services are requested.
     """
@@ -78,7 +88,7 @@ class DIContainer:
     ) -> None:
         """
         Register an interface and its implementation with the container.
-        
+
         Args:
             interface: The interface type that will be requested.
             implementation: The concrete implementation type that will be instantiated.
@@ -98,7 +108,7 @@ class DIContainer:
     ) -> None:
         """
         Register a pre-created instance with the container.
-        
+
         Args:
             interface: The interface type that will be requested.
             instance: The pre-created instance to return when the interface is requested.
@@ -120,7 +130,7 @@ class DIContainer:
     ) -> None:
         """
         Register a factory function to create instances of a service.
-        
+
         Args:
             interface: The interface type that will be requested.
             factory: A function that creates instances of the implementation.
@@ -128,22 +138,26 @@ class DIContainer:
         """
         self._registrations[interface] = ServiceRegistration(
             interface=interface,
-            implementation=cast(Type[TImplementation], object),  # Type doesn't matter for factory
+            implementation=cast(
+                Type[TImplementation], object
+            ),  # Type doesn't matter for factory
             scope=scope,
             factory=factory,
         )
-        logger.debug(f"Registered factory for {interface.__name__} with scope {scope.name}")
+        logger.debug(
+            f"Registered factory for {interface.__name__} with scope {scope.name}"
+        )
 
     def get(self, interface: Type[T]) -> T:
         """
         Resolve and return an instance of the requested interface.
-        
+
         Args:
             interface: The interface type to resolve.
-            
+
         Returns:
             An instance of the implementation registered for the interface.
-            
+
         Raises:
             KeyError: If the interface is not registered.
             ValueError: If there's an error creating the instance.
@@ -154,7 +168,10 @@ class DIContainer:
         registration = self._registrations[interface]
 
         # For singletons, return the cached instance if available
-        if registration.scope == ServiceScope.SINGLETON and registration.instance is not None:
+        if (
+            registration.scope == ServiceScope.SINGLETON
+            and registration.instance is not None
+        ):
             return cast(T, registration.instance)
 
         # Create a new instance
@@ -169,13 +186,13 @@ class DIContainer:
     def _create_instance(self, registration: ServiceRegistration[Any, Any]) -> Any:
         """
         Create an instance of the implementation based on the registration.
-        
+
         Args:
             registration: The service registration.
-            
+
         Returns:
             An instance of the implementation.
-            
+
         Raises:
             ValueError: If there's an error creating the instance.
         """
@@ -198,32 +215,32 @@ class DIContainer:
     def _instantiate_with_dependencies(self, implementation: Type[Any]) -> Any:
         """
         Instantiate an implementation, resolving its constructor dependencies.
-        
+
         Args:
             implementation: The implementation type to instantiate.
-            
+
         Returns:
             An instance of the implementation.
         """
         # Get the constructor signature
         signature = inspect.signature(implementation.__init__)
-        
+
         # Skip self parameter
         parameters = list(signature.parameters.values())[1:]
-        
+
         # Get type hints for constructor parameters
         type_hints = get_type_hints(implementation.__init__)
-        
+
         # Build arguments for the constructor
         kwargs = {}
         for param in parameters:
             # Skip *args and **kwargs
             if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
                 continue
-                
+
             # Get parameter type
             param_type = type_hints.get(param.name, Any)
-            
+
             # Try to resolve the parameter from the container
             try:
                 kwargs[param.name] = self.get(param_type)
@@ -237,7 +254,7 @@ class DIContainer:
                         f"Cannot resolve parameter '{param.name}' of type '{param_type}' "
                         f"for {implementation.__name__}.__init__"
                     )
-        
+
         # Create the instance
         return implementation(**kwargs)
 

@@ -81,7 +81,9 @@ async def call_llm(
         except ConnectionError as e:
             logger.error(
                 "Connection error during LLM call (attempt %d/%d): %s",
-                attempt + 1, max_retries + 1, e,
+                attempt + 1,
+                max_retries + 1,
+                e,
                 exc_info=True,
             )
             if attempt < max_retries:
@@ -95,7 +97,9 @@ async def call_llm(
         except TimeoutError as e:
             logger.error(
                 "Timeout during LLM call (attempt %d/%d): %s",
-                attempt + 1, max_retries + 1, e,
+                attempt + 1,
+                max_retries + 1,
+                e,
                 exc_info=True,
             )
             if attempt < max_retries:
@@ -109,7 +113,9 @@ async def call_llm(
         except ValueError as e:
             logger.error(
                 "Value error during LLM call (attempt %d/%d): %s",
-                attempt + 1, max_retries + 1, e,
+                attempt + 1,
+                max_retries + 1,
+                e,
                 exc_info=True,
             )
             if attempt < max_retries:
@@ -123,7 +129,9 @@ async def call_llm(
         except Exception as e:  # Catch any other unexpected errors
             logger.error(
                 "Unexpected error during LLM call (attempt %d/%d): %s",
-                attempt + 1, max_retries + 1, e,
+                attempt + 1,
+                max_retries + 1,
+                e,
                 exc_info=True,
             )
             if attempt < max_retries:

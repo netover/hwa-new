@@ -133,25 +133,37 @@ class TWSTroubleshootingTool(TWSToolReadOnly):
             return analysis
 
         except ConnectionError as e:
-            logger.error("Connection error in TWSTroubleshootingTool: %s", e, exc_info=True)
+            logger.error(
+                "Connection error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
             return f"Erro de conexão ao analisar as falhas do TWS: {e}"
         except TimeoutError as e:
-            logger.error("Timeout error in TWSTroubleshootingTool: %s", e, exc_info=True)
+            logger.error(
+                "Timeout error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
             return f"Timeout ao analisar as falhas do TWS: {e}"
         except NetworkError as e:
-            logger.error("Network error in TWSTroubleshootingTool: %s", e, exc_info=True)
+            logger.error(
+                "Network error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
             return f"Erro de rede ao analisar as falhas do TWS: {e}"
         except ValueError as e:
             logger.error("Value error in TWSTroubleshootingTool: %s", e, exc_info=True)
             return f"Erro de dados ao analisar as falhas do TWS: {e}"
         except AttributeError as e:
-            logger.error("Attribute error in TWSTroubleshootingTool: %s", e, exc_info=True)
+            logger.error(
+                "Attribute error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
             return f"Erro de atributo ao analisar as falhas do TWS: {e}"
         except ProcessingError as e:
-            logger.error("Processing error in TWSTroubleshootingTool: %s", e, exc_info=True)
+            logger.error(
+                "Processing error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
             return f"Erro de processamento ao analisar as falhas do TWS: {e}"
         except Exception as e:
-            logger.error("Unexpected error in TWSTroubleshootingTool: %s", e, exc_info=True)
+            logger.error(
+                "Unexpected error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
             return f"Erro inesperado ao analisar as falhas do TWS: {e}"
 
 

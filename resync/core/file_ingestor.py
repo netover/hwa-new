@@ -6,7 +6,7 @@ import os
 import re
 import shutil
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Iterator
 
 import docx
 import openpyxl
@@ -22,7 +22,10 @@ logger = logging.getLogger(__name__)
 
 # --- Text Chunking --- #
 
-def chunk_text(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> Iterator[str]:
+
+def chunk_text(
+    text: str, chunk_size: int = 1000, chunk_overlap: int = 200
+) -> Iterator[str]:
     """Splits a long text into smaller chunks with overlap."""
     if not text:
         return
@@ -35,6 +38,7 @@ def chunk_text(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> I
 
 
 # --- File Readers --- #
+
 
 def read_pdf(file_path: Path) -> str:
     """Extracts text from a PDF file."""
@@ -49,7 +53,9 @@ def read_pdf(file_path: Path) -> str:
         logger.error("PDF file not found: %s - %s", file_path, e, exc_info=True)
         return ""
     except PermissionError as e:
-        logger.error("Permission denied accessing PDF file: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "Permission denied accessing PDF file: %s - %s", file_path, e, exc_info=True
+        )
         return ""
     except pypdf.errors.PdfReadError as e:
         logger.error("PDF read error: %s - %s", file_path, e, exc_info=True)
@@ -73,7 +79,12 @@ def read_docx(file_path: Path) -> str:
         logger.error("DOCX file not found: %s - %s", file_path, e, exc_info=True)
         return ""
     except PermissionError as e:
-        logger.error("Permission denied accessing DOCX file: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "Permission denied accessing DOCX file: %s - %s",
+            file_path,
+            e,
+            exc_info=True,
+        )
         return ""
     except PackageNotFoundError as e:
         logger.error("Invalid DOCX package: %s - %s", file_path, e, exc_info=True)
@@ -82,7 +93,9 @@ def read_docx(file_path: Path) -> str:
         logger.error("Invalid DOCX content: %s - %s", file_path, e, exc_info=True)
         return ""
     except Exception as e:
-        logger.error("Unexpected error reading DOCX %s: %s", file_path, e, exc_info=True)
+        logger.error(
+            "Unexpected error reading DOCX %s: %s", file_path, e, exc_info=True
+        )
         raise FileProcessingError(f"Failed to read DOCX {file_path}: {e}") from e
 
 
@@ -107,7 +120,12 @@ def read_excel(file_path: Path) -> str:
         logger.error("Excel file not found: %s - %s", file_path, e, exc_info=True)
         return ""
     except PermissionError as e:
-        logger.error("Permission denied accessing Excel file: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "Permission denied accessing Excel file: %s - %s",
+            file_path,
+            e,
+            exc_info=True,
+        )
         return ""
     except InvalidFileException as e:
         logger.error("Invalid Excel file: %s - %s", file_path, e, exc_info=True)
@@ -116,23 +134,26 @@ def read_excel(file_path: Path) -> str:
         logger.error("Invalid Excel content: %s - %s", file_path, e, exc_info=True)
         return ""
     except Exception as e:
-        logger.error("Unexpected error reading Excel %s: %s", file_path, e, exc_info=True)
+        logger.error(
+            "Unexpected error reading Excel %s: %s", file_path, e, exc_info=True
+        )
         raise FileProcessingError(f"Failed to read Excel {file_path}: {e}") from e
 
 
 # --- Main Ingestion Logic --- #
 
+
 class FileIngestor(IFileIngestor):
     """
     Service for ingesting files into the knowledge graph.
-    
+
     This class handles file uploads, saving, and processing for RAG.
     """
-    
+
     def __init__(self, knowledge_graph: IKnowledgeGraph):
         """
         Initialize the FileIngestor with dependencies.
-        
+
         Args:
             knowledge_graph: The knowledge graph service to store extracted content
         """
@@ -145,19 +166,21 @@ class FileIngestor(IFileIngestor):
         }
         # Ensure the RAG directory exists
         self.rag_directory.mkdir(exist_ok=True)
-        logger.info(f"FileIngestor initialized with RAG directory: {self.rag_directory}")
-    
+        logger.info(
+            f"FileIngestor initialized with RAG directory: {self.rag_directory}"
+        )
+
     async def save_uploaded_file(self, file_name: str, file_content) -> Path:
         """
         Saves an uploaded file to the RAG directory with proper sanitization.
-        
+
         Args:
             file_name: The original filename
             file_content: A file-like object containing the content
-            
+
         Returns:
             Path to the saved file
-            
+
         Raises:
             FileProcessingError: If the file cannot be saved
         """
@@ -167,9 +190,9 @@ class FileIngestor(IFileIngestor):
         safe_filename = re.sub(r"[^\w\-_.]", "", basename)
         if not safe_filename:
             raise FileProcessingError("Invalid filename.")
-        
+
         destination = self.rag_directory / safe_filename
-        
+
         try:
             logger.info(f"Saving uploaded file: {safe_filename}")
             with destination.open("wb") as buffer:
@@ -177,36 +200,38 @@ class FileIngestor(IFileIngestor):
             logger.info(f"Successfully saved file to {destination}")
             return destination
         except Exception as e:
-            logger.error(f"Failed to save uploaded file {safe_filename}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to save uploaded file {safe_filename}: {e}", exc_info=True
+            )
             raise FileProcessingError(f"Could not save file: {e}") from e
-    
+
     async def ingest_file(self, file_path: Path) -> bool:
         """
         Ingests a single file into the knowledge graph.
-        
+
         Args:
             file_path: Path to the file to ingest
-            
+
         Returns:
             True if ingestion was successful, False otherwise
         """
         if not file_path.exists():
             logger.warning(f"File not found for ingestion: {file_path}")
             return False
-        
+
         file_ext = file_path.suffix.lower()
         reader = self.file_readers.get(file_ext)
-        
+
         if not reader:
             logger.warning(f"Unsupported file type: {file_ext}. Skipping.")
             return False
-        
+
         # Read the file content
         content = reader(file_path)
         if not content:
             logger.warning(f"No content extracted from {file_path}. Skipping.")
             return False
-        
+
         # Chunk the content and add to knowledge graph
         chunks = list(chunk_text(content))
         chunk_count = 0
@@ -222,30 +247,38 @@ class FileIngestor(IFileIngestor):
                 chunk_count += 1
             except KnowledgeGraphError as e:
                 logger.error(
-                    "Knowledge graph error adding chunk %d from %s: %s", 
-                    i+1, file_path, e,
+                    "Knowledge graph error adding chunk %d from %s: %s",
+                    i + 1,
+                    file_path,
+                    e,
                     exc_info=True,
                 )
             except ValueError as e:
                 logger.error(
-                    "Value error adding chunk %d from %s: %s", 
-                    i+1, file_path, e,
+                    "Value error adding chunk %d from %s: %s",
+                    i + 1,
+                    file_path,
+                    e,
                     exc_info=True,
                 )
             except TypeError as e:
                 logger.error(
-                    "Type error adding chunk %d from %s: %s", 
-                    i+1, file_path, e,
+                    "Type error adding chunk %d from %s: %s",
+                    i + 1,
+                    file_path,
+                    e,
                     exc_info=True,
                 )
             except Exception as e:
                 logger.error(
-                    "Unexpected error adding chunk %d from %s: %s", 
-                    i+1, file_path, e,
+                    "Unexpected error adding chunk %d from %s: %s",
+                    i + 1,
+                    file_path,
+                    e,
                     exc_info=True,
                 )
                 # We don't re-raise here to allow processing of other chunks
-        
+
         logger.info(
             f"Successfully ingested {chunk_count}/{len(chunks)} chunks from {file_path}"
         )
@@ -255,10 +288,10 @@ class FileIngestor(IFileIngestor):
 def create_file_ingestor(knowledge_graph: IKnowledgeGraph) -> FileIngestor:
     """
     Factory function to create a FileIngestor instance.
-    
+
     Args:
         knowledge_graph: The knowledge graph service to use
-        
+
     Returns:
         A configured FileIngestor instance
     """

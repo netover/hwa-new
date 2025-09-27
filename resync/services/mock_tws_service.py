@@ -6,7 +6,6 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List
 
-from resync.core.exceptions import DataParsingError, FileProcessingError
 from resync.models.tws import (
     CriticalJob,
     JobStatus,
@@ -61,7 +60,9 @@ class MockTWSClient:
             with open(mock_data_path, "r", encoding="utf-8") as f:
                 self.mock_data = json.load(f)
         except json.JSONDecodeError as e:
-            logger.error("Failed to decode mock data JSON from %s: %s", mock_data_path, e)
+            logger.error(
+                "Failed to decode mock data JSON from %s: %s", mock_data_path, e
+            )
             self.mock_data = {}
             # Don't raise here to allow the service to continue with empty data
         except (IOError, IsADirectoryError) as e:
@@ -73,11 +74,19 @@ class MockTWSClient:
             self.mock_data = {}
             # Don't raise here to allow the service to continue with empty data
         except PermissionError as e:
-            logger.error("Permission denied accessing mock data file at %s: %s", mock_data_path, e)
+            logger.error(
+                "Permission denied accessing mock data file at %s: %s",
+                mock_data_path,
+                e,
+            )
             self.mock_data = {}
             # Don't raise here to allow the service to continue with empty data
         except UnicodeDecodeError as e:
-            logger.error("Unicode decode error reading mock data file at %s: %s", mock_data_path, e)
+            logger.error(
+                "Unicode decode error reading mock data file at %s: %s",
+                mock_data_path,
+                e,
+            )
             self.mock_data = {}
             # Don't raise here to allow the service to continue with empty data
         except Exception as e:

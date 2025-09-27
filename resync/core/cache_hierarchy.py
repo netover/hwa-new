@@ -5,7 +5,7 @@ import logging
 from collections import OrderedDict
 from dataclasses import dataclass
 from time import time as time_func
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from resync.core.enhanced_async_cache import EnhancedAsyncTTLCache
 from resync.settings import settings
@@ -63,11 +63,15 @@ class L1Cache:
         """
         self.max_size = max_size
         self.num_shards = num_shards
-        self.shards: List[OrderedDict[str, Tuple[Any, float]]] = [OrderedDict() for _ in range(num_shards)]
+        self.shards: List[OrderedDict[str, Tuple[Any, float]]] = [
+            OrderedDict() for _ in range(num_shards)
+        ]
         self.shard_locks = [asyncio.Lock() for _ in range(num_shards)]
         self.shard_max_size = max_size // num_shards if num_shards > 0 else max_size
 
-    def _get_shard(self, key: str) -> Tuple[OrderedDict[str, Tuple[Any, float]], asyncio.Lock]:
+    def _get_shard(
+        self, key: str
+    ) -> Tuple[OrderedDict[str, Tuple[Any, float]], asyncio.Lock]:
         """Get the shard and lock for a given key."""
         shard_index = hash(key) % self.num_shards
         return self.shards[shard_index], self.shard_locks[shard_index]
@@ -172,12 +176,13 @@ class CacheHierarchy:
         """
         # Use settings from the project configuration
         from resync.settings import settings
+
         self.l1_cache = L1Cache(max_size=settings.CACHE_HIERARCHY_L1_MAX_SIZE)
         self.l2_cache = EnhancedAsyncTTLCache(
             ttl_seconds=settings.CACHE_HIERARCHY_L2_TTL,
             cleanup_interval=settings.CACHE_HIERARCHY_L2_CLEANUP_INTERVAL,
             num_shards=getattr(settings, "CACHE_HIERARCHY_NUM_SHARDS", 16),
-            max_workers=getattr(settings, "CACHE_HIERARCHY_MAX_WORKERS", 4)
+            max_workers=getattr(settings, "CACHE_HIERARCHY_MAX_WORKERS", 4),
         )
         self.metrics = CacheMetrics()
         self.is_running = False

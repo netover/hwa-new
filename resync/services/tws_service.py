@@ -62,7 +62,9 @@ class OptimizedTWSClient:
         logger.info("OptimizedTWSClient initialized for base URL: %s", self.base_url)
 
     @http_retry(max_attempts=3, min_wait=1.0, max_wait=5.0)
-    async def _make_request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+    async def _make_request(
+        self, method: str, url: str, **kwargs: Any
+    ) -> httpx.Response:
         """Makes an HTTP request with retry logic."""
         logger.debug("Making request: %s %s", method.upper(), url)
         response = await self.client.request(method, url, **kwargs)
@@ -70,7 +72,9 @@ class OptimizedTWSClient:
         return response
 
     @asynccontextmanager
-    async def _api_request(self, method: str, url: str, **kwargs: Any) -> AsyncGenerator[Any, None]:
+    async def _api_request(
+        self, method: str, url: str, **kwargs: Any
+    ) -> AsyncGenerator[Any, None]:
         """A context manager for making robust API requests."""
         try:
             response = await self._make_request(method, url, **kwargs)

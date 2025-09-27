@@ -15,8 +15,6 @@ from pydantic import BaseModel
 
 # Import settings
 from ..settings import settings
-from resync.core.exceptions import KnowledgeGraphError
-from resync.core.interfaces import IKnowledgeGraph
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -288,7 +286,9 @@ class AsyncKnowledgeGraph:
         logger.info("Found %d conversations for query: %s", len(memories), query)
         return memories
 
-    async def add_solution_feedback(self, memory_id: str, feedback: str, rating: int) -> None:
+    async def add_solution_feedback(
+        self, memory_id: str, feedback: str, rating: int
+    ) -> None:
         """
         Adds user feedback to a specific memory in the knowledge graph.
 
@@ -526,6 +526,7 @@ def create_knowledge_graph(
 # Legacy compatibility: create a default instance
 # This will be removed once all code is migrated to DI
 import warnings
+
 warnings.warn(
     "The global knowledge_graph instance is deprecated and will be removed in a future version. "
     "Use dependency injection with IKnowledgeGraph instead.",

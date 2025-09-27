@@ -64,16 +64,18 @@ def add_audit_record(memory: Dict[str, Any]) -> Optional[int]:
                 ),
             )
             conn.commit()
-            logger.info("Added memory %s to audit queue.", memory['id'])
+            logger.info("Added memory %s to audit queue.", memory["id"])
             return cursor.lastrowid
         except sqlite3.IntegrityError:
             logger.warning(
-                "Memory %s already exists in audit queue. Skipping.", memory['id']
+                "Memory %s already exists in audit queue. Skipping.", memory["id"]
             )
             return None
         except Exception as e:
             logger.error(
-                "Error adding memory %s to audit queue: %s", memory.get('id'), e,
+                "Error adding memory %s to audit queue: %s",
+                memory.get("id"),
+                e,
                 exc_info=True,
             )
             return None

@@ -2,10 +2,10 @@
 
 ## 📋 VISÃO GERAL
 
-**Objetivo**: Continuar as correções de código iniciadas, focando em tipagem, exceções, arquitetura e testes.  
-**Estratégia**: Dividir em 4 tasks principais, cada uma executada em um novo chat para otimizar contexto.  
-**Tempo Estimado**: 2-3 semanas  
-**Status**: 🔄 Em Andamento  
+**Objetivo**: Continuar as correções de código iniciadas, focando em tipagem, exceções, arquitetura e testes.
+**Estratégia**: Dividir em 4 tasks principais, cada uma executada em um novo chat para otimizar contexto.
+**Tempo Estimado**: 2-3 semanas
+**Status**: 🔄 Em Andamento
 
 ---
 
@@ -333,7 +333,6 @@ python -m pytest tests/ --cov=resync --cov-report=html
 
 ---
 
-**Criado em**: 2024-12-19  
-**Responsável**: Equipe de Desenvolvimento  
+**Criado em**: 2024-12-19
+**Responsável**: Equipe de Desenvolvimento
 **Status**: 📋 Pronto para Execução
-
