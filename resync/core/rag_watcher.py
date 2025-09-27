@@ -7,7 +7,8 @@ from pathlib import Path
 
 from watchfiles import awatch
 
-from resync.core.file_ingestor import ingest_file
+from resync.core.file_ingestor import create_file_ingestor
+from resync.core.knowledge_graph import create_knowledge_graph
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,10 @@ async def watch_rag_directory():
     # Ensure the directory exists
     RAG_DIRECTORY.mkdir(exist_ok=True)
 
+    # Create file ingestor instance
+    knowledge_graph = create_knowledge_graph()
+    file_ingestor = create_file_ingestor(knowledge_graph)
+
     logger.info(f"Starting RAG watcher on directory: {RAG_DIRECTORY}")
     try:
         async for changes in awatch(RAG_DIRECTORY):
@@ -29,7 +34,7 @@ async def watch_rag_directory():
                     file_path = Path(path_str)
                     logger.info(f"New file detected in RAG directory: {file_path.name}")
                     # Schedule ingestion as a background task to avoid blocking the watcher
-                    asyncio.create_task(ingest_file(file_path))
+                    asyncio.create_task(file_ingestor.ingest_file(file_path))
 
     except Exception as e:
         logger.error(f"Error in RAG directory watcher: {e}", exc_info=True)
