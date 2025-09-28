@@ -99,16 +99,30 @@ class Settings(AgnoSettings):
 
     # --- Cache Hierarchy Configuration ---
     CACHE_HIERARCHY_L1_MAX_SIZE: int = Field(
-        default=int(os.environ.get("CACHE_HIERARCHY_L1_MAX_SIZE", 1000)),
+        default=int(os.environ.get("CACHE_HIERARCHY_L1_MAX_SIZE", 5000)),  # 5K for 4M jobs/month
         description="Maximum number of entries in L1 cache before LRU eviction.",
     )
     CACHE_HIERARCHY_L2_TTL: int = Field(
-        default=int(os.environ.get("CACHE_HIERARCHY_L2_TTL", 300)),
+        default=int(os.environ.get("CACHE_HIERARCHY_L2_TTL", 600)),  # 10 min for 4M jobs/month
         description="Time-To-Live (TTL) for L2 cache entries in seconds.",
     )
     CACHE_HIERARCHY_L2_CLEANUP_INTERVAL: int = Field(
-        default=int(os.environ.get("CACHE_HIERARCHY_L2_CLEANUP_INTERVAL", 30)),
+        default=int(os.environ.get("CACHE_HIERARCHY_L2_CLEANUP_INTERVAL", 60)),  # 1 min for production
         description="Cleanup interval for L2 cache in seconds.",
+    )
+
+    # Production-specific settings for 4M jobs/month environment
+    CACHE_HIERARCHY_NUM_SHARDS: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_NUM_SHARDS", 8)),
+        description="Number of shards for production cache (8 for 15 users).",
+    )
+    CACHE_HIERARCHY_MAX_WORKERS: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_MAX_WORKERS", 4)),
+        description="Max workers for production cache (4 for 15 users).",
+    )
+    ASYNC_CACHE_CONCURRENCY_THRESHOLD: int = Field(
+        default=int(os.environ.get("ASYNC_CACHE_CONCURRENCY_THRESHOLD", 5)),
+        description="Concurrency threshold for adaptive sharding.",
     )
     # These settings are critical for connecting to the HCL Workload Automation server
     # They MUST be provided in the .env file for security

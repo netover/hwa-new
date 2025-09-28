@@ -1,21 +1,21 @@
 """Tests for resync.core.file_ingestor module."""
 
-import os
 import io
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from resync.core.exceptions import FileProcessingError, KnowledgeGraphError
 from resync.core.file_ingestor import (
+    FileIngestor,
     chunk_text,
-    read_pdf,
+    create_file_ingestor,
     read_docx,
     read_excel,
-    FileIngestor,
-    create_file_ingestor,
+    read_pdf,
 )
 
 
@@ -74,7 +74,7 @@ class TestChunkText:
         assert len(chunks) > 1
         # Check no overlap
         for i in range(len(chunks) - 1):
-            assert chunks[i] != chunks[i + 1][:len(chunks[i])]
+            assert chunks[i] != chunks[i + 1][: len(chunks[i])]
 
     def test_chunk_text_large_overlap(self):
         """Test chunking with large overlap."""
@@ -100,7 +100,7 @@ class TestReadPDF:
 
     def test_read_pdf_invalid_content(self):
         """Test reading PDF with invalid content."""
-        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
             tmp_file.write(b"This is not a valid PDF content")
             tmp_path = Path(tmp_file.name)
 
@@ -113,10 +113,10 @@ class TestReadPDF:
 
     def test_read_pdf_exception_handling(self):
         """Test that unexpected exceptions are properly handled."""
-        with patch('pypdf.PdfReader') as mock_reader:
+        with patch("pypdf.PdfReader") as mock_reader:
             mock_reader.side_effect = Exception("Unexpected PDF error")
 
-            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
                 tmp_path = Path(tmp_file.name)
 
             try:
@@ -138,7 +138,7 @@ class TestReadDOCX:
 
     def test_read_docx_invalid_content(self):
         """Test reading DOCX with invalid content."""
-        with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as tmp_file:
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp_file:
             tmp_file.write(b"This is not a valid DOCX content")
             tmp_path = Path(tmp_file.name)
 
@@ -151,10 +151,10 @@ class TestReadDOCX:
 
     def test_read_docx_exception_handling(self):
         """Test that unexpected exceptions are properly handled."""
-        with patch('docx.Document') as mock_doc:
+        with patch("docx.Document") as mock_doc:
             mock_doc.side_effect = Exception("Unexpected DOCX error")
 
-            with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as tmp_file:
+            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp_file:
                 tmp_path = Path(tmp_file.name)
 
             try:
@@ -176,7 +176,7 @@ class TestReadExcel:
 
     def test_read_excel_invalid_file(self):
         """Test reading invalid Excel file."""
-        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp_file:
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp_file:
             tmp_file.write(b"This is not a valid Excel content")
             tmp_path = Path(tmp_file.name)
 
@@ -189,10 +189,10 @@ class TestReadExcel:
 
     def test_read_excel_exception_handling(self):
         """Test that unexpected exceptions are properly handled."""
-        with patch('openpyxl.load_workbook') as mock_workbook:
+        with patch("openpyxl.load_workbook") as mock_workbook:
             mock_workbook.side_effect = Exception("Unexpected Excel error")
 
-            with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp_file:
+            with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp_file:
                 tmp_path = Path(tmp_file.name)
 
             try:
@@ -222,7 +222,7 @@ class TestFileIngestor:
     @pytest.fixture
     def file_ingestor(self, mock_knowledge_graph, temp_rag_dir):
         """Create a FileIngestor instance."""
-        with patch('resync.core.file_ingestor.settings') as mock_settings:
+        with patch("resync.core.file_ingestor.settings") as mock_settings:
             mock_settings.BASE_DIR = temp_rag_dir.parent
 
             ingestor = FileIngestor(mock_knowledge_graph)
@@ -234,7 +234,7 @@ class TestFileIngestor:
 
     def test_file_ingestor_initialization(self, mock_knowledge_graph, temp_rag_dir):
         """Test FileIngestor initialization."""
-        with patch('resync.core.file_ingestor.settings') as mock_settings:
+        with patch("resync.core.file_ingestor.settings") as mock_settings:
             mock_settings.BASE_DIR = temp_rag_dir.parent
 
             ingestor = FileIngestor(mock_knowledge_graph)
@@ -258,7 +258,7 @@ class TestFileIngestor:
         assert result.parent == file_ingestor.rag_directory
 
         # Check file content
-        with open(result, 'rb') as f:
+        with open(result, "rb") as f:
             content = f.read()
         assert content == b"test file content"
 
@@ -267,7 +267,9 @@ class TestFileIngestor:
         file_content = io.BytesIO(b"test content")
         malicious_filename = "../../../etc/passwd"
 
-        result = await file_ingestor.save_uploaded_file(malicious_filename, file_content)
+        result = await file_ingestor.save_uploaded_file(
+            malicious_filename, file_content
+        )
 
         # Should be sanitized to just the basename
         assert result.name == "passwd"
@@ -339,8 +341,10 @@ class TestFileIngestor:
 
         try:
             # Mock the text file reader
-            with patch.object(file_ingestor, 'file_readers') as mock_readers:
-                mock_readers['.txt'] = lambda path: "This is a test document with some content to be chunked."
+            with patch.object(file_ingestor, "file_readers") as mock_readers:
+                mock_readers[".txt"] = (
+                    lambda path: "This is a test document with some content to be chunked."
+                )
 
                 result = await file_ingestor.ingest_file(text_file)
 
@@ -358,7 +362,7 @@ class TestFileIngestor:
 
         try:
             # Mock the PDF reader to return content
-            with patch('resync.core.file_ingestor.read_pdf') as mock_read_pdf:
+            with patch("resync.core.file_ingestor.read_pdf") as mock_read_pdf:
                 mock_read_pdf.return_value = "Test content for chunking"
 
                 # Mock knowledge graph to raise error
@@ -381,7 +385,7 @@ class TestFileIngestor:
 
         try:
             # Mock the PDF reader to raise unexpected error
-            with patch('resync.core.file_ingestor.read_pdf') as mock_read_pdf:
+            with patch("resync.core.file_ingestor.read_pdf") as mock_read_pdf:
                 mock_read_pdf.side_effect = Exception("Unexpected error")
 
                 result = await file_ingestor.ingest_file(test_file)
@@ -421,7 +425,7 @@ class TestFileIngestorIntegration:
         mock_kg = MagicMock()
         mock_kg.add_content = AsyncMock()
 
-        with patch('resync.core.file_ingestor.settings') as mock_settings:
+        with patch("resync.core.file_ingestor.settings") as mock_settings:
             mock_settings.BASE_DIR = temp_rag_dir.parent
 
             ingestor = FileIngestor(mock_kg)
@@ -435,8 +439,8 @@ class TestFileIngestorIntegration:
 
             try:
                 # Mock the text file reader
-                with patch.object(ingestor, 'file_readers') as mock_readers:
-                    mock_readers['.txt'] = lambda path: test_content
+                with patch.object(ingestor, "file_readers") as mock_readers:
+                    mock_readers[".txt"] = lambda path: test_content
 
                     # Ingest the file
                     result = await ingestor.ingest_file(test_file)
@@ -452,7 +456,7 @@ class TestFileIngestorIntegration:
         """Test that RAG directory is created if it doesn't exist."""
         mock_kg = MagicMock()
 
-        with patch('resync.core.file_ingestor.settings') as mock_settings:
+        with patch("resync.core.file_ingestor.settings") as mock_settings:
             mock_settings.BASE_DIR = temp_rag_dir.parent
 
             # Remove the directory if it exists

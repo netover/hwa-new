@@ -181,8 +181,8 @@ class CacheHierarchy:
         self.l2_cache = TWS_OptimizedAsyncCache(
             ttl_seconds=settings.CACHE_HIERARCHY_L2_TTL,
             cleanup_interval=settings.CACHE_HIERARCHY_L2_CLEANUP_INTERVAL,
-            num_shards=getattr(settings, "CACHE_HIERARCHY_NUM_SHARDS", 16),
-            max_workers=getattr(settings, "CACHE_HIERARCHY_MAX_WORKERS", 4),
+            num_shards=getattr(settings, "CACHE_HIERARCHY_NUM_SHARDS", 8),
+            max_workers=getattr(settings, "CACHE_HIERARCHY_MAX_WORKERS", 4),  # 4 workers for 15 users
         )
         self.metrics = CacheMetrics()
         self.is_running = False

@@ -3,32 +3,32 @@
 import pytest
 
 from resync.core.exceptions import (
-    ResyncError,
-    ConfigError,
-    NetworkError,
-    DataError,
-    SecurityError,
-    ProcessingError,
-    SettingsError,
-    MissingConfigError,
-    InvalidConfigError,
-    ConnectionFailedError,
+    AgentError,
     APIError,
-    WebSocketError,
-    TimeoutError,
-    ValidationError,
-    DataParsingError,
-    DatabaseError,
-    CacheError,
+    AuditError,
     AuthenticationError,
     AuthorizationError,
-    TokenError,
-    AgentError,
-    AuditError,
+    CacheError,
+    ConfigError,
+    ConnectionFailedError,
+    DatabaseError,
+    DataError,
+    DataParsingError,
+    FileProcessingError,
+    InvalidConfigError,
+    KnowledgeGraphError,
     LLMError,
     MemoryError,
-    FileProcessingError,
-    KnowledgeGraphError,
+    MissingConfigError,
+    NetworkError,
+    ProcessingError,
+    ResyncError,
+    SecurityError,
+    SettingsError,
+    TimeoutError,
+    TokenError,
+    ValidationError,
+    WebSocketError,
 )
 
 
@@ -306,7 +306,10 @@ class TestExceptionMessages:
         test_cases = [
             ("Simple message", "Simple message"),
             ("Message with spaces", "Message with spaces"),
-            ("Message with special chars: @#$%^&*()", "Message with special chars: @#$%^&*()"),
+            (
+                "Message with special chars: @#$%^&*()",
+                "Message with special chars: @#$%^&*()",
+            ),
             ("", ""),
             ("Message\nwith\nnewlines", "Message\nwith\nnewlines"),
         ]
@@ -435,6 +438,3 @@ class TestExceptionEdgeCases:
                 raise ResyncError("Context manager test")
         except ResyncError as e:
             assert str(e) == "Context manager test"
-
-
-

@@ -1,12 +1,11 @@
 """Tests for resync.core.encryption_service module."""
 
-import pytest
 import logging
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 from resync.core.encryption_service import (
     EncryptionService,
-    mask_sensitive_data_in_logs
+    mask_sensitive_data_in_logs,
 )
 
 
@@ -78,7 +77,7 @@ class TestEncryptionService:
             "with spaces",
             "with@special#chars$%",
             "very_long_string_" * 100,
-            ""
+            "",
         ]
 
         for original in test_cases:

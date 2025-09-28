@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import pytest_asyncio
 
-from resync.core.enhanced_async_cache import TWS_OptimizedAsyncCache, ConsistentHash
+from resync.core.enhanced_async_cache import ConsistentHash, TWS_OptimizedAsyncCache
 
 
 class TestConsistentHash:

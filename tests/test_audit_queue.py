@@ -1,12 +1,13 @@
 """Tests for resync.core.audit_queue module."""
 
 import json
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from resync.core.audit_queue import AsyncAuditQueue
-from resync.core.exceptions import AuditError, DatabaseError, DataParsingError
+from resync.core.exceptions import AuditError, DataParsingError
 
 
 class TestAsyncAuditQueue:
@@ -20,13 +21,15 @@ class TestAsyncAuditQueue:
             "user_query": "What is the capital of France?",
             "agent_response": "The capital of France is Paris.",
             "ia_audit_reason": "This is a factual question about geography.",
-            "ia_audit_confidence": 0.95
+            "ia_audit_confidence": 0.95,
         }
 
     def test_async_audit_queue_initialization(self):
         """Test AsyncAuditQueue initialization."""
-        with patch('redis.from_url') as mock_sync_redis, \
-             patch('redis.asyncio.Redis.from_url') as mock_async_redis:
+        with (
+            patch("redis.from_url") as mock_sync_redis,
+            patch("redis.asyncio.Redis.from_url") as mock_async_redis,
+        ):
 
             mock_sync_client = MagicMock()
             mock_async_client = AsyncMock()
@@ -44,8 +47,10 @@ class TestAsyncAuditQueue:
         """Test AsyncAuditQueue initialization with custom Redis URL."""
         custom_url = "redis://custom-host:6380"
 
-        with patch('redis.from_url') as mock_sync_redis, \
-             patch('redis.asyncio.Redis.from_url') as mock_async_redis:
+        with (
+            patch("redis.from_url") as mock_sync_redis,
+            patch("redis.asyncio.Redis.from_url") as mock_async_redis,
+        ):
 
             mock_sync_client = MagicMock()
             mock_async_client = AsyncMock()
@@ -58,8 +63,10 @@ class TestAsyncAuditQueue:
 
     def test_audit_queue_key_configuration(self):
         """Test audit queue key configuration."""
-        with patch('redis.from_url') as mock_sync_redis, \
-             patch('redis.asyncio.Redis.from_url') as mock_async_redis:
+        with (
+            patch("redis.from_url") as mock_sync_redis,
+            patch("redis.asyncio.Redis.from_url") as mock_async_redis,
+        ):
 
             mock_sync_client = MagicMock()
             mock_async_client = AsyncMock()
@@ -167,7 +174,9 @@ class TestAsyncAuditQueue:
         assert ":" in queue_key
         assert ":" in status_key
         assert ":" in data_key
-        assert all(key.startswith("resync:") for key in [queue_key, status_key, data_key])
+        assert all(
+            key.startswith("resync:") for key in [queue_key, status_key, data_key]
+        )
 
     def test_datetime_serialization(self):
         """Test datetime serialization for audit records."""
@@ -185,7 +194,7 @@ class TestAsyncAuditQueue:
             "user_query": "Test query",
             "agent_response": "Test response",
             "ia_audit_reason": "Optional reason",
-            "ia_audit_confidence": 0.8
+            "ia_audit_confidence": 0.8,
         }
 
         assert memory_with_optional.get("ia_audit_reason") == "Optional reason"
@@ -194,7 +203,7 @@ class TestAsyncAuditQueue:
         memory_without_optional = {
             "id": "test_memory",
             "user_query": "Test query",
-            "agent_response": "Test response"
+            "agent_response": "Test response",
         }
 
         assert memory_without_optional.get("ia_audit_reason") is None
@@ -202,11 +211,13 @@ class TestAsyncAuditQueue:
 
     def test_audit_queue_settings_integration(self):
         """Test integration with settings module."""
-        with patch('resync.core.audit_queue.settings') as mock_settings:
+        with patch("resync.core.audit_queue.settings") as mock_settings:
             mock_settings.REDIS_URL = "redis://test-host:6379"
 
-            with patch('redis.from_url') as mock_sync_redis, \
-                 patch('redis.asyncio.Redis.from_url') as mock_async_redis:
+            with (
+                patch("redis.from_url") as mock_sync_redis,
+                patch("redis.asyncio.Redis.from_url") as mock_async_redis,
+            ):
 
                 mock_sync_client = MagicMock()
                 mock_async_client = AsyncMock()
@@ -219,9 +230,11 @@ class TestAsyncAuditQueue:
 
     def test_audit_queue_environment_variable_fallback(self):
         """Test environment variable fallback for Redis URL."""
-        with patch.dict('os.environ', {'REDIS_URL': 'redis://env-host:6380'}), \
-             patch('redis.from_url') as mock_sync_redis, \
-             patch('redis.asyncio.Redis.from_url') as mock_async_redis:
+        with (
+            patch.dict("os.environ", {"REDIS_URL": "redis://env-host:6380"}),
+            patch("redis.from_url") as mock_sync_redis,
+            patch("redis.asyncio.Redis.from_url") as mock_async_redis,
+        ):
 
             mock_sync_client = MagicMock()
             mock_async_client = AsyncMock()
@@ -238,19 +251,19 @@ class TestAsyncAuditQueue:
         from resync.core import audit_queue
 
         # Test that the class is available
-        assert hasattr(audit_queue, 'AsyncAuditQueue')
+        assert hasattr(audit_queue, "AsyncAuditQueue")
 
         # Test that exceptions are imported
-        assert hasattr(audit_queue, 'AuditError')
-        assert hasattr(audit_queue, 'DatabaseError')
-        assert hasattr(audit_queue, 'DataParsingError')
+        assert hasattr(audit_queue, "AuditError")
+        assert hasattr(audit_queue, "DatabaseError")
+        assert hasattr(audit_queue, "DataParsingError")
 
     def test_audit_queue_module_structure(self):
         """Test audit queue module structure."""
         import resync.core.audit_queue as aq
 
         # Test that the class exists
-        assert hasattr(aq, 'AsyncAuditQueue')
+        assert hasattr(aq, "AsyncAuditQueue")
 
         # Test that the class is properly defined
         assert issubclass(aq.AsyncAuditQueue, object)
@@ -284,11 +297,7 @@ class TestAsyncAuditQueue:
 
     def test_audit_queue_key_prefix_consistency(self):
         """Test audit queue key prefix consistency."""
-        keys = [
-            "resync:audit_queue",
-            "resync:audit_status",
-            "resync:audit_data"
-        ]
+        keys = ["resync:audit_queue", "resync:audit_status", "resync:audit_data"]
 
         # All keys should have the same prefix
         for key in keys:
@@ -340,16 +349,16 @@ class TestAsyncAuditQueue:
 
         # Check that methods exist (even if not implemented)
         expected_methods = [
-            'add_audit_record',
-            'get_pending_audits',
-            'update_audit_status',
-            'delete_audit_record',
-            'is_memory_approved',
-            'get_queue_length',
-            'get_all_audits',
-            'get_audits_by_status',
-            'get_audit_metrics',
-            'health_check'
+            "add_audit_record",
+            "get_pending_audits",
+            "update_audit_status",
+            "delete_audit_record",
+            "is_memory_approved",
+            "get_queue_length",
+            "get_all_audits",
+            "get_audits_by_status",
+            "get_audit_metrics",
+            "health_check",
         ]
 
         for method_name in expected_methods:
@@ -362,16 +371,16 @@ class TestAsyncAuditQueue:
         queue = AsyncAuditQueue.__new__(AsyncAuditQueue)
 
         async_methods = [
-            'add_audit_record',
-            'get_pending_audits',
-            'update_audit_status',
-            'delete_audit_record',
-            'is_memory_approved',
-            'get_queue_length',
-            'get_all_audits',
-            'get_audits_by_status',
-            'get_audit_metrics',
-            'health_check'
+            "add_audit_record",
+            "get_pending_audits",
+            "update_audit_status",
+            "delete_audit_record",
+            "is_memory_approved",
+            "get_queue_length",
+            "get_all_audits",
+            "get_audits_by_status",
+            "get_audit_metrics",
+            "health_check",
         ]
 
         for method_name in async_methods:
@@ -380,8 +389,10 @@ class TestAsyncAuditQueue:
 
     def test_audit_queue_initialization(self):
         """Test AsyncAuditQueue initialization."""
-        with patch('redis.from_url') as mock_sync_redis, \
-             patch('redis.asyncio.Redis.from_url') as mock_async_redis:
+        with (
+            patch("redis.from_url") as mock_sync_redis,
+            patch("redis.asyncio.Redis.from_url") as mock_async_redis,
+        ):
 
             mock_sync_client = MagicMock()
             mock_async_client = AsyncMock()
@@ -398,8 +409,10 @@ class TestAsyncAuditQueue:
     def test_audit_queue_basic_functionality(self):
         """Test basic audit queue functionality."""
         # Test that the class can be imported and initialized
-        with patch('redis.from_url') as mock_sync_redis, \
-             patch('redis.asyncio.Redis.from_url') as mock_async_redis:
+        with (
+            patch("redis.from_url") as mock_sync_redis,
+            patch("redis.asyncio.Redis.from_url") as mock_async_redis,
+        ):
 
             mock_sync_client = MagicMock()
             mock_async_client = AsyncMock()
@@ -413,14 +426,18 @@ class TestAsyncAuditQueue:
             assert queue.audit_status_key == "resync:audit_status"
             assert queue.audit_data_key == "resync:audit_data"
 
-    async def test_add_audit_record_duplicate(self, audit_queue, sample_memory, mock_redis_client):
+    async def test_add_audit_record_duplicate(
+        self, audit_queue, sample_memory, mock_redis_client
+    ):
         """Test adding duplicate audit record."""
         mock_redis_client.hexists.return_value = True
 
         result = await audit_queue.add_audit_record(sample_memory)
 
         assert result is False
-        mock_redis_client.hexists.assert_called_once_with("resync:audit_status", "test_memory_123")
+        mock_redis_client.hexists.assert_called_once_with(
+            "resync:audit_status", "test_memory_123"
+        )
 
     async def test_get_pending_audits_empty(self, audit_queue, mock_redis_client):
         """Test getting pending audits when queue is empty."""
@@ -438,7 +455,7 @@ class TestAsyncAuditQueue:
         mock_redis_client.lrange.return_value = memory_ids
         mock_redis_client.hget.side_effect = [
             b"pending",  # memory_1 status
-            b"approved", # memory_2 status
+            b"approved",  # memory_2 status
             b'{"memory_id": "memory_1", "status": "pending"}',  # memory_1 data
         ]
 
@@ -455,7 +472,9 @@ class TestAsyncAuditQueue:
         result = await audit_queue.update_audit_status("memory_123", "approved")
 
         assert result is True
-        mock_redis_client.hset.assert_called_once_with("resync:audit_status", "memory_123", "approved")
+        mock_redis_client.hset.assert_called_once_with(
+            "resync:audit_status", "memory_123", "approved"
+        )
 
     async def test_update_audit_status_not_found(self, audit_queue, mock_redis_client):
         """Test updating status of non-existent record."""
@@ -489,9 +508,13 @@ class TestAsyncAuditQueue:
         result = await audit_queue.is_memory_approved("memory_123")
 
         assert result is True
-        mock_redis_client.hget.assert_called_once_with("resync:audit_status", "memory_123")
+        mock_redis_client.hget.assert_called_once_with(
+            "resync:audit_status", "memory_123"
+        )
 
-    async def test_is_memory_approved_false_pending(self, audit_queue, mock_redis_client):
+    async def test_is_memory_approved_false_pending(
+        self, audit_queue, mock_redis_client
+    ):
         """Test checking if memory is approved when pending."""
         mock_redis_client.hget.return_value = b"pending"
 
@@ -499,7 +522,9 @@ class TestAsyncAuditQueue:
 
         assert result is False
 
-    async def test_is_memory_approved_false_rejected(self, audit_queue, mock_redis_client):
+    async def test_is_memory_approved_false_rejected(
+        self, audit_queue, mock_redis_client
+    ):
         """Test checking if memory is approved when rejected."""
         mock_redis_client.hget.return_value = b"rejected"
 
@@ -527,7 +552,6 @@ class TestAsyncAuditQueue:
     async def test_get_all_audits(self, audit_queue, mock_redis_client):
         """Test getting all audit records."""
         # Mock Redis responses
-        memory_ids = [b"memory_1", b"memory_2", b"memory_3"]
         mock_redis_client.hgetall.return_value = {
             b"memory_1": b'{"status": "pending"}',
             b"memory_2": b'{"status": "approved"}',
@@ -602,11 +626,17 @@ class TestAsyncAuditQueue:
         with pytest.raises(DataParsingError):
             await audit_queue.get_all_audits()
 
-    async def test_memory_data_storage(self, audit_queue, sample_memory, mock_redis_client):
+    async def test_memory_data_storage(
+        self, audit_queue, sample_memory, mock_redis_client
+    ):
         """Test that memory data is properly stored and retrieved."""
         # Mock successful addition
         mock_redis_client.hexists.return_value = False
-        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [1, 1, 1]
+        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [
+            1,
+            1,
+            1,
+        ]
 
         # Add memory
         await audit_queue.add_audit_record(sample_memory)
@@ -616,15 +646,17 @@ class TestAsyncAuditQueue:
         pipeline.hset.assert_any_call(
             "resync:audit_data",
             "test_memory_123",
-            json.dumps({
-                "memory_id": "test_memory_123",
-                "user_query": "What is the capital of France?",
-                "agent_response": "The capital of France is Paris.",
-                "ia_audit_reason": "This is a factual question about geography.",
-                "ia_audit_confidence": 0.95,
-                "status": "pending",
-                "created_at": pytest.approx(datetime.utcnow().isoformat(), abs=1),
-            })
+            json.dumps(
+                {
+                    "memory_id": "test_memory_123",
+                    "user_query": "What is the capital of France?",
+                    "agent_response": "The capital of France is Paris.",
+                    "ia_audit_reason": "This is a factual question about geography.",
+                    "ia_audit_confidence": 0.95,
+                    "status": "pending",
+                    "created_at": pytest.approx(datetime.utcnow().isoformat(), abs=1),
+                }
+            ),
         )
 
     async def test_concurrent_operations(self, audit_queue, mock_redis_client):
@@ -633,13 +665,17 @@ class TestAsyncAuditQueue:
 
         # Mock Redis responses
         mock_redis_client.hexists.return_value = False
-        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [1, 1, 1]
+        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [
+            1,
+            1,
+            1,
+        ]
 
         async def add_memory(memory_id):
             memory = {
                 "id": memory_id,
                 "user_query": f"Query {memory_id}",
-                "agent_response": f"Response {memory_id}"
+                "agent_response": f"Response {memory_id}",
             }
             return await audit_queue.add_audit_record(memory)
 
@@ -673,15 +709,21 @@ class TestAsyncAuditQueue:
 
         # Should handle gracefully or raise appropriate error
         mock_redis_client.hexists.return_value = False
-        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [1, 1, 1]
+        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [
+            1,
+            1,
+            1,
+        ]
 
         # Should not crash, but may not add invalid data
-        result = await audit_queue.add_audit_record(invalid_memory)
+        await audit_queue.add_audit_record(invalid_memory)
         # The implementation should handle this case
 
     async def test_redis_connection_failure(self, audit_queue, mock_redis_client):
         """Test Redis connection failure handling."""
-        mock_redis_client.hexists.side_effect = redis.exceptions.ConnectionError("Connection failed")
+        mock_redis_client.hexists.side_effect = redis.exceptions.ConnectionError(
+            "Connection failed"
+        )
 
         with pytest.raises(AuditError):
             await audit_queue.add_audit_record({"id": "test"})
@@ -700,10 +742,19 @@ class TestAsyncAuditQueue:
     async def test_batch_operations(self, audit_queue, mock_redis_client):
         """Test batch operations."""
         # Mock batch operations
-        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [1, 1, 1, 1]
+        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [
+            1,
+            1,
+            1,
+            1,
+        ]
 
         memories = [
-            {"id": f"memory_{i}", "user_query": f"Query {i}", "agent_response": f"Response {i}"}
+            {
+                "id": f"memory_{i}",
+                "user_query": f"Query {i}",
+                "agent_response": f"Response {i}",
+            }
             for i in range(10)
         ]
 
@@ -740,7 +791,11 @@ class TestAsyncAuditQueue:
         """Test audit queue performance characteristics."""
         # Mock Redis responses for performance testing
         mock_redis_client.hexists.return_value = False
-        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [1, 1, 1]
+        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [
+            1,
+            1,
+            1,
+        ]
 
         import time
 
@@ -750,7 +805,7 @@ class TestAsyncAuditQueue:
             memory = {
                 "id": f"perf_memory_{i}",
                 "user_query": f"Query {i}",
-                "agent_response": f"Response {i}"
+                "agent_response": f"Response {i}",
             }
             await audit_queue.add_audit_record(memory)
         end_time = time.time()
@@ -763,9 +818,13 @@ class TestAsyncAuditQueue:
         # Test that operations can recover from temporary errors
         mock_redis_client.hexists.side_effect = [
             Exception("Temporary error"),
-            False  # Second call succeeds
+            False,  # Second call succeeds
         ]
-        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [1, 1, 1]
+        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [
+            1,
+            1,
+            1,
+        ]
 
         # Should handle the temporary error and retry
         with pytest.raises(Exception):  # First call fails
@@ -777,23 +836,29 @@ class TestAsyncAuditQueue:
         memory = {
             "id": memory_id,
             "user_query": "Consistency test query",
-            "agent_response": "Consistency test response"
+            "agent_response": "Consistency test response",
         }
 
         # Add memory
         mock_redis_client.hexists.return_value = False
-        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [1, 1, 1]
+        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [
+            1,
+            1,
+            1,
+        ]
 
         await audit_queue.add_audit_record(memory)
 
         # Retrieve and verify data
         mock_redis_client.hgetall.return_value = {
-            memory_id.encode(): json.dumps({
-                "memory_id": memory_id,
-                "user_query": "Consistency test query",
-                "agent_response": "Consistency test response",
-                "status": "pending"
-            }).encode()
+            memory_id.encode(): json.dumps(
+                {
+                    "memory_id": memory_id,
+                    "user_query": "Consistency test query",
+                    "agent_response": "Consistency test response",
+                    "status": "pending",
+                }
+            ).encode()
         }
 
         all_audits = await audit_queue.get_all_audits()
@@ -806,28 +871,32 @@ class TestAsyncAuditQueue:
         """Test edge cases in audit queue operations."""
 
         # Test with empty memory ID
-        result = await audit_queue.update_audit_status("", "approved")
+        await audit_queue.update_audit_status("", "approved")
         # Should handle gracefully
 
         # Test with None memory ID
-        result = await audit_queue.update_audit_status(None, "approved")
+        await audit_queue.update_audit_status(None, "approved")
         # Should handle gracefully
 
         # Test with very long memory ID
         long_memory_id = "a" * 1000
-        result = await audit_queue.update_audit_status(long_memory_id, "approved")
+        await audit_queue.update_audit_status(long_memory_id, "approved")
         # Should handle gracefully
 
         # Test with special characters in memory ID
         special_memory_id = "memory_with_@#$%^&*()_special_chars"
-        result = await audit_queue.update_audit_status(special_memory_id, "approved")
+        await audit_queue.update_audit_status(special_memory_id, "approved")
         # Should handle gracefully
 
     async def test_audit_queue_memory_efficiency(self, audit_queue, mock_redis_client):
         """Test memory efficiency of audit queue operations."""
         # Mock Redis responses
         mock_redis_client.hexists.return_value = False
-        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [1, 1, 1]
+        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [
+            1,
+            1,
+            1,
+        ]
 
         # Test with large memory data
         large_memory = {
@@ -835,7 +904,7 @@ class TestAsyncAuditQueue:
             "user_query": "A" * 10000,  # Large query
             "agent_response": "B" * 10000,  # Large response
             "ia_audit_reason": "C" * 5000,  # Large reason
-            "ia_audit_confidence": 0.95
+            "ia_audit_confidence": 0.95,
         }
 
         # Should handle large data without issues
@@ -854,19 +923,25 @@ class TestAsyncAuditQueue:
         assert result is True
 
         # Check that status was set
-        mock_redis_client.hset.assert_called_with("resync:audit_status", memory_id, "invalid_status")
+        mock_redis_client.hset.assert_called_with(
+            "resync:audit_status", memory_id, "invalid_status"
+        )
 
     async def test_audit_queue_data_integrity(self, audit_queue, mock_redis_client):
         """Test data integrity across Redis operations."""
         memory = {
             "id": "integrity_memory",
             "user_query": "Integrity test",
-            "agent_response": "Data integrity test"
+            "agent_response": "Data integrity test",
         }
 
         # Add memory
         mock_redis_client.hexists.return_value = False
-        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [1, 1, 1]
+        mock_redis_client.pipeline.return_value.__aenter__.return_value.execute.return_value = [
+            1,
+            1,
+            1,
+        ]
 
         await audit_queue.add_audit_record(memory)
 
@@ -875,10 +950,12 @@ class TestAsyncAuditQueue:
             "memory_id": "integrity_memory",
             "user_query": "Integrity test",
             "agent_response": "Data integrity test",
-            "status": "pending"
+            "status": "pending",
         }
 
         # Check that the data stored matches expected
         stored_data = json.dumps(expected_data)
         pipeline = mock_redis_client.pipeline.return_value.__aenter__.return_value
-        pipeline.hset.assert_any_call("resync:audit_data", "integrity_memory", stored_data)
+        pipeline.hset.assert_any_call(
+            "resync:audit_data", "integrity_memory", stored_data
+        )

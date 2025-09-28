@@ -56,7 +56,7 @@ class LLMCostMonitor:
         """Initialize LLM cost monitor."""
         self.usage_stats = LLMUsageStats()
         self.cost_history: List[LLMCost] = []
-        self.budget_limit = 100.0  # USD per month
+        self.budget_limit = 500.0  # USD per month for 4M jobs/month
         self.cache = None  # Lazy initialization
 
     async def _ensure_cache(self) -> None:

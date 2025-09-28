@@ -30,18 +30,17 @@ def mask_sensitive_data_in_logs(record) -> None:
     if hasattr(record, "msg"):
         msg_str = str(record.msg)
         # Replace entire lines containing password with masked version
-        import re
-        lines = msg_str.split('\n')
+        lines = msg_str.split("\n")
         masked_lines = []
 
         for line in lines:
-            if 'password' in line.lower():
+            if "password" in line.lower():
                 # Mask the entire line containing password
-                masked_lines.append('*** PASSWORD LOG ENTRY MASKED ***')
+                masked_lines.append("*** PASSWORD LOG ENTRY MASKED ***")
             else:
                 masked_lines.append(line)
 
-        record.msg = '\n'.join(masked_lines)
+        record.msg = "\n".join(masked_lines)
     return True
 
 

@@ -353,8 +353,8 @@ class TWS_OptimizedAsyncCache:
         self,
         ttl_seconds: int = 60,
         cleanup_interval: int = 30,
-        num_shards: int = 4,  # Optimized for TWS concurrency
-        max_workers: int = 2,  # Reduced for TWS workload
+        num_shards: int = 8,  # Optimized for 15 users + 4M jobs/month
+        max_workers: int = 4,  # Optimized for 15 users + 4M jobs/month
         concurrency_threshold: int = 5,  # Threshold for adaptive sharding
     ):
         """
@@ -597,7 +597,9 @@ class TWS_OptimizedAsyncCache:
         try:
             # TWS cache warming - placeholder for future implementation
             # Would require TWS client initialization with proper credentials
-            logger.debug("TWS cache warming attempted - requires TWS client initialization")
+            logger.debug(
+                "TWS cache warming attempted - requires TWS client initialization"
+            )
 
         except ImportError:
             logger.debug("TWS client not available for cache warming")

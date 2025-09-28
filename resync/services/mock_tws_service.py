@@ -195,7 +195,7 @@ class MockTWSClient:
             "job_id": job_id,
             "action": "restarted",
             "status": "PENDING",
-            "timestamp": "2024-01-01T12:00:00Z"
+            "timestamp": "2024-01-01T12:00:00Z",
         }
 
     async def cancel_job(self, job_id: str) -> Dict[str, Any]:
@@ -216,7 +216,7 @@ class MockTWSClient:
             "job_id": job_id,
             "action": "canceled",
             "status": "CANCELED",
-            "timestamp": "2024-01-01T12:00:00Z"
+            "timestamp": "2024-01-01T12:00:00Z",
         }
 
     async def get_job_status(self, job_id: str) -> JobStatus:
@@ -242,7 +242,7 @@ class MockTWSClient:
             name=f"JOB_{job_id}",
             workstation="CPU_WS",
             status="SUCC",
-            job_stream="STREAM_A"
+            job_stream="STREAM_A",
         )
 
     async def get_job_history(self, job_id: str) -> List[Dict[str, Any]]:
@@ -264,14 +264,14 @@ class MockTWSClient:
                 "job_id": job_id,
                 "status": "SUCC",
                 "timestamp": "2024-01-01T10:00:00Z",
-                "duration": "5m"
+                "duration": "5m",
             },
             {
                 "job_id": job_id,
                 "status": "RUNNING",
                 "timestamp": "2024-01-01T11:00:00Z",
-                "duration": "2m"
-            }
+                "duration": "2m",
+            },
         ]
 
     async def list_jobs(self, status_filter: str = None) -> List[JobStatus]:

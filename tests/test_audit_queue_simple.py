@@ -1,12 +1,12 @@
 """Tests for resync.core.audit_queue module."""
 
 import json
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from resync.core.audit_queue import AsyncAuditQueue
-from resync.core.exceptions import AuditError, DatabaseError, DataParsingError
 
 
 class TestAsyncAuditQueue:
@@ -14,8 +14,10 @@ class TestAsyncAuditQueue:
 
     def test_audit_queue_initialization(self):
         """Test AsyncAuditQueue initialization."""
-        with patch('redis.from_url') as mock_sync_redis, \
-             patch('redis.asyncio.Redis.from_url') as mock_async_redis:
+        with (
+            patch("redis.from_url") as mock_sync_redis,
+            patch("redis.asyncio.Redis.from_url") as mock_async_redis,
+        ):
 
             mock_sync_client = MagicMock()
             mock_async_client = AsyncMock()
@@ -96,7 +98,7 @@ class TestAsyncAuditQueue:
             "user_query": "Test query",
             "agent_response": "Test response",
             "ia_audit_reason": "Optional reason",
-            "ia_audit_confidence": 0.8
+            "ia_audit_confidence": 0.8,
         }
 
         assert "id" in memory
@@ -123,7 +125,9 @@ class TestAsyncAuditQueue:
         assert ":" in queue_key
         assert ":" in status_key
         assert ":" in data_key
-        assert all(key.startswith("resync:") for key in [queue_key, status_key, data_key])
+        assert all(
+            key.startswith("resync:") for key in [queue_key, status_key, data_key]
+        )
 
     def test_memory_data_field_types(self):
         """Test memory data field types."""
@@ -132,7 +136,7 @@ class TestAsyncAuditQueue:
             "user_query": "What is the capital of France?",
             "agent_response": "The capital of France is Paris.",
             "ia_audit_confidence": 0.95,
-            "ia_audit_reason": "This is a factual question about geography."
+            "ia_audit_reason": "This is a factual question about geography.",
         }
 
         # Test that fields have correct types
@@ -162,11 +166,7 @@ class TestAsyncAuditQueue:
 
     def test_audit_queue_key_prefix_consistency(self):
         """Test audit queue key prefix consistency."""
-        keys = [
-            "resync:audit_queue",
-            "resync:audit_status",
-            "resync:audit_data"
-        ]
+        keys = ["resync:audit_queue", "resync:audit_status", "resync:audit_data"]
 
         # All keys should have the same prefix
         for key in keys:
@@ -191,16 +191,16 @@ class TestAsyncAuditQueue:
 
         # Check that methods exist (even if not implemented)
         expected_methods = [
-            'add_audit_record',
-            'get_pending_audits',
-            'update_audit_status',
-            'delete_audit_record',
-            'is_memory_approved',
-            'get_queue_length',
-            'get_all_audits',
-            'get_audits_by_status',
-            'get_audit_metrics',
-            'health_check'
+            "add_audit_record",
+            "get_pending_audits",
+            "update_audit_status",
+            "delete_audit_record",
+            "is_memory_approved",
+            "get_queue_length",
+            "get_all_audits",
+            "get_audits_by_status",
+            "get_audit_metrics",
+            "health_check",
         ]
 
         for method_name in expected_methods:
@@ -213,16 +213,16 @@ class TestAsyncAuditQueue:
         queue = AsyncAuditQueue.__new__(AsyncAuditQueue)
 
         async_methods = [
-            'add_audit_record',
-            'get_pending_audits',
-            'update_audit_status',
-            'delete_audit_record',
-            'is_memory_approved',
-            'get_queue_length',
-            'get_all_audits',
-            'get_audits_by_status',
-            'get_audit_metrics',
-            'health_check'
+            "add_audit_record",
+            "get_pending_audits",
+            "update_audit_status",
+            "delete_audit_record",
+            "is_memory_approved",
+            "get_queue_length",
+            "get_all_audits",
+            "get_audits_by_status",
+            "get_audit_metrics",
+            "health_check",
         ]
 
         for method_name in async_methods:
@@ -235,22 +235,19 @@ class TestAsyncAuditQueue:
         from resync.core import audit_queue
 
         # Test that the class is available
-        assert hasattr(audit_queue, 'AsyncAuditQueue')
+        assert hasattr(audit_queue, "AsyncAuditQueue")
 
         # Test that exceptions are imported
-        assert hasattr(audit_queue, 'AuditError')
-        assert hasattr(audit_queue, 'DatabaseError')
-        assert hasattr(audit_queue, 'DataParsingError')
+        assert hasattr(audit_queue, "AuditError")
+        assert hasattr(audit_queue, "DatabaseError")
+        assert hasattr(audit_queue, "DataParsingError")
 
     def test_audit_queue_module_structure(self):
         """Test audit queue module structure."""
         import resync.core.audit_queue as aq
 
         # Test that the class exists
-        assert hasattr(aq, 'AsyncAuditQueue')
+        assert hasattr(aq, "AsyncAuditQueue")
 
         # Test that the class is properly defined
         assert issubclass(aq.AsyncAuditQueue, object)
-
-
-

@@ -1,11 +1,7 @@
 """Tests for resync.settings module."""
 
-import os
-from unittest.mock import patch
-import pytest
-
-from resync.settings import settings, APP_ENV
 from config.base import Settings
+from resync.settings import APP_ENV, settings
 
 
 class TestSettingsModule:
@@ -22,8 +18,12 @@ class TestSettingsModule:
     def test_settings_has_required_attributes(self):
         """Test that settings has all required attributes."""
         required_attrs = [
-            'PROJECT_NAME', 'PROJECT_VERSION', 'BASE_DIR',
-            'LLM_ENDPOINT', 'LLM_API_KEY', 'TWS_MOCK_MODE'
+            "PROJECT_NAME",
+            "PROJECT_VERSION",
+            "BASE_DIR",
+            "LLM_ENDPOINT",
+            "LLM_API_KEY",
+            "TWS_MOCK_MODE",
         ]
 
         for attr in required_attrs:

@@ -67,8 +67,8 @@ class OptimizedTWSClient:
                 pool=5,
             ),
             limits=httpx.Limits(
-                max_connections=10,  # TWS doesn't support many concurrent connections
-                max_keepalive_connections=3,
+                max_connections=20,  # 15 users + 4M jobs/month = need more connections
+                max_keepalive_connections=8,
             ),
         )
         # Caching layer to reduce redundant API calls - now using cache hierarchy
