@@ -5,7 +5,7 @@ import time
 from typing import Any, Dict
 
 from resync.core.async_cache import AsyncTTLCache
-from resync.core.enhanced_async_cache import EnhancedAsyncTTLCache
+from resync.core.enhanced_async_cache import TWS_OptimizedAsyncCache
 
 
 class CacheBenchmark:
@@ -34,7 +34,7 @@ class CacheBenchmark:
             ttl_seconds=60, cleanup_interval=30, num_shards=num_shards
         )
 
-        enhanced_cache = EnhancedAsyncTTLCache(
+        enhanced_cache = TWS_OptimizedAsyncCache(
             ttl_seconds=60, cleanup_interval=30, num_shards=num_shards
         )
 
@@ -232,9 +232,9 @@ class CacheBenchmark:
                         "AsyncTTLCache", original_cache, operation
                     )
                 )
-                self.results[f"enhanced_{operation}"] = (
+                self.results[f"tws_optimized_{operation}"] = (
                     await self.run_single_operation_benchmark(
-                        "EnhancedAsyncTTLCache", enhanced_cache, operation
+                        "TWS_OptimizedAsyncCache", enhanced_cache, operation
                     )
                 )
 
@@ -245,9 +245,9 @@ class CacheBenchmark:
                         "AsyncTTLCache", original_cache, num_workers=workers
                     )
                 )
-                self.results[f"enhanced_concurrent_{workers}"] = (
+                self.results[f"tws_optimized_concurrent_{workers}"] = (
                     await self.run_concurrent_benchmark(
-                        "EnhancedAsyncTTLCache", enhanced_cache, num_workers=workers
+                        "TWS_OptimizedAsyncCache", enhanced_cache, num_workers=workers
                     )
                 )
 
@@ -255,8 +255,8 @@ class CacheBenchmark:
             self.results["original_cleanup"] = await self.run_cleanup_benchmark(
                 "AsyncTTLCache", original_cache
             )
-            self.results["enhanced_cleanup"] = await self.run_cleanup_benchmark(
-                "EnhancedAsyncTTLCache", enhanced_cache
+            self.results["tws_optimized_cleanup"] = await self.run_cleanup_benchmark(
+                "TWS_OptimizedAsyncCache", enhanced_cache
             )
 
         finally:
@@ -278,7 +278,7 @@ class CacheBenchmark:
         print("Single Operation Performance (ops/sec):")
         print("-" * 60)
         print(
-            f"{'Operation':<10} | {'AsyncTTLCache':<20} | {'EnhancedAsyncTTLCache':<20} | {'Improvement':<10}"
+            f"{'Operation':<10} | {'AsyncTTLCache':<20} | {'TWS_OptimizedAsyncCache':<20} | {'Improvement':<10}"
         )
         print("-" * 60)
 
@@ -286,7 +286,7 @@ class CacheBenchmark:
             orig = self.results.get(f"original_{op}", {}).get(
                 "operations_per_second", 0
             )
-            enhanced = self.results.get(f"enhanced_{op}", {}).get(
+            enhanced = self.results.get(f"tws_optimized_{op}", {}).get(
                 "operations_per_second", 0
             )
             improvement = ((enhanced / orig) - 1) * 100 if orig > 0 else 0
@@ -299,7 +299,7 @@ class CacheBenchmark:
         print("\nConcurrent Performance (ops/sec):")
         print("-" * 70)
         print(
-            f"{'Workers':<10} | {'AsyncTTLCache':<20} | {'EnhancedAsyncTTLCache':<20} | {'Improvement':<10}"
+            f"{'Workers':<10} | {'AsyncTTLCache':<20} | {'TWS_OptimizedAsyncCache':<20} | {'Improvement':<10}"
         )
         print("-" * 70)
 
@@ -307,7 +307,7 @@ class CacheBenchmark:
             orig = self.results.get(f"original_concurrent_{workers}", {}).get(
                 "operations_per_second", 0
             )
-            enhanced = self.results.get(f"enhanced_concurrent_{workers}", {}).get(
+            enhanced = self.results.get(f"tws_optimized_concurrent_{workers}", {}).get(
                 "operations_per_second", 0
             )
             improvement = ((enhanced / orig) - 1) * 100 if orig > 0 else 0
@@ -320,12 +320,12 @@ class CacheBenchmark:
         print("\nLatency Results (ms) for 100 Workers:")
         print("-" * 70)
         print(
-            f"{'Metric':<10} | {'AsyncTTLCache':<20} | {'EnhancedAsyncTTLCache':<20} | {'Improvement':<10}"
+            f"{'Metric':<10} | {'AsyncTTLCache':<20} | {'TWS_OptimizedAsyncCache':<20} | {'Improvement':<10}"
         )
         print("-" * 70)
 
         orig_results = self.results.get("original_concurrent_100", {})
-        enhanced_results = self.results.get("enhanced_concurrent_100", {})
+        enhanced_results = self.results.get("tws_optimized_concurrent_100", {})
 
         for metric in [
             "avg_latency_ms",
@@ -348,12 +348,12 @@ class CacheBenchmark:
         print("\nCleanup Performance:")
         print("-" * 70)
         print(
-            f"{'Metric':<15} | {'AsyncTTLCache':<20} | {'EnhancedAsyncTTLCache':<20} | {'Improvement':<10}"
+            f"{'Metric':<15} | {'AsyncTTLCache':<20} | {'TWS_OptimizedAsyncCache':<20} | {'Improvement':<10}"
         )
         print("-" * 70)
 
         orig_cleanup = self.results.get("original_cleanup", {})
-        enhanced_cleanup = self.results.get("enhanced_cleanup", {})
+        enhanced_cleanup = self.results.get("tws_optimized_cleanup", {})
 
         orig_duration = orig_cleanup.get("duration_seconds", 0)
         enhanced_duration = enhanced_cleanup.get("duration_seconds", 0)

@@ -16,7 +16,9 @@ class EncryptionService:
     @staticmethod
     def decrypt(encrypted_data: str) -> str:
         """Decrypt data."""
-        return encrypted_data.replace("encrypted_", "")
+        if encrypted_data.startswith("encrypted_"):
+            return encrypted_data[10:]  # Remove "encrypted_" prefix
+        return encrypted_data  # Return as-is if not encrypted
 
 
 # Logger masking
@@ -25,8 +27,21 @@ logger = logging.getLogger(__name__)
 
 def mask_sensitive_data_in_logs(record) -> None:
     """Mask sensitive data in log records."""
-    if hasattr(record, "msg") and "password" in str(record.msg).lower():
-        record.msg = str(record.msg).replace("password", "***")
+    if hasattr(record, "msg"):
+        msg_str = str(record.msg)
+        # Replace entire lines containing password with masked version
+        import re
+        lines = msg_str.split('\n')
+        masked_lines = []
+
+        for line in lines:
+            if 'password' in line.lower():
+                # Mask the entire line containing password
+                masked_lines.append('*** PASSWORD LOG ENTRY MASKED ***')
+            else:
+                masked_lines.append(line)
+
+        record.msg = '\n'.join(masked_lines)
     return True
 
 

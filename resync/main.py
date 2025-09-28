@@ -23,6 +23,7 @@ from resync.core.exceptions import ConfigError, FileProcessingError
 from resync.core.fastapi_di import inject_container
 from resync.core.ia_auditor import analyze_and_flag_memories
 from resync.core.rag_watcher import watch_rag_directory
+from resync.core.tws_monitor import tws_monitor
 from resync.settings import settings
 
 # Configure logging
@@ -49,6 +50,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     rag_watcher_task = asyncio.create_task(watch_rag_directory())
     logger.info("Started RAG directory watcher.")
 
+    # Start TWS monitoring system
+    await tws_monitor.start_monitoring()
+    logger.info("Started TWS monitoring system.")
+
     # Initialize the Knowledge Graph
     logger.info("Initializing Knowledge Graph for continuous learning...")
 
@@ -68,6 +73,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Gracefully stop the watchers and scheduler
     config_watcher_task.cancel()
     rag_watcher_task.cancel()
+
+    # Stop TWS monitoring system
+    await tws_monitor.stop_monitoring()
+    logger.info("TWS monitoring system stopped.")
+
     if app.state.scheduler:
         app.state.scheduler.shutdown()
         logger.info("IA Auditor scheduler stopped.")

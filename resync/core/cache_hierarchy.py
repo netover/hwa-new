@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from time import time as time_func
 from typing import Any, Dict, List, Optional, Tuple
 
-from resync.core.enhanced_async_cache import EnhancedAsyncTTLCache
+from resync.core.enhanced_async_cache import TWS_OptimizedAsyncCache
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -178,7 +178,7 @@ class CacheHierarchy:
         from resync.settings import settings
 
         self.l1_cache = L1Cache(max_size=settings.CACHE_HIERARCHY_L1_MAX_SIZE)
-        self.l2_cache = EnhancedAsyncTTLCache(
+        self.l2_cache = TWS_OptimizedAsyncCache(
             ttl_seconds=settings.CACHE_HIERARCHY_L2_TTL,
             cleanup_interval=settings.CACHE_HIERARCHY_L2_CLEANUP_INTERVAL,
             num_shards=getattr(settings, "CACHE_HIERARCHY_NUM_SHARDS", 16),

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import pytest_asyncio
 
-from resync.core.enhanced_async_cache import EnhancedAsyncTTLCache, ConsistentHash
+from resync.core.enhanced_async_cache import TWS_OptimizedAsyncCache, ConsistentHash
 
 
 class TestConsistentHash:
@@ -64,13 +64,13 @@ class TestConsistentHash:
         assert changed < len(keys) * 0.3
 
 
-class TestEnhancedAsyncTTLCache:
-    """Test suite for EnhancedAsyncTTLCache functionality."""
+class TestTWSOptimizedAsyncCache:
+    """Test suite for TWS_OptimizedAsyncCache functionality."""
 
     @pytest_asyncio.fixture
     async def cache(self):
         """Create a cache instance for testing."""
-        cache = EnhancedAsyncTTLCache(ttl_seconds=1, cleanup_interval=0.1)
+        cache = TWS_OptimizedAsyncCache(ttl_seconds=1, cleanup_interval=0.1)
         yield cache
         await cache.stop()
 
@@ -186,7 +186,7 @@ class TestEnhancedAsyncTTLCache:
     @pytest.mark.asyncio
     async def test_parallel_cleanup(self):
         """Test parallel cleanup of expired entries."""
-        cache = EnhancedAsyncTTLCache(ttl_seconds=0.2, cleanup_interval=0.1)
+        cache = TWS_OptimizedAsyncCache(ttl_seconds=0.2, cleanup_interval=0.1)
 
         try:
             # Add many items with short TTL

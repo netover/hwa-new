@@ -194,3 +194,63 @@ async def files_endpoint(path: str):
     if ".." in path or path.startswith("/"):
         raise HTTPException(status_code=400, detail="Invalid path")
     return {"path": path}
+
+
+# --- TWS Monitoring Endpoints ---
+@api_router.get("/monitoring/metrics", summary="Get TWS Performance Metrics")
+async def get_tws_metrics():
+    """
+    Returns comprehensive TWS performance metrics including:
+    - API performance
+    - Cache hit ratios
+    - LLM usage and costs
+    - Circuit breaker status
+    - Memory usage
+    """
+    return tws_monitor.get_performance_report()
+
+
+@api_router.get("/monitoring/alerts", summary="Get Recent System Alerts")
+async def get_tws_alerts(limit: int = 10):
+    """
+    Returns recent system alerts and warnings.
+
+    Args:
+        limit: Maximum number of alerts to return (default: 10)
+    """
+    return tws_monitor.get_alerts(limit=limit)
+
+
+@api_router.get("/monitoring/health", summary="Get TWS System Health")
+async def get_tws_health():
+    """
+    Returns overall TWS system health status.
+    """
+    performance_report = tws_monitor.get_performance_report()
+
+    # Determine health status
+    critical_alerts = [
+        alert
+        for alert in performance_report["alerts"]
+        if alert["severity"] == "critical"
+    ]
+
+    warning_alerts = [
+        alert
+        for alert in performance_report["alerts"]
+        if alert["severity"] == "warning"
+    ]
+
+    if critical_alerts:
+        status = "critical"
+    elif warning_alerts:
+        status = "warning"
+    else:
+        status = "healthy"
+
+    return {
+        "status": status,
+        "critical_alerts": len(critical_alerts),
+        "warning_alerts": len(warning_alerts),
+        "last_updated": performance_report["current_metrics"].get("timestamp"),
+    }

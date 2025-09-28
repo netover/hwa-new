@@ -4,6 +4,8 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import sqlite3
 import tempfile
+import os
+import threading
 from pathlib import Path
 
 from resync.core.audit_db import (
@@ -14,8 +16,156 @@ from resync.core.audit_db import (
     update_audit_status,
     delete_audit_record,
     is_memory_approved,
-    DATABASE_PATH
 )
+
+
+class TestAuditDB:
+    """Test suite for audit database functions."""
+
+    @pytest.fixture
+    def temp_db(self):
+        """Use the real database for testing."""
+        # Clean the database before each test
+        try:
+            from resync.core.audit_db import delete_audit_record, get_pending_audits
+            # Delete all existing records
+            pending = get_pending_audits()
+            for record in pending:
+                delete_audit_record(record['memory_id'])
+        except:
+            pass
+
+        yield "audit_queue.db"
+
+    @pytest.fixture
+    def sample_memory(self):
+        """Sample memory data for testing."""
+        import uuid
+        return {
+            "id": f"test_memory_{uuid.uuid4().hex[:8]}",
+            "user_query": "What is the capital of France?",
+            "agent_response": "The capital of France is Paris.",
+            "ia_audit_reason": "This is a factual question about geography.",
+            "ia_audit_confidence": 0.95
+        }
+
+    def test_get_db_connection(self):
+        """Test database connection establishment."""
+        conn = get_db_connection()
+        assert isinstance(conn, sqlite3.Connection)
+        assert conn.row_factory == sqlite3.Row
+        conn.close()
+
+    def test_add_audit_record_success(self, sample_memory):
+        """Test successful addition of audit record."""
+        result = add_audit_record(sample_memory)
+
+        assert result is not None
+        assert isinstance(result, int)
+
+        # Verify record was added
+        conn = sqlite3.connect("audit_queue.db")
+        conn.row_factory = sqlite3.Row  # Enable column access by name
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM audit_queue WHERE memory_id = ?", (sample_memory["id"],))
+        row = cursor.fetchone()
+
+        assert row is not None
+        assert row['memory_id'] == sample_memory["id"]
+        assert row['user_query'] == sample_memory["user_query"]
+        assert row['agent_response'] == sample_memory["agent_response"]
+        assert row['status'] == 'pending'
+
+        conn.close()
+
+    def test_get_pending_audits_empty(self):
+        """Test getting pending audits when database is empty."""
+        audits = get_pending_audits()
+        assert isinstance(audits, list)
+        # Should be empty after our cleanup
+        assert len(audits) == 0
+
+    def test_get_pending_audits_with_data(self, sample_memory):
+        """Test getting pending audits with existing data."""
+        # Add a pending record
+        add_audit_record(sample_memory)
+
+        # Get pending audits
+        pending_audits = get_pending_audits()
+
+        assert len(pending_audits) >= 1
+        found = False
+        for audit in pending_audits:
+            if audit['memory_id'] == sample_memory["id"]:
+                found = True
+                assert audit['status'] == 'pending'
+                break
+        assert found, f"Memory {sample_memory['id']} not found in pending audits"
+
+    def test_update_audit_status_success(self, sample_memory):
+        """Test successful audit status update."""
+        # Add a record first
+        add_audit_record(sample_memory)
+
+        # Update status
+        result = update_audit_status(sample_memory["id"], "approved")
+        assert result is True
+
+        # Verify update
+        conn = sqlite3.connect("audit_queue.db")
+        conn.row_factory = sqlite3.Row  # Enable column access by name
+        cursor = conn.cursor()
+        cursor.execute("SELECT status FROM audit_queue WHERE memory_id = ?", (sample_memory["id"],))
+        row = cursor.fetchone()
+        assert row['status'] == 'approved'
+
+        conn.close()
+
+    def test_update_audit_status_not_found(self):
+        """Test updating status of non-existent record."""
+        result = update_audit_status("non_existent_id", "approved")
+        assert result is False
+
+    def test_delete_audit_record_success(self, sample_memory):
+        """Test successful audit record deletion."""
+        # Add a record first
+        add_audit_record(sample_memory)
+
+        # Delete the record
+        result = delete_audit_record(sample_memory["id"])
+        assert result is True
+
+        # Verify deletion
+        conn = sqlite3.connect("audit_queue.db")
+        conn.row_factory = sqlite3.Row  # Enable column access by name
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM audit_queue WHERE memory_id = ?", (sample_memory["id"],))
+        row = cursor.fetchone()
+        assert row is None
+
+        conn.close()
+
+    def test_is_memory_approved_true(self, sample_memory):
+        """Test checking if memory is approved when it is."""
+        # Add and approve a record
+        add_audit_record(sample_memory)
+        update_audit_status(sample_memory["id"], "approved")
+
+        result = is_memory_approved(sample_memory["id"])
+        assert result is True
+
+    def test_is_memory_approved_false_pending(self, sample_memory):
+        """Test checking if memory is approved when it's pending."""
+        # Add a pending record
+        add_audit_record(sample_memory)
+
+        result = is_memory_approved(sample_memory["id"])
+        assert result is False
+
+    def test_is_memory_approved_not_found(self):
+        """Test checking if non-existent memory is approved."""
+        result = is_memory_approved("non_existent_id")
+        assert result is False
 
 
 class TestDatabaseConnection:
