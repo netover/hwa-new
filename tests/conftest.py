@@ -25,9 +25,8 @@ from resync.core.interfaces import (
     ITWSClient,
 )
 from resync.core.knowledge_graph import AsyncKnowledgeGraph
-from resync.services.tws_service import OptimizedTWSClient
 from resync.main import app as main_app
-
+from resync.services.tws_service import OptimizedTWSClient
 
 # --- Mock Service Fixtures ---
 
@@ -112,6 +111,55 @@ def mock_audit_queue() -> MagicMock:
     mock.update_audit_status = AsyncMock(return_value=True)
     mock.is_memory_approved = AsyncMock(return_value=False)
     return mock
+
+
+@pytest.fixture
+def mock_redis_client() -> MagicMock:
+    """Create a fully mocked Redis client for unit tests."""
+    mock = MagicMock()
+    # Configure default behaviors
+    mock.keys.return_value = []
+    mock.ttl.return_value = -1
+    mock.exists.return_value = 0
+    mock.delete.return_value = 1
+    mock.hget.return_value = None
+    mock.hset.return_value = 1
+    mock.lpush.return_value = 1
+    mock.lrange.return_value = []
+    mock.llen.return_value = 0
+    mock.pipeline.return_value = MagicMock()
+    return mock
+
+
+@pytest.fixture
+def audit_queue(mock_redis_client: MagicMock) -> AsyncAuditQueue:
+    """Create an AsyncAuditQueue instance with mocked Redis for testing."""
+    # Create AsyncAuditQueue instance
+    queue = AsyncAuditQueue.__new__(
+        AsyncAuditQueue
+    )  # Don't call __init__ to avoid Redis connection
+
+    # Set up the instance attributes
+    queue.redis_url = "redis://localhost:6379"
+    queue.audit_queue_key = "resync:audit_queue"
+    queue.audit_status_key = "resync:audit_status"
+    queue.audit_data_key = "resync:audit_data"
+
+    # Use the mocked Redis client
+    queue.redis_client = mock_redis_client
+    queue.sync_client = mock_redis_client
+    queue.async_client = mock_redis_client
+
+    # Create a mock distributed lock that can be awaited
+    mock_lock = AsyncMock()
+    mock_lock.cleanup_expired_locks = AsyncMock(
+        side_effect=lambda *args, **kwargs: 2
+    )  # Return expected count for tests
+    mock_lock.acquire = AsyncMock()
+    mock_lock.force_release = AsyncMock()
+    queue.distributed_lock = mock_lock
+
+    return queue
 
 
 # --- DI Container Fixtures ---
@@ -204,3 +252,40 @@ def patch_settings(mock_settings: MagicMock) -> Generator[None, None, None]:
         patch("resync.core.audit_queue.settings", mock_settings),
     ):
         yield
+
+
+@pytest.fixture(scope="module")
+def redis_client():
+    """Create a real Redis client for integration tests."""
+    import redis
+    from redis.exceptions import ConnectionError
+
+    # Try to connect to Redis
+    client = redis.Redis.from_url("redis://localhost:6379")
+
+    # Test connection
+    try:
+        client.ping()
+    except ConnectionError as e:
+        raise RuntimeError("Redis server not available") from e
+
+    yield client
+
+    # Cleanup (not strictly necessary as Redis handles this)
+    client.disconnect()
+
+
+@pytest.fixture(scope="function")
+def clean_redis(redis_client):
+    """Fixture that provides a cleaned Redis instance for each test."""
+    # Store current DB keys
+    keys = redis_client.keys("resync:*")
+
+    yield redis_client
+
+    # Restore state by deleting any new keys
+    if keys:
+        redis_client.delete(*keys)
+    else:
+        # Clear all resync keys
+        redis_client.delete(*redis_client.keys("resync:*"))

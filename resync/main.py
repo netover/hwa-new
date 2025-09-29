@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+
+# Configure logging first
+from resync.core.logger import setup_logging
+
+setup_logging()
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict
@@ -11,6 +16,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pybreaker import CircuitBreaker
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 from watchfiles import awatch
 
 from resync.api.audit import router as audit_router
@@ -29,6 +36,13 @@ from resync.settings import settings
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Circuit Breaker for Redis/TWS operations
+redis_circuit_breaker = CircuitBreaker(
+    fail_max=5,  # Open after 5 failures
+    timeout=60,  # Wait 60 seconds before retrying
+    name="redis_circuit_breaker",
+)
 
 
 @asynccontextmanager
@@ -62,8 +76,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         yield
 
+    except KeyboardInterrupt:
+        logger.info("🛑 Application startup interrupted by user")
+        raise SystemExit("Startup interrupted by user") from KeyboardInterrupt
+    except ImportError as e:
+        logger.critical(f"❌ Missing required dependencies: {e}")
+        raise SystemExit(f"Dependency error: {e}") from e
+    except (OSError, IOError) as e:
+        logger.critical(f"❌ File system error during startup: {e}")
+        raise SystemExit(f"File system error: {e}") from e
     except Exception as e:
-        logger.critical(f"❌ Failed to start application: {e}")
+        logger.critical(f"❌ Unexpected error during startup: {e}", exc_info=True)
         raise SystemExit(f"Critical failure during startup: {e}") from e
 
     finally:
@@ -75,7 +98,14 @@ def validate_settings() -> None:
     """Validate critical settings before startup."""
     logger.info("🔧 Validating settings...")
 
-    required_vars = ["TWS_HOST", "TWS_PORT", "AGENT_MODEL_NAME", "LLM_ENDPOINT", "AGENT_CONFIG_PATH", "RAG_DIR"]
+    required_vars = [
+        "TWS_HOST",
+        "TWS_PORT",
+        "AGENT_MODEL_NAME",
+        "LLM_ENDPOINT",
+        "AGENT_CONFIG_PATH",
+        "RAG_DIR",
+    ]
     missing = []
 
     for var in required_vars:
@@ -89,7 +119,11 @@ def validate_settings() -> None:
         raise ConfigError(error_msg)
 
     # Additional validations
-    if not isinstance(settings.TWS_PORT, int) or settings.TWS_PORT <= 0 or settings.TWS_PORT > 65535:
+    if (
+        not isinstance(settings.TWS_PORT, int)
+        or settings.TWS_PORT <= 0
+        or settings.TWS_PORT > 65535
+    ):
         error_msg = f"Invalid TWS_PORT: {settings.TWS_PORT} (must be integer 1-65535)"
         logger.critical(f"❌ {error_msg}")
         raise ConfigError(error_msg)
@@ -176,9 +210,7 @@ async def initialize_schedulers() -> AsyncIOScheduler:
         job_config = get_auditor_job_config()
 
         scheduler.add_job(
-            analyze_and_flag_memories,
-            job_config["type"],
-            **job_config["config"]
+            analyze_and_flag_memories, job_config["type"], **job_config["config"]
         )
 
         # Run once on startup for immediate feedback
@@ -186,7 +218,9 @@ async def initialize_schedulers() -> AsyncIOScheduler:
             scheduler.add_job(analyze_and_flag_memories)
 
         scheduler.start()
-        logger.info(f"✅ IA Auditor scheduler initialized with {job_config['type']} schedule: {job_config['config']}")
+        logger.info(
+            f"✅ IA Auditor scheduler initialized with {job_config['type']} schedule: {job_config['config']}"
+        )
         if job_config.get("startup_enabled", False):
             logger.info("✅ IA Auditor will run on startup")
 
@@ -206,26 +240,28 @@ def get_auditor_job_config() -> Dict[str, Any]:
 
         # Validate frequency_hours
         if not isinstance(frequency_hours, int) or frequency_hours <= 0:
-            raise ValueError(f"IA_AUDITOR_FREQUENCY_HOURS must be a positive integer, got: {frequency_hours}")
+            raise ValueError(
+                f"IA_AUDITOR_FREQUENCY_HOURS must be a positive integer, got: {frequency_hours}"
+            )
 
         return {
             "type": "cron",
             "config": {"hour": f"*/{frequency_hours}"},  # Every N hours
-            "startup_enabled": startup_enabled
+            "startup_enabled": startup_enabled,
         }
     elif settings.APP_ENV == "development":
         # Development: More frequent for testing
         return {
             "type": "interval",
             "config": {"minutes": 30},  # Every 30 minutes
-            "startup_enabled": True
+            "startup_enabled": True,
         }
     else:
         # Default: Conservative approach
         return {
             "type": "cron",
             "config": {"hour": "*/6"},  # Every 6 hours
-            "startup_enabled": True
+            "startup_enabled": True,
         }
 
 
@@ -242,7 +278,9 @@ async def start_monitoring_system() -> None:
         logger.warning("Continuing without monitoring system")
 
 
-async def shutdown_application(app: FastAPI, background_tasks: Dict[str, asyncio.Task]) -> None:
+async def shutdown_application(
+    app: FastAPI, background_tasks: Dict[str, asyncio.Task]
+) -> None:
     """Gracefully shutdown all application components."""
     logger.info("🛑 Shutting down application...")
 
@@ -269,7 +307,11 @@ async def shutdown_application(app: FastAPI, background_tasks: Dict[str, asyncio
 
     # Stop scheduler
     try:
-        if hasattr(app, 'state') and hasattr(app.state, 'scheduler') and app.state.scheduler:
+        if (
+            hasattr(app, "state")
+            and hasattr(app.state, "scheduler")
+            and app.state.scheduler
+        ):
             app.state.scheduler.shutdown()
             logger.info("✅ IA Auditor scheduler stopped")
     except Exception as e:
@@ -284,6 +326,11 @@ async def shutdown_application(app: FastAPI, background_tasks: Dict[str, asyncio
         logger.error(f"❌ Error closing TWS client: {e}")
 
 
+@retry(
+    wait=wait_random_exponential(multiplier=1, max=60),
+    stop=stop_after_attempt(5),
+    reraise=True,
+)
 async def watch_config_changes(config_path: Path) -> None:
     """
     Watches the agent configuration file for changes and triggers a reload.
@@ -370,24 +417,22 @@ async def health_check():
     """
     from resync.core.tws_monitor import tws_monitor
 
-    health_status = {
-        "status": "healthy",
-        "timestamp": time.time(),
-        "components": {}
-    }
+    health_status = {"status": "healthy", "timestamp": time.time(), "components": {}}
 
     try:
         # Check TWS Client
-        if hasattr(agent_manager, 'tws_client') and agent_manager.tws_client:
+        if hasattr(agent_manager, "tws_client") and agent_manager.tws_client:
             health_status["components"]["tws_client"] = "connected"
         else:
             health_status["components"]["tws_client"] = "disconnected"
             health_status["status"] = "degraded"
 
         # Check Scheduler
-        if hasattr(app.state, 'scheduler') and app.state.scheduler:
+        if hasattr(app.state, "scheduler") and app.state.scheduler:
             scheduler_running = app.state.scheduler.running
-            health_status["components"]["scheduler"] = "running" if scheduler_running else "stopped"
+            health_status["components"]["scheduler"] = (
+                "running" if scheduler_running else "stopped"
+            )
             if not scheduler_running:
                 health_status["status"] = "degraded"
         else:
@@ -400,7 +445,9 @@ async def health_check():
         # Check Monitoring System
         try:
             monitoring_stats = tws_monitor.get_current_metrics()
-            health_status["components"]["monitoring"] = "active" if monitoring_stats else "inactive"
+            health_status["components"]["monitoring"] = (
+                "active" if monitoring_stats else "inactive"
+            )
         except Exception as e:
             health_status["components"]["monitoring"] = f"error: {str(e)}"
             health_status["status"] = "degraded"

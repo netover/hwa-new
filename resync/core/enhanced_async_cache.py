@@ -146,42 +146,57 @@ class KeyLock:
 
     async def _cleanup_old_locks(self) -> None:
         """Remove the least recently used locks to stay under max_locks."""
+        # Create a copy of locks dict to avoid modification during iteration
+        locks_copy = self.locks.copy()
+        access_times_copy = self.lock_access_times.copy()
+
         # Only clean up locks that aren't currently held
-        available_locks = [k for k, lock in self.locks.items() if not lock.locked()]
+        available_locks = [
+            k
+            for k, lock in locks_copy.items()
+            if not lock.locked() and k in access_times_copy
+        ]
 
         if not available_locks:
             return  # All locks are in use, can't clean up
 
         # Sort by access time and remove oldest
-        oldest_keys = sorted(
-            available_locks, key=lambda k: self.lock_access_times.get(k, 0)
-        )
+        oldest_keys = sorted(available_locks, key=lambda k: access_times_copy.get(k, 0))
 
-        # Remove the oldest third of unused locks
+        # Remove the oldest third of unused locks, but with safety check
         to_remove = oldest_keys[: max(1, len(oldest_keys) // 3)]
 
+        # Double-check locks are still available before deletion
         for key in to_remove:
-            del self.locks[key]
-            del self.lock_access_times[key]
+            if key in self.locks and not self.locks[key].locked():
+                del self.locks[key]
+                del self.lock_access_times[key]
+                logger.debug(f"Cleaned up lock for key: {key}")
+            else:
+                logger.debug(f"Skipped cleanup for lock {key} - still in use")
 
 
 class ShardLockManager:
     """
-    Manages hierarchical locking with both shard-level and key-level locks.
+    Simplified lock manager with optimized locking strategy.
 
-    This allows fine-grained locking for individual key operations while still
-    supporting efficient shard-wide operations.
+    Uses a single KeyLock manager for all shards to reduce overhead
+    and simplify the locking architecture.
     """
 
     def __init__(self, num_shards: int):
         """
-        Initialize the shard lock manager.
+        Initialize the simplified shard lock manager.
 
         Args:
-            num_shards: Number of shards
+            num_shards: Number of shards (for compatibility)
         """
-        self.shard_locks = [asyncio.Lock() for _ in range(num_shards)]
-        self.key_lock_managers = [KeyLock() for _ in range(num_shards)]
+        # Use a single KeyLock manager for all keys across all shards
+        # This simplifies locking and reduces memory usage
+        self.key_lock_manager = KeyLock(
+            max_locks=2048
+        )  # Increased for better performance
+        self.num_shards = num_shards  # Keep for compatibility
 
     async def acquire_shard_lock(self, shard_id: int) -> asyncio.Lock:
         """
@@ -191,9 +206,11 @@ class ShardLockManager:
             shard_id: The shard ID
 
         Returns:
-            The shard lock
+            A shard-level lock (uses key-based locking for simplicity)
         """
-        return self.shard_locks[shard_id]
+        # For shard locks, use a consistent key pattern
+        shard_key = f"__shard_{shard_id}__"
+        return await self.key_lock_manager.acquire(shard_key)
 
     async def acquire_key_lock(self, shard_id: int, key: str) -> asyncio.Lock:
         """
@@ -206,7 +223,7 @@ class ShardLockManager:
         Returns:
             A key-specific lock
         """
-        return await self.key_lock_managers[shard_id].acquire(key)
+        return await self.key_lock_manager.acquire(key)
 
 
 class CacheShard:
@@ -395,8 +412,15 @@ class TWS_OptimizedAsyncCache:
         # Initialize consistent hashing
         self.hasher = ConsistentHash(num_shards=self.num_shards)
 
-        # Initialize lock manager
+        # Initialize lock manager with configurable max locks
+        try:
+            from resync.settings import settings
+
+            max_locks = getattr(settings, "KEY_LOCK_MAX_LOCKS", 2048)
+        except ImportError:
+            max_locks = 2048
         self.lock_manager = ShardLockManager(num_shards=self.num_shards)
+        self.lock_manager.key_lock_manager.max_locks = max_locks
 
         # Initialize shards
         self.shards = [
@@ -434,6 +458,11 @@ class TWS_OptimizedAsyncCache:
         """Get the shard for a given key."""
         shard_id = self._get_shard_id(key)
         return self.shards[shard_id]
+
+    async def _get_key_lock(self, key: str) -> asyncio.Lock:
+        """Get a lock for a specific key across all shards."""
+        shard_id = self._get_shard_id(key)
+        return await self.lock_manager.acquire_key_lock(shard_id, key)
 
     def _start_cleanup_task(self) -> None:
         """Start the background cleanup task."""
