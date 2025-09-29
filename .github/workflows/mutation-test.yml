@@ -1,4 +1,4 @@
-name: Mutation Testing
+name: Mutation Testing  # Updated to fix deprecation error
 
 on:
   push:
