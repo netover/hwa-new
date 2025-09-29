@@ -13,7 +13,7 @@ settings = Dynaconf(
         f"settings.{os.environ.get('APP_ENV', 'development')}.toml"  # Environment-specific overrides
     ],
     environments=True,  # Enable environment-specific loading
-    load_dotenv=True,  # Load .env file if present
+    load_dotenv=False,  # Disable automatic .env loading for CI/CD compatibility
     env_switcher="APP_ENV",  # Use APP_ENV to switch environments
 )
 
@@ -23,7 +23,9 @@ ModelEndpoint = str
 # Post-process settings for type conversion and dynamic path resolution
 # Set BASE_DIR dynamically based on current working directory if not already set
 if not hasattr(settings, 'BASE_DIR') or not settings.BASE_DIR:
-    settings.BASE_DIR = Path.cwd()
+    # Use current working directory as base
+    current_dir = Path.cwd()
+    settings.BASE_DIR = current_dir
 
-# Ensure BASE_DIR is a Path object
-settings.BASE_DIR = Path(settings.BASE_DIR)
+# Ensure BASE_DIR is a Path object and resolve to absolute path
+settings.BASE_DIR = Path(settings.BASE_DIR).resolve()
