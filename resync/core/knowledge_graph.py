@@ -1,17 +1,16 @@
 """
-Knowledge Graph Integration for Resync
+Knowledge Graph Integration for Resync using Neo4j.
 
-This module implements a persistent knowledge graph using Mem0 AI to enable
-continuous learning from user interactions with AI agents. It captures
-conversations, outcomes, and solutions to build a self-improving system.
+This module implements a persistent knowledge graph using Neo4j to model and
+query the complex relationships within the TWS environment and user interactions.
 """
 
 import logging
+import httpx
 from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
 
-import httpx
-from pydantic import BaseModel
+from neo4j import AsyncGraphDatabase, AsyncDriver
 
 # Import settings
 from ..settings import settings
@@ -20,174 +19,77 @@ from ..settings import settings
 logger = logging.getLogger(__name__)
 
 
-class MemoryConfig(BaseModel):
-    """Configuration for the async Mem0 client."""
-
-    storage_provider: str = "qdrant"
-    storage_host: str = "localhost"
-    storage_port: int = 6333
-    embedding_provider: str = "openai"
-    embedding_model: str = "text-embedding-3-small"
-    llm_provider: str = "openai"
-    llm_model: str = "gpt-4o-mini"
-    api_key: Optional[str] = None
-
-
-class AsyncMem0Client:
+class AsyncKnowledgeGraph:
     """
-    A truly async wrapper around the Mem0 AI REST API.
+    A wrapper around a Neo4j database to manage a persistent knowledge graph for the Resync system.
 
-    This client eliminates blocking I/O by using httpx for all HTTP requests
-    and provides fully async methods for all Mem0 operations.
+    The knowledge graph stores:
+    - Conversations between users and AI agents
+    - TWS entities like Jobs, Jobstreams, and Workstations
+    - Relationships between all these entities
+
+    This enables RAG (Retrieval-Augmented Generation) to become more intelligent over time.
     """
 
-    def __init__(self, config: MemoryConfig):
+    _driver: Optional[AsyncDriver] = None
+
+    def __init__(self, settings_module: Any = settings):
         """
-        Initialize the async Mem0 client.
+        Initialize the AsyncKnowledgeGraph with Neo4j connection settings.
 
         Args:
-            config: Configuration object with API settings.
+            settings_module: The settings module to use (default: global settings).
         """
-        self.config = config
-        self.base_url = f"http://{config.storage_host}:{config.storage_port}"
-        headers_list = [("Content-Type", "application/json")]
-        if config.api_key:
-            headers_list.append(("Authorization", f"Bearer {config.api_key}"))
-        self.headers = httpx.Headers(headers_list)
-        self.timeout = httpx.Timeout(30.0, connect=10.0)
-        logger.info(f"AsyncMem0Client initialized with base URL: {self.base_url}")
+        self.settings = settings_module
+        self.uri = self.settings.NEO4J_URI
+        self.auth = (self.settings.NEO4J_USER, self.settings.NEO4J_PASSWORD)
+        logger.info(
+            f"AsyncKnowledgeGraph configured for Neo4j instance at {self.uri}"
+        )
 
-    async def add(self, memory_content: Dict[str, Any]) -> str:
+    def _get_driver(self) -> AsyncDriver:
+        """Get or create the Neo4j async driver instance."""
+        if self._driver is None or self._driver.closed():
+            logger.info("Initializing new Neo4j driver.")
+            self._driver = AsyncGraphDatabase.driver(self.uri, auth=self.auth)
+        return self._driver
+
+    async def close(self):
+        """Close the Neo4j driver connection."""
+        if self._driver and not self._driver.closed():
+            await self.driver.close()
+            logger.info("Neo4j driver closed.")
+
+    @property
+    def driver(self) -> AsyncDriver:
+        """Property to access the driver, ensuring it's initialized."""
+        return self._get_driver()
+
+    async def add_content(self, content: str, metadata: Dict[str, Any]) -> str:
         """
-        Add a memory to the knowledge graph asynchronously.
+        Adds a piece of content (e.g., a document chunk) to the knowledge graph.
 
         Args:
-            memory_content: The memory data to store.
+            content: The text content to store.
+            metadata: Additional metadata about the content (e.g., source file, chunk index).
 
         Returns:
             The unique ID of the stored memory.
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/memories",
-                json=memory_content,
-                headers=self.headers,
-            )
-            response.raise_for_status()
-            return cast(str, response.json()["id"])
-
-    async def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        query = """
+        CREATE (c:DocumentChunk {
+            content: $content,
+            source_file: $metadata.source_file,
+            chunk_index: $metadata.chunk_index,
+            total_chunks: $metadata.total_chunks,
+            uuid: randomUUID()
+        })
+        RETURN c.uuid AS uuid
         """
-        Search for memories asynchronously.
-
-        Args:
-            query: The search query.
-            limit: Maximum number of results to return.
-
-        Returns:
-            List of matching memories.
-        """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            params: Dict[str, str | int] = {"query": query, "limit": str(limit)}
-            response = await client.get(
-                f"{self.base_url}/search", params=params, headers=self.headers
-            )
-            response.raise_for_status()
-            return response.json()["results"]  # type: ignore[no-any-return]
-
-    async def update(self, memory_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Update a memory asynchronously.
-
-        Args:
-            memory_id: The ID of the memory to update.
-            updates: The fields to update.
-
-        Returns:
-            The updated memory data.
-        """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.patch(
-                f"{self.base_url}/memories/{memory_id}",
-                json=updates,
-                headers=self.headers,
-            )
-            response.raise_for_status()
-            return response.json()  # type: ignore[no-any-return]
-
-    async def delete(self, memory_id: str) -> None:
-        """
-        Delete a memory asynchronously.
-
-        Args:
-            memory_id: The ID of the memory to delete.
-        """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.delete(
-                f"{self.base_url}/memories/{memory_id}", headers=self.headers
-            )
-            response.raise_for_status()
-
-    async def add_observations(self, memory_id: str, observations: List[str]) -> None:
-        """
-        Add observations to a memory asynchronously.
-
-        Args:
-            memory_id: The ID of the memory to add observations to.
-            observations: List of observation strings.
-        """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            data = {"observations": observations}
-            response = await client.post(
-                f"{self.base_url}/memories/{memory_id}/observations",
-                json=data,
-                headers=self.headers,
-            )
-            response.raise_for_status()
-
-
-class AsyncKnowledgeGraph:
-    """
-    A wrapper around Mem0 AI to manage a persistent knowledge graph for the Resync system.
-
-    The knowledge graph stores:
-    - Conversations between users and AI agents
-    - Problem descriptions and root causes
-    - Solutions and troubleshooting steps
-    - User feedback on solution effectiveness
-
-    This enables RAG (Retrieval-Augmented Generation) to become more intelligent over time.
-
-    All methods are truly async without any blocking I/O operations.
-    """
-
-    def __init__(self, data_dir: Path = Path(".mem0"), settings_module: Any = settings):
-        """
-        Initialize the AsyncKnowledgeGraph with Mem0 configuration.
-
-        Args:
-            data_dir: Directory to store persistent memory data.
-            settings_module: The settings module to use (default: global settings).
-        """
-        self.settings = settings_module
-        self.data_dir = data_dir
-        self.data_dir.mkdir(exist_ok=True)
-
-        # Configure async Mem0 client
-        mem0_config = MemoryConfig(
-            storage_host=self.settings.MEM0_STORAGE_HOST,
-            storage_port=self.settings.MEM0_STORAGE_PORT,
-            embedding_provider=self.settings.MEM0_EMBEDDING_PROVIDER,
-            embedding_model=self.settings.MEM0_EMBEDDING_MODEL,
-            llm_provider=self.settings.MEM0_LLM_PROVIDER,
-            llm_model=self.settings.MEM0_LLM_MODEL,
-        )
-
-        # Initialize async Mem0 client
-        self.client = AsyncMem0Client(config=mem0_config)
-        logger.info(
-            f"AsyncKnowledgeGraph initialized with data directory: {self.data_dir}"
-        )
+        async with self.driver.session() as session:
+            result = await session.run(query, content=content, metadata=metadata)
+            record = await result.single()
+            return record["uuid"] if record else ""
 
     async def add_conversation(
         self,
@@ -208,19 +110,22 @@ class AsyncKnowledgeGraph:
         Returns:
             The unique ID of the stored memory.
         """
-        # Create a structured memory record
-        memory_content = {
-            "type": "conversation",
-            "user_query": user_query,
-            "agent_response": agent_response,
-            "agent_id": agent_id,
-            "context": context or {},
-        }
-
-        # Store in Mem0 using truly async client
-        memory_id = await self.client.add(memory_content)
-        logger.info(f"Added conversation to knowledge graph. Memory ID: {memory_id}")
-        return memory_id
+        query = """
+        CREATE (c:Conversation {
+            user_query: $user_query,
+            agent_response: $agent_response,
+            agent_id: $agent_id,
+            context: $context,
+            uuid: randomUUID()
+        })
+        RETURN c.uuid AS uuid
+        """
+        async with self.driver.session() as session:
+            result = await session.run(
+                query, user_query=user_query, agent_response=agent_response, agent_id=agent_id, context=context or {}
+            )
+            record = await result.single()
+            return record["uuid"] if record else ""
 
     async def search_similar_issues(
         self, query: str, limit: int = 5
@@ -235,9 +140,10 @@ class AsyncKnowledgeGraph:
         Returns:
             A list of relevant past memories with their metadata.
         """
-        memories = await self.client.search(query, limit)
-        logger.info(f"Found {len(memories)} similar issues for query: {query}")
-        return memories
+        # This would use the Neo4j Vector Index
+        # Placeholder implementation
+        logger.warning("search_similar_issues with vector index is not yet implemented.")
+        return []
 
     async def search_conversations(
         self,
@@ -258,33 +164,17 @@ class AsyncKnowledgeGraph:
         Returns:
             A list of conversation memories sorted efficiently.
         """
-        # Use a more specific query format for better performance
-        if query == "type:conversation":
-            search_query = "type:conversation"
-        else:
-            search_query = f"{query} AND type:conversation"
-
-        memories = await self.client.search(search_query, limit)
-
-        # Sort memories by creation time if available (in-memory sort for better performance)
-        try:
-            memories.sort(
-                key=lambda x: x.get("created_at", ""),
-                reverse=(sort_order.lower() == "desc"),
-            )
-        except TypeError as e:
-            logger.warning("Type error sorting memories by %s: %s", sort_by, e)
-        except KeyError as e:
-            logger.warning("Key error sorting memories by %s: %s", sort_by, e)
-        except ValueError as e:
-            logger.warning("Value error sorting memories by %s: %s", sort_by, e)
-        except Exception as e:
-            logger.warning("Unexpected error sorting memories by %s: %s", sort_by, e)
-            # Keep this generic handler but with better logging
-            # Don't raise since this is not critical functionality
-
-        logger.info("Found %d conversations for query: %s", len(memories), query)
-        return memories
+        # This is a placeholder. A real implementation would parse the query.
+        cypher_query = f"""
+        MATCH (c:Conversation)
+        RETURN c
+        ORDER BY c.{sort_by} {sort_order.upper()}
+        LIMIT {limit}
+        """
+        async with self.driver.session() as session:
+            result = await session.run(cypher_query)
+            records = await result.data()
+            return [record['c'] for record in records]
 
     async def add_solution_feedback(
         self, memory_id: str, feedback: str, rating: int
@@ -297,9 +187,15 @@ class AsyncKnowledgeGraph:
             feedback: The user's textual feedback (e.g., 'This helped!', 'Not useful').
             rating: A numerical rating from 1 to 5.
         """
-        # Update the memory with feedback using truly async client
-        await self.client.update(memory_id, {"feedback": feedback, "rating": rating})
-        logger.info(f"Added feedback to memory {memory_id}: {rating}/5 - {feedback}")
+        query = """
+        MATCH (c:Conversation {uuid: $memory_id})
+        SET c.feedback = $feedback, c.rating = $rating
+        """
+        async with self.driver.session() as session:
+            await session.run(query, memory_id=memory_id, feedback=feedback, rating=rating)
+        logger.info(
+            f"Added feedback to conversation {memory_id}: {rating}/5 - {feedback}"
+        )
 
     async def get_all_recent_conversations(
         self, limit: int = 100
@@ -333,24 +229,74 @@ class AsyncKnowledgeGraph:
         Returns:
             A formatted string of relevant past solutions and context.
         """
-        similar_issues = await self.search_similar_issues(user_query, limit=3)
-        if not similar_issues:
-            return "Nenhuma solução similar encontrada na base de conhecimento."
+        graph_schema = """
+        Node labels are: `Job`, `Jobstream`, `Workstation`, `User`, `Execution`, `Conversation`, `Message`, `DocumentChunk`.
+        Relationship types are: `CONTAINS`, `DEPENDS_ON`, `EXECUTED_ON`, `INSTANCE_OF`, `INTERACTED_IN`, `HAS_MESSAGE`, `MENTIONS`, `REFERENCES`.
+        `Job` properties: `name`, `type`.
+        `Execution` properties: `status`, `startTime`.
+        `Workstation` properties: `name`, `type`.
+        `Conversation` properties: `user_query`, `agent_response`.
+        """
 
-        context_parts = []
-        for mem in similar_issues:
-            if mem.get("content", {}).get("type") == "conversation":
-                content = mem["content"]
-                context_parts.append(
-                    f"""
---- Problema Similar ---
-Usuário: {content.get("user_query")}
-Solução: {content.get("agent_response")}
-Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
-"""
+        prompt = f"""
+        You are an expert Neo4j Cypher query translator. Given the following graph schema and a user question,
+        generate a Cypher query to answer the question. Return ONLY the Cypher query, with no explanations.
+
+        Schema:
+        {graph_schema}
+
+        Question: "{user_query}"
+
+        Cypher Query:
+        """
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.settings.LLM_ENDPOINT,
+                    json={
+                        "model": self.settings.AGENT_MODEL_NAME,
+                        "prompt": prompt,
+                        "stream": False,
+                    },
+                    headers={"Authorization": f"Bearer {self.settings.LLM_API_KEY}"},
+                    timeout=30.0,
                 )
+                response.raise_for_status()
+                
+                # Handle different API response structures (OpenAI vs Ollama)
+                response_data = response.json()
+                if "response" in response_data: # Ollama
+                    cypher_query = response_data["response"]
+                elif "choices" in response_data and response_data["choices"] and "text" in response_data["choices"][0]: # OpenAI (legacy completion)
+                    cypher_query = response_data["choices"][0]["text"]
+                elif "choices" in response_data and response_data["choices"]: # OpenAI
+                    cypher_query = response_data["choices"][0]["message"]["content"]
+                else:
+                    raise ValueError("Unsupported LLM API response format")
 
-        return "\n".join(context_parts)
+            logger.info(f"Generated Cypher query: {cypher_query}")
+
+            # --- Sanitize and validate the generated Cypher ---
+            # Extract from markdown code block if present
+            if "```" in cypher_query:
+                cypher_query = cypher_query.split("```")[1].replace("cypher", "").strip()
+
+            # Basic validation to prevent execution of garbage
+            if not cypher_query.strip().upper().startswith(("MATCH", "CREATE", "MERGE", "CALL")):
+                raise ValueError(f"Generated query is not a valid Cypher query: {cypher_query}")
+
+            # Execute the generated query
+            async with self.driver.session() as session:
+                result = await session.run(cypher_query)
+                records = await result.data()
+
+            # Format results for RAG context
+            return str(records) if records else "No relevant information found in the knowledge graph."
+
+        except Exception as e:
+            logger.error(f"Error during Text-to-Cypher or execution: {e}", exc_info=True)
+            return "Error retrieving context from the knowledge graph."
 
     # --- Additional methods for race condition fixes ---
 
@@ -364,12 +310,8 @@ Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
         Returns:
             True if the memory is flagged, False otherwise.
         """
-        memories = await self.client.search(f"id:{memory_id}", 1)
-
-        if memories:
-            observations = memories[0].get("observations", [])
-            return any("FLAGGED_BY_IA" in str(obs) for obs in observations)
-
+        # Placeholder implementation
+        logger.warning("is_memory_flagged is not yet implemented.")
         return False
 
     async def is_memory_approved(self, memory_id: str) -> bool:
@@ -382,12 +324,8 @@ Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
         Returns:
             True if the memory is approved, False otherwise.
         """
-        memories = await self.client.search(f"id:{memory_id}", 1)
-
-        if memories:
-            observations = memories[0].get("observations", [])
-            return any("MANUALLY_APPROVED_BY_ADMIN" in str(obs) for obs in observations)
-
+        # Placeholder implementation
+        logger.warning("is_memory_approved is not yet implemented.")
         return False
 
     async def delete_memory(self, memory_id: str) -> None:
@@ -397,8 +335,12 @@ Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
         Args:
             memory_id: The ID of the memory to delete.
         """
-        await self.client.delete(memory_id)
-        logger.info("Deleted memory %s from knowledge graph", memory_id)
+        query = "MATCH (n {uuid: $memory_id}) DETACH DELETE n"
+        async with self.driver.session() as session:
+            await session.run(query, memory_id=memory_id)
+        logger.info(
+            f"Deleted node with uuid {memory_id} from knowledge graph"
+        )
 
     async def add_observations(self, memory_id: str, observations: List[str]) -> None:
         """
@@ -408,8 +350,12 @@ Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
             memory_id: The ID of the memory to add observations to.
             observations: List of observation strings to add.
         """
-        await self.client.add_observations(memory_id, observations)
-        logger.info(f"Added {len(observations)} observations to memory {memory_id}")
+        # This would likely involve creating new nodes or updating properties.
+        # Placeholder implementation
+        logger.warning("add_observations is not yet implemented.")
+        logger.info(
+            f"Received {len(observations)} observations for memory {memory_id}"
+        )
 
     # --- Atomic Operations for Race Condition Prevention ---
 
@@ -423,18 +369,8 @@ Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
         Returns:
             True if already processed (flagged or approved), False otherwise.
         """
-        memories = await self.client.search(f"id:{memory_id}", 1)
-
-        if memories:
-            observations = memories[0].get("observations", [])
-            # Check for any processing indicators
-            return any(
-                "FLAGGED_BY_IA" in str(obs)
-                or "MANUALLY_APPROVED_BY_ADMIN" in str(obs)
-                or "PROCESSED_BY_IA_AUDITOR" in str(obs)
-                for obs in observations
-            )
-
+        # Placeholder implementation
+        logger.warning("is_memory_already_processed is not yet implemented.")
         return False
 
     async def atomic_check_and_flag(
@@ -451,32 +387,10 @@ Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
         Returns:
             True if successfully flagged, False if already processed.
         """
-        # Check current state first
-        memories = await self.client.search(f"id:{memory_id}", 1)
-        if not memories:
-            logger.warning(f"Memory {memory_id} not found for atomic flagging.")
-            return False
-
-        observations = memories[0].get("observations", [])
-
-        # Check if already processed
-        if any(
-            "FLAGGED_BY_IA" in str(obs)
-            or "MANUALLY_APPROVED_BY_ADMIN" in str(obs)
-            or "PROCESSED_BY_IA_AUDITOR" in str(obs)
-            for obs in observations
-        ):
-            logger.info(f"Memory {memory_id} already processed, skipping flagging.")
-            return False
-
-        # Add flagging observation
-        flag_observation = f"FLAGGED_BY_IA: {reason} (Confidence: {confidence:.2f})"
-        await self.client.add_observations(memory_id, [flag_observation])
-
-        logger.info(
-            f"Successfully flagged memory {memory_id} with confidence {confidence:.2f}"
-        )
-        return True
+        # This would need a transactional Cypher query (using MERGE or transactions)
+        # Placeholder implementation
+        logger.warning("atomic_check_and_flag is not yet implemented.")
+        return False
 
     async def atomic_check_and_delete(self, memory_id: str) -> bool:
         """
@@ -488,49 +402,13 @@ Avaliação: {content.get("metadata", {}).get("rating", "N/A")}/5
         Returns:
             True if successfully deleted, False if already processed.
         """
-        # Check current state first
-        memories = await self.client.search(f"id:{memory_id}", 1)
-        if not memories:
-            logger.warning(f"Memory {memory_id} not found for atomic deletion.")
-            return False
-
-        observations = memories[0].get("observations", [])
-
-        # Check if already processed
-        if any(
-            "FLAGGED_BY_IA" in str(obs)
-            or "MANUALLY_APPROVED_BY_ADMIN" in str(obs)
-            or "PROCESSED_BY_IA_AUDITOR" in str(obs)
-            for obs in observations
-        ):
-            logger.info(f"Memory {memory_id} already processed, skipping deletion.")
-            return False
-
-        # Mark as processed to prevent future processing
-        await self.client.add_observations(memory_id, ["PROCESSED_BY_IA_AUDITOR"])
-
-        # Delete the memory
-        await self.client.delete(memory_id)
-        logger.info(f"Successfully deleted memory {memory_id}")
-        return True
+        # This would need a transactional Cypher query
+        # Placeholder implementation
+        logger.warning("atomic_check_and_delete is not yet implemented.")
+        return False
 
 
 # Factory function for creating AsyncKnowledgeGraph instances
-def create_knowledge_graph(
-    data_dir: Path = Path(".mem0"), settings_module: Any = settings
-) -> AsyncKnowledgeGraph:
+def create_knowledge_graph(settings_module: Any = settings) -> AsyncKnowledgeGraph:
     """Create and return a new AsyncKnowledgeGraph instance."""
-    return AsyncKnowledgeGraph(data_dir=data_dir, settings_module=settings_module)
-
-
-# Legacy compatibility: create a default instance
-# This will be removed once all code is migrated to DI
-import warnings
-
-warnings.warn(
-    "The global knowledge_graph instance is deprecated and will be removed in a future version. "
-    "Use dependency injection with IKnowledgeGraph instead.",
-    DeprecationWarning,
-    stacklevel=2,
-)
-knowledge_graph = create_knowledge_graph()
+    return AsyncKnowledgeGraph(settings_module=settings_module)

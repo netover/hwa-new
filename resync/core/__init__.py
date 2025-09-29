@@ -11,7 +11,7 @@ from .config_watcher import handle_config_change
 
 # from .agent_manager import agent_manager  # Temporarily disabled for testing
 from .connection_manager import connection_manager
-from .knowledge_graph import knowledge_graph
+# from .knowledge_graph import knowledge_graph  # Temporarily disabled due to import issues
 from .metrics import metrics_registry
 
 __all__ = [

@@ -273,3 +273,8 @@ container = DIContainer()
 from resync.core.audit_queue import AsyncAuditQueue, IAuditQueue
 
 container.register(IAuditQueue, AsyncAuditQueue, scope=ServiceScope.SINGLETON)
+
+
+def get_container() -> DIContainer:
+    """Get the global DI container instance."""
+    return container

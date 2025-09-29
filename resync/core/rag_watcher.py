@@ -7,8 +7,7 @@ from pathlib import Path
 
 from watchfiles import awatch
 
-from resync.core.file_ingestor import create_file_ingestor
-from resync.core.knowledge_graph import create_knowledge_graph
+from resync.core.interfaces import IFileIngestor
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -16,14 +15,10 @@ logger = logging.getLogger(__name__)
 RAG_DIRECTORY = settings.BASE_DIR / "rag"
 
 
-async def watch_rag_directory():
+async def watch_rag_directory(file_ingestor: IFileIngestor):
     """Watches the rag/ directory for new files and triggers ingestion."""
     # Ensure the directory exists
     RAG_DIRECTORY.mkdir(exist_ok=True)
-
-    # Create file ingestor instance
-    knowledge_graph = create_knowledge_graph()
-    file_ingestor = create_file_ingestor(knowledge_graph)
 
     logger.info(f"Starting RAG watcher on directory: {RAG_DIRECTORY}")
     try:

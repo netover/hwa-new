@@ -14,6 +14,7 @@ from typing import Any, AsyncGenerator, Dict
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
+from time import time as time_func # Use time_func for consistency
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pybreaker import CircuitBreaker
@@ -26,15 +27,16 @@ from resync.api.endpoints import api_router
 from resync.api.rag_upload import router as rag_upload_router
 from resync.core.agent_manager import agent_manager
 from resync.core.config_watcher import handle_config_change
+from resync.core.cache_hierarchy import get_cache_hierarchy
+from resync.core.file_ingestor import FileIngestor
+from resync.core.di_container import get_container
 from resync.core.exceptions import ConfigError, FileProcessingError
 from resync.core.fastapi_di import inject_container
+from resync.core.interfaces import IFileIngestor, IKnowledgeGraph
 from resync.core.ia_auditor import analyze_and_flag_memories
 from resync.core.rag_watcher import watch_rag_directory
 from resync.core.tws_monitor import tws_monitor
 from resync.settings import settings
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Circuit Breaker for Redis/TWS operations
@@ -66,11 +68,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Phase 3: Start background services
         background_tasks = await start_background_services()
 
-        # Phase 4: Initialize schedulers
-        app.state.scheduler = await initialize_schedulers()
+        # Phase 4: Start Cache Hierarchy and Monitoring
+        await get_cache_hierarchy().start()
+        await tws_monitor.start_monitoring()
 
-        # Phase 5: Start monitoring
-        await start_monitoring_system()
+        # Phase 5: Initialize schedulers
+        app.state.scheduler = await initialize_schedulers()
 
         logger.info("✅ All systems initialized successfully")
 
@@ -150,7 +153,8 @@ async def initialize_core_systems() -> None:
 
     # TWS Client (required for agents)
     try:
-        await agent_manager._get_tws_client()
+        with redis_circuit_breaker: # Applying Circuit Breaker to TWS client initialization
+            await agent_manager._get_tws_client()
         logger.info("✅ TWS Client initialized")
     except Exception as e:
         logger.critical(f"❌ Failed to initialize TWS Client: {e}")
@@ -158,15 +162,27 @@ async def initialize_core_systems() -> None:
 
     # Knowledge Graph (required)
     try:
-        # Initialize the Knowledge Graph for continuous learning
+        from resync.core.knowledge_graph import AsyncKnowledgeGraph
+
         logger.info("Initializing Knowledge Graph for continuous learning...")
-        # TODO: Implement actual Knowledge Graph initialization
-        # For now, this is a placeholder - needs real implementation
-        logger.warning("⚠️ Knowledge Graph initialization is not yet implemented")
-        # raise NotImplementedError("Knowledge Graph initialization not implemented")
+        container = get_container()
+        knowledge_graph = AsyncKnowledgeGraph()
+        container.register_instance(IKnowledgeGraph, knowledge_graph)
+        container.register_instance(AsyncKnowledgeGraph, knowledge_graph)
+        logger.info("✅ Knowledge Graph initialized and registered")
+
     except Exception as e:
         logger.critical(f"❌ Failed to initialize Knowledge Graph: {e}")
         raise SystemExit("Knowledge Graph initialization failed") from e
+
+    # File Ingestor (depends on KG)
+    try:
+        file_ingestor = FileIngestor(knowledge_graph=knowledge_graph)
+        container.register_instance(IFileIngestor, file_ingestor)
+        logger.info("✅ File Ingestor initialized and registered")
+    except Exception as e:
+        logger.critical(f"❌ Failed to initialize File Ingestor: {e}")
+        raise SystemExit("File Ingestor initialization failed") from e
 
 
 async def start_background_services() -> Dict[str, asyncio.Task]:
@@ -188,7 +204,10 @@ async def start_background_services() -> Dict[str, asyncio.Task]:
 
     # RAG directory watcher
     try:
-        rag_watcher_task = asyncio.create_task(watch_rag_directory())
+        # Get the file_ingestor instance from the DI container
+        container = get_container()
+        file_ingestor = container.resolve(IFileIngestor)
+        rag_watcher_task = asyncio.create_task(watch_rag_directory(file_ingestor))
         tasks["rag_watcher"] = rag_watcher_task
         logger.info("✅ RAG directory watcher started")
     except Exception as e:
@@ -264,20 +283,6 @@ def get_auditor_job_config() -> Dict[str, Any]:
             "startup_enabled": True,
         }
 
-
-async def start_monitoring_system() -> None:
-    """Start monitoring system."""
-    logger.info("🔧 Starting monitoring system...")
-
-    try:
-        await tws_monitor.start_monitoring()
-        logger.info("✅ TWS monitoring system started")
-    except Exception as e:
-        logger.error(f"❌ Failed to start monitoring system: {e}")
-        # Don't fail startup, but log warning
-        logger.warning("Continuing without monitoring system")
-
-
 async def shutdown_application(
     app: FastAPI, background_tasks: Dict[str, asyncio.Task]
 ) -> None:
@@ -297,6 +302,13 @@ async def shutdown_application(
             logger.info("✅ All background tasks completed")
         except Exception as e:
             logger.warning(f"⚠️ Some background tasks had issues during shutdown: {e}")
+
+    # Stop Cache Hierarchy
+    try:
+        await get_cache_hierarchy().stop()
+        logger.info("✅ Cache Hierarchy stopped")
+    except Exception as e:
+        logger.error(f"❌ Error stopping Cache Hierarchy: {e}")
 
     # Stop TWS monitoring system
     try:
@@ -324,6 +336,17 @@ async def shutdown_application(
             logger.info("✅ TWS client closed")
     except Exception as e:
         logger.error(f"❌ Error closing TWS client: {e}")
+
+    # Close Knowledge Graph connection
+    try:
+        container = get_container()
+        if container.is_registered(IKnowledgeGraph):
+            kg_instance = container.resolve(IKnowledgeGraph)
+            if hasattr(kg_instance, "close"):
+                await kg_instance.close()
+            logger.info("✅ Knowledge Graph connection closed")
+    except Exception as e:
+        logger.error(f"❌ Error closing Knowledge Graph connection: {e}")
 
 
 @retry(
@@ -356,11 +379,6 @@ async def watch_config_changes(config_path: Path) -> None:
     except asyncio.CancelledError:
         # Re-raise CancelledError for proper task cancellation
         raise
-    except Exception as e:
-        logger.error("Unexpected error in configuration watcher: %s", e, exc_info=True)
-        raise ConfigError(
-            f"Unexpected error watching configuration file: {str(e)}"
-        ) from e
 
 
 # --- FastAPI App Initialization ---
@@ -415,9 +433,7 @@ async def health_check():
     """
     Comprehensive health check endpoint for monitoring system status.
     """
-    from resync.core.tws_monitor import tws_monitor
-
-    health_status = {"status": "healthy", "timestamp": time.time(), "components": {}}
+    health_status = {"status": "healthy", "timestamp": time_func(), "components": {}}
 
     try:
         # Check TWS Client
@@ -449,8 +465,19 @@ async def health_check():
             health_status["components"]["scheduler"] = "not_initialized"
             health_status["status"] = "degraded"
 
-        # Check Knowledge Graph (placeholder)
-        health_status["components"]["knowledge_graph"] = "not_implemented"
+        # Check Knowledge Graph
+        try:
+            container = get_container()
+            # Check if the instance is registered
+            if container.is_registered(IKnowledgeGraph):
+                health_status["components"]["knowledge_graph"] = "initialized"
+            else:
+                health_status["components"]["knowledge_graph"] = "not_initialized"
+                health_status["status"] = "degraded"
+        except Exception as e:
+            health_status["components"]["knowledge_graph"] = f"error: {str(e)}"
+            health_status["status"] = "degraded"
+
 
         # Check Monitoring System
         try:

@@ -1,0 +1,29 @@
+# Production-specific overrides for Dynaconf
+# These values override the defaults in settings.toml for production environment
+
+[default]
+APP_ENV = "production"
+# TWS Configuration for Production
+TWS_VERIFY_SSL = false  # As per project decision
+
+# Cache Hierarchy Settings for Production Scale
+CACHE_HIERARCHY_L1_MAX_SIZE = 10000  # Larger for high volume
+CACHE_HIERARCHY_L2_TTL = 900  # Longer for efficiency
+CACHE_HIERARCHY_L2_CLEANUP_INTERVAL = 120
+CACHE_HIERARCHY_NUM_SHARDS = 12  # More for 15 users
+CACHE_HIERARCHY_MAX_WORKERS = 6
+
+# TWS Cache for Production
+TWS_CACHE_TTL = 120
+
+# IA Auditor Scheduler for Production
+IA_AUDITOR_FREQUENCY_HOURS = 6  # Less frequent to avoid overload
+IA_AUDITOR_STARTUP_ENABLED = false
+
+# Production LLM Endpoint (uncomment if needed)
+# LLM_ENDPOINT = "https://api.openai.com/v1"
+# LLM_API_KEY = "your_prod_openai_key"
+
+# Mem0 Settings for Production
+# MEM0_STORAGE_HOST = "your_prod_qdrant_host"
+# MEM0_STORAGE_PORT = 6333

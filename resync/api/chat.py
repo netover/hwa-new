@@ -164,14 +164,12 @@ Pergunta do usuário:
                 user_query=data,
                 agent_response=response_message,
                 agent_id=agent_id,
-                context={
-                    "agent_config": (
-                        agent_manager.get_agent(agent_id).__dict__
-                        if agent_manager.get_agent(agent_id)
-                        else "N/A"
-                    )
-                },
-            )
+                context={  # Refine context to include only relevant, non-sensitive info
+                    "agent_name": agent.name,
+                    "agent_description": agent.description,
+                    "model_used": agent.llm_model,
+                }
+            ),
 
             # --- IA Auditor ---
             # Recommendation 3: Run the auditor in a safe background task

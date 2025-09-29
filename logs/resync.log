@@ -18,3 +18,30 @@
 2025-09-29 15:22:24,575 - resync.core.fastapi_di - INFO - DI container injected into FastAPI application
 2025-09-29 15:23:20,309 - resync.core.fastapi_di - INFO - DI container configured with all service registrations
 2025-09-29 15:23:20,309 - resync.core.fastapi_di - INFO - DI container injected into FastAPI application
+2025-09-29 16:39:34,143 - resync.core.agent_manager - INFO - Initializing AgentManager.
+2025-09-29 16:39:34,150 - resync.core.audit_lock - INFO - DistributedAuditLock initialized with Redis at redis://localhost:6379
+2025-09-29 16:39:34,150 - resync.core.audit_lock - INFO - DistributedAuditLock initialized with Redis at redis://localhost:6379
+2025-09-29 16:39:34,150 - resync.core.audit_queue - INFO - AsyncAuditQueue initialized with Redis at redis://localhost:6379
+2025-09-29 16:39:34,155 - resync.core.di_container - INFO - DIContainer initialized
+2025-09-29 16:39:54,583 - resync.core.agent_manager - INFO - Initializing AgentManager.
+2025-09-29 16:39:54,584 - resync.core.audit_lock - INFO - DistributedAuditLock initialized with Redis at redis://localhost:6379
+2025-09-29 16:39:54,585 - resync.core.audit_lock - INFO - DistributedAuditLock initialized with Redis at redis://localhost:6379
+2025-09-29 16:39:54,585 - resync.core.audit_queue - INFO - AsyncAuditQueue initialized with Redis at redis://localhost:6379
+2025-09-29 16:39:54,585 - resync.core.di_container - INFO - DIContainer initialized
+2025-09-29 16:40:13,334 - resync.core.agent_manager - INFO - Initializing AgentManager.
+2025-09-29 16:40:13,335 - resync.core.audit_lock - INFO - DistributedAuditLock initialized with Redis at redis://localhost:6379
+2025-09-29 16:40:13,335 - resync.core.audit_lock - INFO - DistributedAuditLock initialized with Redis at redis://localhost:6379
+2025-09-29 16:40:13,335 - resync.core.audit_queue - INFO - AsyncAuditQueue initialized with Redis at redis://localhost:6379
+2025-09-29 16:40:13,336 - resync.core.di_container - INFO - DIContainer initialized
+2025-09-29 16:40:53,184 - resync.core.agent_manager - INFO - Initializing AgentManager.
+2025-09-29 16:40:53,185 - resync.core.audit_lock - INFO - DistributedAuditLock initialized with Redis at redis://localhost:6379
+2025-09-29 16:40:53,186 - resync.core.audit_lock - INFO - DistributedAuditLock initialized with Redis at redis://localhost:6379
+2025-09-29 16:40:53,186 - resync.core.audit_queue - INFO - AsyncAuditQueue initialized with Redis at redis://localhost:6379
+2025-09-29 16:40:53,188 - resync.core.di_container - INFO - DIContainer initialized
+2025-09-29 16:41:26,487 - resync.core.agent_manager - INFO - Initializing AgentManager.
+2025-09-29 16:41:26,489 - resync.core.audit_lock - INFO - DistributedAuditLock initialized with Redis at redis://localhost:6379
+2025-09-29 16:41:26,489 - resync.core.audit_lock - INFO - DistributedAuditLock initialized with Redis at redis://localhost:6379
+2025-09-29 16:41:26,489 - resync.core.audit_queue - INFO - AsyncAuditQueue initialized with Redis at redis://localhost:6379
+2025-09-29 16:41:26,490 - resync.core.di_container - INFO - DIContainer initialized
+2025-09-29 16:41:27,389 - resync.core.fastapi_di - INFO - DI container configured with all service registrations
+2025-09-29 16:41:27,389 - resync.core.fastapi_di - INFO - DI container injected into FastAPI application

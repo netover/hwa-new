@@ -10,7 +10,7 @@ from typing import Iterator
 
 import docx
 import openpyxl
-import pypdf
+import pypdf # Corrected import for pypdf
 from openpyxl.utils.exceptions import InvalidFileException
 
 from resync.core.exceptions import FileProcessingError, KnowledgeGraphError
@@ -85,8 +85,8 @@ def read_docx(file_path: Path) -> str:
             e,
             exc_info=True,
         )
-        return ""
-    except PackageNotFoundError as e:
+        return "" # Corrected import for PackageNotFoundError
+    except docx.opc.exceptions.PackageNotFoundError as e:
         logger.error("Invalid DOCX package: %s - %s", file_path, e, exc_info=True)
         return ""
     except ValueError as e:

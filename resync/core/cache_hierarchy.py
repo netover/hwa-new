@@ -68,6 +68,9 @@ class L1Cache:
             max_size: Maximum number of entries before LRU eviction
             num_shards: Number of shards for the cache and locks
         """
+        if num_shards <= 0:
+            raise ValueError("num_shards must be a positive integer")
+
         self.max_size = max_size
         self.num_shards = num_shards
         self.shards: List[OrderedDict[str, Tuple[Any, float]]] = [
@@ -125,7 +128,9 @@ class L1Cache:
             # Check if we need to evict
             if self.shard_max_size > 0 and len(shard) > self.shard_max_size:
                 evicted_key, _ = shard.popitem(last=False)  # Remove LRU
-                logger.debug("L1 cache EVICTION for key: %s", evicted_key)
+                logger.debug("L1 cache EVICTION for key: %s", evicted_key) # Added debug log
+                return True  # Indicate that an eviction occurred
+        return False  # No eviction occurred
 
     async def delete(self, key: str) -> bool:
         """
@@ -184,7 +189,7 @@ class CacheHierarchy:
         # Use settings from the project configuration
         from resync.settings import settings
 
-        self.l1_cache = L1Cache(max_size=settings.CACHE_HIERARCHY_L1_MAX_SIZE)
+        self.l1_cache = L1Cache(max_size=settings.CACHE_HIERARCHY_L1_MAX_SIZE, num_shards=settings.CACHE_HIERARCHY_NUM_SHARDS)
         self.l2_cache = TWS_OptimizedAsyncCache(
             ttl_seconds=settings.CACHE_HIERARCHY_L2_TTL,
             cleanup_interval=settings.CACHE_HIERARCHY_L2_CLEANUP_INTERVAL,
@@ -228,34 +233,30 @@ class CacheHierarchy:
             # Try L1 first (fastest)
             l1_start = time_func()
             l1_value = await self.l1_cache.get(key)
-            l1_latency = time_func() - l1_start
-            self.metrics.l1_get_latency = (
-                self.metrics.l1_get_latency + l1_latency
-            ) / 2  # Running average
+            l1_latency = time_func() - l1_start # Re-introduce L1 latency calculation
+            self.metrics.l1_get_latency = (self.metrics.l1_get_latency + l1_latency) / 2 # Update internal metric
 
             if l1_value is not None:
                 self.metrics.l1_hits += 1
                 cache_hits.labels(cache_level='l1').inc()
+                # Ensure l1_latency is defined here
                 cache_latency.labels(cache_level='l1').observe(l1_latency)
                 logger.debug(
                     f"Cache HIERARCHY HIT (L1) for key: {key}, latency: {l1_latency * 1000:.2f}ms"
                 )
                 return l1_value
-
             self.metrics.l1_misses += 1
 
             # Try L2 if L1 miss
             l2_start = time_func()
             l2_value = await self.l2_cache.get(key)
-            l2_latency = time_func() - l2_start
-            self.metrics.l2_get_latency = (
-                self.metrics.l2_get_latency + l2_latency
-            ) / 2  # Running average
-
+            l2_latency = time_func() - l2_start # This one was already here
+            self.metrics.l2_get_latency = (self.metrics.l2_get_latency + l2_latency) / 2 # Update internal metric
+            
             if l2_value is not None:
                 self.metrics.l2_hits += 1
                 cache_hits.labels(cache_level='l2').inc()
-                cache_latency.labels(cache_level='l2').observe(l2_latency)
+                cache_latency.labels(cache_level='l2').observe(l2_latency) # Observe L2 latency
                 # Simplified: Always write L2 value to L1 without complex double-check
                 # This trades perfect consistency for simplicity and performance
                 await self.l1_cache.set(key, l2_value)
@@ -266,10 +267,8 @@ class CacheHierarchy:
 
             self.metrics.l2_misses += 1
             cache_misses.labels(cache_level='l2').inc()
-            miss_latency = time_func() - start_time
-            self.metrics.miss_latency = (
-                self.metrics.miss_latency + miss_latency
-            ) / 2  # Running average
+            miss_latency = time_func() - start_time # This one was already here
+            self.metrics.miss_latency = (self.metrics.miss_latency + miss_latency) / 2 # Update internal metric
 
             logger.debug(
                 f"Cache HIERARCHY MISS for key: {key}, total latency: {miss_latency * 1000:.2f}ms"
@@ -299,13 +298,18 @@ class CacheHierarchy:
             value: Value to cache
             ttl_seconds: Optional TTL override (affects L2 only)
         """
+        if len(key) > 256:
+            logger.warning(f"Cache key too long: {len(key)} chars, truncating for set operation")
+            key = key[:256] # Truncate for set operations as well
+
         self.metrics.total_sets += 1
 
         # Write to L2 first (persistent)
         await self.l2_cache.set(key, value, ttl_seconds)
 
         # Write to L1 (fast access)
-        await self.l1_cache.set(key, value)
+        if await self.l1_cache.set(key, value):  # Check if eviction occurred
+            self.metrics.l1_evictions += 1
 
         logger.debug(f"Cache HIERARCHY SET for key: {key}")
 
@@ -320,13 +324,18 @@ class CacheHierarchy:
             value: Value to cache
             ttl_seconds: Optional TTL override (affects L2 only)
         """
+        if len(key) > 256:
+            logger.warning(f"Cache key too long: {len(key)} chars, truncating for set_from_source operation")
+            key = key[:256] # Truncate for set_from_source operations as well
+
         self.metrics.total_sets += 1
 
         # Write to L2 first (persistent)
         await self.l2_cache.set(key, value, ttl_seconds)
 
         # Write to L1 (fast access)
-        await self.l1_cache.set(key, value)
+        if await self.l1_cache.set(key, value):  # Check if eviction occurred
+            self.metrics.l1_evictions += 1
 
         logger.debug(f"Cache HIERARCHY SET_FROM_SOURCE for key: {key}")
 
@@ -340,6 +349,10 @@ class CacheHierarchy:
         Returns:
             True if key was found in at least one tier
         """
+        if len(key) > 256:
+            logger.warning(f"Cache key too long: {len(key)} chars, truncating for delete operation")
+            key = key[:256] # Truncate for delete operations as well
+
         l1_deleted = await self.l1_cache.delete(key)
         l2_deleted = await self.l2_cache.delete(key)
 
