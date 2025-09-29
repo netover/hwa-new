@@ -20,6 +20,62 @@ from resync.settings import settings
 logger = logging.getLogger(__name__)
 
 
+def is_path_protected(file_path: Path) -> bool:
+    """
+    Check if a file path is within a protected directory.
+
+    Args:
+        file_path: Path to check for protection
+
+    Returns:
+        True if the path is within a protected directory, False otherwise
+    """
+    if not file_path.exists():
+        return False
+
+    file_path = file_path.resolve()
+
+    for protected_dir in settings.PROTECTED_DIRECTORIES:
+        protected_dir = Path(protected_dir).resolve()
+        try:
+            # Check if the file path is within the protected directory
+            file_path.relative_to(protected_dir)
+            return True
+        except ValueError:
+            # Path is not within the protected directory
+            continue
+
+    return False
+
+
+def is_path_in_knowledge_base(file_path: Path) -> bool:
+    """
+    Check if a file path is within a knowledge base directory.
+
+    Args:
+        file_path: Path to check for knowledge base inclusion
+
+    Returns:
+        True if the path is within a knowledge base directory, False otherwise
+    """
+    if not file_path.exists():
+        return False
+
+    file_path = file_path.resolve()
+
+    for knowledge_dir in settings.KNOWLEDGE_BASE_DIRS:
+        knowledge_dir = Path(knowledge_dir).resolve()
+        try:
+            # Check if the file path is within the knowledge base directory
+            file_path.relative_to(knowledge_dir)
+            return True
+        except ValueError:
+            # Path is not within the knowledge base directory
+            continue
+
+    return False
+
+
 # --- Text Chunking --- #
 
 
@@ -218,6 +274,15 @@ class FileIngestor(IFileIngestor):
         if not file_path.exists():
             logger.warning(f"File not found for ingestion: {file_path}")
             return False
+
+        # Check if file is in knowledge base directories
+        if not is_path_in_knowledge_base(file_path):
+            logger.warning(f"File {file_path} is not in knowledge base directories. Skipping ingestion.")
+            return False
+
+        # Check if file is in protected directories (should not be deleted during processing)
+        if is_path_protected(file_path):
+            logger.info(f"File {file_path} is in protected directory - will not be deleted after processing")
 
         file_ext = file_path.suffix.lower()
         reader = self.file_readers.get(file_ext)
