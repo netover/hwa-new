@@ -18,6 +18,11 @@ class ProductionSettings(Settings):
     # Note: This would need to be set via environment variable
     # LLM_MONTHLY_BUDGET: float = 1000.0  # $1000/month for production
 
+    # IA Auditor scheduler configuration for production
+    # Reduce frequency to avoid overload in production
+    IA_AUDITOR_FREQUENCY_HOURS: int = 6  # Every 6 hours instead of 2
+    IA_AUDITOR_STARTUP_ENABLED: bool = False  # Don't run on startup in production
+
     # Override settings for production
     # TWS credentials MUST be set via environment variables in production
     # TWS_HOST: str = "your_prod_tws_host"

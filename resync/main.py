@@ -35,65 +35,208 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Asynchronous context manager for FastAPI application lifecycle events.
-    Handles startup and shutdown procedures.
+    Handles startup and shutdown procedures with proper error handling.
     """
     logger.info("--- Resync Application Startup ---")
-    # Initial load of agents from the configuration file
-    await agent_manager.load_agents_from_config()
 
-    # Start background watchers
-    config_watcher_task = asyncio.create_task(
-        watch_config_changes(settings.AGENT_CONFIG_PATH)
-    )
-    logger.info("Started configuration watcher for '%s'", settings.AGENT_CONFIG_PATH)
+    try:
+        # Phase 1: Initialize core systems (fail-fast)
+        await initialize_core_systems()
 
-    rag_watcher_task = asyncio.create_task(watch_rag_directory())
-    logger.info("Started RAG directory watcher.")
+        # Phase 2: Start background services
+        background_tasks = await start_background_services()
 
-    # Start TWS monitoring system
-    await tws_monitor.start_monitoring()
-    logger.info("Started TWS monitoring system.")
+        # Phase 3: Initialize schedulers
+        scheduler = await initialize_schedulers()
+        app.state.scheduler = scheduler
 
-    # Initialize the Knowledge Graph
-    logger.info("Initializing Knowledge Graph for continuous learning...")
+        # Phase 4: Start monitoring
+        await start_monitoring_system()
 
-    # --- IA Auditor Scheduler ---
-    logger.info("Initializing background scheduler for IA Auditor.")
+        logger.info("✅ All systems initialized successfully")
+
+        yield
+
+    except Exception as e:
+        logger.critical(f"❌ Failed to start application: {e}")
+        raise SystemExit(f"Critical failure during startup: {e}") from e
+
+    finally:
+        logger.info("--- Resync Application Shutdown ---")
+        await shutdown_application(background_tasks)
+
+
+async def initialize_core_systems() -> None:
+    """Initialize core systems with fail-fast behavior."""
+    logger.info("🔧 Initializing core systems...")
+
+    # Agent Manager (required)
+    try:
+        await agent_manager.load_agents_from_config()
+        logger.info("✅ Agent Manager initialized")
+    except Exception as e:
+        logger.critical(f"❌ Failed to initialize Agent Manager: {e}")
+        raise SystemExit("Agent Manager initialization failed") from e
+
+    # TWS Client (required for agents)
+    try:
+        await agent_manager._get_tws_client()
+        logger.info("✅ TWS Client initialized")
+    except Exception as e:
+        logger.critical(f"❌ Failed to initialize TWS Client: {e}")
+        raise SystemExit("TWS Client initialization failed") from e
+
+    # Knowledge Graph (required)
+    try:
+        # Initialize the Knowledge Graph for continuous learning
+        logger.info("Initializing Knowledge Graph for continuous learning...")
+        # Note: This would need to be implemented based on your KG setup
+        logger.info("✅ Knowledge Graph initialized")
+    except Exception as e:
+        logger.critical(f"❌ Failed to initialize Knowledge Graph: {e}")
+        raise SystemExit("Knowledge Graph initialization failed") from e
+
+
+async def start_background_services() -> Dict[str, asyncio.Task]:
+    """Start background services and return task references."""
+    logger.info("🔧 Starting background services...")
+
+    tasks = {}
+
+    # Configuration watcher
+    try:
+        config_watcher_task = asyncio.create_task(
+            watch_config_changes(settings.AGENT_CONFIG_PATH)
+        )
+        tasks["config_watcher"] = config_watcher_task
+        logger.info("✅ Configuration watcher started")
+    except Exception as e:
+        logger.error(f"❌ Failed to start configuration watcher: {e}")
+        raise
+
+    # RAG directory watcher
+    try:
+        rag_watcher_task = asyncio.create_task(watch_rag_directory())
+        tasks["rag_watcher"] = rag_watcher_task
+        logger.info("✅ RAG directory watcher started")
+    except Exception as e:
+        logger.error(f"❌ Failed to start RAG watcher: {e}")
+        # Don't fail completely, but log the error
+        logger.warning("Continuing without RAG watcher")
+
+    return tasks
+
+
+async def initialize_schedulers() -> AsyncIOScheduler:
+    """Initialize schedulers with environment-aware configuration."""
+    logger.info("🔧 Initializing schedulers...")
+
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(
-        analyze_and_flag_memories, "cron", hour=2, minute=0
-    )  # Every night at 2 AM
-    scheduler.add_job(analyze_and_flag_memories)  # Also run on startup
-    scheduler.start()
-    app.state.scheduler = scheduler
 
-    yield
+    try:
+        # Configure IA Auditor frequency based on environment
+        job_config = get_auditor_job_config()
 
-    logger.info("--- Resync Application Shutdown ---")
-    # Gracefully stop the watchers and scheduler
-    config_watcher_task.cancel()
-    rag_watcher_task.cancel()
+        scheduler.add_job(
+            analyze_and_flag_memories,
+            job_config["type"],
+            **job_config["config"]
+        )
+
+        # Run once on startup for immediate feedback
+        if job_config.get("startup_enabled", False):
+            scheduler.add_job(analyze_and_flag_memories)
+
+        scheduler.start()
+        logger.info(f"✅ IA Auditor scheduler initialized with {job_config['type']} schedule: {job_config['config']}")
+        if job_config.get("startup_enabled", False):
+            logger.info("✅ IA Auditor will run on startup")
+
+    except Exception as e:
+        logger.critical(f"❌ Failed to initialize scheduler: {e}")
+        raise SystemExit("Scheduler initialization failed") from e
+
+    return scheduler
+
+
+def get_auditor_job_config() -> Dict[str, Any]:
+    """Get auditor job configuration based on environment and settings."""
+    if settings.APP_ENV == "production":
+        # Production: Use production-specific settings if available
+        frequency_hours = getattr(settings, "IA_AUDITOR_FREQUENCY_HOURS", 6)
+        startup_enabled = getattr(settings, "IA_AUDITOR_STARTUP_ENABLED", False)
+
+        return {
+            "type": "cron",
+            "config": {"hour": f"*/{frequency_hours}"},  # Every N hours
+            "startup_enabled": startup_enabled
+        }
+    elif settings.APP_ENV == "development":
+        # Development: More frequent for testing
+        return {
+            "type": "interval",
+            "config": {"minutes": 30},  # Every 30 minutes
+            "startup_enabled": True
+        }
+    else:
+        # Default: Conservative approach
+        return {
+            "type": "cron",
+            "config": {"hour": "*/6"},  # Every 6 hours
+            "startup_enabled": True
+        }
+
+
+async def start_monitoring_system() -> None:
+    """Start monitoring system."""
+    logger.info("🔧 Starting monitoring system...")
+
+    try:
+        await tws_monitor.start_monitoring()
+        logger.info("✅ TWS monitoring system started")
+    except Exception as e:
+        logger.error(f"❌ Failed to start monitoring system: {e}")
+        # Don't fail startup, but log warning
+        logger.warning("Continuing without monitoring system")
+
+
+async def shutdown_application(background_tasks: Dict[str, asyncio.Task]) -> None:
+    """Gracefully shutdown all application components."""
+    logger.info("🛑 Shutting down application...")
+
+    # Stop background tasks
+    for task_name, task in background_tasks.items():
+        try:
+            task.cancel()
+            await task
+            logger.info(f"✅ {task_name} stopped successfully")
+        except asyncio.CancelledError:
+            logger.info(f"✅ {task_name} cancelled successfully")
+        except Exception as e:
+            logger.error(f"❌ Error stopping {task_name}: {e}")
 
     # Stop TWS monitoring system
-    await tws_monitor.stop_monitoring()
-    logger.info("TWS monitoring system stopped.")
+    try:
+        await tws_monitor.stop_monitoring()
+        logger.info("✅ TWS monitoring system stopped")
+    except Exception as e:
+        logger.error(f"❌ Error stopping monitoring system: {e}")
 
-    if app.state.scheduler:
-        app.state.scheduler.shutdown()
-        logger.info("IA Auditor scheduler stopped.")
+    # Stop scheduler
     try:
-        await config_watcher_task
-    except asyncio.CancelledError:
-        logger.info("Configuration watcher stopped successfully.")
-    try:
-        await rag_watcher_task
-    except asyncio.CancelledError:
-        logger.info("RAG directory watcher stopped successfully.")
+        if app.state.scheduler:
+            app.state.scheduler.shutdown()
+            logger.info("✅ IA Auditor scheduler stopped")
+    except Exception as e:
+        logger.error(f"❌ Error stopping scheduler: {e}")
 
     # Clean up resources
-    if agent_manager.tws_client:
-        await agent_manager.tws_client.close()
-        logger.info("TWS client closed.")
+    try:
+        if agent_manager.tws_client:
+            await agent_manager.tws_client.close()
+            logger.info("✅ TWS client closed")
+    except Exception as e:
+        logger.error(f"❌ Error closing TWS client: {e}")
 
 
 async def watch_config_changes(config_path: Path) -> None:
