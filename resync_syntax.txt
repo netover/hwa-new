@@ -1,5 +1,0 @@
-  File "D:\Python\GITHUB\hwa-new-1\resync\api\models.py", line 43
-    LOCAL SCRIPT = "local_script"
-          ^^^^^^
-SyntaxError: invalid syntax
-Sorry: IndentationError: expected an indented block after 'if' statement on line 45 (audit_lock.py, line 46)
