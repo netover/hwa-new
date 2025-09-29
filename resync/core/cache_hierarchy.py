@@ -125,12 +125,15 @@ class L1Cache:
             shard[key] = (value, current_time)
             shard.move_to_end(key)  # Move to most recently used
 
-            # Check if we need to evict
-            if self.shard_max_size > 0 and len(shard) > self.shard_max_size:
-                evicted_key, _ = shard.popitem(last=False)  # Remove LRU
-                logger.debug("L1 cache EVICTION for key: %s", evicted_key) # Added debug log
-                return True  # Indicate that an eviction occurred
-        return False  # No eviction occurred
+            # Check if we need to evict - check total cache size
+            current_total_size = sum(len(s) for s in self.shards)
+            if self.max_size > 0 and current_total_size > self.max_size:
+                # Find and evict LRU item from any shard
+                for s in self.shards:
+                    if s:
+                        evicted_key, _ = s.popitem(last=False)  # Remove LRU
+                        logger.debug("L1 cache EVICTION for key: %s", evicted_key)
+                        break
 
     async def delete(self, key: str) -> bool:
         """

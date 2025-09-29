@@ -1,7 +1,7 @@
 """Tests for resync.settings module."""
 
-from config.base import Settings
-from resync.settings import APP_ENV, settings
+from dynaconf import Dynaconf
+from resync.settings import settings
 
 
 class TestSettingsModule:
@@ -9,11 +9,11 @@ class TestSettingsModule:
 
     def test_app_env_default(self):
         """Test default APP_ENV value."""
-        assert APP_ENV == "development"
+        assert settings.APP_ENV == "development"
 
     def test_settings_instance_type(self):
         """Test that settings is an instance of the correct class."""
-        assert isinstance(settings, Settings)
+        assert isinstance(settings, Dynaconf)
 
     def test_settings_has_required_attributes(self):
         """Test that settings has all required attributes."""

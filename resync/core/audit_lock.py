@@ -168,7 +168,7 @@ class DistributedAuditLock:
 
                 # Check if lock is old enough to be considered expired
                 ttl = await self.client.ttl(lock_key)
-                if ttl is None or ttl > max_age:
+                if ttl is None or ttl <= max_age:
                     # Remove locks that are too old
                     await self.client.delete(lock_key)
                     cleaned_count += 1

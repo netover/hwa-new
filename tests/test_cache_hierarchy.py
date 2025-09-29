@@ -3,6 +3,7 @@ import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import pytest_asyncio
 
 from resync.core.cache_hierarchy import (
     CacheHierarchy,
@@ -149,7 +150,7 @@ class TestCacheMetrics:
 class TestCacheHierarchy:
     """Test cache hierarchy functionality."""
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def cache_hierarchy(self):
         """Create cache hierarchy instance for testing."""
         cache = CacheHierarchy(

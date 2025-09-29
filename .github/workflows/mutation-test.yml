@@ -1,4 +1,4 @@
-name: Mutation Testing
+name: Mutation Testing  # Updated to fix deprecation error
 
 on:
   push:
@@ -43,7 +43,7 @@ jobs:
         python scripts/mutation_test.py
 
     - name: Upload mutation results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: mutation-results

@@ -4,3 +4,11 @@ python-docx
 openpyxl
 neo4j
 dynaconf>=3.2.0  # For dynamic configuration management
+pytest-asyncio  # For async testing support
+redis  # For Redis operations in tests
+fastapi  # For API testing
+uvicorn  # For running the server
+python-multipart  # For file uploads
+tenacity  # For retry mechanisms
+agno  # For AI agent functionality
+prometheus_client  # For metrics collection
