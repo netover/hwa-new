@@ -2,6 +2,8 @@
 
 ## Propósito Principal
 
+<!-- Trigger GitHub Actions workflow -->
+
 O Resync é uma interface de conversação inteligente, alimentada por Inteligência Artificial, para comunicação com o scheduler de cargas de trabalho **HCL Workload Automation (HWA)**, anteriormente conhecido como IBM Tivoli Workload Scheduler (TWS).
 
 O objetivo é substituir a complexa navegação em painéis por uma interação simples e em linguagem natural, centralizando a informação e acelerando a resolução de problemas.
