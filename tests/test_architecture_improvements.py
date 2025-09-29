@@ -18,7 +18,6 @@ from resync.main import (
     initialize_schedulers,
     shutdown_application,
     start_background_services,
-    start_monitoring_system,
 )
 
 

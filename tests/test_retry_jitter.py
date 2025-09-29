@@ -53,7 +53,7 @@ def test_exponential_jitter_range():
     assert max(samples) < max_wait
 
 # Demonstrate that retry attempts have varying wait times due to jitter
-def test_retry_jitter Behavior():
+def test_retry_jitter_behavior():
     """Verify the jitter causes variable wait times between retries."""
     # Create mock function that always fails
     mock_func = make_mock_func([httpx.RequestError("Connection error")] * 5)

@@ -4,7 +4,7 @@ import pytest
 import logging
 from unittest.mock import patch
 
-from resync.core.logger import logger
+from resync.core.logger import setup_logging
 
 
 class TestLogger:

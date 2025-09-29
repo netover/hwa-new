@@ -7,9 +7,8 @@ import json
 import tempfile
 
 from resync.core.knowledge_graph import (
-    AsyncKnowledgeGraph, 
-    create_knowledge_graph,
-    knowledge_graph
+    AsyncKnowledgeGraph,
+    create_knowledge_graph
 )
 
 
