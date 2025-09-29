@@ -17,3 +17,9 @@ apscheduler  # For async job scheduling
 pybreaker  # For circuit breaker pattern
 watchfiles  # For file system monitoring
 jinja2  # For HTML templating
+python-jose[cryptography]  # For JWT token handling
+passlib[bcrypt]  # For password hashing
+cryptography  # For cryptographic operations
+orjson  # For fast JSON serialization
+psutil  # For system monitoring
+python-dotenv  # For environment variable loading
