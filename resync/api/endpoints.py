@@ -11,6 +11,7 @@ from resync.core.agent_manager import AgentConfig
 from resync.core.fastapi_di import get_agent_manager, get_tws_client
 from resync.core.interfaces import IAgentManager, ITWSClient
 from resync.core.metrics import metrics_registry
+from resync.core.tws_monitor import tws_monitor
 from resync.models.tws import SystemStatus
 from resync.settings import settings
 
@@ -142,12 +143,12 @@ async def chat_endpoint(request: Dict):
 @api_router.post("/sensitive")
 async def sensitive_endpoint(data: Dict):
     """Sensitive endpoint for testing encryption."""
-    from resync.core.encryption_service import EncryptionService
+    from resync.core.encryption_service import encryption_service
 
-    encrypted = EncryptionService.encrypt(data["data"])
+    encrypted = encryption_service.encrypt(data["data"])
     from resync.core.logger import log_info
 
-    log_info(f"Processing sensitive data: {data['data']}")
+    log_info("Processing sensitive data (encrypted successfully)")
     return {"encrypted": encrypted}
 
 

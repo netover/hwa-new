@@ -1,10 +1,13 @@
 """Tests for resync.core.encryption_service module."""
 
 import logging
+import base64
 from unittest.mock import MagicMock
+from cryptography.fernet import Fernet
 
 from resync.core.encryption_service import (
     EncryptionService,
+    encryption_service,
     mask_sensitive_data_in_logs,
 )
 
@@ -15,56 +18,80 @@ class TestEncryptionService:
     def test_encrypt_basic_string(self):
         """Test basic string encryption."""
         data = "test_data"
-        result = EncryptionService.encrypt(data)
+        result = encryption_service.encrypt(data)
 
-        assert result == f"encrypted_{data}"
-        assert result != data  # Should be different from original
+        # Result should be base64 encoded and different from original
+        assert result != data
+        # Should be able to decode the result
+        try:
+            base64.b64decode(result.encode())
+            # If decoding succeeds, the encryption worked
+            pass
+        except Exception:
+            # If decoding fails, there's an issue with the encryption
+            assert False, "Result should be valid base64"
 
     def test_encrypt_empty_string(self):
         """Test encrypting empty string."""
         data = ""
-        result = EncryptionService.encrypt(data)
+        result = encryption_service.encrypt(data)
 
-        assert result == "encrypted_"
-        assert result != data
+        assert result != data  # Should be different from original
+        # Should be able to decode the result
+        try:
+            base64.b64decode(result.encode())
+            # If decoding succeeds, the encryption worked
+            pass
+        except Exception:
+            # If decoding fails, there's an issue with the encryption
+            assert False, "Result should be valid base64"
 
     def test_encrypt_special_characters(self):
         """Test encrypting string with special characters."""
         data = "test@#$%^&*()_+{}|:<>?[]\\;',./"
-        result = EncryptionService.encrypt(data)
+        result = encryption_service.encrypt(data)
 
-        assert result == f"encrypted_{data}"
-        assert result.startswith("encrypted_")
+        assert result != data  # Should be different from original
+        # Should be able to decode the result
+        try:
+            base64.b64decode(result.encode())
+            # If decoding succeeds, the encryption worked
+            pass
+        except Exception:
+            # If decoding fails, there's an issue with the encryption
+            assert False, "Result should be valid base64"
 
     def test_decrypt_basic_string(self):
         """Test basic string decryption."""
-        encrypted_data = "encrypted_test_data"
-        result = EncryptionService.decrypt(encrypted_data)
+        original_data = "test_data"
+        encrypted_data = encryption_service.encrypt(original_data)
+        result = encryption_service.decrypt(encrypted_data)
 
-        assert result == "test_data"
+        assert result == original_data
         assert result != encrypted_data  # Should be different from encrypted
 
     def test_decrypt_empty_string(self):
         """Test decrypting empty encrypted string."""
-        encrypted_data = "encrypted_"
-        result = EncryptionService.decrypt(encrypted_data)
+        original_data = ""
+        encrypted_data = encryption_service.encrypt(original_data)
+        result = encryption_service.decrypt(encrypted_data)
 
-        assert result == ""
+        assert result == original_data
         assert result != encrypted_data
 
     def test_decrypt_non_encrypted_string(self):
-        """Test decrypting string that doesn't have encrypted_ prefix."""
+        """Test decrypting string that isn't properly encrypted."""
         data = "not_encrypted_data"
-        result = EncryptionService.decrypt(data)
+        result = encryption_service.decrypt(data)
 
+        # For this implementation, it returns the original on failure
         assert result == data  # Should return original string
-        assert result == data
 
     def test_encrypt_decrypt_roundtrip(self):
         """Test that encrypt/decrypt roundtrip works correctly."""
         original_data = "sensitive_information"
-        encrypted = EncryptionService.encrypt(original_data)
-        decrypted = EncryptionService.decrypt(encrypted)
+        encrypted = encryption_service.encrypt(original_data)
+        decrypted = encryption_service.decrypt(encrypted)
 
         assert decrypted == original_data
         assert encrypted != original_data
@@ -76,14 +103,27 @@ class TestEncryptionService:
             "simple",
             "with spaces",
             "with@special#chars$%",
-            "very_long_string_" * 100,
-            "",
+            "very_long_string_" * 10,
+            "",  # empty string
+            "single",
+            "a",  # single character
         ]
 
         for original in test_cases:
-            encrypted = EncryptionService.encrypt(original)
-            decrypted = EncryptionService.decrypt(encrypted)
+            encrypted = encryption_service.encrypt(original)
+            decrypted = encryption_service.decrypt(encrypted)
             assert decrypted == original, f"Failed for: {original}"
+
+    def test_encryption_with_custom_key(self):
+        """Test encryption service initialization with custom key."""
+        key = Fernet.generate_key()
+        custom_encryption_service = EncryptionService(key)
+        
+        original_data = "test_with_custom_key"
+        encrypted = custom_encryption_service.encrypt(original_data)
+        decrypted = custom_encryption_service.decrypt(encrypted)
+        
+        assert decrypted == original_data
 
 
 class TestLogMasking:

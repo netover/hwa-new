@@ -21,6 +21,7 @@ tenacity>=8.2.3  # For robust retry mechanisms
 mutmut>=3.3.0  # Mutation testing for test effectiveness validation
 authlib>=1.6.4  # Fixed CVE-2025-59420 - JWS verification bypass
 mypy>=1.10.0
+cryptography>=42.0.0
 
 # Testing Dependencies
 pytest>=7.4.0

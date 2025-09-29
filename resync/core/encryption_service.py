@@ -3,22 +3,50 @@ Encryption service for Resync core.
 """
 
 import logging
+import base64
+import os
+from cryptography.fernet import Fernet
 
 
 class EncryptionService:
     """Simple encryption service for sensitive data handling."""
 
-    @staticmethod
-    def encrypt(data: str) -> str:
-        """Encrypt sensitive data."""
-        return f"encrypted_{data}"
+    def __init__(self, key: bytes = None):
+        # In production, the key should be stored securely
+        if key:
+            self.key = key
+        elif os.getenv("ENCRYPTION_KEY"):
+            self.key = os.getenv("ENCRYPTION_KEY").encode()
+        else:
+            # This is still not ideal in production - key should be provided
+            self.key = Fernet.generate_key()
+        self.cipher_suite = Fernet(self.key)
 
     @staticmethod
-    def decrypt(encrypted_data: str) -> str:
+    def generate_key() -> bytes:
+        """Generate a new encryption key."""
+        return Fernet.generate_key()
+
+    def encrypt(self, data: str) -> str:
+        """Encrypt sensitive data."""
+        if not isinstance(data, str):
+            data = str(data)
+        encrypted_data = self.cipher_suite.encrypt(data.encode())
+        return base64.b64encode(encrypted_data).decode()
+
+    def decrypt(self, encrypted_data: str) -> str:
         """Decrypt data."""
-        if encrypted_data.startswith("encrypted_"):
-            return encrypted_data[10:]  # Remove "encrypted_" prefix
-        return encrypted_data  # Return as-is if not encrypted
+        try:
+            encrypted_bytes = base64.b64decode(encrypted_data.encode())
+            decrypted_data = self.cipher_suite.decrypt(encrypted_bytes)
+            return decrypted_data.decode()
+        except Exception:
+            # If decryption fails, return the original data
+            return encrypted_data
+
+
+# Global instance
+encryption_service = EncryptionService()
 
 
 # Logger masking

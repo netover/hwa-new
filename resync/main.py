@@ -4,7 +4,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, Dict
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request
@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     finally:
         logger.info("--- Resync Application Shutdown ---")
-        await shutdown_application(background_tasks)
+        await shutdown_application(background_tasks, app)
 
 
 async def initialize_core_systems() -> None:
@@ -200,7 +200,7 @@ async def start_monitoring_system() -> None:
         logger.warning("Continuing without monitoring system")
 
 
-async def shutdown_application(background_tasks: Dict[str, asyncio.Task]) -> None:
+async def shutdown_application(background_tasks: Dict[str, asyncio.Task], app_instance: FastAPI) -> None:
     """Gracefully shutdown all application components."""
     logger.info("🛑 Shutting down application...")
 
@@ -224,8 +224,8 @@ async def shutdown_application(background_tasks: Dict[str, asyncio.Task]) -> Non
 
     # Stop scheduler
     try:
-        if app.state.scheduler:
-            app.state.scheduler.shutdown()
+        if hasattr(app_instance, 'state') and hasattr(app_instance.state, 'scheduler') and app_instance.state.scheduler:
+            app_instance.state.scheduler.shutdown()
             logger.info("✅ IA Auditor scheduler stopped")
     except Exception as e:
         logger.error(f"❌ Error stopping scheduler: {e}")
