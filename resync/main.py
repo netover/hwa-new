@@ -40,6 +40,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("--- Resync Application Startup ---")
 
     try:
+        # Phase 0: Validate configuration
+        await validate_settings()
+
         # Phase 1: Initialize core systems (fail-fast)
         await initialize_core_systems()
 
@@ -66,6 +69,37 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await shutdown_application(background_tasks, app)
 
 
+async def validate_settings() -> None:
+    """Validate critical settings before startup."""
+    logger.info("🔧 Validating settings...")
+
+    required_vars = ["TWS_HOST", "TWS_PORT", "AGENT_MODEL_NAME", "LLM_ENDPOINT"]
+    missing = []
+
+    for var in required_vars:
+        value = getattr(settings, var, None)
+        if not value or (isinstance(value, str) and not value.strip()):
+            missing.append(var)
+
+    if missing:
+        error_msg = f"Missing or empty required settings: {', '.join(missing)}"
+        logger.critical(f"❌ {error_msg}")
+        raise ConfigError(error_msg)
+
+    # Additional validations
+    if settings.TWS_PORT <= 0 or settings.TWS_PORT > 65535:
+        error_msg = f"Invalid TWS_PORT: {settings.TWS_PORT} (must be 1-65535)"
+        logger.critical(f"❌ {error_msg}")
+        raise ConfigError(error_msg)
+
+    if settings.APP_ENV not in ["development", "production", "staging"]:
+        error_msg = f"Invalid APP_ENV: {settings.APP_ENV}"
+        logger.critical(f"❌ {error_msg}")
+        raise ConfigError(error_msg)
+
+    logger.info("✅ Settings validation completed")
+
+
 async def initialize_core_systems() -> None:
     """Initialize core systems with fail-fast behavior."""
     logger.info("🔧 Initializing core systems...")
@@ -90,8 +124,10 @@ async def initialize_core_systems() -> None:
     try:
         # Initialize the Knowledge Graph for continuous learning
         logger.info("Initializing Knowledge Graph for continuous learning...")
-        # Note: This would need to be implemented based on your KG setup
-        logger.info("✅ Knowledge Graph initialized")
+        # TODO: Implement actual Knowledge Graph initialization
+        # For now, this is a placeholder - needs real implementation
+        logger.warning("⚠️ Knowledge Graph initialization is not yet implemented")
+        # raise NotImplementedError("Knowledge Graph initialization not implemented")
     except Exception as e:
         logger.critical(f"❌ Failed to initialize Knowledge Graph: {e}")
         raise SystemExit("Knowledge Graph initialization failed") from e
@@ -165,6 +201,10 @@ def get_auditor_job_config() -> Dict[str, Any]:
         # Production: Use production-specific settings if available
         frequency_hours = getattr(settings, "IA_AUDITOR_FREQUENCY_HOURS", 6)
         startup_enabled = getattr(settings, "IA_AUDITOR_STARTUP_ENABLED", False)
+
+        # Validate frequency_hours
+        if not isinstance(frequency_hours, int) or frequency_hours <= 0:
+            raise ValueError(f"IA_AUDITOR_FREQUENCY_HOURS must be a positive integer, got: {frequency_hours}")
 
         return {
             "type": "cron",
@@ -316,3 +356,49 @@ async def root():
     from fastapi.responses import RedirectResponse
 
     return RedirectResponse(url="/api/docs", status_code=302)
+
+
+@app.get("/health")
+async def health_check():
+    """
+    Comprehensive health check endpoint for monitoring system status.
+    """
+    from resync.core.tws_monitor import tws_monitor
+
+    health_status = {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "components": {}
+    }
+
+    try:
+        # Check TWS Client
+        if hasattr(agent_manager, 'tws_client') and agent_manager.tws_client:
+            health_status["components"]["tws_client"] = "connected"
+        else:
+            health_status["components"]["tws_client"] = "disconnected"
+            health_status["status"] = "degraded"
+
+        # Check Scheduler
+        if hasattr(app.state, 'scheduler') and app.state.scheduler:
+            scheduler_running = app.state.scheduler.running
+            health_status["components"]["scheduler"] = "running" if scheduler_running else "stopped"
+            if not scheduler_running:
+                health_status["status"] = "degraded"
+        else:
+            health_status["components"]["scheduler"] = "not_initialized"
+            health_status["status"] = "degraded"
+
+        # Check Knowledge Graph (placeholder)
+        health_status["components"]["knowledge_graph"] = "not_implemented"
+
+        # Check Monitoring System
+        monitoring_stats = tws_monitor.get_current_metrics()
+        health_status["components"]["monitoring"] = "active" if monitoring_stats else "inactive"
+
+    except Exception as e:
+        health_status["status"] = "error"
+        health_status["error"] = str(e)
+        logger.error(f"Health check failed: {e}")
+
+    return health_status
