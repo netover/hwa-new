@@ -177,6 +177,124 @@ class MockTWSClient:
             workstations=workstations, jobs=jobs, critical_jobs=critical_jobs
         )
 
+    async def restart_job(self, job_id: str) -> Dict[str, Any]:
+        """
+        Mocks restarting a job.
+
+        Args:
+            job_id: The ID of the job to restart
+
+        Returns:
+            Dict containing job restart information
+
+        Note:
+            Simulates an asynchronous delay and returns mock restart data
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+        return {
+            "job_id": job_id,
+            "action": "restarted",
+            "status": "PENDING",
+            "timestamp": "2024-01-01T12:00:00Z",
+        }
+
+    async def cancel_job(self, job_id: str) -> Dict[str, Any]:
+        """
+        Mocks canceling a job.
+
+        Args:
+            job_id: The ID of the job to cancel
+
+        Returns:
+            Dict containing job cancellation information
+
+        Note:
+            Simulates an asynchronous delay and returns mock cancellation data
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+        return {
+            "job_id": job_id,
+            "action": "canceled",
+            "status": "CANCELED",
+            "timestamp": "2024-01-01T12:00:00Z",
+        }
+
+    async def get_job_status(self, job_id: str) -> JobStatus:
+        """
+        Mocks getting the status of a specific job.
+
+        Args:
+            job_id: The ID of the job to get status for
+
+        Returns:
+            JobStatus: The status of the requested job
+
+        Note:
+            Simulates an asynchronous delay and returns mock job status
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+        # Find a job that matches the job_id (for simplicity, return first job)
+        jobs = self.mock_data.get("jobs_status", [])
+        if jobs:
+            return JobStatus(**jobs[0])
+        # Return a default job if none found
+        return JobStatus(
+            name=f"JOB_{job_id}",
+            workstation="CPU_WS",
+            status="SUCC",
+            job_stream="STREAM_A",
+        )
+
+    async def get_job_history(self, job_id: str) -> List[Dict[str, Any]]:
+        """
+        Mocks getting the history of a specific job.
+
+        Args:
+            job_id: The ID of the job to get history for
+
+        Returns:
+            List of job history entries
+
+        Note:
+            Simulates an asynchronous delay and returns mock job history
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+        return [
+            {
+                "job_id": job_id,
+                "status": "SUCC",
+                "timestamp": "2024-01-01T10:00:00Z",
+                "duration": "5m",
+            },
+            {
+                "job_id": job_id,
+                "status": "RUNNING",
+                "timestamp": "2024-01-01T11:00:00Z",
+                "duration": "2m",
+            },
+        ]
+
+    async def list_jobs(self, status_filter: str = None) -> List[JobStatus]:
+        """
+        Mocks listing all jobs, optionally filtered by status.
+
+        Args:
+            status_filter: Optional status filter (e.g., 'SUCC', 'ABEND')
+
+        Returns:
+            List[JobStatus]: List of job status objects
+
+        Note:
+            Simulates an asynchronous delay and returns filtered mock jobs
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+        jobs = [JobStatus(**job) for job in self.mock_data.get("jobs_status", [])]
+
+        if status_filter:
+            jobs = [job for job in jobs if job.status == status_filter]
+
+        return jobs
+
     async def close(self) -> None:
         """
         Mocks closing the client connection.

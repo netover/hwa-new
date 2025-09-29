@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from time import time as time_func
 from typing import Any, Dict, List, Optional, Tuple
 
-from resync.core.enhanced_async_cache import EnhancedAsyncTTLCache
+from resync.core.enhanced_async_cache import TWS_OptimizedAsyncCache
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -178,11 +178,11 @@ class CacheHierarchy:
         from resync.settings import settings
 
         self.l1_cache = L1Cache(max_size=settings.CACHE_HIERARCHY_L1_MAX_SIZE)
-        self.l2_cache = EnhancedAsyncTTLCache(
+        self.l2_cache = TWS_OptimizedAsyncCache(
             ttl_seconds=settings.CACHE_HIERARCHY_L2_TTL,
             cleanup_interval=settings.CACHE_HIERARCHY_L2_CLEANUP_INTERVAL,
-            num_shards=getattr(settings, "CACHE_HIERARCHY_NUM_SHARDS", 16),
-            max_workers=getattr(settings, "CACHE_HIERARCHY_MAX_WORKERS", 4),
+            num_shards=settings.CACHE_HIERARCHY_NUM_SHARDS,
+            max_workers=settings.CACHE_HIERARCHY_MAX_WORKERS,
         )
         self.metrics = CacheMetrics()
         self.is_running = False
@@ -213,50 +213,98 @@ class CacheHierarchy:
         start_time = time_func()
         self.metrics.total_gets += 1
 
-        # Try L1 first (fastest)
-        l1_start = time_func()
-        l1_value = await self.l1_cache.get(key)
-        l1_latency = time_func() - l1_start
-        self.metrics.l1_get_latency = (
-            self.metrics.l1_get_latency + l1_latency
-        ) / 2  # Running average
+        try:
+            # Try L1 first (fastest)
+            l1_start = time_func()
+            l1_value = await self.l1_cache.get(key)
+            l1_latency = time_func() - l1_start
+            self.metrics.l1_get_latency = (
+                self.metrics.l1_get_latency + l1_latency
+            ) / 2  # Running average
 
-        if l1_value is not None:
-            self.metrics.l1_hits += 1
+            if l1_value is not None:
+                self.metrics.l1_hits += 1
+                logger.debug(
+                    f"Cache HIERARCHY HIT (L1) for key: {key}, latency: {l1_latency * 1000:.2f}ms"
+                )
+                return l1_value
+
+            self.metrics.l1_misses += 1
+
+            # Try L2 if L1 miss
+            l2_start = time_func()
+            l2_value = await self.l2_cache.get(key)
+            l2_latency = time_func() - l2_start
+            self.metrics.l2_get_latency = (
+                self.metrics.l2_get_latency + l2_latency
+            ) / 2  # Running average
+
+            if l2_value is not None:
+                self.metrics.l2_hits += 1
+                # Fix race condition: Atomic double-check pattern with L2 lock
+                try:
+                    # Acquire L2 lock to ensure data consistency during L1 write
+                    async with self.l2_cache._get_key_lock(key):
+                        # Double-check: Verify L2 value is still valid after acquiring lock
+                        current_l2_value = await self.l2_cache.get(key)
+                        if (
+                            current_l2_value is not None
+                            and current_l2_value == l2_value
+                        ):
+                            # Atomically write to L1 while holding L2 lock
+                            await self.l1_cache.set(key, l2_value)
+                            logger.debug(
+                                f"Cache HIERARCHY HIT (L2) for key: {key}, latency: {l2_latency * 1000:.2f}ms"
+                            )
+                            return l2_value
+                        else:
+                            # L2 value changed, treat as miss
+                            logger.debug(
+                                f"Cache HIERARCHY L2 value changed for key: {key}"
+                            )
+                            return None
+                except AttributeError:
+                    # Fallback: L2 cache doesn't have key locking, use L1 lock
+                    shard, lock = self.l1_cache._get_shard(key)
+                    async with lock:
+                        current_l2_value = await self.l2_cache.get(key)
+                        if (
+                            current_l2_value is not None
+                            and current_l2_value == l2_value
+                        ):
+                            await self.l1_cache.set(key, l2_value)
+                            logger.debug(
+                                f"Cache HIERARCHY HIT (L2) for key: {key}, latency: {l2_latency * 1000:.2f}ms"
+                            )
+                            return l2_value
+                        else:
+                            logger.debug(
+                                f"Cache HIERARCHY L2 value changed for key: {key}"
+                            )
+                            return None
+
+            self.metrics.l2_misses += 1
+            miss_latency = time_func() - start_time
+            self.metrics.miss_latency = (
+                self.metrics.miss_latency + miss_latency
+            ) / 2  # Running average
+
             logger.debug(
-                f"Cache HIERARCHY HIT (L1) for key: {key}, latency: {l1_latency * 1000:.2f}ms"
+                f"Cache HIERARCHY MISS for key: {key}, total latency: {miss_latency * 1000:.2f}ms"
             )
-            return l1_value
+            return None
 
-        self.metrics.l1_misses += 1
-
-        # Try L2 if L1 miss
-        l2_start = time_func()
-        l2_value = await self.l2_cache.get(key)
-        l2_latency = time_func() - l2_start
-        self.metrics.l2_get_latency = (
-            self.metrics.l2_get_latency + l2_latency
-        ) / 2  # Running average
-
-        if l2_value is not None:
-            self.metrics.l2_hits += 1
-            # Write through to L1 for hot data
-            await self.l1_cache.set(key, l2_value)
-            logger.debug(
-                f"Cache HIERARCHY HIT (L2) for key: {key}, latency: {l2_latency * 1000:.2f}ms"
+        except asyncio.TimeoutError:
+            logger.warning(f"Cache get operation timed out for key: {key}")
+            return None
+        except asyncio.CancelledError:
+            logger.debug(f"Cache get operation cancelled for key: {key}")
+            raise
+        except Exception as e:
+            logger.error(
+                f"Unexpected error in cache get for key {key}: {e}", exc_info=True
             )
-            return l2_value
-
-        self.metrics.l2_misses += 1
-        miss_latency = time_func() - start_time
-        self.metrics.miss_latency = (
-            self.metrics.miss_latency + miss_latency
-        ) / 2  # Running average
-
-        logger.debug(
-            f"Cache HIERARCHY MISS for key: {key}, total latency: {miss_latency * 1000:.2f}ms"
-        )
-        return None
+            return None
 
     async def set(
         self, key: str, value: Any, ttl_seconds: Optional[int] = None

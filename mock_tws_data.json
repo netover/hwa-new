@@ -15,19 +15,22 @@
     {
       "name": "JOB_A",
       "workstation": "CPU_WS",
-      "status": "SUCC"
+      "status": "SUCC",
+      "job_stream": "STREAM_A"
     },
     {
       "name": "JOB_B",
       "workstation": "FT_WS",
-      "status": "ABEND"
+      "status": "ABEND",
+      "job_stream": "STREAM_B"
     }
   ],
   "critical_path_status": [
     {
-      "name": "CRITICAL_JOB_1",
-      "workstation": "CPU_WS",
-      "status": "SUCC"
+      "job_id": 1,
+      "job_name": "CRITICAL_JOB_1",
+      "status": "SUCC",
+      "start_time": "2024-01-01T10:00:00Z"
     }
   ],
   "connection_status": true

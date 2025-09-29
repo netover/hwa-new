@@ -268,3 +268,8 @@ class DIContainer:
 # This is the default container used by the application.
 # It can be replaced with a custom container if needed.
 container = DIContainer()
+
+# Register AsyncAuditQueue as the implementation for IAuditQueue
+from resync.core.audit_queue import AsyncAuditQueue, IAuditQueue
+
+container.register(IAuditQueue, AsyncAuditQueue, scope=ServiceScope.SINGLETON)

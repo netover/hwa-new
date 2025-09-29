@@ -45,17 +45,31 @@ class OptimizedTWSClient:
         engine_name: str = "tws-engine",
         engine_owner: str = "tws-owner",
     ):
-        self.base_url = f"{hostname}:{port}/twsd"
-        self.auth = (username, password)
+        self.hostname = hostname
+        self.port = port
+        self.username = username
+        self.password = password
         self.engine_name = engine_name
         self.engine_owner = engine_owner
+        self.timeout = DEFAULT_TIMEOUT
+        self.base_url = f"{hostname}:{port}/twsd"
+        self.auth = (username, password)
 
-        # Asynchronous client with connection pooling
+        # Asynchronous client with TWS-optimized connection pooling
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             auth=self.auth,
-            verify=True,
-            timeout=DEFAULT_TIMEOUT,
+            verify=False,  # Development: TWS often uses self-signed certs
+            timeout=httpx.Timeout(
+                connect=10,  # TWS can be slow to connect
+                read=30,  # TWS responses can be large/slow
+                write=10,
+                pool=5,
+            ),
+            limits=httpx.Limits(
+                max_connections=20,  # 15 users + 4M jobs/month = need more connections
+                max_keepalive_connections=8,
+            ),
         )
         # Caching layer to reduce redundant API calls - now using cache hierarchy
         self.cache = get_cache_hierarchy()
@@ -154,6 +168,52 @@ class OptimizedTWSClient:
         return SystemStatus(
             workstations=workstations, jobs=jobs, critical_jobs=critical_jobs
         )
+
+    async def get_job_status_batch(self, job_ids: List[str]) -> dict[str, JobStatus]:
+        """
+        Batch multiple job status queries in a single optimized request.
+
+        Args:
+            job_ids: List of job IDs to query
+
+        Returns:
+            Dictionary mapping job_id to JobStatus
+        """
+        results = {}
+        uncached_jobs = []
+
+        # Check cache for each job
+        for job_id in job_ids:
+            cache_key = f"job_status:{job_id}"
+            cached_data = await self.cache.get(cache_key)
+            if cached_data:
+                results[job_id] = cached_data
+            else:
+                uncached_jobs.append(job_id)
+
+        # Batch request for uncached jobs
+        if uncached_jobs:
+            # TWS API may support batch queries - if not, make individual calls
+            for job_id in uncached_jobs:
+                try:
+                    # This would ideally be a batch API call
+                    # For now, make individual calls (can be optimized further)
+                    url = f"/model/jobdefinition/{job_id}?engineName={self.engine_name}&engineOwner={self.engine_owner}"
+                    async with self._api_request("GET", url) as data:
+                        job_status = JobStatus(**data)
+                        results[job_id] = job_status
+                        # Cache the result
+                        await self.cache.set_from_source(
+                            f"job_status:{job_id}",
+                            job_status,
+                            ttl_seconds=settings.TWS_CACHE_TTL,
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to get status for job {job_id}: {e}")
+                    # Return None or a default status for failed jobs
+                    results[job_id] = None
+
+        return results
 
     async def close(self) -> None:
         """Closes the underlying HTTPX client and its connections."""

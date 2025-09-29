@@ -8,7 +8,8 @@ The audit queue manages memories that need to be reviewed by administrators.
 import json
 import logging
 import os
-from datetime import datetime
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 import redis
@@ -27,7 +28,41 @@ from resync.settings import settings
 logger = logging.getLogger(__name__)
 
 
-class AsyncAuditQueue:
+class IAuditQueue(ABC):
+    """
+    Abstract interface for audit queue implementations.
+    """
+
+    @abstractmethod
+    async def add_audit_record(self, memory: Dict[str, Any]) -> bool:
+        """Add a new memory to the audit queue."""
+
+    @abstractmethod
+    async def get_pending_audits(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get pending audit records."""
+
+    @abstractmethod
+    async def update_audit_status(self, memory_id: str, status: str) -> bool:
+        """Update the status of an audit record."""
+
+    @abstractmethod
+    async def is_memory_approved(self, memory_id: str) -> bool:
+        """Check if a memory has been approved."""
+
+    @abstractmethod
+    async def delete_audit_record(self, memory_id: str) -> bool:
+        """Remove an audit record from the queue."""
+
+    @abstractmethod
+    async def get_queue_length(self) -> int:
+        """Get the current length of the audit queue."""
+
+    @abstractmethod
+    async def cleanup_processed_audits(self, days_old: int = 30) -> int:
+        """Remove old processed audits."""
+
+
+class AsyncAuditQueue(IAuditQueue):
     """
     Redis-based audit queue for managing memories that need admin review.
 
@@ -92,7 +127,7 @@ class AsyncAuditQueue:
             "ia_audit_reason": memory.get("ia_audit_reason"),
             "ia_audit_confidence": memory.get("ia_audit_confidence"),
             "status": "pending",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         async with self.async_client.pipeline() as pipe:
@@ -164,7 +199,7 @@ class AsyncAuditQueue:
             if data_json:
                 data = json.loads(data_json.decode("utf-8"))
                 data["status"] = status
-                data["reviewed_at"] = datetime.utcnow().isoformat()
+                data["reviewed_at"] = datetime.now(timezone.utc).isoformat()
                 pipe.hset(self.audit_data_key, memory_id, json.dumps(data))
             await pipe.execute()
 
@@ -229,7 +264,7 @@ class AsyncAuditQueue:
         Returns:
             Number of records cleaned up.
         """
-        cutoff_date = datetime.utcnow().timestamp() - (days_old * 24 * 60 * 60)
+        cutoff_date = datetime.now(timezone.utc).timestamp() - (days_old * 24 * 60 * 60)
         cleaned_count = 0
 
         # Get all memory IDs
@@ -318,7 +353,7 @@ class AsyncAuditQueue:
                 pass
         """
         # Delegate to the new distributed audit lock
-        return await self.distributed_lock.acquire(lock_key, timeout)
+        return self.distributed_lock.acquire(lock_key, timeout)
 
     async def cleanup_expired_locks(
         self, lock_prefix: str = "memory:", max_age: int = 60
@@ -356,6 +391,9 @@ class AsyncAuditQueue:
             return False
         except ValueError as e:
             logger.error("Value error force releasing lock %s: %s", lock_key, e)
+            return False
+        except (ConnectionError, TimeoutError) as e:
+            logger.error("Connection error force releasing lock %s: %s", lock_key, e)
             return False
         except Exception as e:
             logger.error("Unexpected error force releasing lock %s: %s", lock_key, e)
