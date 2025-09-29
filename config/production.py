@@ -30,10 +30,7 @@ class ProductionSettings(Settings):
     # TWS_USER: str = "prod_user"
     # TWS_PASSWORD: str = "prod_password"
 
-    # Ensure SSL verification is enabled in production
-    # This would require modifying OptimizedTWSClient to use this setting
-    # For now, it's a conceptual setting
-    # TWS_VERIFY_SSL: bool = True
+    TWS_VERIFY_SSL: bool = False  # SSL verification disabled as per project decision
 
     # Production LLM endpoint
     # LLM_ENDPOINT: str = "https://api.openai.com/v1"

@@ -10,6 +10,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from resync.core.enhanced_async_cache import TWS_OptimizedAsyncCache
 from resync.settings import settings
 
+# Prometheus metrics for cache monitoring
+from prometheus_client import Counter, Histogram
+
+cache_hits = Counter('cache_hierarchy_hits_total', 'Total cache hits', ['cache_level'])
+cache_misses = Counter('cache_hierarchy_misses_total', 'Total cache misses', ['cache_level'])
+cache_latency = Histogram('cache_hierarchy_latency_seconds', 'Cache operation latency', ['cache_level'])
+
 logger = logging.getLogger(__name__)
 
 
@@ -210,6 +217,10 @@ class CacheHierarchy:
         Returns:
             Cached value if found, None otherwise
         """
+        if len(key) > 256:
+            logger.warning(f"Cache key too long: {len(key)} chars, truncating")
+            key = key[:256]  # Truncate to prevent memory issues
+
         start_time = time_func()
         self.metrics.total_gets += 1
 
@@ -224,6 +235,8 @@ class CacheHierarchy:
 
             if l1_value is not None:
                 self.metrics.l1_hits += 1
+                cache_hits.labels(cache_level='l1').inc()
+                cache_latency.labels(cache_level='l1').observe(l1_latency)
                 logger.debug(
                     f"Cache HIERARCHY HIT (L1) for key: {key}, latency: {l1_latency * 1000:.2f}ms"
                 )
@@ -241,49 +254,18 @@ class CacheHierarchy:
 
             if l2_value is not None:
                 self.metrics.l2_hits += 1
-                # Fix race condition: Atomic double-check pattern with L2 lock
-                try:
-                    # Acquire L2 lock to ensure data consistency during L1 write
-                    async with self.l2_cache._get_key_lock(key):
-                        # Double-check: Verify L2 value is still valid after acquiring lock
-                        current_l2_value = await self.l2_cache.get(key)
-                        if (
-                            current_l2_value is not None
-                            and current_l2_value == l2_value
-                        ):
-                            # Atomically write to L1 while holding L2 lock
-                            await self.l1_cache.set(key, l2_value)
-                            logger.debug(
-                                f"Cache HIERARCHY HIT (L2) for key: {key}, latency: {l2_latency * 1000:.2f}ms"
-                            )
-                            return l2_value
-                        else:
-                            # L2 value changed, treat as miss
-                            logger.debug(
-                                f"Cache HIERARCHY L2 value changed for key: {key}"
-                            )
-                            return None
-                except AttributeError:
-                    # Fallback: L2 cache doesn't have key locking, use L1 lock
-                    shard, lock = self.l1_cache._get_shard(key)
-                    async with lock:
-                        current_l2_value = await self.l2_cache.get(key)
-                        if (
-                            current_l2_value is not None
-                            and current_l2_value == l2_value
-                        ):
-                            await self.l1_cache.set(key, l2_value)
-                            logger.debug(
-                                f"Cache HIERARCHY HIT (L2) for key: {key}, latency: {l2_latency * 1000:.2f}ms"
-                            )
-                            return l2_value
-                        else:
-                            logger.debug(
-                                f"Cache HIERARCHY L2 value changed for key: {key}"
-                            )
-                            return None
+                cache_hits.labels(cache_level='l2').inc()
+                cache_latency.labels(cache_level='l2').observe(l2_latency)
+                # Simplified: Always write L2 value to L1 without complex double-check
+                # This trades perfect consistency for simplicity and performance
+                await self.l1_cache.set(key, l2_value)
+                logger.debug(
+                    f"Cache HIERARCHY HIT (L2) for key: {key}, latency: {l2_latency * 1000:.2f}ms"
+                )
+                return l2_value
 
             self.metrics.l2_misses += 1
+            cache_misses.labels(cache_level='l2').inc()
             miss_latency = time_func() - start_time
             self.metrics.miss_latency = (
                 self.metrics.miss_latency + miss_latency

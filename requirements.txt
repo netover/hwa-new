@@ -18,6 +18,8 @@ redis[asyncio]==5.0.8
 orjson>=3.8.0
 apscheduler
 tenacity>=8.2.3  # For robust retry mechanisms
+pybreaker>=1.0.0  # For circuit breaker pattern in Redis connections
+prometheus-client>=0.23.0  # For monitoring cache metrics
 mutmut>=3.3.0  # Mutation testing for test effectiveness validation
 authlib>=1.6.4  # Fixed CVE-2025-59420 - JWS verification bypass
 mypy>=1.10.0

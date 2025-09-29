@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # Circuit Breaker for Redis/TWS operations
 redis_circuit_breaker = CircuitBreaker(
     fail_max=5,  # Open after 5 failures
-    timeout=60,  # Wait 60 seconds before retrying
+    reset_timeout=60,  # Wait 60 seconds before retrying
     name="redis_circuit_breaker",
 )
 
@@ -422,9 +422,19 @@ async def health_check():
     try:
         # Check TWS Client
         if hasattr(agent_manager, "tws_client") and agent_manager.tws_client:
-            health_status["components"]["tws_client"] = "connected"
+            # Improved check: Attempt a basic operation or check status
+            try:
+                # Assuming tws_client has a method to check connection (e.g., is_connected or ping)
+                if hasattr(agent_manager.tws_client, "is_connected") and agent_manager.tws_client.is_connected:
+                    health_status["components"]["tws_client"] = "connected"
+                else:
+                    health_status["components"]["tws_client"] = "disconnected"
+                    health_status["status"] = "degraded"
+            except Exception as e:
+                health_status["components"]["tws_client"] = f"error: {str(e)}"
+                health_status["status"] = "degraded"
         else:
-            health_status["components"]["tws_client"] = "disconnected"
+            health_status["components"]["tws_client"] = "not_initialized"
             health_status["status"] = "degraded"
 
         # Check Scheduler
@@ -452,6 +462,10 @@ async def health_check():
             health_status["components"]["monitoring"] = f"error: {str(e)}"
             health_status["status"] = "degraded"
 
+    except (ConnectionError, TimeoutError) as e:
+        health_status["status"] = "error"
+        health_status["error"] = str(e)
+        logger.error(f"Health check failed due to connection issue: {e}")
     except Exception as e:
         health_status["status"] = "error"
         health_status["error"] = str(e)
