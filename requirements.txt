@@ -3,6 +3,7 @@ pypdf
 python-docx
 openpyxl
 neo4j
+pydantic  # For data validation and serialization
 dynaconf>=3.2.0  # For dynamic configuration management
 pytest-asyncio  # For async testing support
 redis  # For Redis operations in tests
@@ -12,3 +13,7 @@ python-multipart  # For file uploads
 tenacity  # For retry mechanisms
 agno  # For AI agent functionality
 prometheus_client  # For metrics collection
+apscheduler  # For async job scheduling
+pybreaker  # For circuit breaker pattern
+watchfiles  # For file system monitoring
+jinja2  # For HTML templating
