@@ -2,31 +2,23 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from dynaconf import Dynaconf
 
-from dotenv import load_dotenv
+# --- Dynamic Configuration with Dynaconf ---
+# Load settings from TOML files and environment variables
+settings = Dynaconf(
+    envvar_prefix="APP",  # Prefix for environment variables (e.g., APP_TWS_HOST)
+    settings_files=[
+        "settings.toml",  # Base settings
+        f"settings.{os.environ.get('APP_ENV', 'development')}.toml"  # Environment-specific overrides
+    ],
+    environments=True,  # Enable environment-specific loading
+    load_dotenv=True,  # Load .env file if present
+    env_switcher="APP_ENV",  # Use APP_ENV to switch environments
+)
 
-# --- Environment Setup ---
-# Load environment variables from .env file if it exists
-env_path = Path(".") / ".env"
-if env_path.is_file():
-    load_dotenv(dotenv_path=env_path)
-
-# --- Type Definitions ---
+# --- Type Definitions (for backward compatibility) ---
 ModelEndpoint = str
 
-# --- Base Settings Class (moved to config/base.py) ---
-# This file will now load the correct settings class based on APP_ENV
-
-APP_ENV = os.environ.get("APP_ENV", "development").lower()
-
-if APP_ENV == "development":
-    from config.development import DevelopmentSettings as CurrentSettings
-elif APP_ENV == "production":
-    from config.production import ProductionSettings as CurrentSettings
-else:
-    raise ValueError(
-        f"Unknown APP_ENV: {APP_ENV}. Must be 'development' or 'production'."
-    )
-
-# --- Global Settings Instance ---
-settings: CurrentSettings = CurrentSettings()
+# Post-process settings for type conversion
+settings.BASE_DIR = Path(settings.BASE_DIR)

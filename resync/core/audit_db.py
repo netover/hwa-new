@@ -9,14 +9,22 @@ logger = logging.getLogger(__name__)
 DATABASE_PATH = settings.BASE_DIR / "audit_queue.db"
 
 
-def get_db_connection():
-    """Establishes and returns a connection to the SQLite database."""
+def get_db_connection() -> sqlite3.Connection:
+    """Establishes and returns a TWS-optimized SQLite database connection."""
     conn = sqlite3.connect(DATABASE_PATH)
+
+    # TWS-specific SQLite optimizations
+    conn.execute("PRAGMA journal_mode = WAL")  # Better concurrency
+    conn.execute("PRAGMA synchronous = NORMAL")  # Better performance
+    conn.execute("PRAGMA cache_size = 10000")  # 10MB cache
+    conn.execute("PRAGMA temp_store = memory")  # Memory temp tables
+    conn.execute("PRAGMA foreign_keys = ON")  # Data integrity
+
     conn.row_factory = sqlite3.Row  # Access columns by name
     return conn
 
 
-def initialize_database():
+def initialize_database() -> None:
     """Initializes the database, creating the audit_queue table if it doesn't exist."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -64,19 +72,79 @@ def add_audit_record(memory: Dict[str, Any]) -> Optional[int]:
                 ),
             )
             conn.commit()
-            logger.info(f"Added memory {memory['id']} to audit queue.")
+            logger.debug("Added memory %s to audit queue.", memory["id"])
             return cursor.lastrowid
         except sqlite3.IntegrityError:
-            logger.warning(
-                f"Memory {memory['id']} already exists in audit queue. Skipping."
+            logger.debug(
+                "Memory %s already exists in audit queue. Skipping.", memory["id"]
             )
             return None
         except Exception as e:
             logger.error(
-                f"Error adding memory {memory.get('id')} to audit queue: {e}",
+                "Error adding memory %s to audit queue: %s",
+                memory.get("id"),
+                e,
                 exc_info=True,
             )
             return None
+
+
+def add_audit_records_batch(memories: List[Dict[str, Any]]) -> List[Optional[int]]:
+    """
+    Batch insert multiple audit records for better performance.
+
+    Args:
+        memories: List of memory dictionaries
+
+    Returns:
+        List of record IDs (None for duplicates)
+    """
+    if not memories:
+        return []
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        record_ids = []
+
+        for memory in memories:
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO audit_queue (
+                        memory_id, user_query, agent_response,
+                        ia_audit_reason, ia_audit_confidence, status
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        memory["id"],
+                        memory["user_query"],
+                        memory["agent_response"],
+                        memory.get("ia_audit_reason"),
+                        memory.get("ia_audit_confidence"),
+                        "pending",
+                    ),
+                )
+                record_ids.append(cursor.lastrowid)
+            except sqlite3.IntegrityError:
+                logger.debug(
+                    "Memory %s already exists in audit queue. Skipping.", memory["id"]
+                )
+                record_ids.append(None)
+            except Exception as e:
+                logger.error(
+                    "Error adding memory %s to audit queue: %s",
+                    memory.get("id"),
+                    e,
+                    exc_info=True,
+                )
+                record_ids.append(None)
+
+        conn.commit()
+        logger.info(
+            "Batch inserted %d audit records",
+            len([id for id in record_ids if id is not None]),
+        )
+        return record_ids
 
 
 def get_pending_audits() -> List[Dict[str, Any]]:
@@ -108,9 +176,9 @@ def update_audit_status(memory_id: str, status: str) -> bool:
         )
         conn.commit()
         if cursor.rowcount > 0:
-            logger.info(f"Updated memory {memory_id} status to {status}.")
+            logger.info("Updated memory %s status to %s.", memory_id, status)
             return True
-        logger.warning(f"Memory {memory_id} not found for status update.")
+        logger.warning("Memory %s not found for status update.", memory_id)
         return False
 
 
@@ -123,9 +191,10 @@ def delete_audit_record(memory_id: str) -> bool:
         cursor.execute("DELETE FROM audit_queue WHERE memory_id = ?", (memory_id,))
         conn.commit()
         if cursor.rowcount > 0:
-            logger.info(f"Deleted memory {memory_id} from audit queue.")
+            logger.info("Deleted memory %s from audit queue.", memory_id)
             return True
-        logger.warning(f"Memory {memory_id} not found for deletion from audit queue.")
+        logger.warning("Memory %s not found for deletion from audit queue.", memory_id)
+        return False
 
 
 def is_memory_approved(memory_id: str) -> bool:

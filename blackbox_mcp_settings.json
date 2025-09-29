@@ -5,6 +5,12 @@
       "args": ["-y", "@upstash/context7-mcp"],
       "disabled": false,
       "autoApprove": []
+    },
+    "github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "disabled": false,
+      "autoApprove": []
     }
   }
 }

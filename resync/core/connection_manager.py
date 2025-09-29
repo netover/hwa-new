@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import List
+from typing import Any, Dict, List
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -12,33 +12,32 @@ logger = logging.getLogger(__name__)
 class ConnectionManager:
     """
     Manages active WebSocket connections for real-time updates.
-    This class is a singleton to ensure a single list of active connections.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initializes the ConnectionManager with an empty list of connections."""
         self.active_connections: List[WebSocket] = []
         logger.info("ConnectionManager initialized.")
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket) -> None:
         """
         Accepts a new WebSocket connection and adds it to the active list.
         """
         await websocket.accept()
         self.active_connections.append(websocket)
-        logger.info(f"New WebSocket connection accepted: {websocket.client}")
-        logger.info(f"Total active connections: {len(self.active_connections)}")
+        logger.info("New WebSocket connection accepted: %s", websocket.client)
+        logger.info("Total active connections: %d", len(self.active_connections))
 
-    async def disconnect(self, websocket: WebSocket):
+    async def disconnect(self, websocket: WebSocket) -> None:
         """
         Removes a WebSocket connection from the active list.
         """
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-            logger.info(f"WebSocket connection closed: {websocket.client}")
-            logger.info(f"Total active connections: {len(self.active_connections)}")
+            logger.info("WebSocket connection closed: %s", websocket.client)
+            logger.info("Total active connections: %d", len(self.active_connections))
 
-    async def broadcast(self, message: str):
+    async def broadcast(self, message: str) -> None:
         """
         Sends a plain text message to all connected clients.
         """
@@ -56,11 +55,25 @@ class ConnectionManager:
         for task in tasks:
             try:
                 await task
+            except WebSocketDisconnect as e:
+                # Client disconnected during broadcast
+                logger.warning("Client disconnected during broadcast: %s", e)
+            except ConnectionError as e:
+                # Connection lost
+                logger.warning("Connection error during broadcast: %s", e)
+            except RuntimeError as e:
+                # WebSocket in wrong state
+                if "websocket state" in str(e).lower():
+                    logger.warning("WebSocket in wrong state during broadcast: %s", e)
+                else:
+                    logger.warning("Runtime error during broadcast: %s", e)
             except Exception as e:
                 # Log error but don't stop broadcasting to other clients
-                logger.warning(f"Failed to send message to a client: {e}")
+                logger.warning("Unexpected error during broadcast: %s", e)
+                # Consider raising a custom exception for monitoring in production
+                # but don't raise here to avoid interrupting the broadcast
 
-    async def broadcast_json(self, data: dict):
+    async def broadcast_json(self, data: Dict[str, Any]) -> None:
         """
         Sends a JSON payload to all connected clients.
         """
@@ -69,16 +82,50 @@ class ConnectionManager:
             return
 
         logger.info(
-            f"Broadcasting JSON data to {len(self.active_connections)} clients."
+            "Broadcasting JSON data to %d clients.", len(self.active_connections)
         )
         tasks = [connection.send_json(data) for connection in self.active_connections]
         for task in tasks:
             try:
                 await task
+            except WebSocketDisconnect as e:
+                # Client disconnected during broadcast
+                logger.warning("Client disconnected during JSON broadcast: %s", e)
+            except ConnectionError as e:
+                # Connection lost
+                logger.warning("Connection error during JSON broadcast: %s", e)
+            except RuntimeError as e:
+                # WebSocket in wrong state
+                if "websocket state" in str(e).lower():
+                    logger.warning(
+                        "WebSocket in wrong state during JSON broadcast: %s", e
+                    )
+                else:
+                    logger.warning("Runtime error during JSON broadcast: %s", e)
+            except ValueError as e:
+                # JSON serialization error
+                logger.warning("JSON serialization error during broadcast: %s", e)
             except Exception as e:
-                logger.warning(f"Failed to send JSON to a client: {e}")
+                # Log error but don't stop broadcasting to other clients
+                logger.warning("Unexpected error during JSON broadcast: %s", e)
+                # Consider raising a custom exception for monitoring in production
+                # but don't raise here to avoid interrupting the broadcast
 
 
-# --- Singleton Instance ---
-# Create a single, globally accessible instance of the ConnectionManager.
-connection_manager = ConnectionManager()
+# Factory function for creating ConnectionManager instances
+def create_connection_manager() -> ConnectionManager:
+    """Create and return a new ConnectionManager instance."""
+    return ConnectionManager()
+
+
+# Legacy compatibility: create a default instance
+# This will be removed once all code is migrated to DI
+import warnings
+
+warnings.warn(
+    "The global connection_manager instance is deprecated and will be removed in a future version. "
+    "Use dependency injection with IConnectionManager instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+connection_manager = create_connection_manager()

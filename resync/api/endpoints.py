@@ -7,11 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
-from resync.core.agent_manager import AgentConfig, agent_manager
-from resync.core.dependencies import get_tws_client
+from resync.core.agent_manager import AgentConfig
+from resync.core.fastapi_di import get_agent_manager, get_tws_client
+from resync.core.interfaces import IAgentManager, ITWSClient
 from resync.core.metrics import metrics_registry
+from resync.core.tws_monitor import tws_monitor
 from resync.models.tws import SystemStatus
-from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
 
 # --- Logging Setup ---
@@ -42,7 +43,9 @@ async def get_dashboard():
     response_model=List[AgentConfig],
     summary="Get All Agent Configurations",
 )
-def get_all_agents():
+def get_all_agents(
+    agent_manager: IAgentManager = Depends(get_agent_manager),
+):
     """
     Returns the full configuration for all loaded agents.
     """
@@ -52,7 +55,7 @@ def get_all_agents():
 # --- System Status Endpoints ---
 @api_router.get("/status", response_model=SystemStatus)
 async def get_system_status(
-    tws_client: OptimizedTWSClient = Depends(get_tws_client),
+    tws_client: ITWSClient = Depends(get_tws_client),
 ):
     """
     Provides a comprehensive status of the TWS environment, including
@@ -88,7 +91,7 @@ def get_app_health():
 
 @api_router.get("/health/tws", summary="Check TWS Connection Health")
 async def get_tws_health(
-    tws_client: OptimizedTWSClient = Depends(get_tws_client),
+    tws_client: ITWSClient = Depends(get_tws_client),
 ):
     """
     Performs a quick check to verify the connection to the TWS server is active.
@@ -140,12 +143,12 @@ async def chat_endpoint(request: Dict):
 @api_router.post("/sensitive")
 async def sensitive_endpoint(data: Dict):
     """Sensitive endpoint for testing encryption."""
-    from resync.core.encryption_service import EncryptionService
+    from resync.core.encryption_service import encryption_service
 
-    encrypted = EncryptionService.encrypt(data["data"])
+    encrypted = encryption_service.encrypt(data["data"])
     from resync.core.logger import log_info
 
-    log_info(f"Processing sensitive data: {data['data']}")
+    log_info("Processing sensitive data (encrypted successfully)")
     return {"encrypted": encrypted}
 
 
@@ -192,3 +195,63 @@ async def files_endpoint(path: str):
     if ".." in path or path.startswith("/"):
         raise HTTPException(status_code=400, detail="Invalid path")
     return {"path": path}
+
+
+# --- TWS Monitoring Endpoints ---
+@api_router.get("/monitoring/metrics", summary="Get TWS Performance Metrics")
+async def get_tws_metrics():
+    """
+    Returns comprehensive TWS performance metrics including:
+    - API performance
+    - Cache hit ratios
+    - LLM usage and costs
+    - Circuit breaker status
+    - Memory usage
+    """
+    return tws_monitor.get_performance_report()
+
+
+@api_router.get("/monitoring/alerts", summary="Get Recent System Alerts")
+async def get_tws_alerts(limit: int = 10):
+    """
+    Returns recent system alerts and warnings.
+
+    Args:
+        limit: Maximum number of alerts to return (default: 10)
+    """
+    return tws_monitor.get_alerts(limit=limit)
+
+
+@api_router.get("/monitoring/health", summary="Get TWS System Health")
+async def get_tws_health():
+    """
+    Returns overall TWS system health status.
+    """
+    performance_report = tws_monitor.get_performance_report()
+
+    # Determine health status
+    critical_alerts = [
+        alert
+        for alert in performance_report["alerts"]
+        if alert["severity"] == "critical"
+    ]
+
+    warning_alerts = [
+        alert
+        for alert in performance_report["alerts"]
+        if alert["severity"] == "warning"
+    ]
+
+    if critical_alerts:
+        status = "critical"
+    elif warning_alerts:
+        status = "warning"
+    else:
+        status = "healthy"
+
+    return {
+        "status": status,
+        "critical_alerts": len(critical_alerts),
+        "warning_alerts": len(warning_alerts),
+        "last_updated": performance_report["current_metrics"].get("timestamp"),
+    }

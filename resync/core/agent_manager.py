@@ -10,20 +10,35 @@ try:
     from agno.agent import Agent
 except ImportError:
 
-    class Agent:
+    class MockAgent:
         """Mock Agent class for testing when agno is not available."""
 
-        def __init__(self, tools=None, model=None, instructions=None, **kwargs):
+        def __init__(
+            self,
+            tools: Any = None,
+            model: Any = None,
+            instructions: Any = None,
+            **kwargs: Any,
+        ) -> None:
             self.tools = tools or []
             self.model = model
             self.instructions = instructions
             # Mock methods that might be called
             self.run = self._mock_run
-            self._mock_run = lambda *args, **kwargs: None
+            self._mock_run: Any = lambda *args, **kwargs: None
 
 
 from pydantic import BaseModel
 
+from resync.core.exceptions import (
+    AgentError,
+    ConfigError,
+    DataParsingError,
+    InvalidConfigError,
+    MissingConfigError,
+    NetworkError,
+)
+from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
 from resync.tool_definitions.tws_tools import (
@@ -63,32 +78,24 @@ class AgentsConfig(BaseModel):
 class AgentManager:
     """
     Manages the lifecycle and operations of AI agents.
-    This class is a singleton, ensuring a single source of truth for agent state.
     """
 
-    _instance: Optional[AgentManager] = None
-    _initialized: bool = False
-
-    def __new__(cls, *args, **kwargs) -> AgentManager:
-        if not cls._instance:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def __init__(self):
+    def __init__(self, settings_module: Any = settings) -> None:
         """
-        Initializes the AgentManager.
-        The singleton pattern ensures this runs only once.
+        Initializes the AgentManager with dependencies.
+
+        Args:
+            settings_module: The settings module to use (default: global settings).
         """
-        if self._initialized:
-            return
-        logger.info("Initializing AgentManager singleton.")
+        logger.info("Initializing AgentManager.")
+        self.settings = settings_module
         self.agents: Dict[str, Any] = {}
         self.agent_configs: List[AgentConfig] = []  # Correct initialization
         self.tools: Dict[str, Any] = self._discover_tools()
         self.tws_client: Optional[OptimizedTWSClient] = None
+        self._mock_tws_client: Optional[MockTWSClient] = None
         # Async lock to prevent race conditions during TWS client initialization
         self._tws_init_lock: asyncio.Lock = asyncio.Lock()
-        self._initialized = True
 
     def _discover_tools(self) -> Dict[str, Any]:
         """
@@ -114,12 +121,12 @@ class AgentManager:
                 if not self.tws_client:
                     logger.info("Initializing OptimizedTWSClient for the first time.")
                     self.tws_client = OptimizedTWSClient(
-                        hostname=settings.TWS_HOST,
-                        port=settings.TWS_PORT,
-                        username=settings.TWS_USER,
-                        password=settings.TWS_PASSWORD,
-                        engine_name=settings.TWS_ENGINE_NAME,
-                        engine_owner=settings.TWS_ENGINE_OWNER,
+                        hostname=self.settings.TWS_HOST,
+                        port=self.settings.TWS_PORT,
+                        username=self.settings.TWS_USER,
+                        password=self.settings.TWS_PASSWORD,
+                        engine_name=self.settings.TWS_ENGINE_NAME,
+                        engine_owner=self.settings.TWS_ENGINE_OWNER,
                     )
                     # Inject the client into tools that need it
                     for tool in self.tools.values():
@@ -128,13 +135,13 @@ class AgentManager:
                     logger.info("TWS client initialization completed successfully.")
         return self.tws_client
 
-    async def load_agents_from_config(
-        self, config_path: Path = settings.AGENT_CONFIG_PATH
-    ) -> None:
+    async def load_agents_from_config(self, config_path: Path = None) -> None:
         """
         Loads agent configurations from a JSON file and initializes them.
         This method is designed to be idempotent.
         """
+        # Use provided config_path or get from settings
+        config_path = config_path or self.settings.AGENT_CONFIG_PATH
         logger.info(f"Loading agent configurations from: {config_path}")
         if not config_path.exists():
             logger.error(f"Agent configuration file not found at {config_path}")
@@ -151,17 +158,47 @@ class AgentManager:
             self.agents = await self._create_agents(config.agents)
             logger.info(f"Successfully loaded {len(self.agents)} agents.")
 
-        except json.JSONDecodeError:
-            logger.error(f"Error decoding JSON from {config_path}", exc_info=True)
+        except json.JSONDecodeError as e:
+            logger.error(
+                "Error decoding JSON from %s: %s", config_path, e, exc_info=True
+            )
             self.agents = {}
             self.agent_configs = []
-        except Exception:
+            raise DataParsingError(
+                f"Invalid JSON format in agent configuration file: {config_path}"
+            ) from e
+        except FileNotFoundError as e:
+            logger.error("Agent configuration file not found: %s", e, exc_info=True)
+            self.agents = {}
+            self.agent_configs = []
+            raise MissingConfigError(
+                f"Agent configuration file not found: {config_path}"
+            ) from e
+        except PermissionError as e:
             logger.error(
-                "An unexpected error occurred while loading agents",
+                "Permission denied accessing agent configuration file: %s",
+                e,
                 exc_info=True,
             )
             self.agents = {}
             self.agent_configs = []
+            raise ConfigError(
+                f"Permission denied accessing agent configuration file: {config_path}"
+            ) from e
+        except ValueError as e:
+            logger.error("Invalid agent configuration data: %s", e, exc_info=True)
+            self.agents = {}
+            self.agent_configs = []
+            raise InvalidConfigError(f"Invalid agent configuration data: {e}") from e
+        except Exception as e:
+            logger.error(
+                "An unexpected error occurred while loading agents: %s",
+                e,
+                exc_info=True,
+            )
+            self.agents = {}
+            self.agent_configs = []
+            raise ConfigError(f"Failed to load agent configurations: {e}") from e
 
     async def _create_agents(self, agent_configs: List[AgentConfig]) -> Dict[str, Any]:
         """
@@ -184,7 +221,7 @@ class AgentManager:
                     tools=agent_tools,
                     # Note: The 'model' parameter in agno.Client refers to the LLM.
                     # We use 'model_name' from our config.
-                    model=config.model_name,
+                    model=config.model_name,  # type: ignore[arg-type]
                     # system prompt is constructed from agent personality
                     instructions=(
                         f"You are {config.name}, a specialized AI agent. "
@@ -198,10 +235,50 @@ class AgentManager:
                 logger.debug(f"Successfully created agent: {config.id}")
             except KeyError as e:
                 logger.warning(
-                    f"Tool '{e.args[0]}' not found for agent '{config.id}'. Agent will be created without it."
+                    "Tool '%s' not found for agent '%s'. Agent will be created without it.",
+                    e.args[0],
+                    config.id,
                 )
-            except Exception:
-                logger.error(f"Failed to create agent '{config.id}'", exc_info=True)
+            except ImportError as e:
+                logger.error(
+                    "Failed to import dependency for agent '%s': %s",
+                    config.id,
+                    e,
+                    exc_info=True,
+                )
+                raise AgentError(
+                    f"Failed to import dependency for agent '{config.id}': {e}"
+                ) from e
+            except ValueError as e:
+                logger.error(
+                    "Invalid configuration for agent '%s': %s",
+                    config.id,
+                    e,
+                    exc_info=True,
+                )
+                raise AgentError(
+                    f"Invalid configuration for agent '{config.id}': {e}"
+                ) from e
+            except TypeError as e:
+                logger.error(
+                    "Type error creating agent '%s': %s", config.id, e, exc_info=True
+                )
+                raise AgentError(f"Type error creating agent '{config.id}': {e}") from e
+            except NetworkError as e:
+                logger.error(
+                    "Network error initializing agent '%s': %s",
+                    config.id,
+                    e,
+                    exc_info=True,
+                )
+                raise AgentError(
+                    f"Network error initializing agent '{config.id}': {e}"
+                ) from e
+            except Exception as e:
+                logger.error(
+                    "Failed to create agent '%s': %s", config.id, e, exc_info=True
+                )
+                raise AgentError(f"Failed to create agent '{config.id}': {e}") from e
         return agents
 
     def get_agent(self, agent_id: str) -> Optional[Any]:
@@ -226,6 +303,20 @@ class AgentManager:
             raise ValueError(f"Tool {tool_name} not found for agent {agent_id}")
 
 
-# --- Singleton Instance ---
-# Create a single, globally accessible instance of the AgentManager.
-agent_manager = AgentManager()
+# Factory function for creating AgentManager instances
+def create_agent_manager(settings_module: Any = settings) -> AgentManager:
+    """Create and return a new AgentManager instance."""
+    return AgentManager(settings_module=settings_module)
+
+
+# Legacy compatibility: create a default instance
+# This will be removed once all code is migrated to DI
+import warnings
+
+warnings.warn(
+    "The global agent_manager instance is deprecated and will be removed in a future version. "
+    "Use dependency injection with IAgentManager instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+agent_manager = create_agent_manager()

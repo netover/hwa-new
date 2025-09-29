@@ -1,43 +1,6 @@
-fastapi>=0.115.8
-uvicorn[standard]>=0.32.0
-agno>=1.5.0
-llama-cpp-python
-pandas>=2.1.0
-openpyxl>=3.1.0
-python-docx>=1.0.0
-pypdf>=3.10.0
-httpx[http2]
-watchfiles
-sse-starlette
-anthropic
-openai
-sentence-transformers
-networkx
-mem0ai
-redis[asyncio]==5.0.8
-orjson>=3.8.0
-apscheduler
-mutmut>=3.3.0  # Mutation testing for test effectiveness validation
-authlib>=1.6.4  # Fixed CVE-2025-59420 - JWS verification bypass
-mypy>=1.10.0
-
-# Testing Dependencies
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-pytest-benchmark>=4.0.0
-pytest-cov>=4.0.0
-pytest-mock>=3.10.0
-pytest-xdist>=3.3.0
-hypothesis>=6.79.0
-bandit>=1.7.0
-psutil>=5.9.0
-
-passlib[bcrypt]>=1.7.4
-python-jose[cryptography]>=3.3.0
-# Linting Dependencies
-flake8>=7.1.1
-flake8-async>=1.6.3
-safety>=3.6.0
-semgrep
-black>=24.0.0
-memory-profiler>=0.61.0
+httpx
+pypdf
+python-docx
+openpyxl
+neo4j
+dynaconf>=3.2.0  # For dynamic configuration management

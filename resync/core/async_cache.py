@@ -4,7 +4,9 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from time import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+from resync.core.exceptions import CacheError
 
 logger = logging.getLogger(__name__)
 
@@ -24,28 +26,52 @@ class AsyncTTLCache:
 
     Features:
     - Async get() and set() methods for non-blocking operations
-    - Thread-safe concurrent access using asyncio.Lock
+    - Thread-safe concurrent access using sharded asyncio.Lock
     - Background cleanup task for expired entries
     - Time-based eviction using asyncio.sleep()
     """
 
-    def __init__(self, ttl_seconds: int = 60, cleanup_interval: int = 30):
+    def __init__(
+        self, ttl_seconds: int = 60, cleanup_interval: int = 30, num_shards: int = 16
+    ):
         """
         Initialize the async cache.
 
         Args:
             ttl_seconds: Time-to-live for cache entries in seconds
             cleanup_interval: How often to run background cleanup in seconds
+            num_shards: Number of shards for the lock
         """
-        self.ttl_seconds = ttl_seconds
-        self.cleanup_interval = cleanup_interval
-        self.cache: Dict[str, CacheEntry] = {}
-        self.lock = asyncio.Lock()
-        self.cleanup_task: Optional[asyncio.Task] = None
+        # Read TTL and cleanup interval from configuration, if available
+        # Assuming get_config() reads from config.yaml
+        try:
+            from your_config_module import get_config  # Replace your_config_module
+
+            config = get_config()
+            self.ttl_seconds = config.get("async_cache", {}).get(
+                "ttl_seconds", ttl_seconds
+            )
+            self.cleanup_interval = config.get("async_cache", {}).get(
+                "cleanup_interval", cleanup_interval
+            )
+        except ImportError:
+            # Handle the case where your_config_module is not available
+            self.ttl_seconds = ttl_seconds
+            self.cleanup_interval = cleanup_interval
+
+        self.num_shards = num_shards
+        self.shards: List[Dict[str, CacheEntry]] = [{} for _ in range(num_shards)]
+        self.shard_locks = [asyncio.Lock() for _ in range(num_shards)]
+        self.cleanup_task: Optional[asyncio.Task[None]] = None
         self.is_running = False
 
         # Start background cleanup task
         self._start_cleanup_task()
+
+    def _get_shard(self, key: str) -> Tuple[Dict[str, CacheEntry], asyncio.Lock]:
+        """Get the shard and lock for a given key."""
+        shard_index = hash(key) % self.num_shards
+        return self.shards[shard_index], self.shard_locks[shard_index]
 
     def _start_cleanup_task(self) -> None:
         """Start the background cleanup task."""
@@ -62,31 +88,39 @@ class AsyncTTLCache:
             except asyncio.CancelledError:
                 logger.debug("AsyncTTLCache cleanup task cancelled")
                 break
+            except MemoryError as e:
+                logger.error("Memory error in AsyncTTLCache cleanup task: %s", e)
+                raise CacheError("Memory error during cache cleanup") from e
+            except KeyError as e:
+                logger.error("Key error in AsyncTTLCache cleanup task: %s", e)
+                raise CacheError(f"Key error during cache cleanup: {e}") from e
+            except RuntimeError as e:
+                logger.error("Runtime error in AsyncTTLCache cleanup task: %s", e)
+                raise CacheError(f"Runtime error during cache cleanup: {e}") from e
             except Exception as e:
-                logger.error(f"Error in AsyncTTLCache cleanup task: {e}")
+                logger.error("Unexpected error in AsyncTTLCache cleanup task: %s", e)
+                raise CacheError(f"Unexpected error during cache cleanup: {e}") from e
 
     async def _remove_expired_entries(self) -> None:
         """Remove expired entries from cache."""
         current_time = time()
-        expired_keys = []
-
-        # Find expired entries without holding the lock
-        for key, entry in self.cache.items():
-            if current_time - entry.timestamp > entry.ttl:
-                expired_keys.append(key)
-
-        # Remove expired entries while holding the lock
-        if expired_keys:
-            async with self.lock:
+        total_removed = 0
+        for i in range(self.num_shards):
+            shard = self.shards[i]
+            lock = self.shard_locks[i]
+            async with lock:
+                expired_keys = [
+                    key
+                    for key, entry in shard.items()
+                    if current_time - entry.timestamp > entry.ttl
+                ]
                 for key in expired_keys:
-                    if key in self.cache:
-                        del self.cache[key]
-                        logger.debug(f"Removed expired cache entry: {key}")
+                    del shard[key]
+                    logger.debug("Removed expired cache entry: %s", key)
+                total_removed += len(expired_keys)
 
-                if expired_keys:
-                    logger.debug(
-                        f"Cleaned up {len(expired_keys)} expired cache entries"
-                    )
+        if total_removed > 0:
+            logger.debug("Cleaned up %d expired cache entries", total_removed)
 
     async def get(self, key: str) -> Any | None:
         """
@@ -94,23 +128,23 @@ class AsyncTTLCache:
 
         Args:
             key: Cache key to retrieve
-
         Returns:
             Cached value if exists and not expired, None otherwise
         """
-        async with self.lock:
-            entry = self.cache.get(key)
+        shard, lock = self._get_shard(key)
+        async with lock:
+            entry = shard.get(key)
             if entry:
                 current_time = time()
                 if current_time - entry.timestamp <= entry.ttl:
-                    logger.debug(f"Cache HIT for key: {key}")
+                    logger.debug("Cache HIT for key: %s", key)
                     return entry.data
                 else:
                     # Entry expired, remove it
-                    del self.cache[key]
-                    logger.debug(f"Cache EXPIRED for key: {key}")
+                    del shard[key]
+                    logger.debug("Cache EXPIRED for key: %s", key)
 
-            logger.debug(f"Cache MISS for key: {key}")
+            logger.debug("Cache MISS for key: %s", key)
             return None
 
     async def set(
@@ -130,9 +164,10 @@ class AsyncTTLCache:
         current_time = time()
         entry = CacheEntry(data=value, timestamp=current_time, ttl=ttl_seconds)
 
-        async with self.lock:
-            self.cache[key] = entry
-            logger.debug(f"Cache SET for key: {key}")
+        shard, lock = self._get_shard(key)
+        async with lock:
+            shard[key] = entry
+            logger.debug("Cache SET for key: %s", key)
 
     async def delete(self, key: str) -> bool:
         """
@@ -144,22 +179,26 @@ class AsyncTTLCache:
         Returns:
             True if item was deleted, False if not found
         """
-        async with self.lock:
-            if key in self.cache:
-                del self.cache[key]
-                logger.debug(f"Cache DELETE for key: {key}")
+        shard, lock = self._get_shard(key)
+        async with lock:
+            if key in shard:
+                del shard[key]
+                logger.debug("Cache DELETE for key: %s", key)
                 return True
             return False
 
     async def clear(self) -> None:
         """Asynchronously clear all cache entries."""
-        async with self.lock:
-            self.cache.clear()
-            logger.debug("Cache CLEARED")
+        for i in range(self.num_shards):
+            shard = self.shards[i]
+            lock = self.shard_locks[i]
+            async with lock:
+                shard.clear()
+        logger.debug("Cache CLEARED")
 
     def size(self) -> int:
         """Get the current number of items in cache (non-async for performance)."""
-        return len(self.cache)
+        return sum(len(shard) for shard in self.shards)
 
     async def stop(self) -> None:
         """Stop the background cleanup task."""
@@ -172,10 +211,10 @@ class AsyncTTLCache:
                 pass
         logger.debug("AsyncTTLCache stopped")
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "AsyncTTLCache":
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Async context manager exit - cleanup resources."""
         await self.stop()

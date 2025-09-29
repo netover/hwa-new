@@ -99,16 +99,60 @@ class Settings(AgnoSettings):
 
     # --- Cache Hierarchy Configuration ---
     CACHE_HIERARCHY_L1_MAX_SIZE: int = Field(
-        default=int(os.environ.get("CACHE_HIERARCHY_L1_MAX_SIZE", 1000)),
+        default=int(
+            os.environ.get("CACHE_HIERARCHY_L1_MAX_SIZE", 5000)
+        ),  # 5K for 4M jobs/month
         description="Maximum number of entries in L1 cache before LRU eviction.",
     )
     CACHE_HIERARCHY_L2_TTL: int = Field(
-        default=int(os.environ.get("CACHE_HIERARCHY_L2_TTL", 300)),
+        default=int(
+            os.environ.get("CACHE_HIERARCHY_L2_TTL", 600)
+        ),  # 10 min for 4M jobs/month
         description="Time-To-Live (TTL) for L2 cache entries in seconds.",
     )
     CACHE_HIERARCHY_L2_CLEANUP_INTERVAL: int = Field(
-        default=int(os.environ.get("CACHE_HIERARCHY_L2_CLEANUP_INTERVAL", 30)),
+        default=int(
+            os.environ.get("CACHE_HIERARCHY_L2_CLEANUP_INTERVAL", 60)
+        ),  # 1 min for production
         description="Cleanup interval for L2 cache in seconds.",
+    )
+
+    # Production-specific settings for 4M jobs/month environment
+    CACHE_HIERARCHY_NUM_SHARDS: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_NUM_SHARDS", 8)),
+        description="Number of shards for production cache (8 for 15 users).",
+    )
+    CACHE_HIERARCHY_MAX_WORKERS: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_MAX_WORKERS", 4)),
+        description="Max workers for production cache (4 for 15 users).",
+    )
+    ASYNC_CACHE_CONCURRENCY_THRESHOLD: int = Field(
+        default=int(os.environ.get("ASYNC_CACHE_CONCURRENCY_THRESHOLD", 5)),
+        description="Concurrency threshold for adaptive sharding.",
+    )
+
+    # --- Async Cache Configuration ---
+    ASYNC_CACHE_TTL: int = Field(
+        default=int(os.environ.get("ASYNC_CACHE_TTL", 60)),
+        description="Default TTL for async cache entries in seconds.",
+    )
+    ASYNC_CACHE_CLEANUP_INTERVAL: int = Field(
+        default=int(os.environ.get("ASYNC_CACHE_CLEANUP_INTERVAL", 30)),
+        description="Cleanup interval for async cache in seconds.",
+    )
+    ASYNC_CACHE_NUM_SHARDS: int = Field(
+        default=int(os.environ.get("ASYNC_CACHE_NUM_SHARDS", 8)),
+        description="Number of shards for async cache.",
+    )
+    ASYNC_CACHE_MAX_WORKERS: int = Field(
+        default=int(os.environ.get("ASYNC_CACHE_MAX_WORKERS", 4)),
+        description="Max workers for async cache operations.",
+    )
+
+    # --- KeyLock Configuration ---
+    KEY_LOCK_MAX_LOCKS: int = Field(
+        default=int(os.environ.get("KEY_LOCK_MAX_LOCKS", 2048)),
+        description="Maximum number of locks to maintain in KeyLock manager.",
     )
     # These settings are critical for connecting to the HCL Workload Automation server
     # They MUST be provided in the .env file for security
@@ -128,6 +172,22 @@ class Settings(AgnoSettings):
     )
     TWS_ENGINE_OWNER: str = Field(
         default="tws-owner", description="Owner of the TWS engine."
+    )
+
+    # --- Logging Configuration ---
+    LOG_LEVEL: str = Field(
+        default=os.environ.get("LOG_LEVEL", "INFO"),
+        description="Default logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).",
+    )
+    LOG_FORMAT: str = Field(
+        default=os.environ.get(
+            "LOG_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        ),
+        description="Log format string.",
+    )
+    LOG_FILE_PATH: str = Field(
+        default=os.environ.get("LOG_FILE_PATH", "logs/resync.log"),
+        description="Path to log file.",
     )
 
     class Config:

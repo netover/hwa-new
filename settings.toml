@@ -1,0 +1,66 @@
+# Base settings for the Resync application (compatible with Dynaconf)
+# This file contains default values from the original Settings class
+
+[default]
+# Project Metadata
+PROJECT_NAME = "Resync"
+PROJECT_VERSION = "1.0.0"
+DESCRIPTION = "Real-time monitoring dashboard for HCL Workload Automation"
+BASE_DIR = "D:/Python/GITHUB/hwa-new-1"  # Adjust path as needed
+
+# Agent and Model Configuration
+AGENT_CONFIG_PATH = "config/runtime.json"
+LLM_MODEL_PATH = "models/Meta-Llama-3-8B-Instruct.Q4_K_M.gguf"
+LLM_ENDPOINT = "http://localhost:8001/v1"
+LLM_API_KEY = "your_default_api_key_here"
+AUDITOR_MODEL_NAME = "gpt-4o-mini"
+LLM_N_GPU_LAYERS = -1
+
+# Knowledge Graph (Mem0) Configuration
+MEM0_EMBEDDING_PROVIDER = "openai"
+MEM0_EMBEDDING_MODEL = "text-embedding-3-small"
+MEM0_LLM_PROVIDER = "openai"
+MEM0_LLM_MODEL = "gpt-4o-mini"
+MEM0_STORAGE_PROVIDER = "qdrant"
+MEM0_STORAGE_HOST = "localhost"
+MEM0_STORAGE_PORT = 6333
+
+# Redis Configuration
+REDIS_URL = "redis://localhost:6379"
+
+# TWS Environment Configuration
+TWS_MOCK_MODE = false
+TWS_CACHE_TTL = 60
+
+# Cache Hierarchy Configuration
+CACHE_HIERARCHY_L1_MAX_SIZE = 5000
+CACHE_HIERARCHY_L2_TTL = 600
+CACHE_HIERARCHY_L2_CLEANUP_INTERVAL = 60
+CACHE_HIERARCHY_NUM_SHARDS = 8
+CACHE_HIERARCHY_MAX_WORKERS = 4
+ASYNC_CACHE_CONCURRENCY_THRESHOLD = 5
+
+# Async Cache Configuration
+ASYNC_CACHE_TTL = 60
+ASYNC_CACHE_CLEANUP_INTERVAL = 30
+ASYNC_CACHE_NUM_SHARDS = 8
+ASYNC_CACHE_MAX_WORKERS = 4
+
+# KeyLock Configuration
+KEY_LOCK_MAX_LOCKS = 2048
+
+# TWS Credentials (must be set via environment variables)
+TWS_HOST = ""
+TWS_PORT = 31111
+TWS_USER = ""
+TWS_PASSWORD = ""
+TWS_ENGINE_NAME = "tws-engine"
+TWS_ENGINE_OWNER = "tws-owner"
+
+# Logging Configuration
+LOG_LEVEL = "INFO"
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+LOG_FILE_PATH = "logs/resync.log"
+
+# Application Environment (default to development)
+APP_ENV = "development"

@@ -5,6 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from resync.core.exceptions import NetworkError, ProcessingError
 from resync.services.tws_service import OptimizedTWSClient
 
 # --- Logging Setup ---
@@ -66,9 +67,21 @@ class TWSStatusTool(TWSToolReadOnly):
                 f"- Workstations: {workstation_summary or 'Nenhuma encontrada.'}\n"
                 f"- Jobs: {job_summary or 'Nenhum encontrado.'}"
             )
+        except ConnectionError as e:
+            logger.error("Connection error in TWSStatusTool: %s", e, exc_info=True)
+            return f"Erro de conexão ao obter o status do TWS: {e}"
+        except TimeoutError as e:
+            logger.error("Timeout error in TWSStatusTool: %s", e, exc_info=True)
+            return f"Timeout ao obter o status do TWS: {e}"
+        except NetworkError as e:
+            logger.error("Network error in TWSStatusTool: %s", e, exc_info=True)
+            return f"Erro de rede ao obter o status do TWS: {e}"
+        except ValueError as e:
+            logger.error("Value error in TWSStatusTool: %s", e, exc_info=True)
+            return f"Erro de dados ao obter o status do TWS: {e}"
         except Exception as e:
-            logger.error(f"Error in TWSStatusTool: {e}", exc_info=True)
-            return f"Erro ao obter o status do TWS: {e}"
+            logger.error("Unexpected error in TWSStatusTool: %s", e, exc_info=True)
+            return f"Erro inesperado ao obter o status do TWS: {e}"
 
 
 class TWSTroubleshootingTool(TWSToolReadOnly):
@@ -119,9 +132,39 @@ class TWSTroubleshootingTool(TWSToolReadOnly):
 
             return analysis
 
+        except ConnectionError as e:
+            logger.error(
+                "Connection error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
+            return f"Erro de conexão ao analisar as falhas do TWS: {e}"
+        except TimeoutError as e:
+            logger.error(
+                "Timeout error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
+            return f"Timeout ao analisar as falhas do TWS: {e}"
+        except NetworkError as e:
+            logger.error(
+                "Network error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
+            return f"Erro de rede ao analisar as falhas do TWS: {e}"
+        except ValueError as e:
+            logger.error("Value error in TWSTroubleshootingTool: %s", e, exc_info=True)
+            return f"Erro de dados ao analisar as falhas do TWS: {e}"
+        except AttributeError as e:
+            logger.error(
+                "Attribute error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
+            return f"Erro de atributo ao analisar as falhas do TWS: {e}"
+        except ProcessingError as e:
+            logger.error(
+                "Processing error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
+            return f"Erro de processamento ao analisar as falhas do TWS: {e}"
         except Exception as e:
-            logger.error(f"Error in TWSTroubleshootingTool: {e}", exc_info=True)
-            return f"Erro ao analisar as falhas do TWS: {e}"
+            logger.error(
+                "Unexpected error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
+            return f"Erro inesperado ao analisar as falhas do TWS: {e}"
 
 
 # --- Tool Instantiation ---
