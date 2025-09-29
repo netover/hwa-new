@@ -23,3 +23,4 @@ cryptography  # For cryptographic operations
 orjson  # For fast JSON serialization
 psutil  # For system monitoring
 python-dotenv  # For environment variable loading
+openai  # For OpenAI API integration
