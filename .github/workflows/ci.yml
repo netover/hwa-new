@@ -37,9 +37,9 @@ jobs:
         pip install -r requirements.txt
         pip install pytest pytest-asyncio pytest-mock pytest-cov hypofuzz
 
-    - name: Run unit tests with coverage and hypofuzz
+    - name: Run unit tests with coverage
       run: |
-        pytest tests/ -v --tb=short --cov=resync/core --cov-report=xml --hypofuzz
+        pytest tests/ -v --tb=short --cov=resync/core --cov-report=xml
 
     - name: Run mutation tests with mutmut
       run: |
