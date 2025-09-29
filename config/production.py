@@ -25,6 +25,15 @@ class ProductionSettings(Settings):
 
     # Override settings for production
     # TWS credentials MUST be set via environment variables in production
+# Knowledge Base and Protection Settings
+KNOWLEDGE_BASE_DIRS: list[Path] = Field(
+    default=[BASE_DIR / "resync/RAG"],
+    description="Directories included in the knowledge base (includes all RAG subdirectories)"
+)
+PROTECTED_DIRECTORIES: list[Path] = Field(
+    default=[BASE_DIR / "resync/RAG/BASE"],
+    description="Core knowledge base directory protected from deletion"
+)
     # TWS_HOST: str = "your_prod_tws_host"
     # TWS_PORT: int = 31116
     # TWS_USER: str = "prod_user"
