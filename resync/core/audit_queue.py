@@ -368,8 +368,13 @@ class AsyncAuditQueue(IAuditQueue):
         Returns:
             Number of locks cleaned up
         """
-        # Delegate to the new distributed audit lock
-        return await self.distributed_lock.cleanup_expired_locks(max_age)
+        try:
+            # Delegate to the new distributed audit lock
+            return await self.distributed_lock.cleanup_expired_locks(max_age)
+        except Exception as e:
+            # Handle errors gracefully and return 0 to indicate no locks were cleaned
+            logger.warning("Error during audit lock cleanup: %s", e)
+            return 0
 
     async def force_release_lock(self, lock_key: str) -> bool:
         """

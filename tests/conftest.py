@@ -4,7 +4,7 @@ Common test fixtures for the Resync application.
 
 import asyncio
 from pathlib import Path
-from typing import Generator
+from typing import Generator, List, Tuple, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -152,9 +152,7 @@ def audit_queue(mock_redis_client: MagicMock) -> AsyncAuditQueue:
 
     # Create a mock distributed lock that can be awaited
     mock_lock = AsyncMock()
-    mock_lock.cleanup_expired_locks = AsyncMock(
-        side_effect=lambda *args, **kwargs: 2
-    )  # Return expected count for tests
+    mock_lock.cleanup_expired_locks = AsyncMock(return_value=0)  # Default: no locks cleaned
     mock_lock.acquire = AsyncMock()
     mock_lock.force_release = AsyncMock()
     queue.distributed_lock = mock_lock
@@ -289,3 +287,126 @@ def clean_redis(redis_client):
     else:
         # Clear all resync keys
         redis_client.delete(*redis_client.keys("resync:*"))
+
+
+# --- Background Tasks Fixture ---
+
+
+class BackgroundTasksFixture:
+    """Fixture for capturing and testing background tasks."""
+
+    def __init__(self):
+        self._capturing = False
+        self._original_create_task = None
+        self.captured_tasks: List[Tuple[Any, tuple, dict]] = []
+
+    def start_capturing(self):
+        """Start intercepting asyncio.create_task calls."""
+        if not self._capturing:
+            self._original_create_task = asyncio.create_task
+            # Don't clear captured_tasks here - let reset() handle it
+            self._capturing = True
+
+            def capture_task(coro, *args, **kwargs):
+                """Capture task creation instead of executing it."""
+                if self._capturing:
+                    self.captured_tasks.append((coro, args, kwargs))
+                    # Return a mock task that never completes
+                    return asyncio.Future()
+                else:
+                    return self._original_create_task(coro, *args, **kwargs)
+
+            asyncio.create_task = capture_task
+
+    def stop_capturing(self):
+        """Stop intercepting asyncio.create_task calls."""
+        if self._capturing:
+            asyncio.create_task = self._original_create_task
+            self._capturing = False
+
+    def reset(self):
+        """Clear all captured tasks."""
+        # Cancel any pending futures to avoid warnings
+        for coro, args, kwargs in self.captured_tasks:
+            if hasattr(coro, 'close'):
+                try:
+                    coro.close()
+                except:
+                    pass
+        self.captured_tasks = []
+
+    @property
+    def task_count(self) -> int:
+        """Return the number of captured tasks."""
+        return len(self.captured_tasks)
+
+    async def run_all_async(self) -> List[Any]:
+        """Execute all captured tasks asynchronously and return their results."""
+        results = []
+        for coro, args, kwargs in self.captured_tasks:
+            if asyncio.iscoroutine(coro):
+                result = await coro
+            else:
+                # If it's not a coroutine, try to call it
+                if callable(coro):
+                    if asyncio.iscoroutinefunction(coro):
+                        result = await coro(*args, **kwargs)
+                    else:
+                        result = coro(*args, **kwargs)
+                else:
+                    result = coro
+            results.append(result)
+        return results
+
+    def run_all_sync(self) -> List[Any]:
+        """Execute all captured tasks synchronously and return their results."""
+        # This is a simple synchronous version - in practice you'd want proper event loop handling
+        results = []
+        for coro, args, kwargs in self.captured_tasks:
+            if asyncio.iscoroutine(coro):
+                # For sync execution, we'll need to use asyncio.run or similar
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # If loop is running, we can't use run_until_complete
+                        # This is a limitation of the current implementation
+                        results.append(coro)
+                    else:
+                        result = loop.run_until_complete(coro)
+                        results.append(result)
+                except RuntimeError:
+                    results.append(coro)
+            else:
+                results.append(coro)
+        return results
+
+
+@pytest.fixture
+def background_tasks():
+    """Create a background tasks fixture for testing."""
+    fixture = BackgroundTasksFixture()
+
+    yield fixture
+
+    # Cleanup: restore original create_task if it was patched
+    if fixture._capturing:
+        fixture.stop_capturing()
+
+
+@pytest.fixture
+def performance_test_data():
+    """Create performance test data for testing."""
+    # Generate a large dataset for performance testing
+    large_dataset = [
+        {"id": i, "data": f"performance_test_data_{i}" * 100}
+        for i in range(1000)
+    ]
+
+    return {
+        "large_dataset": large_dataset,
+        "test_config": {
+            "batch_size": 100,
+            "concurrency": 10,
+            "timeout": 30
+        }
+    }

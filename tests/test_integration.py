@@ -233,6 +233,7 @@ class TestResyncIntegration:
             "json_with_prefix": 'Here is the analysis:\n{"is_incorrect": false, "confidence": 0.80, "reason": "Good response"}',
         }
 
+    @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_complete_user_flow_correct_responses(
         self,
@@ -246,7 +247,10 @@ class TestResyncIntegration:
             patch("resync.core.ia_auditor.knowledge_graph", mock_knowledge_graph),
             patch("resync.core.ia_auditor.audit_queue", mock_audit_queue),
             patch("resync.core.ia_auditor.call_llm") as mock_call_llm,
+            patch("resync.core.ia_auditor.settings") as mock_settings,
         ):
+            # Mock settings to use mock mode for Redis to avoid connection errors
+            mock_settings.REDIS_URL = "redis://mock-redis-url"
             # Configure LLM to return correct responses
             mock_call_llm.side_effect = [
                 mock_llm_responses["correct_response"],  # First memory - correct
@@ -358,6 +362,7 @@ class TestResyncIntegration:
             assert result["deleted"] == 0
             assert result["flagged"] == 0
 
+    @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_audit_queue_integration(
         self,
@@ -917,6 +922,7 @@ class TestEndToEndIntegration:
                 assert audit_call_args["ia_audit_reason"] == "Correct restart procedure"
                 assert audit_call_args["ia_audit_confidence"] == 0.95
 
+    @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_end_to_end_with_incorrect_response_flagging(
         self,
@@ -1177,6 +1183,7 @@ class TestIntegrationPerformance:
         )
         return mock_client
 
+    @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_concurrent_websocket_connections(
         self,
