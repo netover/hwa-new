@@ -404,11 +404,14 @@ app.include_router(rag_upload_router)
 app.include_router(chat_router)
 app.include_router(audit_router)
 
-app.mount(
-    "/static",
-    StaticFiles(directory=settings.BASE_DIR / "static"),
-    name="static",
-)
+# Mount static files if directory exists (for cross-platform compatibility)
+static_dir = settings.BASE_DIR / "static"
+if static_dir.exists() and static_dir.is_dir():
+    app.mount(
+        "/static",
+        StaticFiles(directory=static_dir),
+        name="static",
+    )
 
 
 # --- Frontend Page Endpoints ---
