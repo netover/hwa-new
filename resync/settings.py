@@ -20,5 +20,10 @@ settings = Dynaconf(
 # --- Type Definitions (for backward compatibility) ---
 ModelEndpoint = str
 
-# Post-process settings for type conversion
+# Post-process settings for type conversion and dynamic path resolution
+# Set BASE_DIR dynamically based on current working directory if not already set
+if not hasattr(settings, 'BASE_DIR') or not settings.BASE_DIR:
+    settings.BASE_DIR = Path.cwd()
+
+# Ensure BASE_DIR is a Path object
 settings.BASE_DIR = Path(settings.BASE_DIR)
