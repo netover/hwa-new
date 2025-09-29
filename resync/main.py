@@ -39,21 +39,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     logger.info("--- Resync Application Startup ---")
 
-    try:
-        # Phase 0: Validate configuration
-        await validate_settings()
+    # Phase 0: Setup DI (synchronous)
+    inject_container(app)
 
-        # Phase 1: Initialize core systems (fail-fast)
+    try:
+        # Phase 1: Validate configuration
+        validate_settings()
+
+        # Phase 2: Initialize core systems (fail-fast)
         await initialize_core_systems()
 
-        # Phase 2: Start background services
+        # Phase 3: Start background services
         background_tasks = await start_background_services()
 
-        # Phase 3: Initialize schedulers
-        scheduler = await initialize_schedulers()
-        app.state.scheduler = scheduler
+        # Phase 4: Initialize schedulers
+        app.state.scheduler = await initialize_schedulers()
 
-        # Phase 4: Start monitoring
+        # Phase 5: Start monitoring
         await start_monitoring_system()
 
         logger.info("✅ All systems initialized successfully")
@@ -66,14 +68,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     finally:
         logger.info("--- Resync Application Shutdown ---")
-        await shutdown_application(background_tasks, app)
+        await shutdown_application(app, background_tasks)
 
 
-async def validate_settings() -> None:
+def validate_settings() -> None:
     """Validate critical settings before startup."""
     logger.info("🔧 Validating settings...")
 
-    required_vars = ["TWS_HOST", "TWS_PORT", "AGENT_MODEL_NAME", "LLM_ENDPOINT"]
+    required_vars = ["TWS_HOST", "TWS_PORT", "AGENT_MODEL_NAME", "LLM_ENDPOINT", "AGENT_CONFIG_PATH", "RAG_DIR"]
     missing = []
 
     for var in required_vars:
@@ -87,8 +89,8 @@ async def validate_settings() -> None:
         raise ConfigError(error_msg)
 
     # Additional validations
-    if settings.TWS_PORT <= 0 or settings.TWS_PORT > 65535:
-        error_msg = f"Invalid TWS_PORT: {settings.TWS_PORT} (must be 1-65535)"
+    if not isinstance(settings.TWS_PORT, int) or settings.TWS_PORT <= 0 or settings.TWS_PORT > 65535:
+        error_msg = f"Invalid TWS_PORT: {settings.TWS_PORT} (must be integer 1-65535)"
         logger.critical(f"❌ {error_msg}")
         raise ConfigError(error_msg)
 
@@ -240,20 +242,23 @@ async def start_monitoring_system() -> None:
         logger.warning("Continuing without monitoring system")
 
 
-async def shutdown_application(background_tasks: Dict[str, asyncio.Task], app_instance: FastAPI) -> None:
+async def shutdown_application(app: FastAPI, background_tasks: Dict[str, asyncio.Task]) -> None:
     """Gracefully shutdown all application components."""
     logger.info("🛑 Shutting down application...")
 
-    # Stop background tasks
+    # Cancel background tasks first (don't await them)
     for task_name, task in background_tasks.items():
-        try:
+        if not task.done():
             task.cancel()
-            await task
-            logger.info(f"✅ {task_name} stopped successfully")
-        except asyncio.CancelledError:
-            logger.info(f"✅ {task_name} cancelled successfully")
+            logger.info(f"✅ {task_name} cancellation requested")
+
+    # Wait for tasks to complete with timeout
+    if background_tasks:
+        try:
+            await asyncio.gather(*background_tasks.values(), return_exceptions=True)
+            logger.info("✅ All background tasks completed")
         except Exception as e:
-            logger.error(f"❌ Error stopping {task_name}: {e}")
+            logger.warning(f"⚠️ Some background tasks had issues during shutdown: {e}")
 
     # Stop TWS monitoring system
     try:
@@ -264,8 +269,8 @@ async def shutdown_application(background_tasks: Dict[str, asyncio.Task], app_in
 
     # Stop scheduler
     try:
-        if hasattr(app_instance, 'state') and hasattr(app_instance.state, 'scheduler') and app_instance.state.scheduler:
-            app_instance.state.scheduler.shutdown()
+        if hasattr(app, 'state') and hasattr(app.state, 'scheduler') and app.state.scheduler:
+            app.state.scheduler.shutdown()
             logger.info("✅ IA Auditor scheduler stopped")
     except Exception as e:
         logger.error(f"❌ Error stopping scheduler: {e}")
@@ -393,8 +398,12 @@ async def health_check():
         health_status["components"]["knowledge_graph"] = "not_implemented"
 
         # Check Monitoring System
-        monitoring_stats = tws_monitor.get_current_metrics()
-        health_status["components"]["monitoring"] = "active" if monitoring_stats else "inactive"
+        try:
+            monitoring_stats = tws_monitor.get_current_metrics()
+            health_status["components"]["monitoring"] = "active" if monitoring_stats else "inactive"
+        except Exception as e:
+            health_status["components"]["monitoring"] = f"error: {str(e)}"
+            health_status["status"] = "degraded"
 
     except Exception as e:
         health_status["status"] = "error"
