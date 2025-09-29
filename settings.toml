@@ -6,7 +6,8 @@
 PROJECT_NAME = "Resync"
 PROJECT_VERSION = "1.0.0"
 DESCRIPTION = "Real-time monitoring dashboard for HCL Workload Automation"
-BASE_DIR = "D:/Python/GITHUB/hwa-new-1"  # Adjust path as needed
+# BASE_DIR is dynamically determined based on the current working directory
+# This allows the application to work in different environments (local, CI/CD, container)
 
 # Agent and Model Configuration
 AGENT_CONFIG_PATH = "config/runtime.json"
