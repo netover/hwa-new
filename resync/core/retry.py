@@ -42,7 +42,7 @@ def log_retry_attempt(retry_state: RetryCallState) -> None:
                     else "∞"
                 ),
                 retry_state.seconds_since_start,
-                getattr(retry_state.fn, '__qualname__', str(retry_state.fn)),
+                getattr(retry_state.fn, "__qualname__", str(retry_state.fn)),
                 exc,
             )
         else:
@@ -55,7 +55,7 @@ def log_retry_attempt(retry_state: RetryCallState) -> None:
                     else "∞"
                 ),
                 retry_state.seconds_since_start,
-                getattr(retry_state.fn, '__qualname__', str(retry_state.fn)),
+                getattr(retry_state.fn, "__qualname__", str(retry_state.fn)),
             )
 
 
@@ -92,7 +92,16 @@ def http_retry(
     elif isinstance(exceptions, type):
         exception_tuple = (exceptions,)
     else:
-        exception_tuple = exceptions if isinstance(exceptions, tuple) else (httpx.RequestError, httpx.HTTPStatusError, httpx.TimeoutException, ConnectionError)
+        exception_tuple = (
+            exceptions
+            if isinstance(exceptions, tuple)
+            else (
+                httpx.RequestError,
+                httpx.HTTPStatusError,
+                httpx.TimeoutException,
+                ConnectionError,
+            )
+        )
 
     return retry(
         stop=stop_after_attempt(max_attempts),
@@ -133,7 +142,11 @@ def database_retry(
     elif isinstance(exceptions, type):
         exception_tuple = (exceptions,)
     else:
-        exception_tuple = exceptions if isinstance(exceptions, tuple) else (ConnectionError, TimeoutError)
+        exception_tuple = (
+            exceptions
+            if isinstance(exceptions, tuple)
+            else (ConnectionError, TimeoutError)
+        )
 
     return retry(
         stop=stop_after_attempt(max_attempts),
@@ -173,7 +186,11 @@ def external_service_retry(
     elif isinstance(exceptions, type):
         exception_tuple = (exceptions,)
     else:
-        exception_tuple = exceptions if isinstance(exceptions, tuple) else (ConnectionError, TimeoutError, httpx.RequestError)
+        exception_tuple = (
+            exceptions
+            if isinstance(exceptions, tuple)
+            else (ConnectionError, TimeoutError, httpx.RequestError)
+        )
 
     return retry(
         stop=(stop_after_attempt(max_attempts) | stop_after_delay(max_delay)),

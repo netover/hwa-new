@@ -16,7 +16,7 @@ async def handle_config_change() -> None:
     # Resolve dependencies from the DI container
     from resync.core.agent_manager import AgentManager
     from resync.core.connection_manager import ConnectionManager
-    
+
     agent_manager = cast(AgentManager, container.get(IAgentManager))  # type: ignore[type-abstract]
     connection_manager = cast(ConnectionManager, container.get(IConnectionManager))  # type: ignore[type-abstract]
 

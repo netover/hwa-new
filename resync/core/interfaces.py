@@ -1,9 +1,13 @@
 """Interfaces for Resync components."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from resync.core.agent_manager import AgentConfig
 
 
+@runtime_checkable
 class IKnowledgeGraph(Protocol):
     """
     Interface for the Knowledge Graph service.
@@ -87,6 +91,7 @@ class IKnowledgeGraph(Protocol):
         ...
 
 
+@runtime_checkable
 class IFileIngestor(Protocol):
     """
     Interface for the File Ingestor service.
@@ -102,6 +107,7 @@ class IFileIngestor(Protocol):
         ...
 
 
+@runtime_checkable
 class IAgentManager(Protocol):
     """Interface for managing AI agents."""
 
@@ -113,7 +119,12 @@ class IAgentManager(Protocol):
         """Retrieves an agent by its ID."""
         ...
 
+    async def get_all_agents(self) -> List["AgentConfig"]:
+        """Returns the configuration of all loaded agents."""
+        ...
 
+
+@runtime_checkable
 class IConnectionManager(Protocol):
     """Interface for managing WebSocket connections."""
 
@@ -134,6 +145,7 @@ class IConnectionManager(Protocol):
         ...
 
 
+@runtime_checkable
 class IAuditQueue(Protocol):
     """Interface for an audit queue."""
 
@@ -142,6 +154,7 @@ class IAuditQueue(Protocol):
         ...
 
 
+@runtime_checkable
 class ITWSClient(Protocol):
     """Interface for the TWS client."""
 

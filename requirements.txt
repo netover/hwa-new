@@ -6,6 +6,7 @@ neo4j
 pydantic  # For data validation and serialization
 dynaconf>=3.2.0  # For dynamic configuration management
 pytest-asyncio  # For async testing support
+pytest-cov  # For test coverage reporting
 redis  # For Redis operations in tests
 fastapi  # For API testing
 uvicorn  # For running the server

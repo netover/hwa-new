@@ -70,7 +70,9 @@ class AsyncAuditQueue(IAuditQueue):
     and pub/sub capabilities for real-time updates.
     """
 
-    def __init__(self, redis_url: Optional[str] = None, settings_module: Any = settings):
+    def __init__(
+        self, redis_url: Optional[str] = None, settings_module: Any = settings
+    ):
         """
         Initialize the Redis-based audit queue.
 

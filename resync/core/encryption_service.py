@@ -16,11 +16,13 @@ class EncryptionService:
         # In production, the key should be stored securely
         if key:
             self.key = key
-        elif os.getenv("ENCRYPTION_KEY"):
-            self.key = os.getenv("ENCRYPTION_KEY").encode()
         else:
-            # This is still not ideal in production - key should be provided
-            self.key = Fernet.generate_key()
+            env_key = os.getenv("ENCRYPTION_KEY")
+            if env_key:
+                self.key = env_key.encode()
+            else:
+                # This is still not ideal in production - key should be provided
+                self.key = Fernet.generate_key()
         self.cipher_suite = Fernet(self.key)
 
     @staticmethod

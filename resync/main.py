@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
-from time import time as time_func # Use time_func for consistency
+from time import time as time_func  # Use time_func for consistency
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import pybreaker
@@ -43,6 +43,7 @@ from resync.core.ia_auditor import analyze_and_flag_memories
 from resync.core.rag_watcher import watch_rag_directory
 from resync.core.tws_monitor import tws_monitor
 from resync.settings import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,9 +53,15 @@ def generate_correlation_id() -> str:
     return str(uuid.uuid4())
 
 
-def log_with_correlation(level: int, message: str, correlation_id: str = None,
-                        component: str = "main", operation: str = None,
-                        error: Exception = None, **extra_fields) -> None:
+def log_with_correlation(
+    level: int,
+    message: str,
+    correlation_id: str = None,
+    component: str = "main",
+    operation: str = None,
+    error: Exception = None,
+    **extra_fields,
+) -> None:
     """
     Structured logging with correlation ID and contextual information.
 
@@ -71,7 +78,7 @@ def log_with_correlation(level: int, message: str, correlation_id: str = None,
         "correlation_id": correlation_id or "system",
         "component": component,
         "operation": operation,
-        **extra_fields
+        **extra_fields,
     }
 
     if error:
@@ -84,6 +91,7 @@ def log_with_correlation(level: int, message: str, correlation_id: str = None,
 
 class AppContext:
     """Application context for correlation ID management."""
+
     _current_correlation_id: str = None
 
     @classmethod
@@ -107,9 +115,10 @@ class AppContext:
 # --- Input Sanitization ---
 class SanitizedPath(BaseModel):
     """Sanitized file/directory path with security validations."""
+
     path: str = Field(..., min_length=1, max_length=4096)
 
-    @validator('path')
+    @validator("path")
     def validate_path(cls, v):
         """Validate path for security issues."""
         if not v or not v.strip():
@@ -129,10 +138,12 @@ class SanitizedPath(BaseModel):
             str(path_obj).startswith(str(allowed.resolve()))
             for allowed in [Path.cwd(), Path.home()]
         ):
-            raise ValueError("Absolute paths outside allowed directories are not permitted")
+            raise ValueError(
+                "Absolute paths outside allowed directories are not permitted"
+            )
 
         # Check for suspicious patterns
-        suspicious_patterns = ['..', '\\', '\x00', '\n', '\r']
+        suspicious_patterns = ["..", "\\", "\x00", "\n", "\r"]
         for pattern in suspicious_patterns:
             if pattern in v:
                 raise ValueError(f"Path contains suspicious pattern: {pattern}")
@@ -142,10 +153,11 @@ class SanitizedPath(BaseModel):
 
 class SanitizedHostPort(BaseModel):
     """Sanitized IP address and port combination."""
+
     host: str = Field(..., min_length=1, max_length=253)
     port: int = Field(..., ge=1, le=65535)
 
-    @validator('host')
+    @validator("host")
     def validate_host(cls, v):
         """Validate host as IP address or valid hostname."""
         if not v or not v.strip():
@@ -162,7 +174,10 @@ class SanitizedHostPort(BaseModel):
             pass
 
         # Validate as hostname
-        if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$', v):
+        if not re.match(
+            r"^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$",
+            v,
+        ):
             raise ValueError("Invalid hostname format")
 
         # Prevent localhost/private IPs in production if needed
@@ -170,19 +185,34 @@ class SanitizedHostPort(BaseModel):
 
         return v
 
-    @validator('port')
+    @validator("port")
     def validate_port(cls, v):
         """Validate port number."""
         # Reserve system ports (1-1023) for privileged operations only
         if v < 1024:
             import warnings
-            warnings.warn(f"Using privileged port {v} - ensure proper permissions", UserWarning)
+
+            warnings.warn(
+                f"Using privileged port {v} - ensure proper permissions", UserWarning
+            )
 
         # Well-known ports that might be suspicious
-        suspicious_ports = [22, 23, 25, 53, 80, 443, 3306, 5432]  # SSH, Telnet, SMTP, DNS, HTTP, etc.
+        suspicious_ports = [
+            22,
+            23,
+            25,
+            53,
+            80,
+            443,
+            3306,
+            5432,
+        ]  # SSH, Telnet, SMTP, DNS, HTTP, etc.
         if v in suspicious_ports:
             import warnings
-            warnings.warn(f"Using well-known port {v} - verify this is intended", UserWarning)
+
+            warnings.warn(
+                f"Using well-known port {v} - verify this is intended", UserWarning
+            )
 
         return v
 
@@ -199,20 +229,24 @@ class InputSanitizer:
         except ValidationError as e:
             correlation_id = AppContext.get_correlation_id()
             log_with_correlation(
-                logging.ERROR, f"Path sanitization failed: {path}",
-                correlation_id=correlation_id, component="input_sanitizer", operation="sanitize_path",
-                error=e, invalid_path=str(path)
+                logging.ERROR,
+                f"Path sanitization failed: {path}",
+                correlation_id=correlation_id,
+                component="input_sanitizer",
+                operation="sanitize_path",
+                error=e,
+                invalid_path=str(path),
             )
             raise ValueError(f"Invalid path: {e}") from e
 
     @staticmethod
     def sanitize_host_port(host_port: str) -> tuple[str, int]:
         """Sanitize and validate host:port combination."""
-        if ':' not in host_port:
+        if ":" not in host_port:
             raise ValueError("Host:port format required (host:port)")
 
         try:
-            host, port_str = host_port.rsplit(':', 1)
+            host, port_str = host_port.rsplit(":", 1)
             port = int(port_str)
 
             sanitized = SanitizedHostPort(host=host, port=port)
@@ -221,14 +255,20 @@ class InputSanitizer:
         except (ValueError, ValidationError) as e:
             correlation_id = AppContext.get_correlation_id()
             log_with_correlation(
-                logging.ERROR, f"Host:port sanitization failed: {host_port}",
-                correlation_id=correlation_id, component="input_sanitizer", operation="sanitize_host_port",
-                error=e, invalid_host_port=host_port
+                logging.ERROR,
+                f"Host:port sanitization failed: {host_port}",
+                correlation_id=correlation_id,
+                component="input_sanitizer",
+                operation="sanitize_host_port",
+                error=e,
+                invalid_host_port=host_port,
             )
             raise ValueError(f"Invalid host:port format: {e}") from e
 
     @staticmethod
-    def sanitize_environment_value(key: str, value: Any, expected_type: type = str) -> Any:
+    def sanitize_environment_value(
+        key: str, value: Any, expected_type: type = str
+    ) -> Any:
         """Sanitize environment variable value with type validation."""
         if value is None:
             raise ValueError(f"Environment variable {key} is not set")
@@ -237,7 +277,7 @@ class InputSanitizer:
             if expected_type == bool:
                 # Handle boolean conversion
                 if isinstance(value, str):
-                    return value.lower() in ('true', '1', 'yes', 'on')
+                    return value.lower() in ("true", "1", "yes", "on")
                 return bool(value)
             elif expected_type == int:
                 return int(value)
@@ -257,9 +297,15 @@ class InputSanitizer:
         except (ValueError, TypeError) as e:
             correlation_id = AppContext.get_correlation_id()
             log_with_correlation(
-                logging.ERROR, f"Environment variable sanitization failed: {key}={value}",
-                correlation_id=correlation_id, component="input_sanitizer", operation="sanitize_env",
-                error=e, env_key=key, env_value=str(value), expected_type=expected_type.__name__
+                logging.ERROR,
+                f"Environment variable sanitization failed: {key}={value}",
+                correlation_id=correlation_id,
+                component="input_sanitizer",
+                operation="sanitize_env",
+                error=e,
+                env_key=key,
+                env_value=str(value),
+                expected_type=expected_type.__name__,
             )
             raise ValueError(f"Invalid environment variable {key}: {e}") from e
 
@@ -273,9 +319,12 @@ class InputSanitizer:
             if not resolved_path.exists():
                 correlation_id = AppContext.get_correlation_id()
                 log_with_correlation(
-                    logging.ERROR, f"Required path does not exist: {resolved_path}",
-                    correlation_id=correlation_id, component="input_sanitizer", operation="validate_path_exists",
-                    path=str(resolved_path)
+                    logging.ERROR,
+                    f"Required path does not exist: {resolved_path}",
+                    correlation_id=correlation_id,
+                    component="input_sanitizer",
+                    operation="validate_path_exists",
+                    path=str(resolved_path),
                 )
                 raise FileNotFoundError(f"Path does not exist: {resolved_path}")
 
@@ -283,9 +332,12 @@ class InputSanitizer:
             if resolved_path.is_symlink():
                 target = resolved_path.readlink()
                 if not str(target).startswith(str(Path.cwd())):
-                    raise ValueError(f"Symlink points outside allowed directory: {resolved_path} -> {target}")
+                    raise ValueError(
+                        f"Symlink points outside allowed directory: {resolved_path} -> {target}"
+                    )
 
         return resolved_path
+
 
 # --- Adaptive Circuit Breaker ---
 class AdaptiveCircuitBreaker:
@@ -311,12 +363,12 @@ class AdaptiveCircuitBreaker:
         fail_max = InputSanitizer.sanitize_environment_value(
             f"CIRCUIT_BREAKER_{self.operation.upper()}_FAIL_MAX",
             os.getenv(f"CIRCUIT_BREAKER_{self.operation.upper()}_FAIL_MAX", "5"),
-            int
+            int,
         )
         reset_timeout = InputSanitizer.sanitize_environment_value(
             f"CIRCUIT_BREAKER_{self.operation.upper()}_RESET_TIMEOUT",
             os.getenv(f"CIRCUIT_BREAKER_{self.operation.upper()}_RESET_TIMEOUT", "60"),
-            int
+            int,
         )
 
         # Validate ranges
@@ -327,13 +379,17 @@ class AdaptiveCircuitBreaker:
             fail_max=fail_max,
             reset_timeout=reset_timeout,
             name=f"{self.name}_{self.operation}",
-            listeners=[self]
+            listeners=[self],
         )
 
         log_with_correlation(
-            logging.INFO, f"Created adaptive circuit breaker for {self.operation}",
-            correlation_id=AppContext.get_correlation_id(), component="circuit_breaker",
-            operation="create", fail_max=fail_max, reset_timeout=reset_timeout
+            logging.INFO,
+            f"Created adaptive circuit breaker for {self.operation}",
+            correlation_id=AppContext.get_correlation_id(),
+            component="circuit_breaker",
+            operation="create",
+            fail_max=fail_max,
+            reset_timeout=reset_timeout,
         )
 
     async def call(self, func, *args, **kwargs):
@@ -347,9 +403,13 @@ class AdaptiveCircuitBreaker:
             self._metrics["failure_streak"] = 0
 
             log_with_correlation(
-                logging.DEBUG, f"Circuit breaker call successful for {self.operation}",
-                correlation_id=correlation_id, component="circuit_breaker", operation="call_success",
-                total_calls=self._metrics["total_calls"], success_rate=self.get_success_rate()
+                logging.DEBUG,
+                f"Circuit breaker call successful for {self.operation}",
+                correlation_id=correlation_id,
+                component="circuit_breaker",
+                operation="call_success",
+                total_calls=self._metrics["total_calls"],
+                success_rate=self.get_success_rate(),
             )
 
             return result
@@ -357,9 +417,13 @@ class AdaptiveCircuitBreaker:
         except pybreaker.CircuitBreakerError as e:
             self._metrics["circuit_opened_count"] += 1
             log_with_correlation(
-                logging.WARNING, f"Circuit breaker opened for {self.operation}",
-                correlation_id=correlation_id, component="circuit_breaker", operation="circuit_opened",
-                error=e, opened_count=self._metrics["circuit_opened_count"]
+                logging.WARNING,
+                f"Circuit breaker opened for {self.operation}",
+                correlation_id=correlation_id,
+                component="circuit_breaker",
+                operation="circuit_opened",
+                error=e,
+                opened_count=self._metrics["circuit_opened_count"],
             )
             raise
 
@@ -369,9 +433,13 @@ class AdaptiveCircuitBreaker:
             self._metrics["last_failure_time"] = time_func()
 
             log_with_correlation(
-                logging.WARNING, f"Circuit breaker call failed for {self.operation}",
-                correlation_id=correlation_id, component="circuit_breaker", operation="call_failed",
-                error=e, failure_streak=self._metrics["failure_streak"]
+                logging.WARNING,
+                f"Circuit breaker call failed for {self.operation}",
+                correlation_id=correlation_id,
+                component="circuit_breaker",
+                operation="call_failed",
+                error=e,
+                failure_streak=self._metrics["failure_streak"],
             )
             raise
 
@@ -387,9 +455,13 @@ class AdaptiveCircuitBreaker:
         return {
             **self._metrics,
             "success_rate": self.get_success_rate(),
-            "circuit_state": self._circuit_breaker.current_state.name if self._circuit_breaker else "unknown",
+            "circuit_state": self._circuit_breaker.current_state.name
+            if self._circuit_breaker
+            else "unknown",
             "fail_max": self._circuit_breaker.fail_max if self._circuit_breaker else 0,
-            "reset_timeout": self._circuit_breaker.reset_timeout if self._circuit_breaker else 0,
+            "reset_timeout": self._circuit_breaker.reset_timeout
+            if self._circuit_breaker
+            else 0,
         }
 
     # CircuitBreaker listener methods
@@ -397,9 +469,13 @@ class AdaptiveCircuitBreaker:
         """Called when circuit breaker state changes."""
         correlation_id = AppContext.get_correlation_id()
         log_with_correlation(
-            logging.INFO, f"Circuit breaker state changed for {self.operation}: {old_state.name} -> {new_state.name}",
-            correlation_id=correlation_id, component="circuit_breaker", operation="state_change",
-            old_state=old_state.name, new_state=new_state.name
+            logging.INFO,
+            f"Circuit breaker state changed for {self.operation}: {old_state.name} -> {new_state.name}",
+            correlation_id=correlation_id,
+            component="circuit_breaker",
+            operation="state_change",
+            old_state=old_state.name,
+            new_state=new_state.name,
         )
 
     def failure(self, cb, exc):
@@ -421,8 +497,7 @@ class CircuitBreakerManager:
         """Get or create circuit breaker for operation."""
         if operation not in self._breakers:
             self._breakers[operation] = AdaptiveCircuitBreaker(
-                name="adaptive_cb",
-                operation=operation
+                name="adaptive_cb", operation=operation
             )
         return self._breakers[operation]
 
@@ -477,38 +552,55 @@ async def managed_cache_hierarchy(correlation_id: str):
     cache = None
     try:
         log_with_correlation(
-            logging.INFO, "Initializing Cache Hierarchy",
-            correlation_id=correlation_id, component="cache_manager", operation="init_begin"
+            logging.INFO,
+            "Initializing Cache Hierarchy",
+            correlation_id=correlation_id,
+            component="cache_manager",
+            operation="init_begin",
         )
 
         cache = get_cache_hierarchy()
         await cache.start()
 
         log_with_correlation(
-            logging.INFO, "Cache Hierarchy initialized successfully",
-            correlation_id=correlation_id, component="cache_manager", operation="init_complete"
+            logging.INFO,
+            "Cache Hierarchy initialized successfully",
+            correlation_id=correlation_id,
+            component="cache_manager",
+            operation="init_complete",
         )
 
         yield cache
 
     except Exception as e:
         log_with_correlation(
-            logging.ERROR, "Failed to initialize Cache Hierarchy",
-            correlation_id=correlation_id, component="cache_manager", operation="init_error", error=e
+            logging.ERROR,
+            "Failed to initialize Cache Hierarchy",
+            correlation_id=correlation_id,
+            component="cache_manager",
+            operation="init_error",
+            error=e,
         )
         raise
     finally:
-        if cache and hasattr(cache, 'is_running') and cache.is_running:
+        if cache and hasattr(cache, "is_running") and cache.is_running:
             try:
                 await cache.stop()
                 log_with_correlation(
-                    logging.INFO, "Cache Hierarchy stopped successfully",
-                    correlation_id=correlation_id, component="cache_manager", operation="cleanup_complete"
+                    logging.INFO,
+                    "Cache Hierarchy stopped successfully",
+                    correlation_id=correlation_id,
+                    component="cache_manager",
+                    operation="cleanup_complete",
                 )
             except Exception as e:
                 log_with_correlation(
-                    logging.ERROR, "Error stopping Cache Hierarchy",
-                    correlation_id=correlation_id, component="cache_manager", operation="cleanup_error", error=e
+                    logging.ERROR,
+                    "Error stopping Cache Hierarchy",
+                    correlation_id=correlation_id,
+                    component="cache_manager",
+                    operation="cleanup_error",
+                    error=e,
                 )
 
 
@@ -517,37 +609,54 @@ async def managed_tws_monitor(correlation_id: str):
     """Context manager for TWS Monitor with automatic cleanup."""
     try:
         log_with_correlation(
-            logging.INFO, "Initializing TWS Monitor",
-            correlation_id=correlation_id, component="tws_monitor_manager", operation="init_begin"
+            logging.INFO,
+            "Initializing TWS Monitor",
+            correlation_id=correlation_id,
+            component="tws_monitor_manager",
+            operation="init_begin",
         )
 
         await tws_monitor.start_monitoring()
 
         log_with_correlation(
-            logging.INFO, "TWS Monitor initialized successfully",
-            correlation_id=correlation_id, component="tws_monitor_manager", operation="init_complete"
+            logging.INFO,
+            "TWS Monitor initialized successfully",
+            correlation_id=correlation_id,
+            component="tws_monitor_manager",
+            operation="init_complete",
         )
 
         yield tws_monitor
 
     except Exception as e:
         log_with_correlation(
-            logging.ERROR, "Failed to initialize TWS Monitor",
-            correlation_id=correlation_id, component="tws_monitor_manager", operation="init_error", error=e
+            logging.ERROR,
+            "Failed to initialize TWS Monitor",
+            correlation_id=correlation_id,
+            component="tws_monitor_manager",
+            operation="init_error",
+            error=e,
         )
         raise
     finally:
-        if hasattr(tws_monitor, 'is_monitoring') and tws_monitor.is_monitoring:
+        if hasattr(tws_monitor, "is_monitoring") and tws_monitor.is_monitoring:
             try:
                 await tws_monitor.stop_monitoring()
                 log_with_correlation(
-                    logging.INFO, "TWS Monitor stopped successfully",
-                    correlation_id=correlation_id, component="tws_monitor_manager", operation="cleanup_complete"
+                    logging.INFO,
+                    "TWS Monitor stopped successfully",
+                    correlation_id=correlation_id,
+                    component="tws_monitor_manager",
+                    operation="cleanup_complete",
                 )
             except Exception as e:
                 log_with_correlation(
-                    logging.ERROR, "Error stopping TWS Monitor",
-                    correlation_id=correlation_id, component="tws_monitor_manager", operation="cleanup_error", error=e
+                    logging.ERROR,
+                    "Error stopping TWS Monitor",
+                    correlation_id=correlation_id,
+                    component="tws_monitor_manager",
+                    operation="cleanup_error",
+                    error=e,
                 )
 
 
@@ -557,37 +666,54 @@ async def managed_scheduler(correlation_id: str):
     scheduler = None
     try:
         log_with_correlation(
-            logging.INFO, "Initializing Scheduler",
-            correlation_id=correlation_id, component="scheduler_manager", operation="init_begin"
+            logging.INFO,
+            "Initializing Scheduler",
+            correlation_id=correlation_id,
+            component="scheduler_manager",
+            operation="init_begin",
         )
 
         scheduler = await initialize_schedulers()
 
         log_with_correlation(
-            logging.INFO, "Scheduler initialized successfully",
-            correlation_id=correlation_id, component="scheduler_manager", operation="init_complete"
+            logging.INFO,
+            "Scheduler initialized successfully",
+            correlation_id=correlation_id,
+            component="scheduler_manager",
+            operation="init_complete",
         )
 
         yield scheduler
 
     except Exception as e:
         log_with_correlation(
-            logging.ERROR, "Failed to initialize Scheduler",
-            correlation_id=correlation_id, component="scheduler_manager", operation="init_error", error=e
+            logging.ERROR,
+            "Failed to initialize Scheduler",
+            correlation_id=correlation_id,
+            component="scheduler_manager",
+            operation="init_error",
+            error=e,
         )
         raise
     finally:
-        if scheduler and hasattr(scheduler, 'running') and scheduler.running:
+        if scheduler and hasattr(scheduler, "running") and scheduler.running:
             try:
                 scheduler.shutdown()
                 log_with_correlation(
-                    logging.INFO, "Scheduler stopped successfully",
-                    correlation_id=correlation_id, component="scheduler_manager", operation="cleanup_complete"
+                    logging.INFO,
+                    "Scheduler stopped successfully",
+                    correlation_id=correlation_id,
+                    component="scheduler_manager",
+                    operation="cleanup_complete",
                 )
             except Exception as e:
                 log_with_correlation(
-                    logging.ERROR, "Error stopping Scheduler",
-                    correlation_id=correlation_id, component="scheduler_manager", operation="cleanup_error", error=e
+                    logging.ERROR,
+                    "Error stopping Scheduler",
+                    correlation_id=correlation_id,
+                    component="scheduler_manager",
+                    operation="cleanup_error",
+                    error=e,
                 )
 
 
@@ -599,8 +725,11 @@ async def managed_background_tasks(correlation_id: str):
 
     try:
         log_with_correlation(
-            logging.INFO, "Initializing background tasks with TaskGroup supervision",
-            correlation_id=correlation_id, component="background_manager", operation="init_begin"
+            logging.INFO,
+            "Initializing background tasks with TaskGroup supervision",
+            correlation_id=correlation_id,
+            component="background_manager",
+            operation="init_begin",
         )
 
         # Create TaskGroup for supervision
@@ -608,24 +737,26 @@ async def managed_background_tasks(correlation_id: str):
             # Create supervised tasks
             config_watcher_task = task_group.create_task(
                 watch_config_changes(settings.AGENT_CONFIG_PATH),
-                name="config_watcher"
+                name="config_watcher",
             )
             supervised_tasks["config_watcher"] = config_watcher_task
 
             # Get file ingestor from DI container
             container = get_container()
-            file_ingestor = container.get(IFileIngestor)
+            file_ingestor = await container.get(IFileIngestor)
 
             rag_watcher_task = task_group.create_task(
-                watch_rag_directory(file_ingestor),
-                name="rag_watcher"
+                watch_rag_directory(file_ingestor), name="rag_watcher"
             )
             supervised_tasks["rag_watcher"] = rag_watcher_task
 
             log_with_correlation(
-                logging.INFO, f"Background tasks started under supervision: {list(supervised_tasks.keys())}",
-                correlation_id=correlation_id, component="background_manager", operation="init_complete",
-                task_count=len(supervised_tasks)
+                logging.INFO,
+                f"Background tasks started under supervision: {list(supervised_tasks.keys())}",
+                correlation_id=correlation_id,
+                component="background_manager",
+                operation="init_complete",
+                task_count=len(supervised_tasks),
             )
 
             yield supervised_tasks
@@ -633,16 +764,24 @@ async def managed_background_tasks(correlation_id: str):
     except Exception as e:
         # Handle task supervision errors
         # Check if it's an ExceptionGroup (Python 3.11+) or regular exception
-        if hasattr(e, 'exceptions'):  # ExceptionGroup
+        if hasattr(e, "exceptions"):  # ExceptionGroup
             log_with_correlation(
-                logging.ERROR, f"Background task supervision failed with {len(e.exceptions)} exceptions",
-                correlation_id=correlation_id, component="background_manager", operation="supervision_error",
-                exception_count=len(e.exceptions), exceptions=[str(exc) for exc in e.exceptions]
+                logging.ERROR,
+                f"Background task supervision failed with {len(e.exceptions)} exceptions",
+                correlation_id=correlation_id,
+                component="background_manager",
+                operation="supervision_error",
+                exception_count=len(e.exceptions),
+                exceptions=[str(exc) for exc in e.exceptions],
             )
         else:  # Regular exception
             log_with_correlation(
-                logging.ERROR, "Failed to initialize background task supervision",
-                correlation_id=correlation_id, component="background_manager", operation="init_error", error=e
+                logging.ERROR,
+                "Failed to initialize background task supervision",
+                correlation_id=correlation_id,
+                component="background_manager",
+                operation="init_error",
+                error=e,
             )
         raise
 
@@ -650,9 +789,12 @@ async def managed_background_tasks(correlation_id: str):
         # TaskGroup automatically cancels and waits for all tasks
         # Additional logging for cleanup completion
         log_with_correlation(
-            logging.INFO, "Background task supervision cleanup completed",
-            correlation_id=correlation_id, component="background_manager", operation="cleanup_complete",
-            supervised_tasks_count=len(supervised_tasks)
+            logging.INFO,
+            "Background task supervision cleanup completed",
+            correlation_id=correlation_id,
+            component="background_manager",
+            operation="cleanup_complete",
+            supervised_tasks_count=len(supervised_tasks),
         )
 
 
@@ -664,8 +806,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     correlation_id = AppContext.get_correlation_id()
     log_with_correlation(
-        logging.INFO, "--- Resync Application Startup ---",
-        correlation_id=correlation_id, component="lifespan", operation="startup_begin"
+        logging.INFO,
+        "--- Resync Application Startup ---",
+        correlation_id=correlation_id,
+        component="lifespan",
+        operation="startup_begin",
     )
 
     background_tasks = {}
@@ -675,13 +820,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
             inject_container(app)
             log_with_correlation(
-                logging.INFO, "Dependency injection container initialized",
-                correlation_id=correlation_id, component="di", operation="setup"
+                logging.INFO,
+                "Dependency injection container initialized",
+                correlation_id=correlation_id,
+                component="di",
+                operation="setup",
             )
         except Exception as e:
             log_with_correlation(
-                logging.CRITICAL, "Failed to setup dependency injection",
-                correlation_id=correlation_id, component="di", operation="setup", error=e
+                logging.CRITICAL,
+                "Failed to setup dependency injection",
+                correlation_id=correlation_id,
+                component="di",
+                operation="setup",
+                error=e,
             )
             raise SystemExit(f"DI setup failed: {e}") from e
 
@@ -689,19 +841,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
             validate_settings()
             log_with_correlation(
-                logging.INFO, "Configuration validation completed",
-                correlation_id=correlation_id, component="config", operation="validation"
+                logging.INFO,
+                "Configuration validation completed",
+                correlation_id=correlation_id,
+                component="config",
+                operation="validation",
             )
         except ConfigError as e:
             log_with_correlation(
-                logging.CRITICAL, "Configuration validation failed",
-                correlation_id=correlation_id, component="config", operation="validation", error=e
+                logging.CRITICAL,
+                "Configuration validation failed",
+                correlation_id=correlation_id,
+                component="config",
+                operation="validation",
+                error=e,
             )
             raise SystemExit(f"Configuration error: {e}") from e
         except Exception as e:
             log_with_correlation(
-                logging.CRITICAL, "Unexpected error during configuration validation",
-                correlation_id=correlation_id, component="config", operation="validation", error=e
+                logging.CRITICAL,
+                "Unexpected error during configuration validation",
+                correlation_id=correlation_id,
+                component="config",
+                operation="validation",
+                error=e,
             )
             raise SystemExit(f"Configuration validation failed: {e}") from e
 
@@ -709,81 +872,122 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
             await initialize_core_systems()
             log_with_correlation(
-                logging.INFO, "Core systems initialized successfully",
-                correlation_id=correlation_id, component="core", operation="initialization"
+                logging.INFO,
+                "Core systems initialized successfully",
+                correlation_id=correlation_id,
+                component="core",
+                operation="initialization",
             )
         except SystemExit as e:
             # Re-raise SystemExit from core systems
             raise
         except Exception as e:
             log_with_correlation(
-                logging.CRITICAL, "Failed to initialize core systems",
-                correlation_id=correlation_id, component="core", operation="initialization", error=e
+                logging.CRITICAL,
+                "Failed to initialize core systems",
+                correlation_id=correlation_id,
+                component="core",
+                operation="initialization",
+                error=e,
             )
             raise SystemExit(f"Core systems initialization failed: {e}") from e
 
         # Phase 3-5: Initialize infrastructure components using context managers
         # These will be automatically cleaned up even if errors occur later
-        async with managed_background_tasks(correlation_id) as background_tasks, \
-                   managed_cache_hierarchy(correlation_id) as cache, \
-                   managed_tws_monitor(correlation_id) as monitor, \
-                   managed_scheduler(correlation_id) as scheduler:
-
+        async with managed_background_tasks(
+            correlation_id
+        ) as background_tasks, managed_cache_hierarchy(
+            correlation_id
+        ) as cache, managed_tws_monitor(
+            correlation_id
+        ) as monitor, managed_scheduler(
+            correlation_id
+        ) as scheduler:
             # Store scheduler reference for health checks
             app.state.scheduler = scheduler
 
             log_with_correlation(
-                logging.INFO, "All systems initialized successfully",
-                correlation_id=correlation_id, component="lifespan", operation="startup_complete"
+                logging.INFO,
+                "All systems initialized successfully",
+                correlation_id=correlation_id,
+                component="lifespan",
+                operation="startup_complete",
             )
 
-        yield
+            yield
 
     except KeyboardInterrupt as e:
         log_with_correlation(
-            logging.INFO, "Application startup interrupted by user",
-            correlation_id=correlation_id, component="lifespan", operation="interrupt", error=e
+            logging.INFO,
+            "Application startup interrupted by user",
+            correlation_id=correlation_id,
+            component="lifespan",
+            operation="interrupt",
+            error=e,
         )
         raise SystemExit("Startup interrupted by user") from e
-    except SystemExit as e:
+    except SystemExit:
         # Re-raise SystemExit (already logged upstream)
         raise
     except ImportError as e:
         log_with_correlation(
-            logging.CRITICAL, "Missing required dependencies",
-            correlation_id=correlation_id, component="dependencies", operation="import", error=e
+            logging.CRITICAL,
+            "Missing required dependencies",
+            correlation_id=correlation_id,
+            component="dependencies",
+            operation="import",
+            error=e,
         )
         raise SystemExit(f"Dependency error: {e}") from e
     except (OSError, IOError) as e:
         log_with_correlation(
-            logging.CRITICAL, "File system error during startup",
-            correlation_id=correlation_id, component="filesystem", operation="access", error=e
+            logging.CRITICAL,
+            "File system error during startup",
+            correlation_id=correlation_id,
+            component="filesystem",
+            operation="access",
+            error=e,
         )
         raise SystemExit(f"File system error: {e}") from e
     except (ConnectionError, TimeoutError) as e:
         log_with_correlation(
-            logging.CRITICAL, "Network connectivity error during startup",
-            correlation_id=correlation_id, component="network", operation="connect", error=e
+            logging.CRITICAL,
+            "Network connectivity error during startup",
+            correlation_id=correlation_id,
+            component="network",
+            operation="connect",
+            error=e,
         )
         raise SystemExit(f"Network error: {e}") from e
     except Exception as e:
         log_with_correlation(
-            logging.CRITICAL, "Unexpected critical error during startup",
-            correlation_id=correlation_id, component="lifespan", operation="startup", error=e
+            logging.CRITICAL,
+            "Unexpected critical error during startup",
+            correlation_id=correlation_id,
+            component="lifespan",
+            operation="startup",
+            error=e,
         )
         raise SystemExit(f"Critical failure during startup: {e}") from e
 
     finally:
         log_with_correlation(
-            logging.INFO, "--- Resync Application Shutdown ---",
-            correlation_id=correlation_id, component="lifespan", operation="shutdown_begin"
+            logging.INFO,
+            "--- Resync Application Shutdown ---",
+            correlation_id=correlation_id,
+            component="lifespan",
+            operation="shutdown_begin",
         )
         try:
             await shutdown_application(app, background_tasks, correlation_id)
         except Exception as e:
             log_with_correlation(
-                logging.ERROR, "Error during application shutdown",
-                correlation_id=correlation_id, component="lifespan", operation="shutdown", error=e
+                logging.ERROR,
+                "Error during application shutdown",
+                correlation_id=correlation_id,
+                component="lifespan",
+                operation="shutdown",
+                error=e,
             )
 
 
@@ -792,9 +996,13 @@ def validate_tws_host(host: str) -> None:
     try:
         sanitized_host, sanitized_port = InputSanitizer.sanitize_host_port(host)
         log_with_correlation(
-            logging.DEBUG, f"TWS host validation successful: {sanitized_host}:{sanitized_port}",
-            correlation_id=AppContext.get_correlation_id(), component="validation", operation="tws_host",
-            host=sanitized_host, port=sanitized_port
+            logging.DEBUG,
+            f"TWS host validation successful: {sanitized_host}:{sanitized_port}",
+            correlation_id=AppContext.get_correlation_id(),
+            component="validation",
+            operation="tws_host",
+            host=sanitized_host,
+            port=sanitized_port,
         )
     except ValueError as e:
         raise ConfigError(f"Invalid TWS_HOST format: {host}. {e}") from e
@@ -811,17 +1019,23 @@ def validate_paths() -> None:
 
     for config_name, path_value in path_configs:
         try:
-            validated_path = InputSanitizer.validate_path_exists(path_value, must_exist=True)
+            validated_path = InputSanitizer.validate_path_exists(
+                path_value, must_exist=True
+            )
             log_with_correlation(
-                logging.DEBUG, f"Path validation successful: {config_name}={validated_path}",
-                correlation_id=correlation_id, component="validation", operation="path_exists",
-                config_name=config_name, path=str(validated_path)
+                logging.DEBUG,
+                f"Path validation successful: {config_name}={validated_path}",
+                correlation_id=correlation_id,
+                component="validation",
+                operation="path_exists",
+                config_name=config_name,
+                path=str(validated_path),
             )
         except (ValueError, FileNotFoundError) as e:
             raise ConfigError(f"Path validation failed: {config_name}={path_value}. {e}") from e
 
 
-def validate_runtime_config() -> Dict[str, Any]:
+async def validate_runtime_config() -> Dict[str, Any]:
     """
     Runtime configuration validation for long-running services.
     Re-validates configuration that may change during runtime.
@@ -835,74 +1049,89 @@ def validate_runtime_config() -> Dict[str, Any]:
         "correlation_id": correlation_id,
         "overall_status": "valid",
         "checks": {},
-        "issues": []
+        "issues": [],
     }
 
     log_with_correlation(
-        logging.DEBUG, "Starting runtime configuration validation",
-        correlation_id=correlation_id, component="config_validation", operation="start"
+        logging.DEBUG,
+        "Starting runtime configuration validation",
+        correlation_id=correlation_id,
+        component="config_validation",
+        operation="start",
     )
 
     try:
         # 1. Validate environment settings
         try:
-            app_env = getattr(settings, 'APP_ENV', 'production')
+            app_env = getattr(settings, "APP_ENV", "production")
             if app_env not in ["development", "production", "staging"]:
-                validation_results["issues"].append({
-                    "type": "invalid_environment",
-                    "severity": "error",
-                    "message": f"Invalid APP_ENV: {app_env}",
-                    "current_value": app_env,
-                    "expected_values": ["development", "production", "staging"]
-                })
+                validation_results["issues"].append(
+                    {
+                        "type": "invalid_environment",
+                        "severity": "error",
+                        "message": f"Invalid APP_ENV: {app_env}",
+                        "current_value": app_env,
+                        "expected_values": ["development", "production", "staging"],
+                    }
+                )
                 validation_results["overall_status"] = "invalid"
             else:
                 validation_results["checks"]["environment"] = {
                     "status": "valid",
-                    "value": app_env
+                    "value": app_env,
                 }
         except Exception as e:
-            validation_results["issues"].append({
-                "type": "environment_check_error",
-                "severity": "error",
-                "message": f"Error checking environment: {e}"
-            })
+            validation_results["issues"].append(
+                {
+                    "type": "environment_check_error",
+                    "severity": "error",
+                    "message": f"Error checking environment: {e}",
+                }
+            )
             validation_results["overall_status"] = "invalid"
 
         # 2. Validate TWS connection
         try:
-            tws_host = getattr(settings, 'TWS_HOST', None)
-            tws_port = getattr(settings, 'TWS_PORT', None)
+            tws_host = getattr(settings, "TWS_HOST", None)
+            tws_port = getattr(settings, "TWS_PORT", None)
 
             if tws_host and tws_port:
                 # Re-validate host:port format
                 try:
-                    sanitized_host, sanitized_port = InputSanitizer.sanitize_host_port(f"{tws_host}:{tws_port}")
+                    sanitized_host, sanitized_port = InputSanitizer.sanitize_host_port(
+                        f"{tws_host}:{tws_port}"
+                    )
                     validation_results["checks"]["tws_connection"] = {
                         "status": "valid",
                         "host": sanitized_host,
-                        "port": sanitized_port
+                        "port": sanitized_port,
                     }
                 except ValueError as e:
-                    validation_results["issues"].append({
-                        "type": "invalid_tws_connection",
-                        "severity": "error",
-                        "message": f"Invalid TWS connection format: {tws_host}:{tws_port} - {e}"
-                    })
+                    validation_results["issues"].append(
+                        {
+                            "type": "invalid_tws_connection",
+                            "severity": "error",
+                            "message": f"Invalid TWS connection format: {tws_host}:{tws_port} - {e}",
+                        }
+                    )
                     validation_results["overall_status"] = "invalid"
             else:
-                validation_results["issues"].append({
-                    "type": "missing_tws_connection",
-                    "severity": "error",
-                    "message": "TWS_HOST or TWS_PORT not configured"
-                })
+                validation_results["issues"].append(
+                    {
+                        "type": "missing_tws_connection",
+                        "severity": "error",
+                        "message": "TWS_HOST or TWS_PORT not configured",
+                    }
+                )
                 validation_results["overall_status"] = "invalid"
         except Exception as e:
-            validation_results["issues"].append({
-                "type": "tws_connection_check_error",
-                "severity": "error",
-                "message": f"Error validating TWS connection: {e}"
-            })
+            validation_results["issues"].append(
+                {
+                    "type": "tws_connection_check_error",
+                    "severity": "error",
+                    "message": f"Error validating TWS connection: {e}",
+                }
+            )
             validation_results["overall_status"] = "invalid"
 
         # 3. Validate critical paths still exist
@@ -912,102 +1141,123 @@ def validate_runtime_config() -> Dict[str, Any]:
                 "status": "valid",
                 "paths": {
                     "agent_config": settings.AGENT_CONFIG_PATH,
-                    "rag_dir": settings.RAG_DIR
-                }
+                    "rag_dir": settings.RAG_DIR,
+                },
             }
         except ConfigError as e:
-            validation_results["issues"].append({
-                "type": "critical_paths_invalid",
-                "severity": "error",
-                "message": f"Critical paths validation failed: {e}"
-            })
+            validation_results["issues"].append(
+                {
+                    "type": "critical_paths_invalid",
+                    "severity": "error",
+                    "message": f"Critical paths validation failed: {e}",
+                }
+            )
             validation_results["overall_status"] = "invalid"
         except Exception as e:
-            validation_results["issues"].append({
-                "type": "critical_paths_check_error",
-                "severity": "error",
-                "message": f"Error validating critical paths: {e}"
-            })
+            validation_results["issues"].append(
+                {
+                    "type": "critical_paths_check_error",
+                    "severity": "error",
+                    "message": f"Error validating critical paths: {e}",
+                }
+            )
             validation_results["overall_status"] = "invalid"
 
         # 4. Validate model configuration
         try:
-            agent_model = getattr(settings, 'AGENT_MODEL_NAME', None)
-            llm_endpoint = getattr(settings, 'LLM_ENDPOINT', None)
+            agent_model = getattr(settings, "AGENT_MODEL_NAME", None)
+            llm_endpoint = getattr(settings, "LLM_ENDPOINT", None)
 
             if not agent_model or not agent_model.strip():
-                validation_results["issues"].append({
-                    "type": "missing_agent_model",
-                    "severity": "error",
-                    "message": "AGENT_MODEL_NAME not configured or empty"
-                })
+                validation_results["issues"].append(
+                    {
+                        "type": "missing_agent_model",
+                        "severity": "error",
+                        "message": "AGENT_MODEL_NAME not configured or empty",
+                    }
+                )
                 validation_results["overall_status"] = "invalid"
             else:
                 validation_results["checks"]["agent_model"] = {
                     "status": "valid",
-                    "model_name": agent_model
+                    "model_name": agent_model,
                 }
 
             if not llm_endpoint or not llm_endpoint.strip():
-                validation_results["issues"].append({
-                    "type": "missing_llm_endpoint",
-                    "severity": "error",
-                    "message": "LLM_ENDPOINT not configured or empty"
-                })
+                validation_results["issues"].append(
+                    {
+                        "type": "missing_llm_endpoint",
+                        "severity": "error",
+                        "message": "LLM_ENDPOINT not configured or empty",
+                    }
+                )
                 validation_results["overall_status"] = "invalid"
             else:
                 validation_results["checks"]["llm_endpoint"] = {
                     "status": "valid",
-                    "endpoint": llm_endpoint
+                    "endpoint": llm_endpoint,
                 }
         except Exception as e:
-            validation_results["issues"].append({
-                "type": "model_config_check_error",
-                "severity": "error",
-                "message": f"Error validating model configuration: {e}"
-            })
+            validation_results["issues"].append(
+                {
+                    "type": "model_config_check_error",
+                    "severity": "error",
+                    "message": f"Error validating model configuration: {e}",
+                }
+            )
             validation_results["overall_status"] = "invalid"
 
         # 5. Validate DI container health
         try:
             container = get_container()
-            di_health = container.get_health_status()
+            di_health = await container.get_health_status()
 
             if di_health.get("overall_status") == "healthy":
                 validation_results["checks"]["di_container"] = {
                     "status": "valid",
-                    "services_count": len(di_health.get("services", {}))
+                    "services_count": len(di_health.get("services", {})),
                 }
             else:
-                validation_results["issues"].append({
-                    "type": "di_container_unhealthy",
-                    "severity": "warning",
-                    "message": f"DI container reports unhealthy status: {di_health.get('overall_status')}",
-                    "di_status": di_health
-                })
+                validation_results["issues"].append(
+                    {
+                        "type": "di_container_unhealthy",
+                        "severity": "warning",
+                        "message": f"DI container reports unhealthy status: {di_health.get('overall_status')}",
+                        "di_status": di_health,
+                    }
+                )
                 # Don't set overall_status to invalid for DI issues (might be temporary)
         except Exception as e:
-            validation_results["issues"].append({
-                "type": "di_container_check_error",
-                "severity": "warning",
-                "message": f"Error checking DI container health: {e}"
-            })
+            validation_results["issues"].append(
+                {
+                    "type": "di_container_check_error",
+                    "severity": "warning",
+                    "message": f"Error checking DI container health: {e}",
+                }
+            )
 
     except Exception as e:
-        validation_results["issues"].append({
-            "type": "validation_runtime_error",
-            "severity": "error",
-            "message": f"Runtime validation failed with unexpected error: {e}"
-        })
+        validation_results["issues"].append(
+            {
+                "type": "validation_runtime_error",
+                "severity": "error",
+                "message": f"Runtime validation failed with unexpected error: {e}",
+            }
+        )
         validation_results["overall_status"] = "error"
 
     # Log summary
     issues_count = len(validation_results["issues"])
     log_with_correlation(
-        logging.INFO if validation_results["overall_status"] == "valid" else logging.WARNING,
+        logging.INFO
+        if validation_results["overall_status"] == "valid"
+        else logging.WARNING,
         f"Runtime configuration validation completed: {validation_results['overall_status']} with {issues_count} issues",
-        correlation_id=correlation_id, component="config_validation", operation="complete",
-        overall_status=validation_results["overall_status"], issues_count=issues_count
+        correlation_id=correlation_id,
+        component="config_validation",
+        operation="complete",
+        overall_status=validation_results["overall_status"],
+        issues_count=issues_count,
     )
 
     return validation_results
@@ -1051,7 +1301,9 @@ def validate_settings() -> None:
             or settings.TWS_PORT <= 0
             or settings.TWS_PORT > 65535
         ):
-            error_msg = f"Invalid TWS_PORT: {settings.TWS_PORT} (must be integer 1-65535)"
+            error_msg = (
+                f"Invalid TWS_PORT: {settings.TWS_PORT} (must be integer 1-65535)"
+            )
             logger.critical(f"{error_msg}")
             raise ConfigError(error_msg)
 
@@ -1074,33 +1326,51 @@ async def initialize_core_systems() -> None:
     """Initialize core systems with fail-fast behavior and granular error handling."""
     correlation_id = AppContext.get_correlation_id()
     log_with_correlation(
-        logging.INFO, "Initializing core systems",
-        correlation_id=correlation_id, component="core_init", operation="begin"
+        logging.INFO,
+        "Initializing core systems",
+        correlation_id=correlation_id,
+        component="core_init",
+        operation="begin",
     )
 
     # Agent Manager (required)
     try:
         await agent_manager.load_agents_from_config()
         log_with_correlation(
-            logging.INFO, "Agent Manager initialized successfully",
-            correlation_id=correlation_id, component="core_init", operation="agent_manager_init"
+            logging.INFO,
+            "Agent Manager initialized successfully",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="agent_manager_init",
         )
     except (ConfigError, FileNotFoundError) as e:
         log_with_correlation(
-            logging.CRITICAL, "Configuration error initializing Agent Manager",
-            correlation_id=correlation_id, component="core_init", operation="agent_manager_config_error", error=e
+            logging.CRITICAL,
+            "Configuration error initializing Agent Manager",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="agent_manager_config_error",
+            error=e,
         )
         raise SystemExit("Agent Manager configuration failed") from e
     except (ConnectionError, TimeoutError) as e:
         log_with_correlation(
-            logging.CRITICAL, "Network error initializing Agent Manager",
-            correlation_id=correlation_id, component="core_init", operation="agent_manager_network_error", error=e
+            logging.CRITICAL,
+            "Network error initializing Agent Manager",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="agent_manager_network_error",
+            error=e,
         )
         raise SystemExit("Agent Manager network connection failed") from e
     except Exception as e:
         log_with_correlation(
-            logging.CRITICAL, "Unexpected error initializing Agent Manager",
-            correlation_id=correlation_id, component="core_init", operation="agent_manager_unexpected_error", error=e
+            logging.CRITICAL,
+            "Unexpected error initializing Agent Manager",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="agent_manager_unexpected_error",
+            error=e,
         )
         raise SystemExit("Agent Manager initialization failed") from e
 
@@ -1108,28 +1378,43 @@ async def initialize_core_systems() -> None:
     try:
         # Use adaptive circuit breaker for TWS client initialization
         tws_breaker = circuit_breaker_manager.get_breaker("tws_client")
-        result = await tws_breaker.call(agent_manager._get_tws_client)
+        await tws_breaker.call(agent_manager._get_tws_client)
         log_with_correlation(
-            logging.INFO, "TWS Client initialized successfully",
-            correlation_id=correlation_id, component="core_init", operation="tws_client_init",
-            circuit_metrics=tws_breaker.get_metrics()
+            logging.INFO,
+            "TWS Client initialized successfully",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="tws_client_init",
+            circuit_metrics=tws_breaker.get_metrics(),
         )
     except pybreaker.CircuitBreakerError as e:
         log_with_correlation(
-            logging.CRITICAL, "Circuit breaker open for TWS Client initialization",
-            correlation_id=correlation_id, component="core_init", operation="tws_client_circuit_breaker", error=e
+            logging.CRITICAL,
+            "Circuit breaker open for TWS Client initialization",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="tws_client_circuit_breaker",
+            error=e,
         )
         raise SystemExit("TWS Client circuit breaker open") from e
     except (ConnectionError, TimeoutError) as e:
         log_with_correlation(
-            logging.CRITICAL, "Network error initializing TWS Client",
-            correlation_id=correlation_id, component="core_init", operation="tws_client_network_error", error=e
+            logging.CRITICAL,
+            "Network error initializing TWS Client",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="tws_client_network_error",
+            error=e,
         )
         raise SystemExit("TWS Client network connection failed") from e
     except Exception as e:
         log_with_correlation(
-            logging.CRITICAL, "Unexpected error initializing TWS Client",
-            correlation_id=correlation_id, component="core_init", operation="tws_client_unexpected_error", error=e
+            logging.CRITICAL,
+            "Unexpected error initializing TWS Client",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="tws_client_unexpected_error",
+            error=e,
         )
         raise SystemExit("TWS Client initialization failed") from e
 
@@ -1139,34 +1424,54 @@ async def initialize_core_systems() -> None:
         from resync.core.knowledge_graph import AsyncKnowledgeGraph
 
         log_with_correlation(
-            logging.INFO, "Initializing Knowledge Graph for continuous learning",
-            correlation_id=correlation_id, component="core_init", operation="kg_init_begin"
+            logging.INFO,
+            "Initializing Knowledge Graph for continuous learning",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="kg_init_begin",
         )
         container = get_container()
-        knowledge_graph = AsyncKnowledgeGraph()
+        knowledge_graph = await container.get(AsyncKnowledgeGraph)
         # Register concrete implementation for interface
-        container.register(AsyncKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON)
+        container.register(
+            IKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON
+        )
         log_with_correlation(
-            logging.INFO, "Knowledge Graph initialized and registered successfully",
-            correlation_id=correlation_id, component="core_init", operation="kg_init_complete"
+            logging.INFO,
+            "Knowledge Graph initialized and registered successfully",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="kg_init_complete",
         )
 
     except ImportError as e:
         log_with_correlation(
-            logging.CRITICAL, "Failed to import Knowledge Graph module",
-            correlation_id=correlation_id, component="core_init", operation="kg_import_error", error=e
+            logging.CRITICAL,
+            "Failed to import Knowledge Graph module",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="kg_import_error",
+            error=e,
         )
         raise SystemExit("Knowledge Graph import failed") from e
     except (ConnectionError, TimeoutError) as e:
         log_with_correlation(
-            logging.CRITICAL, "Network/database error initializing Knowledge Graph",
-            correlation_id=correlation_id, component="core_init", operation="kg_connection_error", error=e
+            logging.CRITICAL,
+            "Network/database error initializing Knowledge Graph",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="kg_connection_error",
+            error=e,
         )
         raise SystemExit("Knowledge Graph connection failed") from e
     except Exception as e:
         log_with_correlation(
-            logging.CRITICAL, "Unexpected error initializing Knowledge Graph",
-            correlation_id=correlation_id, component="core_init", operation="kg_unexpected_error", error=e
+            logging.CRITICAL,
+            "Unexpected error initializing Knowledge Graph",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="kg_unexpected_error",
+            error=e,
         )
         raise SystemExit("Knowledge Graph initialization failed") from e
 
@@ -1175,48 +1480,73 @@ async def initialize_core_systems() -> None:
         if knowledge_graph is None:
             raise RuntimeError("Knowledge Graph not available for File Ingestor")
 
-        file_ingestor = FileIngestor(knowledge_graph=knowledge_graph)
+        file_ingestor = await container.get(FileIngestor)
         # Register concrete implementation for interface
-        container.register(FileIngestor, FileIngestor, ServiceScope.SINGLETON)
+        container.register(IFileIngestor, FileIngestor, ServiceScope.SINGLETON)
         log_with_correlation(
-            logging.INFO, "File Ingestor initialized and registered successfully",
-            correlation_id=correlation_id, component="core_init", operation="file_ingestor_init"
+            logging.INFO,
+            "File Ingestor initialized and registered successfully",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="file_ingestor_init",
         )
 
         # Load existing RAG documents into knowledge graph
         log_with_correlation(
-            logging.INFO, "Loading existing RAG documents",
-            correlation_id=correlation_id, component="core_init", operation="rag_loading_begin"
+            logging.INFO,
+            "Loading existing RAG documents",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="rag_loading_begin",
         )
         loaded_docs = await load_existing_rag_documents(file_ingestor)
         log_with_correlation(
-            logging.INFO, f"Loaded {loaded_docs} existing RAG documents into knowledge graph",
-            correlation_id=correlation_id, component="core_init", operation="rag_loading_complete",
-            documents_loaded=loaded_docs
+            logging.INFO,
+            f"Loaded {loaded_docs} existing RAG documents into knowledge graph",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="rag_loading_complete",
+            documents_loaded=loaded_docs,
         )
 
     except (FileNotFoundError, PermissionError) as e:
         log_with_correlation(
-            logging.CRITICAL, "File system error initializing File Ingestor",
-            correlation_id=correlation_id, component="core_init", operation="file_ingestor_fs_error", error=e
+            logging.CRITICAL,
+            "File system error initializing File Ingestor",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="file_ingestor_fs_error",
+            error=e,
         )
         raise SystemExit("File Ingestor file system error") from e
     except (ConnectionError, TimeoutError) as e:
         log_with_correlation(
-            logging.CRITICAL, "Network/database error initializing File Ingestor",
-            correlation_id=correlation_id, component="core_init", operation="file_ingestor_connection_error", error=e
+            logging.CRITICAL,
+            "Network/database error initializing File Ingestor",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="file_ingestor_connection_error",
+            error=e,
         )
         raise SystemExit("File Ingestor connection failed") from e
     except RuntimeError as e:
         log_with_correlation(
-            logging.CRITICAL, "Dependency error initializing File Ingestor",
-            correlation_id=correlation_id, component="core_init", operation="file_ingestor_dependency_error", error=e
+            logging.CRITICAL,
+            "Dependency error initializing File Ingestor",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="file_ingestor_dependency_error",
+            error=e,
         )
         raise SystemExit("File Ingestor dependency error") from e
     except Exception as e:
         log_with_correlation(
-            logging.CRITICAL, "Unexpected error initializing File Ingestor",
-            correlation_id=correlation_id, component="core_init", operation="file_ingestor_unexpected_error", error=e
+            logging.CRITICAL,
+            "Unexpected error initializing File Ingestor",
+            correlation_id=correlation_id,
+            component="core_init",
+            operation="file_ingestor_unexpected_error",
+            error=e,
         )
         raise SystemExit("File Ingestor initialization failed") from e
 
@@ -1242,8 +1572,10 @@ async def start_background_services() -> Dict[str, asyncio.Task]:
     try:
         # Get the file_ingestor instance from the DI container
         container = get_container()
-        file_ingestor = container.get(IFileIngestor)
-        rag_watcher_task: asyncio.Task[None] = asyncio.create_task(watch_rag_directory(file_ingestor))
+        file_ingestor = await container.get(IFileIngestor)
+        rag_watcher_task: asyncio.Task[None] = asyncio.create_task(
+            watch_rag_directory(file_ingestor)
+        )
         tasks["rag_watcher"] = rag_watcher_task
         logger.info(" RAG directory watcher started")
     except Exception as e:
@@ -1258,8 +1590,11 @@ async def initialize_schedulers() -> AsyncIOScheduler:
     """Initialize schedulers with environment-aware configuration and granular error handling."""
     correlation_id = AppContext.get_correlation_id()
     log_with_correlation(
-        logging.INFO, "Initializing schedulers",
-        correlation_id=correlation_id, component="scheduler_init", operation="begin"
+        logging.INFO,
+        "Initializing schedulers",
+        correlation_id=correlation_id,
+        component="scheduler_init",
+        operation="begin",
     )
 
     scheduler = AsyncIOScheduler()
@@ -1268,9 +1603,13 @@ async def initialize_schedulers() -> AsyncIOScheduler:
         # Configure IA Auditor frequency based on environment
         job_config = get_auditor_job_config()
         log_with_correlation(
-            logging.INFO, f"IA Auditor job configuration: {job_config}",
-            correlation_id=correlation_id, component="scheduler_init", operation="config_loaded",
-            job_type=job_config["type"], startup_enabled=job_config.get("startup_enabled", False)
+            logging.INFO,
+            f"IA Auditor job configuration: {job_config}",
+            correlation_id=correlation_id,
+            component="scheduler_init",
+            operation="config_loaded",
+            job_type=job_config["type"],
+            startup_enabled=job_config.get("startup_enabled", False),
         )
 
         # Add recurring job
@@ -1279,40 +1618,59 @@ async def initialize_schedulers() -> AsyncIOScheduler:
                 analyze_and_flag_memories, job_config["type"], **job_config["config"]
             )
             log_with_correlation(
-                logging.INFO, f"IA Auditor recurring job added with {job_config['type']} schedule",
-                correlation_id=correlation_id, component="scheduler_init", operation="recurring_job_added",
-                schedule_type=job_config["type"], schedule_config=job_config["config"]
+                logging.INFO,
+                f"IA Auditor recurring job added with {job_config['type']} schedule",
+                correlation_id=correlation_id,
+                component="scheduler_init",
+                operation="recurring_job_added",
+                schedule_type=job_config["type"],
+                schedule_config=job_config["config"],
             )
         except ValueError as e:
             log_with_correlation(
-                logging.CRITICAL, "Invalid job configuration for IA Auditor",
-                correlation_id=correlation_id, component="scheduler_init", operation="job_config_error", error=e
+                logging.CRITICAL,
+                "Invalid job configuration for IA Auditor",
+                correlation_id=correlation_id,
+                component="scheduler_init",
+                operation="job_config_error",
+                error=e,
             )
             raise SystemExit("Invalid scheduler job configuration") from e
 
         # Add periodic configuration validation job
         try:
             config_validation_interval = InputSanitizer.sanitize_environment_value(
-                "CONFIG_VALIDATION_INTERVAL_HOURS", os.getenv("CONFIG_VALIDATION_INTERVAL_HOURS", "6"), int
+                "CONFIG_VALIDATION_INTERVAL_HOURS",
+                os.getenv("CONFIG_VALIDATION_INTERVAL_HOURS", "6"),
+                int,
             )
-            config_validation_interval = max(1, min(config_validation_interval, 24))  # 1-24 hours
+            config_validation_interval = max(
+                1, min(config_validation_interval, 24)
+            )  # 1-24 hours
 
             scheduler.add_job(
                 validate_runtime_config,
                 "interval",
                 hours=config_validation_interval,
                 id="config_validation",
-                name="Runtime Configuration Validation"
+                name="Runtime Configuration Validation",
             )
             log_with_correlation(
-                logging.INFO, f"Configuration validation job added (every {config_validation_interval} hours)",
-                correlation_id=correlation_id, component="scheduler_init", operation="config_validation_job_added",
-                interval_hours=config_validation_interval
+                logging.INFO,
+                f"Configuration validation job added (every {config_validation_interval} hours)",
+                correlation_id=correlation_id,
+                component="scheduler_init",
+                operation="config_validation_job_added",
+                interval_hours=config_validation_interval,
             )
         except Exception as e:
             log_with_correlation(
-                logging.WARNING, "Failed to add configuration validation job",
-                correlation_id=correlation_id, component="scheduler_init", operation="config_validation_job_error", error=e
+                logging.WARNING,
+                "Failed to add configuration validation job",
+                correlation_id=correlation_id,
+                component="scheduler_init",
+                operation="config_validation_job_error",
+                error=e,
             )
             # Don't fail startup for this
 
@@ -1321,13 +1679,20 @@ async def initialize_schedulers() -> AsyncIOScheduler:
             try:
                 scheduler.add_job(analyze_and_flag_memories)
                 log_with_correlation(
-                    logging.INFO, "IA Auditor startup job added",
-                    correlation_id=correlation_id, component="scheduler_init", operation="startup_job_added"
+                    logging.INFO,
+                    "IA Auditor startup job added",
+                    correlation_id=correlation_id,
+                    component="scheduler_init",
+                    operation="startup_job_added",
                 )
             except Exception as e:
                 log_with_correlation(
-                    logging.WARNING, "Failed to add startup job for IA Auditor",
-                    correlation_id=correlation_id, component="scheduler_init", operation="startup_job_error", error=e
+                    logging.WARNING,
+                    "Failed to add startup job for IA Auditor",
+                    correlation_id=correlation_id,
+                    component="scheduler_init",
+                    operation="startup_job_error",
+                    error=e,
                 )
                 # Don't fail startup for this, just log warning
 
@@ -1335,15 +1700,23 @@ async def initialize_schedulers() -> AsyncIOScheduler:
         try:
             scheduler.start()
             log_with_correlation(
-                logging.INFO, "IA Auditor scheduler started successfully",
-                correlation_id=correlation_id, component="scheduler_init", operation="scheduler_started",
-                job_type=job_config["type"], schedule_config=job_config["config"],
-                startup_enabled=job_config.get("startup_enabled", False)
+                logging.INFO,
+                "IA Auditor scheduler started successfully",
+                correlation_id=correlation_id,
+                component="scheduler_init",
+                operation="scheduler_started",
+                job_type=job_config["type"],
+                schedule_config=job_config["config"],
+                startup_enabled=job_config.get("startup_enabled", False),
             )
         except RuntimeError as e:
             log_with_correlation(
-                logging.CRITICAL, "Failed to start scheduler - already running or invalid state",
-                correlation_id=correlation_id, component="scheduler_init", operation="scheduler_start_error", error=e
+                logging.CRITICAL,
+                "Failed to start scheduler - already running or invalid state",
+                correlation_id=correlation_id,
+                component="scheduler_init",
+                operation="scheduler_start_error",
+                error=e,
             )
             raise SystemExit("Scheduler start failed") from e
 
@@ -1352,8 +1725,12 @@ async def initialize_schedulers() -> AsyncIOScheduler:
         raise
     except Exception as e:
         log_with_correlation(
-            logging.CRITICAL, "Unexpected error initializing scheduler",
-            correlation_id=correlation_id, component="scheduler_init", operation="unexpected_error", error=e
+            logging.CRITICAL,
+            "Unexpected error initializing scheduler",
+            correlation_id=correlation_id,
+            component="scheduler_init",
+            operation="unexpected_error",
+            error=e,
         )
         raise SystemExit("Scheduler initialization failed") from e
 
@@ -1363,98 +1740,124 @@ async def initialize_schedulers() -> AsyncIOScheduler:
 def get_auditor_job_config() -> Dict[str, Any]:
     """Get auditor job configuration based on environment and settings with validation."""
     correlation_id = AppContext.get_correlation_id()
-
     try:
-        app_env = getattr(settings, 'APP_ENV', 'production')
+        app_env = getattr(settings, "APP_ENV", "production")
         log_with_correlation(
-            logging.DEBUG, f"Getting IA Auditor config for environment: {app_env}",
-            correlation_id=correlation_id, component="scheduler_config", operation="env_check",
-            app_env=app_env
+            logging.DEBUG,
+            f"Getting IA Auditor config for environment: {app_env}",
+            correlation_id=correlation_id,
+            component="scheduler_config",
+            operation="env_check",
+            app_env=app_env,
         )
 
         if app_env == "production":
-        # Production: Use production-specific settings if available
-        frequency_hours = getattr(settings, "IA_AUDITOR_FREQUENCY_HOURS", 6)
-        startup_enabled = getattr(settings, "IA_AUDITOR_STARTUP_ENABLED", False)
+            frequency_hours = getattr(settings, "IA_AUDITOR_FREQUENCY_HOURS", 6)
+            startup_enabled = getattr(
+                settings, "IA_AUDITOR_STARTUP_ENABLED", False
+            )
 
-            # Validate frequency_hours with detailed error
             if not isinstance(frequency_hours, (int, float)) or frequency_hours <= 0:
                 error_msg = (
                     f"IA_AUDITOR_FREQUENCY_HOURS must be a positive number, got: {frequency_hours} "
                     f"(type: {type(frequency_hours).__name__})"
                 )
                 log_with_correlation(
-                    logging.ERROR, error_msg,
-                    correlation_id=correlation_id, component="scheduler_config", operation="validation_error",
-                    invalid_value=frequency_hours, expected_type="positive number"
+                    logging.ERROR,
+                    error_msg,
+                    correlation_id=correlation_id,
+                    component="scheduler_config",
+                    operation="validation_error",
+                    invalid_value=frequency_hours,
+                    expected_type="positive number",
                 )
                 raise ValueError(error_msg)
 
-            # Validate frequency_hours range
             if frequency_hours > 24:
                 log_with_correlation(
-                    logging.WARNING, f"IA_AUDITOR_FREQUENCY_HOURS is very high: {frequency_hours} hours",
-                    correlation_id=correlation_id, component="scheduler_config", operation="range_warning",
-                    frequency_hours=frequency_hours
+                    logging.WARNING,
+                    f"IA_AUDITOR_FREQUENCY_HOURS is very high: {frequency_hours} hours",
+                    correlation_id=correlation_id,
+                    component="scheduler_config",
+                    operation="range_warning",
+                    frequency_hours=frequency_hours,
                 )
 
             config = {
-            "type": "cron",
-                "config": {"hour": f"*/{int(frequency_hours)}"},  # Every N hours
+                "type": "cron",
+                "config": {"hour": f"*/{int(frequency_hours)}"},
                 "startup_enabled": bool(startup_enabled),
             }
             log_with_correlation(
-                logging.INFO, f"Production IA Auditor config: every {frequency_hours} hours, startup={startup_enabled}",
-                correlation_id=correlation_id, component="scheduler_config", operation="config_complete",
-                config=config
+                logging.INFO,
+                f"Production IA Auditor config: every {frequency_hours} hours, startup={startup_enabled}",
+                correlation_id=correlation_id,
+                component="scheduler_config",
+                operation="config_complete",
+                config=config,
             )
             return config
 
         elif app_env == "development":
-        # Development: More frequent for testing
             config = {
-            "type": "interval",
-            "config": {"minutes": 30},  # Every 30 minutes
-            "startup_enabled": True,
-        }
+                "type": "interval",
+                "config": {"minutes": 30},
+                "startup_enabled": True,
+            }
             log_with_correlation(
-                logging.INFO, "Development IA Auditor config: every 30 minutes with startup",
-                correlation_id=correlation_id, component="scheduler_config", operation="config_complete",
-                config=config
+                logging.INFO,
+                "Development IA Auditor config: every 30 minutes with startup",
+                correlation_id=correlation_id,
+                component="scheduler_config",
+                operation="config_complete",
+                config=config,
             )
             return config
-
-    else:
-            # Default: Conservative approach for unknown environments
+        else:
             log_with_correlation(
-                logging.WARNING, f"Unknown APP_ENV '{app_env}', using default configuration",
-                correlation_id=correlation_id, component="scheduler_config", operation="unknown_env",
-                app_env=app_env
+                logging.WARNING,
+                f"Unknown APP_ENV '{app_env}', using default configuration",
+                correlation_id=correlation_id,
+                component="scheduler_config",
+                operation="unknown_env",
+                app_env=app_env,
             )
             config = {
-            "type": "cron",
-            "config": {"hour": "*/6"},  # Every 6 hours
-            "startup_enabled": True,
-        }
+                "type": "cron",
+                "config": {"hour": "*/6"},
+                "startup_enabled": True,
+            }
             log_with_correlation(
-                logging.INFO, "Default IA Auditor config: every 6 hours with startup",
-                correlation_id=correlation_id, component="scheduler_config", operation="config_complete",
-                config=config
+                logging.INFO,
+                "Default IA Auditor config: every 6 hours with startup",
+                correlation_id=correlation_id,
+                component="scheduler_config",
+                operation="config_complete",
+                config=config,
             )
             return config
 
     except AttributeError as e:
         log_with_correlation(
-            logging.ERROR, "Missing required settings attribute",
-            correlation_id=correlation_id, component="scheduler_config", operation="attribute_error", error=e
+            logging.ERROR,
+            "Missing required settings attribute",
+            correlation_id=correlation_id,
+            component="scheduler_config",
+            operation="attribute_error",
+            error=e,
         )
         raise ConfigError(f"Settings configuration error: {e}") from e
     except Exception as e:
         log_with_correlation(
-            logging.ERROR, "Unexpected error getting IA Auditor configuration",
-            correlation_id=correlation_id, component="scheduler_config", operation="unexpected_error", error=e
+            logging.ERROR,
+            "Unexpected error getting IA Auditor configuration",
+            correlation_id=correlation_id,
+            component="scheduler_config",
+            operation="unexpected_error",
+            error=e,
         )
         raise ConfigError(f"IA Auditor configuration failed: {e}") from e
+
 
 async def shutdown_application(
     app: FastAPI, background_tasks: Dict[str, asyncio.Task], correlation_id: str
@@ -1464,36 +1867,55 @@ async def shutdown_application(
     Note: Most resources are now managed by context managers in lifespan().
     """
     log_with_correlation(
-        logging.INFO, "Shutting down remaining application components",
-        correlation_id=correlation_id, component="shutdown", operation="begin"
+        logging.INFO,
+        "Shutting down remaining application components",
+        correlation_id=correlation_id,
+        component="shutdown",
+        operation="begin",
     )
 
     shutdown_errors = []
 
     # Clean up TWS client connection (not managed by context managers)
     try:
-        if hasattr(agent_manager, 'tws_client') and agent_manager.tws_client:
+        if hasattr(agent_manager, "tws_client") and agent_manager.tws_client:
             # Check if client has active connections before closing
-            if hasattr(agent_manager.tws_client, 'is_connected') and agent_manager.tws_client.is_connected:
+            if (
+                hasattr(agent_manager.tws_client, "is_connected")
+                and agent_manager.tws_client.is_connected
+            ):
                 await agent_manager.tws_client.close()
                 log_with_correlation(
-                    logging.INFO, "TWS client closed successfully",
-                    correlation_id=correlation_id, component="shutdown", operation="tws_client_close"
+                    logging.INFO,
+                    "TWS client closed successfully",
+                    correlation_id=correlation_id,
+                    component="shutdown",
+                    operation="tws_client_close",
                 )
             else:
                 log_with_correlation(
-                    logging.INFO, "TWS client was not connected, skipping close",
-                    correlation_id=correlation_id, component="shutdown", operation="tws_client_skip"
+                    logging.INFO,
+                    "TWS client was not connected, skipping close",
+                    correlation_id=correlation_id,
+                    component="shutdown",
+                    operation="tws_client_skip",
                 )
         else:
             log_with_correlation(
-                logging.INFO, "TWS client not available, skipping close",
-                correlation_id=correlation_id, component="shutdown", operation="tws_client_not_found"
+                logging.INFO,
+                "TWS client not available, skipping close",
+                correlation_id=correlation_id,
+                component="shutdown",
+                operation="tws_client_not_found",
             )
     except Exception as e:
         log_with_correlation(
-            logging.ERROR, "Error closing TWS client",
-            correlation_id=correlation_id, component="shutdown", operation="tws_client_error", error=e
+            logging.ERROR,
+            "Error closing TWS client",
+            correlation_id=correlation_id,
+            component="shutdown",
+            operation="tws_client_error",
+            error=e,
         )
         shutdown_errors.append(("tws_client", str(e)))
 
@@ -1501,48 +1923,72 @@ async def shutdown_application(
     try:
         container = get_container()
         try:
-            kg_instance = container.get(IKnowledgeGraph)
+            kg_instance = await container.get(IKnowledgeGraph)
             if hasattr(kg_instance, "close") and kg_instance is not None:
                 # Check if connection is active before closing
-                if hasattr(kg_instance, '_driver') and kg_instance._driver:
+                if hasattr(kg_instance, "_driver") and kg_instance._driver:
                     await kg_instance.close()
                     log_with_correlation(
-                        logging.INFO, "Knowledge Graph connection closed successfully",
-                        correlation_id=correlation_id, component="shutdown", operation="kg_close"
+                        logging.INFO,
+                        "Knowledge Graph connection closed successfully",
+                        correlation_id=correlation_id,
+                        component="shutdown",
+                        operation="kg_close",
                     )
                 else:
                     log_with_correlation(
-                        logging.INFO, "Knowledge Graph was not connected, skipping close",
-                        correlation_id=correlation_id, component="shutdown", operation="kg_skip"
+                        logging.INFO,
+                        "Knowledge Graph was not connected, skipping close",
+                        correlation_id=correlation_id,
+                        component="shutdown",
+                        operation="kg_skip",
                     )
             else:
                 log_with_correlation(
-                    logging.INFO, "Knowledge Graph instance not available, skipping close",
-                    correlation_id=correlation_id, component="shutdown", operation="kg_not_available"
+                    logging.INFO,
+                    "Knowledge Graph instance not available, skipping close",
+                    correlation_id=correlation_id,
+                    component="shutdown",
+                    operation="kg_not_available",
                 )
         except KeyError as e:
             log_with_correlation(
-                logging.WARNING, "Knowledge Graph not registered in container, skipping close",
-                correlation_id=correlation_id, component="shutdown", operation="kg_not_registered", error=e
+                logging.WARNING,
+                "Knowledge Graph not registered in container, skipping close",
+                correlation_id=correlation_id,
+                component="shutdown",
+                operation="kg_not_registered",
+                error=e,
             )
     except Exception as e:
         log_with_correlation(
-            logging.ERROR, "Error closing Knowledge Graph connection",
-            correlation_id=correlation_id, component="shutdown", operation="kg_error", error=e
+            logging.ERROR,
+            "Error closing Knowledge Graph connection",
+            correlation_id=correlation_id,
+            component="shutdown",
+            operation="kg_error",
+            error=e,
         )
         shutdown_errors.append(("knowledge_graph", str(e)))
 
     # Log shutdown summary
     if shutdown_errors:
         log_with_correlation(
-            logging.WARNING, f"Shutdown completed with {len(shutdown_errors)} errors",
-            correlation_id=correlation_id, component="shutdown", operation="complete_with_errors",
-            error_count=len(shutdown_errors), errors=shutdown_errors
+            logging.WARNING,
+            f"Shutdown completed with {len(shutdown_errors)} errors",
+            correlation_id=correlation_id,
+            component="shutdown",
+            operation="complete_with_errors",
+            error_count=len(shutdown_errors),
+            errors=shutdown_errors,
         )
     else:
         log_with_correlation(
-            logging.INFO, "Shutdown completed successfully",
-            correlation_id=correlation_id, component="shutdown", operation="complete_success"
+            logging.INFO,
+            "Shutdown completed successfully",
+            correlation_id=correlation_id,
+            component="shutdown",
+            operation="complete_success",
         )
 
 
@@ -1558,9 +2004,13 @@ async def watch_config_changes(config_path: Path) -> None:
     """
     correlation_id = AppContext.get_correlation_id()
     log_with_correlation(
-        logging.INFO, f"Starting configuration watcher with rate limiting",
-        correlation_id=correlation_id, component="watcher", operation="start",
-        config_path=str(config_path), platform=os.name
+        logging.INFO,
+        "Starting configuration watcher with rate limiting",
+        correlation_id=correlation_id,
+        component="watcher",
+        operation="start",
+        config_path=str(config_path),
+        platform=os.name,
     )
 
     # Rate limiting configuration
@@ -1583,19 +2033,29 @@ async def watch_config_changes(config_path: Path) -> None:
             time_since_last = current_time - last_change_time
             if time_since_last < min_interval:
                 log_with_correlation(
-                    logging.DEBUG, f"Rate limiting: change too soon ({time_since_last:.2f}s < {min_interval}s)",
-                    correlation_id=correlation_id, component="watcher", operation="rate_limited",
-                    time_since_last=time_since_last, min_interval=min_interval
+                    logging.DEBUG,
+                    f"Rate limiting: change too soon ({time_since_last:.2f}s < {min_interval}s)",
+                    correlation_id=correlation_id,
+                    component="watcher",
+                    operation="rate_limited",
+                    time_since_last=time_since_last,
+                    min_interval=min_interval,
                 )
                 continue
 
             # Burst protection: limit rapid successive changes
-            recent_changes = [t for t in recent_changes if current_time - t < 60.0]  # Clean old entries
+            recent_changes = [
+                t for t in recent_changes if current_time - t < 60.0
+            ]  # Clean old entries
             if len(recent_changes) >= max_burst_events:
                 log_with_correlation(
-                    logging.WARNING, f"Burst protection: too many changes ({len(recent_changes)} >= {max_burst_events})",
-                    correlation_id=correlation_id, component="watcher", operation="burst_protected",
-                    recent_changes_count=len(recent_changes), max_burst=max_burst_events
+                    logging.WARNING,
+                    f"Burst protection: too many changes ({len(recent_changes)} >= {max_burst_events})",
+                    correlation_id=correlation_id,
+                    component="watcher",
+                    operation="burst_protected",
+                    recent_changes_count=len(recent_changes),
+                    max_burst=max_burst_events,
                 )
                 await asyncio.sleep(min_interval)  # Backoff
                 continue
@@ -1607,29 +2067,45 @@ async def watch_config_changes(config_path: Path) -> None:
                 recent_changes.append(current_time)
 
                 log_with_correlation(
-                    logging.INFO, "Configuration change handled successfully",
-                    correlation_id=correlation_id, component="watcher", operation="change_handled",
-                    changes_count=len(changes), time_since_last=time_since_last
+                    logging.INFO,
+                    "Configuration change handled successfully",
+                    correlation_id=correlation_id,
+                    component="watcher",
+                    operation="change_handled",
+                    changes_count=len(changes),
+                    time_since_last=time_since_last,
                 )
 
             except Exception as e:
                 log_with_correlation(
-                    logging.ERROR, "Error handling config change",
-                    correlation_id=correlation_id, component="watcher", operation="change_error", error=e
+                    logging.ERROR,
+                    "Error handling config change",
+                    correlation_id=correlation_id,
+                    component="watcher",
+                    operation="change_error",
+                    error=e,
                 )
                 # Continue watching despite individual change errors
                 await asyncio.sleep(min_interval * 2)  # Extra backoff on error
 
     except FileNotFoundError as e:
         log_with_correlation(
-            logging.ERROR, "Configuration file not found",
-            correlation_id=correlation_id, component="watcher", operation="file_not_found", error=e
+            logging.ERROR,
+            "Configuration file not found",
+            correlation_id=correlation_id,
+            component="watcher",
+            operation="file_not_found",
+            error=e,
         )
         raise ConfigError(f"Configuration file not found: {config_path}") from e
     except PermissionError as e:
         log_with_correlation(
-            logging.ERROR, "Permission denied accessing configuration file",
-            correlation_id=correlation_id, component="watcher", operation="permission_denied", error=e
+            logging.ERROR,
+            "Permission denied accessing configuration file",
+            correlation_id=correlation_id,
+            component="watcher",
+            operation="permission_denied",
+            error=e,
         )
         raise ConfigError(
             f"Permission denied accessing configuration file: {config_path}"
@@ -1638,16 +2114,23 @@ async def watch_config_changes(config_path: Path) -> None:
         # Platform-specific OS error handling
         error_type = "windows_os_error" if os.name == "nt" else "unix_os_error"
         log_with_correlation(
-            logging.ERROR, f"OS error watching config file: {error_type}",
-            correlation_id=correlation_id, component="watcher", operation=error_type, error=e
+            logging.ERROR,
+            f"OS error watching config file: {error_type}",
+            correlation_id=correlation_id,
+            component="watcher",
+            operation=error_type,
+            error=e,
         )
         raise FileProcessingError(
             f"OS error watching configuration file: {config_path}"
         ) from e
     except asyncio.CancelledError:
         log_with_correlation(
-            logging.INFO, "Configuration watcher cancelled",
-            correlation_id=correlation_id, component="watcher", operation="cancelled"
+            logging.INFO,
+            "Configuration watcher cancelled",
+            correlation_id=correlation_id,
+            component="watcher",
+            operation="cancelled",
         )
         # Re-raise CancelledError for proper task cancellation
         raise
@@ -1700,7 +2183,7 @@ async def root():
     """
     from fastapi.responses import RedirectResponse
 
-    return RedirectResponse(url="/api/docs", status_code=302)
+    return RedirectResponse(url="/docs", status_code=302)
 
 
 @app.get("/health")
@@ -1711,15 +2194,18 @@ async def health_check() -> Dict[str, Any]:
     """
     correlation_id = AppContext.get_correlation_id()
     log_with_correlation(
-        logging.DEBUG, "Global health check requested",
-        correlation_id=correlation_id, component="health", operation="global_check"
+        logging.DEBUG,
+        "Global health check requested",
+        correlation_id=correlation_id,
+        component="health",
+        operation="global_check",
     )
 
     health_status: Dict[str, Any] = {
         "status": "healthy",
         "timestamp": time_func(),
         "correlation_id": correlation_id,
-        "components": {}
+        "components": {},
     }
 
     try:
@@ -1733,30 +2219,42 @@ async def health_check() -> Dict[str, Any]:
         health_status["components"].update(services_health["components"])
 
         # Determine overall status - any subsystem failure makes overall status degraded
-        subsystem_statuses = [core_health["status"], infra_health["status"], services_health["status"]]
+        subsystem_statuses = [
+            core_health["status"],
+            infra_health["status"],
+            services_health["status"],
+        ]
         if "error" in subsystem_statuses:
             health_status["status"] = "error"
         elif "degraded" in subsystem_statuses:
-                    health_status["status"] = "degraded"
+            health_status["status"] = "degraded"
 
         health_status["subsystems"] = {
             "core": core_health["status"],
             "infrastructure": infra_health["status"],
-            "services": services_health["status"]
+            "services": services_health["status"],
         }
 
         log_with_correlation(
-            logging.DEBUG, f"Global health check completed: {health_status['status']}",
-            correlation_id=correlation_id, component="health", operation="global_check_complete",
-            overall_status=health_status["status"], subsystem_statuses=health_status["subsystems"]
+            logging.DEBUG,
+            f"Global health check completed: {health_status['status']}",
+            correlation_id=correlation_id,
+            component="health",
+            operation="global_check_complete",
+            overall_status=health_status["status"],
+            subsystem_statuses=health_status["subsystems"],
         )
 
-            except Exception as e:
+    except Exception as e:
         health_status["status"] = "error"
         health_status["error"] = str(e)
         log_with_correlation(
-            logging.ERROR, "Global health check failed",
-            correlation_id=correlation_id, component="health", operation="global_check_error", error=e
+            logging.ERROR,
+            "Global health check failed",
+            correlation_id=correlation_id,
+            component="health",
+            operation="global_check_error",
+            error=e,
         )
 
     return health_status
@@ -1769,24 +2267,30 @@ async def health_check_di() -> Dict[str, Any]:
     """
     correlation_id = AppContext.get_correlation_id()
     log_with_correlation(
-        logging.DEBUG, "DI health check requested",
-        correlation_id=correlation_id, component="health", operation="di_check"
+        logging.DEBUG,
+        "DI health check requested",
+        correlation_id=correlation_id,
+        component="health",
+        operation="di_check",
     )
 
     try:
         container = get_container()
-        health_status = container.get_health_status()
+        health_status = await container.get_health_status()
         health_status["correlation_id"] = correlation_id
 
         log_with_correlation(
-            logging.DEBUG, f"DI health check completed: {health_status['overall_status']}",
-            correlation_id=correlation_id, component="health", operation="di_check_complete",
-            overall_status=health_status["overall_status"]
+            logging.DEBUG,
+            f"DI health check completed: {health_status['overall_status']}",
+            correlation_id=correlation_id,
+            component="health",
+            operation="di_check_complete",
+            overall_status=health_status["overall_status"],
         )
 
         return health_status
 
-            except Exception as e:
+    except Exception as e:
         health_status = {
             "status": "error",
             "correlation_id": correlation_id,
@@ -1794,8 +2298,12 @@ async def health_check_di() -> Dict[str, Any]:
             "timestamp": time_func(),
         }
         log_with_correlation(
-            logging.ERROR, "DI health check failed",
-            correlation_id=correlation_id, component="health", operation="di_check_error", error=e
+            logging.ERROR,
+            "DI health check failed",
+            correlation_id=correlation_id,
+            component="health",
+            operation="di_check_error",
+            error=e,
         )
         return health_status
 
@@ -1808,19 +2316,25 @@ async def validate_config_endpoint() -> Dict[str, Any]:
     """
     correlation_id = AppContext.get_correlation_id()
     log_with_correlation(
-        logging.INFO, "Runtime configuration validation requested",
-        correlation_id=correlation_id, component="config", operation="validate_request"
+        logging.INFO,
+        "Runtime configuration validation requested",
+        correlation_id=correlation_id,
+        component="config",
+        operation="validate_request",
     )
 
     try:
-        validation_result = validate_runtime_config()
+        validation_result = await validate_runtime_config()
         validation_result["correlation_id"] = correlation_id
 
         log_with_correlation(
-            logging.INFO, f"Configuration validation completed: {validation_result['overall_status']}",
-            correlation_id=correlation_id, component="config", operation="validate_complete",
+            logging.INFO,
+            f"Configuration validation completed: {validation_result['overall_status']}",
+            correlation_id=correlation_id,
+            component="config",
+            operation="validate_complete",
             overall_status=validation_result["overall_status"],
-            issues_count=len(validation_result.get("issues", []))
+            issues_count=len(validation_result.get("issues", [])),
         )
 
         return validation_result
@@ -1831,15 +2345,21 @@ async def validate_config_endpoint() -> Dict[str, Any]:
             "correlation_id": correlation_id,
             "timestamp": time_func(),
             "error": str(e),
-            "issues": [{
-                "type": "endpoint_error",
-                "severity": "error",
-                "message": f"Configuration validation endpoint failed: {e}"
-            }]
+            "issues": [
+                {
+                    "type": "endpoint_error",
+                    "severity": "error",
+                    "message": f"Configuration validation endpoint failed: {e}",
+                }
+            ],
         }
         log_with_correlation(
-            logging.ERROR, "Configuration validation endpoint failed",
-            correlation_id=correlation_id, component="config", operation="validate_error", error=e
+            logging.ERROR,
+            "Configuration validation endpoint failed",
+            correlation_id=correlation_id,
+            component="config",
+            operation="validate_error",
+            error=e,
         )
         return error_result
 
@@ -1852,26 +2372,26 @@ async def health_check_core() -> Dict[str, Any]:
     """
     correlation_id = AppContext.get_correlation_id()
     log_with_correlation(
-        logging.DEBUG, "Core health check requested",
-        correlation_id=correlation_id, component="health", operation="core_check"
+        logging.DEBUG,
+        "Core health check requested",
+        correlation_id=correlation_id,
+        component="health",
+        operation="core_check",
     )
 
     health_status: Dict[str, Any] = {
         "status": "healthy",
         "timestamp": time_func(),
         "correlation_id": correlation_id,
-        "components": {}
+        "components": {},
     }
 
     try:
         # Check Agent Manager (critical)
         try:
             # Agent manager is initialized at startup, check if it's accessible
-            if hasattr(agent_manager, 'agents') and agent_manager.agents is not None:
+            if hasattr(agent_manager, "agents") and agent_manager.agents is not None:
                 health_status["components"]["agent_manager"] = "initialized"
-        else:
-                health_status["components"]["agent_manager"] = "not_initialized"
-                health_status["status"] = "error"
         except Exception as e:
             health_status["components"]["agent_manager"] = f"error: {str(e)}"
             health_status["status"] = "error"
@@ -1879,14 +2399,14 @@ async def health_check_core() -> Dict[str, Any]:
         # Check Knowledge Graph (critical)
         try:
             container = get_container()
-                kg_instance = container.get(IKnowledgeGraph)
-                if kg_instance is not None:
-                    health_status["components"]["knowledge_graph"] = "initialized"
-                else:
-                    health_status["components"]["knowledge_graph"] = "not_initialized"
+            kg_instance = await container.get(IKnowledgeGraph)
+            if kg_instance is not None:
+                health_status["components"]["knowledge_graph"] = "initialized"
+            else:
+                health_status["components"]["knowledge_graph"] = "not_initialized"
                 health_status["status"] = "error"
-            except KeyError:
-                health_status["components"]["knowledge_graph"] = "not_registered"
+        except KeyError:
+            health_status["components"]["knowledge_graph"] = "not_registered"
             health_status["status"] = "error"
         except Exception as e:
             health_status["components"]["knowledge_graph"] = f"error: {str(e)}"
@@ -1895,14 +2415,14 @@ async def health_check_core() -> Dict[str, Any]:
         # Check File Ingestor (critical)
         try:
             container = get_container()
-                file_ingestor = container.get(IFileIngestor)
-                if file_ingestor is not None:
-                    health_status["components"]["file_ingestor"] = "initialized"
-                else:
-                    health_status["components"]["file_ingestor"] = "not_initialized"
+            file_ingestor = await container.get(IFileIngestor)
+            if file_ingestor is not None:
+                health_status["components"]["file_ingestor"] = "initialized"
+            else:
+                health_status["components"]["file_ingestor"] = "not_initialized"
                 health_status["status"] = "error"
-            except KeyError:
-                health_status["components"]["file_ingestor"] = "not_registered"
+        except KeyError:
+            health_status["components"]["file_ingestor"] = "not_registered"
             health_status["status"] = "error"
         except Exception as e:
             health_status["components"]["file_ingestor"] = f"error: {str(e)}"
@@ -1912,8 +2432,12 @@ async def health_check_core() -> Dict[str, Any]:
         health_status["status"] = "error"
         health_status["error"] = str(e)
         log_with_correlation(
-            logging.ERROR, "Core health check failed",
-            correlation_id=correlation_id, component="health", operation="core_check_error", error=e
+            logging.ERROR,
+            "Core health check failed",
+            correlation_id=correlation_id,
+            component="health",
+            operation="core_check_error",
+            error=e,
         )
 
     return health_status
@@ -1927,22 +2451,25 @@ async def health_check_infrastructure() -> Dict[str, Any]:
     """
     correlation_id = AppContext.get_correlation_id()
     log_with_correlation(
-        logging.DEBUG, "Infrastructure health check requested",
-        correlation_id=correlation_id, component="health", operation="infra_check"
+        logging.DEBUG,
+        "Infrastructure health check requested",
+        correlation_id=correlation_id,
+        component="health",
+        operation="infra_check",
     )
 
     health_status: Dict[str, Any] = {
         "status": "healthy",
         "timestamp": time_func(),
         "correlation_id": correlation_id,
-        "components": {}
+        "components": {},
     }
 
     try:
         # Check Cache Hierarchy (important but not critical)
         try:
             cache_hierarchy = get_cache_hierarchy()
-            if hasattr(cache_hierarchy, 'is_running') and cache_hierarchy.is_running:
+            if hasattr(cache_hierarchy, "is_running") and cache_hierarchy.is_running:
                 health_status["components"]["cache_hierarchy"] = "running"
             else:
                 health_status["components"]["cache_hierarchy"] = "stopped"
@@ -1954,8 +2481,10 @@ async def health_check_infrastructure() -> Dict[str, Any]:
         # Check Scheduler (important but not critical)
         try:
             if hasattr(app.state, "scheduler") and app.state.scheduler:
-                scheduler_running = getattr(app.state.scheduler, 'running', False)
-                health_status["components"]["scheduler"] = "running" if scheduler_running else "stopped"
+                scheduler_running = getattr(app.state.scheduler, "running", False)
+                health_status["components"]["scheduler"] = (
+                    "running" if scheduler_running else "stopped"
+                )
                 if not scheduler_running:
                     health_status["status"] = "degraded"
             else:
@@ -1967,7 +2496,7 @@ async def health_check_infrastructure() -> Dict[str, Any]:
 
         # Check TWS Monitor (important but not critical)
         try:
-            if hasattr(tws_monitor, 'is_monitoring') and tws_monitor.is_monitoring:
+            if hasattr(tws_monitor, "is_monitoring") and tws_monitor.is_monitoring:
                 health_status["components"]["tws_monitor"] = "active"
             else:
                 health_status["components"]["tws_monitor"] = "inactive"
@@ -1980,8 +2509,12 @@ async def health_check_infrastructure() -> Dict[str, Any]:
         health_status["status"] = "error"
         health_status["error"] = str(e)
         log_with_correlation(
-            logging.ERROR, "Infrastructure health check failed",
-            correlation_id=correlation_id, component="health", operation="infra_check_error", error=e
+            logging.ERROR,
+            "Infrastructure health check failed",
+            correlation_id=correlation_id,
+            component="health",
+            operation="infra_check_error",
+            error=e,
         )
 
     return health_status
@@ -1995,15 +2528,18 @@ async def health_check_services() -> Dict[str, Any]:
     """
     correlation_id = AppContext.get_correlation_id()
     log_with_correlation(
-        logging.DEBUG, "Services health check requested",
-        correlation_id=correlation_id, component="health", operation="services_check"
+        logging.DEBUG,
+        "Services health check requested",
+        correlation_id=correlation_id,
+        component="health",
+        operation="services_check",
     )
 
     health_status: Dict[str, Any] = {
         "status": "healthy",
         "timestamp": time_func(),
         "correlation_id": correlation_id,
-        "components": {}
+        "components": {},
     }
 
     try:
@@ -2014,7 +2550,10 @@ async def health_check_services() -> Dict[str, Any]:
                 if hasattr(agent_manager.tws_client, "ping"):
                     await agent_manager.tws_client.ping()
                     health_status["components"]["tws_client"] = "reachable"
-                elif hasattr(agent_manager.tws_client, "is_connected") and agent_manager.tws_client.is_connected:
+                elif (
+                    hasattr(agent_manager.tws_client, "is_connected")
+                    and agent_manager.tws_client.is_connected
+                ):
                     health_status["components"]["tws_client"] = "connected"
                 else:
                     health_status["components"]["tws_client"] = "unknown"
@@ -2038,7 +2577,9 @@ async def health_check_services() -> Dict[str, Any]:
                     open_breakers.append(operation)
 
             if open_breakers:
-                health_status["components"]["circuit_breakers_status"] = f"open_circuits: {open_breakers}"
+                health_status["components"][
+                    "circuit_breakers_status"
+                ] = f"open_circuits: {open_breakers}"
                 health_status["status"] = "degraded"
             else:
                 health_status["components"]["circuit_breakers_status"] = "all_closed"
@@ -2051,15 +2592,23 @@ async def health_check_services() -> Dict[str, Any]:
         health_status["status"] = "error"
         health_status["error"] = str(e)
         log_with_correlation(
-            logging.ERROR, "Services health check failed due to connectivity",
-            correlation_id=correlation_id, component="health", operation="services_check_error", error=e
+            logging.ERROR,
+            "Services health check failed due to connectivity",
+            correlation_id=correlation_id,
+            component="health",
+            operation="services_check_error",
+            error=e,
         )
     except Exception as e:
         health_status["status"] = "error"
         health_status["error"] = str(e)
         log_with_correlation(
-            logging.ERROR, "Services health check failed",
-            correlation_id=correlation_id, component="health", operation="services_check_error", error=e
+            logging.ERROR,
+            "Services health check failed",
+            correlation_id=correlation_id,
+            component="health",
+            operation="services_check_error",
+            error=e,
         )
 
     return health_status

@@ -51,7 +51,9 @@ async def send_error_message(websocket: WebSocket, message: str) -> None:
         logger.debug("Failed to send error message, connection error: %s", e)
     except Exception:
         # Last resort to prevent the application from crashing if sending fails.
-        logger.warning("Failed to send error message due to an unexpected error.", exc_info=True)
+        logger.warning(
+            "Failed to send error message due to an unexpected error.", exc_info=True
+        )
 
 
 async def run_auditor_safely():
@@ -71,7 +73,8 @@ async def run_auditor_safely():
         logger.error("IA Auditor encountered an audit-specific error.", exc_info=True)
     except Exception:
         logger.critical(
-            "IA Auditor background task failed with an unhandled exception.", exc_info=True
+            "IA Auditor background task failed with an unhandled exception.",
+            exc_info=True,
         )
 
 
@@ -146,7 +149,7 @@ async def websocket_endpoint(
     Enhances responses with RAG (Retrieval-Augmented Generation) using the Knowledge Graph.
     """
     await connection_manager.connect(websocket)
-    agent: Agent | None = agent_manager.get_agent(agent_id)
+    agent: Agent | None = await agent_manager.get_agent(agent_id)
 
     if not agent:
         logger.warning(f"Agent '{agent_id}' not found for WebSocket connection.")
@@ -193,7 +196,9 @@ async def websocket_endpoint(
     except Exception:
         # A critical, unhandled error occurred. Log it for immediate investigation.
         logger.critical(
-            "Unexpected critical error in WebSocket for agent '%s'", agent_id, exc_info=True
+            "Unexpected critical error in WebSocket for agent '%s'",
+            agent_id,
+            exc_info=True,
         )
         await send_error_message(websocket, "Ocorreu um erro inesperado no servidor.")
     finally:

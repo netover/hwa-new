@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ChaosTestResult:
     """Result of a chaos engineering test."""
+
     test_name: str
     component: str
     duration: float
@@ -43,6 +44,7 @@ class ChaosTestResult:
 @dataclass
 class FuzzingScenario:
     """Definition of a fuzzing scenario."""
+
     name: str
     description: str
     fuzz_function: Callable[[], Any]
@@ -61,19 +63,26 @@ class ChaosEngineer:
         self.active_tests: Dict[str, asyncio.Task] = {}
         self._lock = threading.RLock()
 
-    async def run_full_chaos_suite(self, duration_minutes: float = 5.0) -> Dict[str, Any]:
+    async def run_full_chaos_suite(
+        self, duration_minutes: float = 5.0
+    ) -> Dict[str, Any]:
         """
         Run the complete chaos engineering test suite.
         """
-        correlation_id = runtime_metrics.create_correlation_id({
-            "component": "chaos_engineering",
-            "operation": "full_suite",
-            "duration_minutes": duration_minutes,
-            "global_correlation": self.correlation_id
-        })
+        correlation_id = runtime_metrics.create_correlation_id(
+            {
+                "component": "chaos_engineering",
+                "operation": "full_suite",
+                "duration_minutes": duration_minutes,
+                "global_correlation": self.correlation_id,
+            }
+        )
 
         start_time = time.time()
-        logger.info(f"Starting chaos engineering suite for {duration_minutes} minutes", extra={"correlation_id": correlation_id})
+        logger.info(
+            f"Starting chaos engineering suite for {duration_minutes} minutes",
+            extra={"correlation_id": correlation_id},
+        )
 
         try:
             # Run all tests concurrently
@@ -83,7 +92,7 @@ class ChaosEngineer:
                 self._audit_db_failure_injection(),
                 self._memory_pressure_simulation(),
                 self._network_partition_simulation(),
-                self._component_isolation_testing()
+                self._component_isolation_testing(),
             ]
 
             # Run tests with timeout
@@ -97,15 +106,17 @@ class ChaosEngineer:
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
                     test_name = f"test_{i}"
-                    self.results.append(ChaosTestResult(
-                        test_name=test_name,
-                        component="unknown",
-                        duration=0,
-                        success=False,
-                        error_count=1,
-                        anomalies_detected=[str(result)],
-                        correlation_id=correlation_id
-                    ))
+                    self.results.append(
+                        ChaosTestResult(
+                            test_name=test_name,
+                            component="unknown",
+                            duration=0,
+                            success=False,
+                            error_count=1,
+                            anomalies_detected=[str(result)],
+                            correlation_id=correlation_id,
+                        )
+                    )
                 else:
                     self.results.append(result)
                     if result.success:
@@ -122,12 +133,15 @@ class ChaosEngineer:
                 "success_rate": successful_tests / len(test_tasks) if test_tasks else 0,
                 "total_anomalies": total_anomalies,
                 "test_results": [r.__dict__ for r in self.results],
-                "environment": get_environment_tags()
+                "environment": get_environment_tags(),
             }
 
-            log_with_correlation(logging.INFO,
+            log_with_correlation(
+                logging.INFO,
                 f"Chaos suite completed: {successful_tests}/{len(test_tasks)} tests passed, "
-                f"{total_anomalies} anomalies detected in {suite_duration:.1f}s", correlation_id)
+                f"{total_anomalies} anomalies detected in {suite_duration:.1f}s",
+                correlation_id,
+            )
 
             return summary
 
@@ -139,10 +153,9 @@ class ChaosEngineer:
         Fuzzing test for cache race conditions under concurrent access.
         """
         test_name = "cache_race_condition_fuzzing"
-        correlation_id = runtime_metrics.create_correlation_id({
-            "component": "chaos_engineering",
-            "operation": test_name
-        })
+        correlation_id = runtime_metrics.create_correlation_id(
+            {"component": "chaos_engineering", "operation": test_name}
+        )
 
         start_time = time.time()
         cache = AsyncTTLCache(ttl_seconds=10, num_shards=8)
@@ -158,15 +171,15 @@ class ChaosEngineer:
                 for i in range(100):
                     try:
                         # Random operations to create race conditions
-                        op = random.choice(['set', 'get', 'delete'])
+                        op = random.choice(["set", "get", "delete"])
                         key = f"fuzz_key_{worker_id}_{i}_{random.randint(0, 10)}"
                         value = f"fuzz_value_{worker_id}_{i}"
 
-                        if op == 'set':
+                        if op == "set":
                             await cache.set(key, value, random.randint(1, 30))
-                        elif op == 'get':
+                        elif op == "get":
                             await cache.get(key)
-                        elif op == 'delete':
+                        elif op == "delete":
                             await cache.delete(key)
 
                         operations += 1
@@ -195,7 +208,7 @@ class ChaosEngineer:
                 operations_performed=operations,
                 anomalies_detected=anomalies,
                 correlation_id=correlation_id,
-                details={"cache_metrics": metrics}
+                details={"cache_metrics": metrics},
             )
 
         finally:
@@ -207,10 +220,9 @@ class ChaosEngineer:
         Chaos test for agent manager concurrent initialization.
         """
         test_name = "agent_concurrent_initialization_chaos"
-        correlation_id = runtime_metrics.create_correlation_id({
-            "component": "chaos_engineering",
-            "operation": test_name
-        })
+        correlation_id = runtime_metrics.create_correlation_id(
+            {"component": "chaos_engineering", "operation": test_name}
+        )
 
         start_time = time.time()
         anomalies = []
@@ -218,6 +230,7 @@ class ChaosEngineer:
         errors = 0
 
         try:
+
             async def init_worker(worker_id: int):
                 nonlocal operations, errors
                 try:
@@ -228,7 +241,9 @@ class ChaosEngineer:
                     # Try concurrent operations
                     tasks = []
                     for i in range(10):
-                        task = asyncio.create_task(self._simulate_agent_operation(manager, i))
+                        task = asyncio.create_task(
+                            self._simulate_agent_operation(manager, i)
+                        )
                         tasks.append(task)
 
                     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -255,17 +270,19 @@ class ChaosEngineer:
                 error_count=errors,
                 operations_performed=operations,
                 anomalies_detected=anomalies,
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
 
         finally:
             runtime_metrics.close_correlation_id(correlation_id)
 
-    async def _simulate_agent_operation(self, manager: AgentManager, op_id: int) -> None:
+    async def _simulate_agent_operation(
+        self, manager: AgentManager, op_id: int
+    ) -> None:
         """Simulate agent operations for chaos testing."""
         # Simulate getting non-existent agent
         try:
-            manager.get_agent(f"non_existent_agent_{op_id}")
+            await manager.get_agent(f"non_existent_agent_{op_id}")
         except ValueError:
             pass  # Expected
 
@@ -282,10 +299,9 @@ class ChaosEngineer:
         Inject failures into audit database operations.
         """
         test_name = "audit_db_failure_injection"
-        correlation_id = runtime_metrics.create_correlation_id({
-            "component": "chaos_engineering",
-            "operation": test_name
-        })
+        correlation_id = runtime_metrics.create_correlation_id(
+            {"component": "chaos_engineering", "operation": test_name}
+        )
 
         start_time = time.time()
         anomalies = []
@@ -300,7 +316,7 @@ class ChaosEngineer:
                     "user_query": f"Chaos query {i}",
                     "agent_response": f"Chaos response {i}",
                     "ia_audit_reason": "chaos_test",
-                    "ia_audit_confidence": random.random()
+                    "ia_audit_confidence": random.random(),
                 }
                 for i in range(50)
             ]
@@ -314,7 +330,9 @@ class ChaosEngineer:
                 operations += len(result)
                 successful_inserts = sum(1 for r in result if r is not None)
                 if successful_inserts < len(test_memories) - 10:  # Allow for duplicates
-                    anomalies.append(f"Unexpected batch insert failures: {len(result) - successful_inserts}")
+                    anomalies.append(
+                        f"Unexpected batch insert failures: {len(result) - successful_inserts}"
+                    )
             except Exception as e:
                 errors += 1
                 anomalies.append(f"Batch insert failed: {str(e)}")
@@ -332,7 +350,10 @@ class ChaosEngineer:
             # Test auto sweep
             try:
                 sweep_result = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: __import__('resync.core.audit_db').auto_sweep_pending_audits(1, 10)
+                    None,
+                    lambda: __import__(
+                        "resync.core.audit_db"
+                    ).auto_sweep_pending_audits(1, 10),
                 )
                 operations += sweep_result.get("total_processed", 0)
             except Exception as e:
@@ -349,7 +370,7 @@ class ChaosEngineer:
                 error_count=errors,
                 operations_performed=operations,
                 anomalies_detected=anomalies,
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
 
         finally:
@@ -360,10 +381,9 @@ class ChaosEngineer:
         Simulate memory pressure and resource exhaustion.
         """
         test_name = "memory_pressure_simulation"
-        correlation_id = runtime_metrics.create_correlation_id({
-            "component": "chaos_engineering",
-            "operation": test_name
-        })
+        correlation_id = runtime_metrics.create_correlation_id(
+            {"component": "chaos_engineering", "operation": test_name}
+        )
 
         start_time = time.time()
         anomalies = []
@@ -379,7 +399,7 @@ class ChaosEngineer:
                 large_obj = {
                     "id": f"large_obj_{i}",
                     "data": "x" * 10000,  # 10KB per object
-                    "metadata": {"size": 10000, "created": time.time()}
+                    "metadata": {"size": 10000, "created": time.time()},
                 }
                 large_objects.append(large_obj)
 
@@ -392,7 +412,9 @@ class ChaosEngineer:
                         await asyncio.sleep(0.1)  # Allow cleanup task to run
                         metrics = cache.get_detailed_metrics()
                         if metrics["size"] > 50:  # Too many items
-                            anomalies.append(f"Cache growing too large at iteration {i}: {metrics['size']}")
+                            anomalies.append(
+                                f"Cache growing too large at iteration {i}: {metrics['size']}"
+                            )
 
                 except Exception as e:
                     errors += 1
@@ -403,7 +425,9 @@ class ChaosEngineer:
             final_metrics = cache.get_detailed_metrics()
 
             if final_metrics["size"] > 10:  # Should have cleaned up most items
-                anomalies.append(f"Cleanup ineffective: {final_metrics['size']} items remaining")
+                anomalies.append(
+                    f"Cleanup ineffective: {final_metrics['size']} items remaining"
+                )
 
             success = len(anomalies) == 0
 
@@ -416,7 +440,7 @@ class ChaosEngineer:
                 operations_performed=operations,
                 anomalies_detected=anomalies,
                 correlation_id=correlation_id,
-                details={"final_cache_metrics": final_metrics}
+                details={"final_cache_metrics": final_metrics},
             )
 
         finally:
@@ -428,10 +452,9 @@ class ChaosEngineer:
         Simulate network partitions and connectivity issues.
         """
         test_name = "network_partition_simulation"
-        correlation_id = runtime_metrics.create_correlation_id({
-            "component": "chaos_engineering",
-            "operation": test_name
-        })
+        correlation_id = runtime_metrics.create_correlation_id(
+            {"component": "chaos_engineering", "operation": test_name}
+        )
 
         start_time = time.time()
         anomalies = []
@@ -444,11 +467,13 @@ class ChaosEngineer:
 
             def failing_import(name, *args, **kwargs):
                 # Randomly fail some imports to simulate network issues
-                if random.random() < 0.1 and 'agent' in name:  # 10% failure rate for agent-related
+                if (
+                    random.random() < 0.1 and "agent" in name
+                ):  # 10% failure rate for agent-related
                     raise ImportError(f"Simulated network failure for {name}")
                 return original_import(name, *args, **kwargs)
 
-            with patch('builtins.__import__', side_effect=failing_import):
+            with patch("builtins.__import__", side_effect=failing_import):
                 for i in range(20):
                     try:
                         # Try agent manager operations during simulated network issues
@@ -463,7 +488,9 @@ class ChaosEngineer:
                     except Exception as e:
                         errors += 1
                         if "network failure" not in str(e):
-                            anomalies.append(f"Unexpected error during network chaos {i}: {str(e)}")
+                            anomalies.append(
+                                f"Unexpected error during network chaos {i}: {str(e)}"
+                            )
 
             success = len(anomalies) == 0
 
@@ -475,7 +502,7 @@ class ChaosEngineer:
                 error_count=errors,
                 operations_performed=operations,
                 anomalies_detected=anomalies,
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
 
         finally:
@@ -486,10 +513,9 @@ class ChaosEngineer:
         Test component isolation and failure propagation.
         """
         test_name = "component_isolation_testing"
-        correlation_id = runtime_metrics.create_correlation_id({
-            "component": "chaos_engineering",
-            "operation": test_name
-        })
+        correlation_id = runtime_metrics.create_correlation_id(
+            {"component": "chaos_engineering", "operation": test_name}
+        )
 
         start_time = time.time()
         anomalies = []
@@ -506,7 +532,9 @@ class ChaosEngineer:
                     if component == "async_cache":
                         # Try cache operations with mocked failures
                         cache = AsyncTTLCache()
-                        with patch.object(cache, 'set', side_effect=Exception("Simulated failure")):
+                        with patch.object(
+                            cache, "set", side_effect=Exception("Simulated failure")
+                        ):
                             try:
                                 await cache.set("test_key", "test_value")
                                 anomalies.append("Cache set should have failed")
@@ -518,31 +546,46 @@ class ChaosEngineer:
 
                     elif component == "agent_manager":
                         # Test agent manager with missing dependencies
-                        with patch('resync.core.agent_manager.Agent', side_effect=ImportError("Simulated import failure")):
+                        with patch(
+                            "resync.core.agent_manager.Agent",
+                            side_effect=ImportError("Simulated import failure"),
+                        ):
                             try:
                                 manager = AgentManager()
                                 metrics = manager.get_detailed_metrics()
                                 operations += 1
                             except Exception as e:
                                 if "import failure" not in str(e):
-                                    anomalies.append(f"Agent manager unexpected error: {str(e)}")
+                                    anomalies.append(
+                                        f"Agent manager unexpected error: {str(e)}"
+                                    )
 
                     elif component == "audit_db":
                         # Test audit operations with DB failures
-                        with patch('resync.core.audit_db.get_db_connection', side_effect=Exception("Simulated DB failure")):
+                        with patch(
+                            "resync.core.audit_db.get_db_connection",
+                            side_effect=Exception("Simulated DB failure"),
+                        ):
                             try:
                                 from resync.core.audit_db import get_audit_metrics
+
                                 metrics = get_audit_metrics()
                                 if "error" not in metrics:
-                                    anomalies.append("Audit DB should have reported error")
+                                    anomalies.append(
+                                        "Audit DB should have reported error"
+                                    )
                             except Exception as e:
                                 errors += 1
                                 if "DB failure" not in str(e):
-                                    anomalies.append(f"Audit DB unexpected error: {str(e)}")
+                                    anomalies.append(
+                                        f"Audit DB unexpected error: {str(e)}"
+                                    )
 
                 except Exception as e:
                     errors += 1
-                    anomalies.append(f"Component {component} isolation test failed: {str(e)}")
+                    anomalies.append(
+                        f"Component {component} isolation test failed: {str(e)}"
+                    )
 
             success = len(anomalies) == 0
 
@@ -554,7 +597,7 @@ class ChaosEngineer:
                 error_count=errors,
                 operations_performed=operations,
                 anomalies_detected=anomalies,
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
 
         finally:
@@ -575,58 +618,66 @@ class FuzzingEngine:
         """Setup fuzzing scenarios for different components."""
 
         # Cache fuzzing scenarios
-        self.scenarios.extend([
-            FuzzingScenario(
-                name="cache_key_fuzzing",
-                description="Fuzz cache keys with edge cases",
-                fuzz_function=self._fuzz_cache_keys,
-                expected_failures=["TypeError", "ValueError"]
-            ),
-            FuzzingScenario(
-                name="cache_value_fuzzing",
-                description="Fuzz cache values with complex objects",
-                fuzz_function=self._fuzz_cache_values,
-                expected_failures=["TypeError", "RecursionError"]
-            ),
-            FuzzingScenario(
-                name="cache_ttl_fuzzing",
-                description="Fuzz TTL values with edge cases",
-                fuzz_function=self._fuzz_cache_ttl,
-                expected_failures=["ValueError", "OverflowError"]
-            )
-        ])
+        self.scenarios.extend(
+            [
+                FuzzingScenario(
+                    name="cache_key_fuzzing",
+                    description="Fuzz cache keys with edge cases",
+                    fuzz_function=self._fuzz_cache_keys,
+                    expected_failures=["TypeError", "ValueError"],
+                ),
+                FuzzingScenario(
+                    name="cache_value_fuzzing",
+                    description="Fuzz cache values with complex objects",
+                    fuzz_function=self._fuzz_cache_values,
+                    expected_failures=["TypeError", "RecursionError"],
+                ),
+                FuzzingScenario(
+                    name="cache_ttl_fuzzing",
+                    description="Fuzz TTL values with edge cases",
+                    fuzz_function=self._fuzz_cache_ttl,
+                    expected_failures=["ValueError", "OverflowError"],
+                ),
+            ]
+        )
 
         # Agent fuzzing scenarios
-        self.scenarios.extend([
-            FuzzingScenario(
-                name="agent_config_fuzzing",
-                description="Fuzz agent configurations",
-                fuzz_function=self._fuzz_agent_configs,
-                expected_failures=["ValidationError", "TypeError"]
-            )
-        ])
+        self.scenarios.extend(
+            [
+                FuzzingScenario(
+                    name="agent_config_fuzzing",
+                    description="Fuzz agent configurations",
+                    fuzz_function=self._fuzz_agent_configs,
+                    expected_failures=["ValidationError", "TypeError"],
+                )
+            ]
+        )
 
         # Audit fuzzing scenarios
-        self.scenarios.extend([
-            FuzzingScenario(
-                name="audit_record_fuzzing",
-                description="Fuzz audit record structures",
-                fuzz_function=self._fuzz_audit_records,
-                expected_failures=["TypeError", "ValueError"]
-            )
-        ])
+        self.scenarios.extend(
+            [
+                FuzzingScenario(
+                    name="audit_record_fuzzing",
+                    description="Fuzz audit record structures",
+                    fuzz_function=self._fuzz_audit_records,
+                    expected_failures=["TypeError", "ValueError"],
+                )
+            ]
+        )
 
     async def run_fuzzing_campaign(self, max_duration: float = 60.0) -> Dict[str, Any]:
         """
         Run a complete fuzzing campaign on all scenarios.
         """
-        correlation_id = runtime_metrics.create_correlation_id({
-            "component": "fuzzing_engine",
-            "operation": "campaign",
-            "max_duration": max_duration,
-            "scenarios": len(self.scenarios),
-            "global_correlation": self.correlation_id
-        })
+        correlation_id = runtime_metrics.create_correlation_id(
+            {
+                "component": "fuzzing_engine",
+                "operation": "campaign",
+                "max_duration": max_duration,
+                "scenarios": len(self.scenarios),
+                "global_correlation": self.correlation_id,
+            }
+        )
 
         start_time = time.time()
         results = []
@@ -640,36 +691,42 @@ class FuzzingEngine:
                     loop = asyncio.get_event_loop()
                     result = await asyncio.wait_for(
                         loop.run_in_executor(None, scenario.fuzz_function),
-                        timeout=scenario.max_duration
+                        timeout=scenario.max_duration,
                     )
 
                     duration = time.time() - scenario_start
-                    results.append({
-                        "scenario": scenario.name,
-                        "description": scenario.description,
-                        "duration": duration,
-                        "success": True,
-                        "result": result
-                    })
+                    results.append(
+                        {
+                            "scenario": scenario.name,
+                            "description": scenario.description,
+                            "duration": duration,
+                            "success": True,
+                            "result": result,
+                        }
+                    )
 
                 except asyncio.TimeoutError:
-                    results.append({
-                        "scenario": scenario.name,
-                        "description": scenario.description,
-                        "duration": scenario.max_duration,
-                        "success": False,
-                        "error": "Timeout"
-                    })
+                    results.append(
+                        {
+                            "scenario": scenario.name,
+                            "description": scenario.description,
+                            "duration": scenario.max_duration,
+                            "success": False,
+                            "error": "Timeout",
+                        }
+                    )
 
                 except Exception as e:
                     duration = time.time() - scenario_start
-                    results.append({
-                        "scenario": scenario.name,
-                        "description": scenario.description,
-                        "duration": duration,
-                        "success": False,
-                        "error": str(e)
-                    })
+                    results.append(
+                        {
+                            "scenario": scenario.name,
+                            "description": scenario.description,
+                            "duration": duration,
+                            "success": False,
+                            "error": str(e),
+                        }
+                    )
 
             campaign_duration = time.time() - start_time
             successful_scenarios = sum(1 for r in results if r["success"])
@@ -681,12 +738,14 @@ class FuzzingEngine:
                 "successful_scenarios": successful_scenarios,
                 "success_rate": successful_scenarios / len(self.scenarios),
                 "results": results,
-                "environment": get_environment_tags()
+                "environment": get_environment_tags(),
             }
 
-            log_with_correlation(logging.INFO,
+            log_with_correlation(
+                logging.INFO,
                 f"Fuzzing campaign completed: {successful_scenarios}/{len(self.scenarios)} scenarios passed",
-                correlation_id)
+                correlation_id,
+            )
 
             return summary
 
@@ -696,6 +755,7 @@ class FuzzingEngine:
     def _fuzz_cache_keys(self) -> Dict[str, Any]:
         """Fuzz cache keys with various edge cases."""
         import asyncio
+
         cache = AsyncTTLCache()
 
         async def fuzz_keys():
@@ -705,7 +765,6 @@ class FuzzingEngine:
                 "key_with_underscores",
                 "key-with-dashes",
                 "123_numeric_start",
-
                 # Edge cases
                 "",  # Empty string
                 "a" * 1000,  # Very long key
@@ -753,6 +812,7 @@ class FuzzingEngine:
     def _fuzz_cache_values(self) -> Dict[str, Any]:
         """Fuzz cache values with complex objects."""
         import asyncio
+
         cache = AsyncTTLCache()
 
         async def fuzz_values():
@@ -763,16 +823,13 @@ class FuzzingEngine:
                 3.14,
                 True,
                 None,
-
                 # Complex objects
                 {"nested": {"dict": "value"}},
                 ["list", "of", "items"],
                 {"self_ref": None},  # Will be modified to self-reference
-
                 # Large objects
                 "x" * 100000,  # 100KB string
                 list(range(10000)),  # Large list
-
                 # Edge case objects
                 object(),  # Generic object
             ]
@@ -821,18 +878,21 @@ class FuzzingEngine:
     def _fuzz_cache_ttl(self) -> Dict[str, Any]:
         """Fuzz TTL values."""
         import asyncio
+
         cache = AsyncTTLCache()
 
         async def fuzz_ttl():
             test_cases = [
                 # Valid TTLs
-                1, 30, 300, 3600,
-
+                1,
+                30,
+                300,
+                3600,
                 # Edge cases
                 0,  # Zero TTL
                 -1,  # Negative TTL
                 999999,  # Very large TTL
-                float('inf'),  # Infinite TTL
+                float("inf"),  # Infinite TTL
                 None,  # None TTL
                 "30",  # String TTL
                 [30],  # List TTL
@@ -850,7 +910,9 @@ class FuzzingEngine:
                         results["passed"] += 1
                     else:
                         results["failed"] += 1
-                        results["errors"].append(f"TTL {repr(ttl)}: immediate expiration")
+                        results["errors"].append(
+                            f"TTL {repr(ttl)}: immediate expiration"
+                        )
 
                 except Exception as e:
                     results["failed"] += 1
@@ -878,9 +940,8 @@ class FuzzingEngine:
                 "goal": "Test things",
                 "backstory": "A testing agent",
                 "tools": ["test_tool"],
-                "model_name": "test_model"
+                "model_name": "test_model",
             },
-
             # Edge cases
             {
                 "id": "",  # Empty ID
@@ -889,7 +950,7 @@ class FuzzingEngine:
                 "goal": "Test",
                 "backstory": "Test",
                 "tools": [],
-                "model_name": "test"
+                "model_name": "test",
             },
             {
                 "id": "test_agent_2",
@@ -898,7 +959,7 @@ class FuzzingEngine:
                 "goal": "Test",
                 "backstory": "Test",
                 "tools": ["test_tool"],
-                "model_name": "test"
+                "model_name": "test",
             },
             {
                 "id": "test_agent_3",
@@ -907,7 +968,7 @@ class FuzzingEngine:
                 "goal": "Test",
                 "backstory": "Test",
                 "tools": None,  # None tools
-                "model_name": "test"
+                "model_name": "test",
             },
             {
                 "id": "test_agent_4",
@@ -916,8 +977,8 @@ class FuzzingEngine:
                 "goal": "Test",
                 "backstory": "Test",
                 "tools": ["test_tool"],
-                "model_name": "test"
-            }
+                "model_name": "test",
+            },
         ]
 
         results = {"passed": 0, "failed": 0, "errors": []}
@@ -928,8 +989,8 @@ class FuzzingEngine:
                 results["passed"] += 1
 
                 # Validate required fields are present
-                assert hasattr(config, 'id')
-                assert hasattr(config, 'name')
+                assert hasattr(config, "id")
+                assert hasattr(config, "name")
 
             except Exception as e:
                 results["failed"] += 1
@@ -946,32 +1007,27 @@ class FuzzingEngine:
                 "user_query": "Test query",
                 "agent_response": "Test response",
                 "ia_audit_reason": "test",
-                "ia_audit_confidence": 0.8
+                "ia_audit_confidence": 0.8,
             },
-
             # Edge cases
-            {
-                "id": None,  # None ID
-                "user_query": "Test",
-                "agent_response": "Test"
-            },
+            {"id": None, "user_query": "Test", "agent_response": "Test"},  # None ID
             {
                 "id": "audit_2",
                 "user_query": None,  # None query
-                "agent_response": "Test"
+                "agent_response": "Test",
             },
             {
                 "id": "audit_3",
                 "user_query": "Test",
-                "agent_response": "x" * 100000  # Very large response
+                "agent_response": "x" * 100000,  # Very large response
             },
             {
                 "id": "audit_4",
                 "user_query": "Test",
                 "agent_response": "Test",
                 "ia_audit_reason": None,
-                "ia_audit_confidence": "0.8"  # String instead of float
-            }
+                "ia_audit_confidence": "0.8",  # String instead of float
+            },
         ]
 
         results = {"passed": 0, "failed": 0, "errors": []}
@@ -979,9 +1035,12 @@ class FuzzingEngine:
         for i, record in enumerate(test_cases):
             try:
                 from resync.core.audit_db import add_audit_record
+
                 result = add_audit_record(record)
 
-                if result is not None or i > 0:  # First record should succeed, others may fail
+                if (
+                    result is not None or i > 0
+                ):  # First record should succeed, others may fail
                     results["passed"] += 1
                 else:
                     results["failed"] += 1

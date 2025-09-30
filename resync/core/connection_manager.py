@@ -15,27 +15,33 @@ class ConnectionManager:
     """
 
     def __init__(self) -> None:
-        """Initializes the ConnectionManager with an empty list of connections."""
-        self.active_connections: List[WebSocket] = []
+        """Initializes the ConnectionManager with an empty dictionary of connections."""
+        self.active_connections: Dict[str, WebSocket] = {}
         logger.info("ConnectionManager initialized.")
 
-    async def connect(self, websocket: WebSocket) -> None:
+    async def connect(self, websocket: WebSocket, client_id: str) -> None:
         """
         Accepts a new WebSocket connection and adds it to the active list.
         """
         await websocket.accept()
-        self.active_connections.append(websocket)
-        logger.info("New WebSocket connection accepted: %s", websocket.client)
+        self.active_connections[client_id] = websocket
+        logger.info("New WebSocket connection accepted: %s", client_id)
         logger.info("Total active connections: %d", len(self.active_connections))
 
-    async def disconnect(self, websocket: WebSocket) -> None:
+    async def disconnect(self, client_id: str) -> None:
         """
         Removes a WebSocket connection from the active list.
         """
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-            logger.info("WebSocket connection closed: %s", websocket.client)
+        if client_id in self.active_connections:
+            del self.active_connections[client_id]
+            logger.info("WebSocket connection closed: %s", client_id)
             logger.info("Total active connections: %d", len(self.active_connections))
+
+    async def send_personal_message(self, message: str, client_id: str) -> None:
+        """Sends a message to a specific client."""
+        websocket = self.active_connections.get(client_id)
+        if websocket:
+            await websocket.send_text(message)
 
     async def broadcast(self, message: str) -> None:
         """
@@ -48,7 +54,8 @@ class ConnectionManager:
         logger.info(f"Broadcasting message to {len(self.active_connections)} clients.")
         # Create a list of tasks to send messages concurrently
         tasks = [
-            connection.send_text(message) for connection in self.active_connections
+            connection.send_text(message)
+            for connection in self.active_connections.values()
         ]
         # In a high-load scenario, you might want to handle exceptions here
         # for failed sends, but for now, we keep it simple.
@@ -58,7 +65,7 @@ class ConnectionManager:
             except (WebSocketDisconnect, ConnectionError) as e:
                 # Client disconnected or connection lost during broadcast
                 logger.warning("Connection issue during broadcast: %s", e)
-            except RuntimeError as e: # pragma: no cover
+            except RuntimeError as e:  # pragma: no cover
                 # WebSocket in wrong state
                 if "websocket state" in str(e).lower():
                     logger.warning("WebSocket in wrong state during broadcast: %s", e)
@@ -79,14 +86,17 @@ class ConnectionManager:
         logger.info(
             "Broadcasting JSON data to %d clients.", len(self.active_connections)
         )
-        tasks = [connection.send_json(data) for connection in self.active_connections]
+        tasks = [
+            connection.send_json(data)
+            for connection in self.active_connections.values()
+        ]
         for task in tasks:
             try:
                 await task
             except (WebSocketDisconnect, ConnectionError) as e:
                 # Client disconnected or connection lost during broadcast
                 logger.warning("Connection issue during JSON broadcast: %s", e)
-            except RuntimeError as e: # pragma: no cover
+            except RuntimeError as e:  # pragma: no cover
                 # WebSocket in wrong state
                 if "websocket state" in str(e).lower():
                     logger.warning(
@@ -96,6 +106,8 @@ class ConnectionManager:
                     logger.error("Runtime error during JSON broadcast: %s", e)
             except ValueError as e:
                 # JSON serialization error
-                logger.error("JSON serialization error during broadcast: %s", e, exc_info=True)
+                logger.error(
+                    "JSON serialization error during broadcast: %s", e, exc_info=True
+                )
             except Exception:
                 logger.error("Unexpected error during JSON broadcast.", exc_info=True)

@@ -83,9 +83,7 @@ class DistributedAuditLock:
         """
         return f"{self._lock_prefix}:{memory_id}"
 
-    async def acquire(
-        self, memory_id: str, timeout: int = 5
-    ) -> "AuditLockContext":
+    async def acquire(self, memory_id: str, timeout: int = 5) -> "AuditLockContext":
         """
         Acquire a distributed lock for a memory ID.
 
@@ -191,9 +189,12 @@ class DistributedAuditLock:
             raise AuditError(f"Value error in audit lock cleanup: {e}") from e
         except Exception as e:
             logger.critical(
-                "Unexpected critical error cleaning up expired audit locks.", exc_info=True
+                "Unexpected critical error cleaning up expired audit locks.",
+                exc_info=True,
             )
-            raise AuditError("Unexpected critical error during audit lock cleanup") from e
+            raise AuditError(
+                "Unexpected critical error during audit lock cleanup"
+            ) from e
 
 
 class AuditLockContext:

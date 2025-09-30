@@ -216,7 +216,7 @@ class ShardLockManager:
 class TWS_OptimizedAsyncCache:
     """
     TWS-Optimized Async Cache implementation with sharding and TTL support.
-    
+
     This cache is specifically designed to handle TWS (Tivoli Workload Scheduler)
     data patterns efficiently with:
     - Sharded architecture for concurrent access
@@ -281,7 +281,9 @@ class TWS_OptimizedAsyncCache:
                     del shard[key]
             return None
 
-    async def set(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> None:
+    async def set(
+        self, key: str, value: Any, ttl_seconds: Optional[int] = None
+    ) -> None:
         """Set a value in the cache."""
         if not key:
             return
@@ -389,7 +391,10 @@ class TWS_OptimizedAsyncCache:
         return self
 
     async def __aexit__(
-        self, exc_type: Optional[type], exc_val: Optional[Exception], exc_tb: Optional[Any]
+        self,
+        exc_type: Optional[type],
+        exc_val: Optional[Exception],
+        exc_tb: Optional[Any],
     ) -> None:
         """Async context manager exit."""
         await self.stop()

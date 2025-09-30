@@ -1,6 +1,51 @@
-[project]
+[tool.poetry]
 name = "resync"
 version = "0.1.0"
+description = ""
+authors = []
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "*"
+pydantic = "*"
+pydantic-settings = "*"
+uvicorn = "*"
+python-dotenv = "*"
+dynaconf = "*"
+neo4j = "*"
+redis = "*"
+httpx = "*"
+pybreaker = "*"
+tenacity = "*"
+apscheduler = "*"
+watchfiles = "*"
+python-jose = {extras = ["cryptography"], version = "*"}
+passlib = {extras = ["bcrypt"], version = "*"}
+cryptography = "*"
+openpyxl = "*"
+pypdf = "*"
+python-docx = "*"
+orjson = "*"
+prometheus-client = "*"
+openai = "*"
+anthropic = "*"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+pytest-asyncio = "*"
+locust = "*"
+psutil = "*"
+authlib = "*"
+mutmut = "*"
+mypy = "*"
+ruff = "*"
+black = "*"
+bandit = "*"
+flake8 = "*"
+pre-commit = "*"
+types-redis = "*"
+types-openpyxl = "*"
+types-psutil = "*"
 
 [tool.mypy]
 python_version = "3.13"

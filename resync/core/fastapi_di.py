@@ -9,9 +9,9 @@ that resolve services from the container.
 import inspect
 import logging
 from functools import wraps
-from typing import Any, Callable, Optional, Type, TypeVar
+from typing import Any, Callable, Dict, Type, get_type_hints, TypeVar, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from resync.core.agent_manager import AgentManager
@@ -155,7 +155,7 @@ class DIMiddleware(BaseHTTPMiddleware):
         self.container = container_instance
         logger.info("DIMiddleware initialized")
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Any:
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """
         Process the request and attach the container to it.
 
@@ -174,7 +174,9 @@ class DIMiddleware(BaseHTTPMiddleware):
         return response
 
 
-def inject_container(app: FastAPI, container_instance: Optional[DIContainer] = None) -> None:
+def inject_container(
+    app: FastAPI, container_instance: Optional[DIContainer] = None
+) -> None:
     """
     Configure the application to use the DI container.
 
@@ -203,7 +205,8 @@ def with_injection(func: Callable) -> Callable:
     Decorator that injects dependencies into a function from the container.
 
     This decorator inspects the function's signature and resolves dependencies
-    from the container based on type annotations.
+    from the container based on type annotations. It now correctly handles
+    both synchronous and asynchronous functions.
 
     Args:
         func: The function to inject dependencies into.
@@ -213,35 +216,31 @@ def with_injection(func: Callable) -> Callable:
     """
     signature = inspect.signature(func)
     parameters = list(signature.parameters.values())
+    type_hints = get_type_hints(func)
 
-    @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        # Get type hints for parameters
-        type_hints = get_type_hints(func)
-
-        # Build arguments for the function
+    def inject_dependencies(kwargs: Dict[str, Any]) -> None:
+        """Helper to inject dependencies into kwargs."""
         for param in parameters:
-            # Skip if the parameter is already provided
             if param.name in kwargs:
                 continue
-
-            # Skip *args and **kwargs
             if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
                 continue
-
-            # Get parameter type
             param_type = type_hints.get(param.name, Any)
-
-            # Try to resolve the parameter from the container
             try:
                 kwargs[param.name] = container.get(param_type)
             except KeyError:
-                # If the parameter has a default value, use it
                 if param.default is not param.empty:
                     kwargs[param.name] = param.default
-                # Otherwise, just skip it and let the function handle it
 
-        # Call the function with the resolved dependencies
-        return func(*args, **kwargs)
-
-    return wrapper
+    if inspect.iscoroutinefunction(func):
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            inject_dependencies(kwargs)
+            return await func(*args, **kwargs)
+        return async_wrapper
+    else:
+        @wraps(func)
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            inject_dependencies(kwargs)
+            return func(*args, **kwargs)
+        return sync_wrapper

@@ -71,7 +71,7 @@ def _validate_audit_record(memory: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError("Memory ID cannot be empty")
         if len(str_id) > 255:
             raise ValueError("Memory ID too long (max 255)")
-        if '\x00' in str_id:
+        if "\x00" in str_id:
             raise ValueError("Memory ID cannot contain null bytes")
         validated["id"] = str_id
 
@@ -82,7 +82,7 @@ def _validate_audit_record(memory: Dict[str, Any]) -> Dict[str, Any]:
             raise TypeError("User query must be string")
         if len(user_query) > 10000:
             raise ValueError("User query too long (max 10000)")
-        if '\x00' in user_query:
+        if "\x00" in user_query:
             raise ValueError("User query cannot contain null bytes")
         validated["user_query"] = user_query
     else:
@@ -95,7 +95,7 @@ def _validate_audit_record(memory: Dict[str, Any]) -> Dict[str, Any]:
             raise TypeError("Agent response must be string")
         if len(agent_response) > 50000:
             raise ValueError("Agent response too long (max 50000)")
-        if '\x00' in agent_response:
+        if "\x00" in agent_response:
             raise ValueError("Agent response cannot contain null bytes")
         validated["agent_response"] = agent_response
     else:
@@ -155,7 +155,8 @@ def add_audit_record(memory: Dict[str, Any]) -> Optional[int]:
             return cursor.lastrowid
         except sqlite3.IntegrityError:
             logger.debug(
-                "Memory %s already exists in audit queue. Skipping.", validated_memory["id"]
+                "Memory %s already exists in audit queue. Skipping.",
+                validated_memory["id"],
             )
             return None
         except Exception as e:

@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from resync.core.agent_manager import AgentConfig
 from resync.core.fastapi_di import get_agent_manager, get_tws_client
 from resync.core.interfaces import IAgentManager, ITWSClient
-from resync.core.metrics import metrics_registry
+from resync.core.metrics import runtime_metrics
 from resync.core.tws_monitor import tws_monitor
 from resync.models.tws import SystemStatus
 from resync.settings import settings
@@ -43,13 +43,13 @@ async def get_dashboard() -> HTMLResponse:
     response_model=List[AgentConfig],
     summary="Get All Agent Configurations",
 )
-def get_all_agents(  # This can remain sync as it's a simple getter
+async def get_all_agents(
     agent_manager: IAgentManager = Depends(get_agent_manager),
 ) -> List[AgentConfig]:
     """
     Returns the full configuration for all loaded agents.
     """
-    return agent_manager.get_all_agents()
+    return await agent_manager.get_all_agents()
 
 
 # --- System Status Endpoints ---
@@ -70,13 +70,13 @@ async def get_system_status(
             workstations=workstations, jobs=jobs, critical_jobs=critical_jobs
         )
         # Record metrics upon successful status retrieval
-        metrics_registry.increment_counter("tws_status_requests_success")
-        metrics_registry.set_gauge("tws_workstations_total", len(workstations))
-        metrics_registry.set_gauge("tws_jobs_total", len(jobs))
+        runtime_metrics.tws_status_requests_success.increment()
+        runtime_metrics.tws_workstations_total.set(len(workstations))
+        runtime_metrics.tws_jobs_total.set(len(jobs))
         return status
     except Exception as e:
         logger.error("Failed to get TWS system status: %s", e, exc_info=True)
-        metrics_registry.increment_counter("tws_status_requests_failed")
+        runtime_metrics.tws_status_requests_failed.increment()
         raise HTTPException(
             status_code=503, detail=f"Falha ao comunicar com o TWS: {e}"
         ) from e
@@ -125,7 +125,7 @@ def get_metrics() -> str:
     """
     Returns application metrics in Prometheus text exposition format.
     """
-    return metrics_registry.generate_prometheus_metrics()
+    return runtime_metrics.generate_prometheus_metrics()
 
 
 @api_router.post("/chat")

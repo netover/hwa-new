@@ -197,7 +197,7 @@ class DIContainer:
             f"Registered factory for {interface.__name__} with scope {scope.name}"
         )
 
-    def get(self, interface: Type[T]) -> T:
+    async def get(self, interface: Type[T]) -> T:
         """
         Resolve and return a validated instance of the requested interface.
 
@@ -223,18 +223,22 @@ class DIContainer:
             and registration.instance is not None
         ):
             # Validate cached instance health
-            if self._is_instance_healthy(registration, registration.instance):
+            if await self._is_instance_healthy(registration, registration.instance):
                 return cast(T, registration.instance)
             else:
-                logger.warning(f"Cached instance of {interface.__name__} is unhealthy, recreating")
+                logger.warning(
+                    f"Cached instance of {interface.__name__} is unhealthy, recreating"
+                )
                 registration.instance = None
 
         # Create a new instance
-        instance = self._create_instance(registration)
+        instance = await self._create_instance(registration)
 
         # Validate the new instance
-        if not self._is_instance_healthy(registration, instance):
-            raise RuntimeError(f"Created instance of {interface.__name__} failed health validation")
+        if not await self._is_instance_healthy(registration, instance):
+            raise RuntimeError(
+                f"Created instance of {interface.__name__} failed health validation"
+            )
 
         # Cache singleton instances
         if registration.scope == ServiceScope.SINGLETON:
@@ -242,7 +246,9 @@ class DIContainer:
 
         return cast(T, instance)
 
-    def _create_instance(self, registration: ServiceRegistration[Any, Any]) -> Any:
+    async def _create_instance(
+        self, registration: ServiceRegistration[Any, Any]
+    ) -> Any:
         """
         Create an instance of the implementation based on the registration.
 
@@ -261,7 +267,9 @@ class DIContainer:
                 return registration.factory()
 
             # Otherwise, try to instantiate the implementation with its dependencies
-            return self._instantiate_with_dependencies(registration.implementation)
+            return await self._instantiate_with_dependencies(
+                registration.implementation
+            )
         except Exception as e:
             logger.error(
                 f"Error creating instance of {registration.implementation.__name__}: {e}",
@@ -271,7 +279,7 @@ class DIContainer:
                 f"Error creating instance of {registration.implementation.__name__}: {e}"
             ) from e
 
-    def _instantiate_with_dependencies(self, implementation: Type[Any]) -> Any:
+    async def _instantiate_with_dependencies(self, implementation: Type[Any]) -> Any:
         """
         Instantiate an implementation, resolving its constructor dependencies.
 
@@ -302,7 +310,7 @@ class DIContainer:
 
             # Try to resolve the parameter from the container
             try:
-                kwargs[param.name] = self.get(param_type)
+                kwargs[param.name] = await self.get(param_type)
             except KeyError:
                 # If the parameter has a default value, use it
                 if param.default is not param.empty:
@@ -317,7 +325,9 @@ class DIContainer:
         # Create the instance
         return implementation(**kwargs)
 
-    def _validate_implementation(self, interface: Type[Any], implementation: Type[Any]) -> None:
+    def _validate_implementation(
+        self, interface: Type[Any], implementation: Type[Any]
+    ) -> None:
         """
         Validate that the implementation satisfies the interface contract.
 
@@ -331,16 +341,20 @@ class DIContainer:
         # Check if implementation is a subclass of interface (if interface is a class)
         if inspect.isclass(interface) and not issubclass(implementation, interface):
             # Allow if it's a protocol (structural typing)
-            if hasattr(interface, '__protocol__'):
+            if hasattr(interface, "__protocol__"):
                 return
             raise ValueError(
                 f"{implementation.__name__} does not implement {interface.__name__}"
             )
 
         # Additional validations can be added here
-        logger.debug(f"Implementation validation passed for {interface.__name__} -> {implementation.__name__}")
+        logger.debug(
+            f"Implementation validation passed for {interface.__name__} -> {implementation.__name__}"
+        )
 
-    def _is_instance_healthy(self, registration: ServiceRegistration[Any, Any], instance: Any) -> bool:
+    async def _is_instance_healthy(
+        self, registration: ServiceRegistration[Any, Any], instance: Any
+    ) -> bool:
         """
         Check if an instance is healthy according to its registration requirements.
 
@@ -357,15 +371,20 @@ class DIContainer:
         try:
             # Check cache first
             current_time = asyncio.get_event_loop().time()
-            if (registration._health_check_cache is not None and
-                current_time - registration._last_health_check < registration._health_check_cache_timeout):
-                cached_status = registration._health_check_cache.get("status", "unknown")
+            if (
+                registration._health_check_cache is not None
+                and current_time - registration._last_health_check
+                < registration._health_check_cache_timeout
+            ):
+                cached_status = registration._health_check_cache.get(
+                    "status", "unknown"
+                )
                 return cached_status in ("healthy", "degraded")
 
             # Perform health check
-            health_result = asyncio.wait_for(
+            health_result = await asyncio.wait_for(
                 self._perform_health_check(instance),
-                timeout=registration.health_timeout
+                timeout=registration.health_timeout,
             )
 
             # Cache result
@@ -390,7 +409,9 @@ class DIContainer:
             return False
         except Exception as e:
             registration._health_check_failures += 1
-            logger.error(f"Health check error for {registration.interface.__name__}: {e}")
+            logger.error(
+                f"Health check error for {registration.interface.__name__}: {e}"
+            )
             return False
 
     async def _perform_health_check(self, instance: Any) -> Dict[str, Any]:
@@ -403,7 +424,9 @@ class DIContainer:
         Returns:
             Health check result dictionary.
         """
-        if hasattr(instance, 'health_check') and callable(getattr(instance, 'health_check')):
+        if hasattr(instance, "health_check") and callable(
+            getattr(instance, "health_check")
+        ):
             # Instance has its own health check method
             if inspect.iscoroutinefunction(instance.health_check):
                 return await instance.health_check()
@@ -417,10 +440,10 @@ class DIContainer:
                 "status": "healthy",
                 "service": instance.__class__.__name__,
                 "timestamp": asyncio.get_event_loop().time(),
-                "message": "No specific health check implemented"
+                "message": "No specific health check implemented",
             }
 
-    def get_health_status(self) -> Dict[str, Any]:
+    async def get_health_status(self) -> Dict[str, Any]:
         """
         Get comprehensive health status of all registered services.
 
@@ -433,7 +456,31 @@ class DIContainer:
             "timestamp": asyncio.get_event_loop().time(),
         }
 
+        tasks = []
+        interfaces = []
+
         for interface, registration in self._registrations.items():
+            interfaces.append(interface)
+            if registration.instance is not None:
+                # Create a task to perform the health check
+                task = asyncio.wait_for(
+                    self._perform_health_check(registration.instance), timeout=2.0
+                )
+                tasks.append(task)
+            else:
+                # If no instance, create a placeholder result by creating a coroutine that does nothing
+                async def placeholder():
+                    return {"status": "not_initialized"}
+
+                tasks.append(placeholder())
+
+        # Run all health checks concurrently
+        health_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for i, interface in enumerate(interfaces):
+            registration = self._registrations[interface]
+            health_result = health_results[i]
+
             service_status = {
                 "interface": interface.__name__,
                 "implementation": registration.implementation.__name__,
@@ -442,21 +489,16 @@ class DIContainer:
                 "has_instance": registration.instance is not None,
             }
 
-            if registration.instance is not None:
-                try:
-                    # Quick sync health check for status reporting
-                    health_result = asyncio.run(asyncio.wait_for(
-                        self._perform_health_check(registration.instance),
-                        timeout=2.0
-                    ))
-                    service_status["health"] = health_result
-                    if health_result.get("status") not in ("healthy", "degraded"):
-                        status["overall_status"] = "degraded"
-                except Exception as e:
-                    service_status["health"] = {"status": "error", "error": str(e)}
-                    status["overall_status"] = "error"
+            if isinstance(health_result, Exception):
+                service_status["health"] = {
+                    "status": "error",
+                    "error": str(health_result),
+                }
+                status["overall_status"] = "error"
             else:
-                service_status["health"] = {"status": "not_initialized"}
+                service_status["health"] = health_result
+                if health_result.get("status") not in ("healthy", "degraded"):
+                    status["overall_status"] = "degraded"
 
             status["services"][interface.__name__] = service_status
 

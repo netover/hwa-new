@@ -154,7 +154,11 @@ class OptimizedTWSClient:
 
         url = f"/model/workstation?engineName={self.engine_name}&engineOwner={self.engine_owner}"
         async with self._api_request("GET", url) as data:
-            workstations = [WorkstationStatus(**ws) for ws in data] if isinstance(data, list) else []
+            workstations = (
+                [WorkstationStatus(**ws) for ws in data]
+                if isinstance(data, list)
+                else []
+            )
             await self.cache.set_from_source(
                 cache_key, workstations, ttl_seconds=settings.TWS_CACHE_TTL
             )
@@ -185,7 +189,11 @@ class OptimizedTWSClient:
         url = "/plan/current/criticalpath"
         async with self._api_request("GET", url) as data:
             jobs_data = data.get("jobs", []) if isinstance(data, dict) else []
-            critical_jobs = [CriticalJob(**job) for job in jobs_data] if isinstance(jobs_data, list) else []
+            critical_jobs = (
+                [CriticalJob(**job) for job in jobs_data]
+                if isinstance(jobs_data, list)
+                else []
+            )
             await self.cache.set_from_source(
                 cache_key, critical_jobs, ttl_seconds=settings.TWS_CACHE_TTL
             )
@@ -235,7 +243,9 @@ class OptimizedTWSClient:
                             job_status = JobStatus(**data)
                             results[job_id] = job_status
                         else:
-                            logger.warning(f"Unexpected data format for job {job_id}: expected dict, got {type(data)}")
+                            logger.warning(
+                                f"Unexpected data format for job {job_id}: expected dict, got {type(data)}"
+                            )
                             results[job_id] = None
                         # Cache the result
                         await self.cache.set_from_source(

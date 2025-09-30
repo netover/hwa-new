@@ -50,9 +50,7 @@ class AsyncKnowledgeGraph:
         self.settings = settings_module
         self.uri = self.settings.NEO4J_URI
         self.auth = (self.settings.NEO4J_USER, self.settings.NEO4J_PASSWORD)
-        logger.info(
-            f"AsyncKnowledgeGraph configured for Neo4j instance at {self.uri}"
-        )
+        logger.info(f"AsyncKnowledgeGraph configured for Neo4j instance at {self.uri}")
 
     def _get_driver(self) -> AsyncDriver:
         """Get or create the Neo4j async driver instance."""
@@ -129,7 +127,11 @@ class AsyncKnowledgeGraph:
         """
         async with self.driver.session() as session:
             result = await session.run(
-                query, user_query=user_query, agent_response=agent_response, agent_id=agent_id, context=context or {}
+                query,
+                user_query=user_query,
+                agent_response=agent_response,
+                agent_id=agent_id,
+                context=context or {},
             )
             record = await result.single()
             return str(record["uuid"]) if record else ""
@@ -149,7 +151,9 @@ class AsyncKnowledgeGraph:
         """
         # This would use the Neo4j Vector Index
         # Placeholder implementation
-        logger.warning("search_similar_issues with vector index is not yet implemented.")
+        logger.warning(
+            "search_similar_issues with vector index is not yet implemented."
+        )
         return []
 
     async def search_conversations(
@@ -181,7 +185,7 @@ class AsyncKnowledgeGraph:
         async with self.driver.session() as session:
             result = await session.run(cypher_query)
             records = await result.data()
-            return [record['c'] for record in records]
+            return [record["c"] for record in records]
 
     async def add_solution_feedback(
         self, memory_id: str, feedback: str, rating: int
@@ -199,7 +203,9 @@ class AsyncKnowledgeGraph:
         SET c.feedback = $feedback, c.rating = $rating
         """
         async with self.driver.session() as session:
-            await session.run(query, memory_id=memory_id, feedback=feedback, rating=rating)
+            await session.run(
+                query, memory_id=memory_id, feedback=feedback, rating=rating
+            )
         logger.info(
             f"Added feedback to conversation {memory_id}: {rating}/5 - {feedback}"
         )
@@ -270,12 +276,16 @@ class AsyncKnowledgeGraph:
                     timeout=30.0,
                 )
                 response.raise_for_status()
-                
+
                 # Handle different API response structures (OpenAI vs Ollama)
                 response_data = response.json()
                 if "response" in response_data:  # Ollama
                     cypher_query = str(response_data["response"])
-                elif "choices" in response_data and response_data["choices"] and "text" in response_data["choices"][0]:  # OpenAI (legacy completion)
+                elif (
+                    "choices" in response_data
+                    and response_data["choices"]
+                    and "text" in response_data["choices"][0]
+                ):  # OpenAI (legacy completion)
                     cypher_query = str(response_data["choices"][0]["text"])
                 elif "choices" in response_data and response_data["choices"]:  # OpenAI
                     cypher_query = response_data["choices"][0]["message"]["content"]
@@ -287,11 +297,19 @@ class AsyncKnowledgeGraph:
             # --- Sanitize and validate the generated Cypher ---
             # Extract from markdown code block if present
             if "```" in cypher_query:
-                cypher_query = cypher_query.split("```")[1].replace("cypher", "").strip()
+                cypher_query = (
+                    cypher_query.split("```")[1].replace("cypher", "").strip()
+                )
 
             # Basic validation to prevent execution of garbage
-            if not cypher_query.strip().upper().startswith(("MATCH", "CREATE", "MERGE", "CALL")):
-                raise ValueError(f"Generated query is not a valid Cypher query: {cypher_query}")
+            if (
+                not cypher_query.strip()
+                .upper()
+                .startswith(("MATCH", "CREATE", "MERGE", "CALL"))
+            ):
+                raise ValueError(
+                    f"Generated query is not a valid Cypher query: {cypher_query}"
+                )
 
             # Execute the generated query
             async with self.driver.session() as session:
@@ -299,29 +317,51 @@ class AsyncKnowledgeGraph:
                 records = await result.data()
 
             # Format results for RAG context
-            return str(records) if records else "No relevant information found in the knowledge graph."
+            return (
+                str(records)
+                if records
+                else "No relevant information found in the knowledge graph."
+            )
 
         except httpx.RequestError as e:
-            logger.error("Network error during Text-to-Cypher request: %s", e, exc_info=True)
-            raise NetworkError("Failed to connect to the LLM service for Cypher generation") from e
+            logger.error(
+                "Network error during Text-to-Cypher request: %s", e, exc_info=True
+            )
+            raise NetworkError(
+                "Failed to connect to the LLM service for Cypher generation"
+            ) from e
         except httpx.HTTPStatusError as e:
-            logger.error("LLM API returned an error status during Text-to-Cypher: %s", e.response.text, exc_info=True)
-            raise LLMError(f"LLM API failed with status {e.response.status_code}") from e
+            logger.error(
+                "LLM API returned an error status during Text-to-Cypher: %s",
+                e.response.text,
+                exc_info=True,
+            )
+            raise LLMError(
+                f"LLM API failed with status {e.response.status_code}"
+            ) from e
         except ValueError as e:
             # This can be raised by our custom validation or JSON parsing
-            logger.error("Validation or data error during Text-to-Cypher: %s", e, exc_info=True)
-            raise KnowledgeGraphError("Failed to process or validate the generated Cypher query") from e
+            logger.error(
+                "Validation or data error during Text-to-Cypher: %s", e, exc_info=True
+            )
+            raise KnowledgeGraphError(
+                "Failed to process or validate the generated Cypher query"
+            ) from e
         except (DatabaseError, KnowledgeGraphError) as e:
             # Re-raise known database or graph errors
-            logger.error("Database error executing generated Cypher query: %s", e, exc_info=True)
+            logger.error(
+                "Database error executing generated Cypher query: %s", e, exc_info=True
+            )
             raise
         except Exception as e:
             # Catch any other unexpected errors
             logger.critical(
                 "An unexpected critical error occurred during Text-to-Cypher or execution.",
-                exc_info=True
+                exc_info=True,
             )
-            raise KnowledgeGraphError("An unexpected error occurred while retrieving context") from e
+            raise KnowledgeGraphError(
+                "An unexpected error occurred while retrieving context"
+            ) from e
 
     # --- Additional methods for race condition fixes ---
 
@@ -363,9 +403,7 @@ class AsyncKnowledgeGraph:
         query = "MATCH (n {uuid: $memory_id}) DETACH DELETE n"
         async with self.driver.session() as session:
             await session.run(query, memory_id=memory_id)
-        logger.info(
-            f"Deleted node with uuid {memory_id} from knowledge graph"
-        )
+        logger.info(f"Deleted node with uuid {memory_id} from knowledge graph")
 
     async def add_observations(self, memory_id: str, observations: List[str]) -> None:
         """
@@ -378,9 +416,7 @@ class AsyncKnowledgeGraph:
         # This would likely involve creating new nodes or updating properties.
         # Placeholder implementation
         logger.warning("add_observations is not yet implemented.")
-        logger.info(
-            f"Received {len(observations)} observations for memory {memory_id}"
-        )
+        logger.info(f"Received {len(observations)} observations for memory {memory_id}")
 
     # --- Atomic Operations for Race Condition Prevention ---
 

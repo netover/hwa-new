@@ -38,10 +38,12 @@ async def _validate_memory_for_analysis(mem: Dict[str, Any]) -> bool:
         return False
 
     rating = mem.get("rating")
-    if rating is not None and isinstance(rating, (int, float)) and rating >= AUDIT_HIGH_RATING_THRESHOLD:
-        logger.debug(
-            f"Memory {memory_id} has high rating ({rating}), skipping."
-        )
+    if (
+        rating is not None
+        and isinstance(rating, (int, float))
+        and rating >= AUDIT_HIGH_RATING_THRESHOLD
+    ):
+        logger.debug(f"Memory {memory_id} has high rating ({rating}), skipping.")
         return False
 
     if not mem.get("user_query") or not mem.get("agent_response"):
@@ -102,15 +104,21 @@ async def _perform_action_on_memory(
     """Performs the appropriate action on a memory based on the LLM analysis."""
     memory_id = str(mem.get("id", ""))
     confidence = float(analysis.get("confidence", 0))
-    
-    if analysis.get("is_incorrect") and confidence > AUDIT_DELETION_CONFIDENCE_THRESHOLD:
+
+    if (
+        analysis.get("is_incorrect")
+        and confidence > AUDIT_DELETION_CONFIDENCE_THRESHOLD
+    ):
         logger.info(
             f"🚨 DELETING: ID {memory_id} | Confidence: {confidence:.2f} | Reason: {analysis.get('reason', 'N/A')}"
         )
         success = await knowledge_graph.atomic_check_and_delete(memory_id)
         return ("delete", memory_id) if success else None
 
-    elif analysis.get("is_incorrect") and confidence > AUDIT_FLAGGING_CONFIDENCE_THRESHOLD:
+    elif (
+        analysis.get("is_incorrect")
+        and confidence > AUDIT_FLAGGING_CONFIDENCE_THRESHOLD
+    ):
         reason = str(analysis.get("reason", "N/A"))
         logger.warning(
             f"⚠️ FLAGGING: ID {memory_id} | Confidence: {confidence:.2f} | Reason: {reason}"
@@ -127,7 +135,7 @@ async def _perform_action_on_memory(
 
 
 async def analyze_memory(
-    mem: Dict[str, Any]
+    mem: Dict[str, Any],
 ) -> Optional[Tuple[str, Union[str, Dict[str, Any]]]]:
     """Analyzes a single memory and returns an action if necessary."""
     memory_id = str(mem.get("id", ""))
@@ -163,11 +171,15 @@ async def analyze_memory(
         return None
     except AuditError as e:
         # Lock acquisition failure
-        logger.warning("IA Auditor: Could not acquire lock for memory %s: %s", memory_id, e)
+        logger.warning(
+            "IA Auditor: Could not acquire lock for memory %s: %s", memory_id, e
+        )
         return None
     except Exception:
         # Catch any other unexpected errors during the analysis of a single memory
-        logger.error("IA Auditor: Unexpected error analyzing memory %s", memory_id, exc_info=True)
+        logger.error(
+            "IA Auditor: Unexpected error analyzing memory %s", memory_id, exc_info=True
+        )
         return None
 
 
@@ -182,7 +194,9 @@ async def _cleanup_locks() -> None:
 async def _fetch_recent_memories() -> Optional[List[Dict[str, Any]]]:
     """Fetches recent conversations from the knowledge graph."""
     try:
-        return await knowledge_graph.get_all_recent_conversations(RECENT_MEMORIES_FETCH_LIMIT)
+        return await knowledge_graph.get_all_recent_conversations(
+            RECENT_MEMORIES_FETCH_LIMIT
+        )
     except (KnowledgeGraphError, DatabaseError) as e:
         logger.error(
             "IA Auditor: Could not fetch memories from the database: %s",
@@ -236,5 +250,7 @@ async def analyze_and_flag_memories() -> Dict[str, Union[int, str]]:
     for mem_id in to_delete:
         await knowledge_graph.delete_memory(mem_id)
 
-    logger.info("IA Auditor: Finished. Deleted: %d, Flagged: %d", len(to_delete), len(to_flag))
+    logger.info(
+        "IA Auditor: Finished. Deleted: %d, Flagged: %d", len(to_delete), len(to_flag)
+    )
     return {"deleted": len(to_delete), "flagged": len(to_flag)}

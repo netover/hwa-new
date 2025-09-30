@@ -10,7 +10,7 @@ from typing import Iterator
 
 import docx
 import openpyxl
-import pypdf # Corrected import for pypdf
+import pypdf  # Corrected import for pypdf
 from openpyxl.utils.exceptions import InvalidFileException
 
 from resync.core.exceptions import FileProcessingError, KnowledgeGraphError
@@ -119,8 +119,10 @@ def read_pdf(file_path: Path) -> str:
     except ValueError as e:
         logger.error("Invalid PDF content: %s - %s", file_path, e, exc_info=True)
         return ""
-    except Exception as e: # Catch any other pypdf or system errors
-        logger.critical("Unexpected error reading PDF %s: %s", file_path, e, exc_info=True)
+    except Exception as e:  # Catch any other pypdf or system errors
+        logger.critical(
+            "Unexpected error reading PDF %s: %s", file_path, e, exc_info=True
+        )
         raise FileProcessingError(f"Failed to process PDF {file_path}") from e
 
 
@@ -130,7 +132,7 @@ def read_json(file_path: Path) -> str:
     try:
         import json
 
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         # Convert JSON to readable text format
@@ -153,17 +155,24 @@ def read_json(file_path: Path) -> str:
         return ""
     except PermissionError as e:
         logger.error(
-            "Permission denied accessing JSON file: %s - %s", file_path, e, exc_info=True
+            "Permission denied accessing JSON file: %s - %s",
+            file_path,
+            e,
+            exc_info=True,
         )
         return ""
     except json.JSONDecodeError as e:
         logger.error("Invalid JSON format: %s - %s", file_path, e, exc_info=True)
         return ""
     except UnicodeDecodeError as e:
-        logger.error("Encoding error reading JSON file: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "Encoding error reading JSON file: %s - %s", file_path, e, exc_info=True
+        )
         return ""
-    except Exception as e: # Catch other potential OS or parsing errors
-        logger.critical("Unexpected error reading JSON %s: %s", file_path, e, exc_info=True)
+    except Exception as e:  # Catch other potential OS or parsing errors
+        logger.critical(
+            "Unexpected error reading JSON %s: %s", file_path, e, exc_info=True
+        )
         raise FileProcessingError(f"Failed to process JSON {file_path}") from e
 
 
@@ -178,14 +187,21 @@ def read_txt(file_path: Path) -> str:
         return ""
     except PermissionError as e:
         logger.error(
-            "Permission denied accessing text file: %s - %s", file_path, e, exc_info=True
+            "Permission denied accessing text file: %s - %s",
+            file_path,
+            e,
+            exc_info=True,
         )
         return ""
     except UnicodeDecodeError as e:
-        logger.error("Encoding error reading text file: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "Encoding error reading text file: %s - %s", file_path, e, exc_info=True
+        )
         return ""
     except (OSError, IOError) as e:
-        logger.critical("Unexpected OS error reading text %s: %s", file_path, e, exc_info=True)
+        logger.critical(
+            "Unexpected OS error reading text %s: %s", file_path, e, exc_info=True
+        )
         raise FileProcessingError(f"Failed to process text file {file_path}") from e
 
 
@@ -199,12 +215,14 @@ def read_doc(file_path: Path) -> str:
             text = "\n".join(para.text for para in doc.paragraphs if para.text)
             if text.strip():
                 return text
-        except Exception: # docx library might fail on .doc
+        except Exception:  # docx library might fail on .doc
             pass
 
         # Fallback: try to use antiword or similar tool if available
         # For now, return a message indicating the file type is not fully supported
-        logger.warning(f"DOC file {file_path} requires manual processing or external tool")
+        logger.warning(
+            f"DOC file {file_path} requires manual processing or external tool"
+        )
         return f"[DOC file: {file_path.name} - Manual processing may be required]"
 
     except FileNotFoundError as e:
@@ -215,8 +233,10 @@ def read_doc(file_path: Path) -> str:
             "Permission denied accessing DOC file: %s - %s", file_path, e, exc_info=True
         )
         return ""
-    except Exception as e: # Catch other potential library or system errors
-        logger.critical("Unexpected error reading DOC %s: %s", file_path, e, exc_info=True)
+    except Exception as e:  # Catch other potential library or system errors
+        logger.critical(
+            "Unexpected error reading DOC %s: %s", file_path, e, exc_info=True
+        )
         raise FileProcessingError(f"Failed to process DOC file {file_path}") from e
 
 
@@ -244,12 +264,13 @@ def read_xls(file_path: Path) -> str:
             workbook.close()
             return "\n".join(text_parts)
 
-        except Exception: # openpyxl might fail on .xls
+        except Exception:  # openpyxl might fail on .xls
             pass
 
         # Fallback: try to use xlrd if available, or return message
         try:
             import xlrd
+
             workbook = xlrd.open_workbook(file_path)
             text_parts = []
 
@@ -260,7 +281,11 @@ def read_xls(file_path: Path) -> str:
                 for row_idx in range(sheet.nrows):
                     row = sheet.row_values(row_idx)
                     # Convert row to text, filtering out None values
-                    row_text = " | ".join(str(cell) for cell in row if cell is not None and str(cell).strip())
+                    row_text = " | ".join(
+                        str(cell)
+                        for cell in row
+                        if cell is not None and str(cell).strip()
+                    )
                     if row_text.strip():
                         text_parts.append(row_text)
 
@@ -269,7 +294,9 @@ def read_xls(file_path: Path) -> str:
             return "\n".join(text_parts)
 
         except ImportError:
-            logger.warning(f"XLS file {file_path} requires xlrd library for full support")
+            logger.warning(
+                f"XLS file {file_path} requires xlrd library for full support"
+            )
             return f"[XLS file: {file_path.name} - Install xlrd for better support]"
         except Exception as e:
             logger.error(f"Error processing XLS file {file_path}: {e}")
@@ -283,8 +310,10 @@ def read_xls(file_path: Path) -> str:
             "Permission denied accessing XLS file: %s - %s", file_path, e, exc_info=True
         )
         return ""
-    except Exception as e: # Catch other potential library or system errors
-        logger.critical("Unexpected error reading XLS %s: %s", file_path, e, exc_info=True)
+    except Exception as e:  # Catch other potential library or system errors
+        logger.critical(
+            "Unexpected error reading XLS %s: %s", file_path, e, exc_info=True
+        )
         raise FileProcessingError(f"Failed to process XLS file {file_path}") from e
 
 
@@ -299,14 +328,21 @@ def read_md(file_path: Path) -> str:
         return ""
     except PermissionError as e:
         logger.error(
-            "Permission denied accessing Markdown file: %s - %s", file_path, e, exc_info=True
+            "Permission denied accessing Markdown file: %s - %s",
+            file_path,
+            e,
+            exc_info=True,
         )
         return ""
     except UnicodeDecodeError as e:
-        logger.error("Encoding error reading Markdown file: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "Encoding error reading Markdown file: %s - %s", file_path, e, exc_info=True
+        )
         return ""
     except (OSError, IOError) as e:
-        logger.critical("Unexpected OS error reading Markdown %s: %s", file_path, e, exc_info=True)
+        logger.critical(
+            "Unexpected OS error reading Markdown %s: %s", file_path, e, exc_info=True
+        )
         raise FileProcessingError(f"Failed to process Markdown file {file_path}") from e
 
 
@@ -327,14 +363,14 @@ def read_docx(file_path: Path) -> str:
             e,
             exc_info=True,
         )
-        return "" # Corrected import for PackageNotFoundError
+        return ""  # Corrected import for PackageNotFoundError
     except docx.opc.exceptions.PackageNotFoundError as e:
         logger.error("Invalid DOCX package: %s - %s", file_path, e, exc_info=True)
         return ""
     except ValueError as e:
         logger.error("Invalid DOCX content: %s - %s", file_path, e, exc_info=True)
         return ""
-    except Exception as e: # Catch other potential library or system errors
+    except Exception as e:  # Catch other potential library or system errors
         logger.critical(
             "Unexpected error reading DOCX %s: %s", file_path, e, exc_info=True
         )
@@ -375,7 +411,7 @@ def read_excel(file_path: Path) -> str:
     except ValueError as e:
         logger.error("Invalid Excel content: %s - %s", file_path, e, exc_info=True)
         return ""
-    except Exception as e: # Catch other potential library or system errors
+    except Exception as e:  # Catch other potential library or system errors
         logger.critical(
             "Unexpected error reading Excel %s: %s", file_path, e, exc_info=True
         )
@@ -450,7 +486,9 @@ class FileIngestor(IFileIngestor):
             logger.critical(
                 f"Failed to save uploaded file {safe_filename}: {e}", exc_info=True
             )
-            raise FileProcessingError(f"Could not save file due to OS error: {e}") from e
+            raise FileProcessingError(
+                f"Could not save file due to OS error: {e}"
+            ) from e
 
     async def ingest_file(self, file_path: Path) -> bool:
         """
@@ -468,12 +506,16 @@ class FileIngestor(IFileIngestor):
 
         # Check if file is in knowledge base directories
         if not is_path_in_knowledge_base(file_path):
-            logger.warning(f"File {file_path} is not in knowledge base directories. Skipping ingestion.")
+            logger.warning(
+                f"File {file_path} is not in knowledge base directories. Skipping ingestion."
+            )
             return False
 
         # Check if file is in protected directories (should not be deleted during processing)
         if is_path_protected(file_path):
-            logger.info(f"File {file_path} is in protected directory - will not be deleted after processing")
+            logger.info(
+                f"File {file_path} is in protected directory - will not be deleted after processing"
+            )
 
         file_ext = file_path.suffix.lower()
         reader = self.file_readers.get(file_ext)
@@ -575,7 +617,12 @@ async def load_existing_rag_documents(file_ingestor: IFileIngestor) -> int:
                         await file_ingestor.ingest_file(file_path)
                         processed_count += 1
                     except FileProcessingError as e:
-                        logger.error("Failed to process document %s: %s", file_path, e, exc_info=True)
+                        logger.error(
+                            "Failed to process document %s: %s",
+                            file_path,
+                            e,
+                            exc_info=True,
+                        )
                 else:
                     logger.debug(f"Skipping protected file: {file_path}")
 

@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MetricCounter:
     """Thread-safe counter for metrics."""
+
     value: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -37,6 +38,7 @@ class MetricCounter:
 @dataclass
 class MetricGauge:
     """Thread-safe gauge for current values."""
+
     value: float = 0.0
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -52,6 +54,7 @@ class MetricGauge:
 @dataclass
 class MetricHistogram:
     """Simple histogram for tracking distributions."""
+
     buckets: Dict[str, int] = field(default_factory=dict)
     samples: List[float] = field(default_factory=list)
     max_samples: int = 1000
@@ -99,6 +102,12 @@ class RuntimeMetrics:
         self.async_operations_active = MetricGauge()
         self.error_rate = MetricHistogram()
 
+        # TWS-specific metrics
+        self.tws_status_requests_success = MetricCounter()
+        self.tws_status_requests_failed = MetricCounter()
+        self.tws_workstations_total = MetricGauge()
+        self.tws_jobs_total = MetricGauge()
+
         # Correlation tracking
         self._correlation_context: Dict[str, Dict[str, Any]] = {}
         self._correlation_lock = threading.Lock()
@@ -122,15 +131,19 @@ class RuntimeMetrics:
         logger.debug(f"Created correlation ID: {correlation_id}")
         return correlation_id
 
-    def add_correlation_event(self, correlation_id: str, event: str, data: Optional[Dict[str, Any]] = None) -> None:
+    def add_correlation_event(
+        self, correlation_id: str, event: str, data: Optional[Dict[str, Any]] = None
+    ) -> None:
         """Add an event to a correlation context."""
         with self._correlation_lock:
             if correlation_id in self._correlation_context:
-                self._correlation_context[correlation_id]["operations"].append({
-                    "timestamp": time.time(),
-                    "event": event,
-                    "data": data or {},
-                })
+                self._correlation_context[correlation_id]["operations"].append(
+                    {
+                        "timestamp": time.time(),
+                        "event": event,
+                        "data": data or {},
+                    }
+                )
 
     def close_correlation_id(self, correlation_id: str) -> None:
         """Close a correlation context and log summary."""
@@ -146,7 +159,9 @@ class RuntimeMetrics:
                 )
                 self.correlation_ids_active.set(len(self._correlation_context))
 
-    def record_health_check(self, component: str, status: str, details: Optional[Dict[str, Any]] = None) -> None:
+    def record_health_check(
+        self, component: str, status: str, details: Optional[Dict[str, Any]] = None
+    ) -> None:
         """Record health check status for a component."""
         with self._health_lock:
             self._health_checks[component] = {
@@ -178,8 +193,10 @@ class RuntimeMetrics:
                 "size": self.cache_size.get(),
                 "cleanup_cycles": self.cache_cleanup_cycles.value,
                 "hit_rate": (
-                    self.cache_hits.value / (self.cache_hits.value + self.cache_misses.value)
-                    if (self.cache_hits.value + self.cache_misses.value) > 0 else 0
+                    self.cache_hits.value
+                    / (self.cache_hits.value + self.cache_misses.value)
+                    if (self.cache_hits.value + self.cache_misses.value) > 0
+                    else 0
                 ),
             },
             "audit": {
@@ -197,6 +214,22 @@ class RuntimeMetrics:
             "health": self.get_health_status(),
         }
 
+    def generate_prometheus_metrics(self) -> str:
+        """Generate metrics in Prometheus text exposition format."""
+        lines = []
+        snapshot = self.get_snapshot()
+
+        for category, metrics in snapshot.items():
+            if category == "health":
+                continue
+            for name, value in metrics.items():
+                metric_name = f"resync_{category}_{name}"
+                if isinstance(value, (int, float)):
+                    lines.append(f"# TYPE {metric_name} gauge")
+                    lines.append(f"{metric_name} {value}")
+
+        return "\n".join(lines)
+
 
 # Global singleton instance
 runtime_metrics = RuntimeMetrics()
@@ -209,8 +242,12 @@ def get_correlation_context() -> str:
     return runtime_metrics.create_correlation_id()
 
 
-def log_with_correlation(level: int, message: str, correlation_id: Optional[str] = None, **kwargs: Any) -> None:
+def log_with_correlation(
+    level: int, message: str, correlation_id: Optional[str] = None, **kwargs: Any
+) -> None:
     """Log message with correlation context."""
     if correlation_id:
-        runtime_metrics.add_correlation_event(correlation_id, f"log_{level}", {"message": message, **kwargs})
+        runtime_metrics.add_correlation_event(
+            correlation_id, f"log_{level}", {"message": message, **kwargs}
+        )
     logger.log(level, f"[{correlation_id}] {message}", **kwargs)
