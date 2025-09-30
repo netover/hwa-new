@@ -4,7 +4,7 @@ Tests for Adaptive Circuit Breaker functionality.
 
 import pytest
 import asyncio
-from resync.main import CircuitBreakerManager
+from resync.core.resilience import CircuitBreakerManager
 
 
 class TestAdaptiveCircuitBreaker:

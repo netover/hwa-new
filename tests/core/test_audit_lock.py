@@ -11,6 +11,7 @@ Tests verify:
 
 import asyncio
 import logging
+import uuid
 from unittest.mock import AsyncMock
 
 import pytest
@@ -29,25 +30,19 @@ class TestDistributedAuditLock:
 
 
 @pytest_asyncio.fixture
-async def redis_client():
-    """Create a Redis client for testing."""
-    client = redis.Redis.from_url("redis://localhost:6379/1", decode_responses=True)
-    # Clear test database
-    await client.flushdb()
-    yield client
-    # Cleanup after test
-    await client.flushdb()
-    await client.aclose()
-
-
-@pytest_asyncio.fixture
-async def audit_lock_instance(redis_client):
+async def audit_lock_instance(mock_redis_client):
     """Create a DistributedAuditLock instance for testing."""
     lock = DistributedAuditLock("redis://localhost:6379/1")
-    await lock.connect()
+    lock.client = mock_redis_client
+    lock.release_script_sha = await lock.client.script_load(lock.LUA_RELEASE_SCRIPT)
     yield lock
     await lock.disconnect()
 
+
+class TestDistributedAuditLock:
+    """Test suite for DistributedAuditLock functionality."""
+
+    @pytest.mark.asyncio
     async def test_basic_lock_acquisition(self, audit_lock_instance):
         """Test basic lock acquisition and release."""
         memory_id = "test_memory_123"
@@ -65,16 +60,17 @@ async def audit_lock_instance(redis_client):
         # Lock should be released
         assert not await audit_lock_instance.is_locked(memory_id)
 
+    @pytest.mark.asyncio
     async def test_lock_timeout(self, audit_lock_instance):
         """Test lock timeout functionality."""
         memory_id = "test_memory_timeout"
 
         # Acquire lock
-        async with await audit_lock_instance.acquire(memory_id, timeout=2):
+        async with await audit_lock_instance.acquire(memory_id, timeout=1):
             assert await audit_lock_instance.is_locked(memory_id)
 
         # Wait for timeout
-        await asyncio.sleep(3)
+        await asyncio.sleep(1.1)
 
         # Lock should be automatically released due to timeout
         assert not await audit_lock_instance.is_locked(memory_id)
@@ -83,6 +79,7 @@ async def audit_lock_instance(redis_client):
         async with await audit_lock_instance.acquire(memory_id, timeout=5):
             assert await audit_lock_instance.is_locked(memory_id)
 
+    @pytest.mark.asyncio
     async def test_concurrent_lock_prevention(self, audit_lock_instance):
         """Test that concurrent processes cannot acquire the same lock."""
         memory_id = "test_memory_concurrent"
@@ -109,6 +106,7 @@ async def audit_lock_instance(redis_client):
             success_count == 1
         ), f"Expected 1 success, got {success_count}. Results: {results}"
 
+    @pytest.mark.asyncio
     async def test_lock_re_entrancy(self, audit_lock_instance):
         """Test that locks are re-entrant within the same task."""
         memory_id = "test_memory_reentrant"
@@ -131,6 +129,7 @@ async def audit_lock_instance(redis_client):
 
         await nested_lock_test()
 
+    @pytest.mark.asyncio
     async def test_force_release_lock(self, audit_lock_instance):
         """Test force release functionality."""
         memory_id = "test_memory_force_release"
@@ -144,6 +143,7 @@ async def audit_lock_instance(redis_client):
         assert result is True
         assert not await audit_lock_instance.is_locked(memory_id)
 
+    @pytest.mark.asyncio
     async def test_cleanup_expired_locks(self, audit_lock_instance):
         """Test cleanup of expired locks."""
         # Create some locks with different ages
@@ -161,6 +161,7 @@ async def audit_lock_instance(redis_client):
         cleaned_count = await audit_lock_instance.cleanup_expired_locks(max_age=1)
         assert cleaned_count >= 0  # At least some locks should be cleaned
 
+    @pytest.mark.asyncio
     async def test_lock_context_manual_release(self, audit_lock_instance):
         """Test manual lock release."""
         memory_id = "test_memory_manual_release"
@@ -173,6 +174,7 @@ async def audit_lock_instance(redis_client):
             await context.release()
             assert not await audit_lock_instance.is_locked(memory_id)
 
+    @pytest.mark.asyncio
     async def test_lock_key_generation(self, audit_lock_instance):
         """Test lock key generation."""
         memory_id = "test_memory_key_gen"
@@ -182,6 +184,7 @@ async def audit_lock_instance(redis_client):
         lock_key = audit_lock_instance._get_lock_key(memory_id)
         assert lock_key == expected_key
 
+    @pytest.mark.asyncio
     async def test_multiple_memory_locks(self, audit_lock_instance):
         """Test that different memory IDs can be locked independently."""
         memory_ids = ["memory_1", "memory_2", "memory_3"]

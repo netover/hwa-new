@@ -46,6 +46,7 @@ pre-commit = "*"
 types-redis = "*"
 types-openpyxl = "*"
 types-psutil = "*"
+fakeredis = {extras = ["aioredis"], version = "*"}
 
 [tool.mypy]
 python_version = "3.13"

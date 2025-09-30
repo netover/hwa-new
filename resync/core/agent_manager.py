@@ -216,12 +216,13 @@ class AgentManager:
                 correlation_id,
             )
 
+            config_path = Path(config_path)
             if not config_path.exists():
                 error_msg = f"Agent configuration file not found at {config_path}"
                 log_with_correlation(logging.ERROR, error_msg, correlation_id)
-                runtime_metrics.record_health_check(
-                    "agent_config", "missing", {"path": str(config_path)}
-                )
+                # runtime_metrics.record_health_check(
+                #     "agent_config", "missing", {"path": str(config_path)}
+                # )
                 self.agents = {}
                 self.agent_configs = []  # Ensure it's reset if config not found
                 return

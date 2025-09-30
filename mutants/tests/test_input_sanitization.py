@@ -4,7 +4,7 @@ Tests for InputSanitizer class and related functionality.
 
 import pytest
 from pathlib import Path
-from resync.main import InputSanitizer
+from resync.core.security import InputSanitizer
 
 
 class TestInputSanitizer:
@@ -109,7 +109,7 @@ class TestPathValidation:
 
     def test_validate_tws_host(self):
         """Test TWS host validation."""
-        from resync.main import validate_tws_host
+        from resync.core.lifecycle import validate_tws_host
         from resync.core.exceptions import ConfigError
 
         # Valid host:port
@@ -121,7 +121,7 @@ class TestPathValidation:
 
     def test_validate_paths(self):
         """Test path validation."""
-        from resync.main import validate_paths
+        from resync.core.lifecycle import validate_paths
         from resync.core.exceptions import ConfigError
 
         # This will likely fail in test environment due to missing settings
