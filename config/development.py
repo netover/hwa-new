@@ -1,3 +1,5 @@
+from pathlib import Path
+from pydantic import Field
 from .base import Settings
 
 
@@ -13,12 +15,13 @@ class DevelopmentSettings(Settings):
     # Override other settings for development if needed
     # For example, a local LLM endpoint
     # LLM_ENDPOINT: str = "http://localhost:8001/v1"
-# Knowledge Base and Protection Settings
-KNOWLEDGE_BASE_DIRS: list[Path] = Field(
-    default=[BASE_DIR / "resync/RAG"],
-    description="Directories included in the knowledge base (includes all RAG subdirectories)"
-)
-PROTECTED_DIRECTORIES: list[Path] = Field(
-    default=[BASE_DIR / "resync/RAG/BASE"],
-    description="Core knowledge base directory protected from deletion"
-)
+
+    # Knowledge Base and Protection Settings
+    KNOWLEDGE_BASE_DIRS: list[Path] = Field(
+        default=[Settings.BASE_DIR / "resync/RAG"],
+        description="Directories included in the knowledge base (includes all RAG subdirectories)"
+    )
+    PROTECTED_DIRECTORIES: list[Path] = Field(
+        default=[Settings.BASE_DIR / "resync/RAG/BASE"],
+        description="Core knowledge base directory protected from deletion"
+    )

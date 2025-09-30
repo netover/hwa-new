@@ -55,23 +55,18 @@ class ConnectionManager:
         for task in tasks:
             try:
                 await task
-            except WebSocketDisconnect as e:
-                # Client disconnected during broadcast
-                logger.warning("Client disconnected during broadcast: %s", e)
-            except ConnectionError as e:
-                # Connection lost
-                logger.warning("Connection error during broadcast: %s", e)
-            except RuntimeError as e:
+            except (WebSocketDisconnect, ConnectionError) as e:
+                # Client disconnected or connection lost during broadcast
+                logger.warning("Connection issue during broadcast: %s", e)
+            except RuntimeError as e: # pragma: no cover
                 # WebSocket in wrong state
                 if "websocket state" in str(e).lower():
                     logger.warning("WebSocket in wrong state during broadcast: %s", e)
                 else:
                     logger.warning("Runtime error during broadcast: %s", e)
-            except Exception as e:
+            except Exception:
                 # Log error but don't stop broadcasting to other clients
-                logger.warning("Unexpected error during broadcast: %s", e)
-                # Consider raising a custom exception for monitoring in production
-                # but don't raise here to avoid interrupting the broadcast
+                logger.error("Unexpected error during broadcast.", exc_info=True)
 
     async def broadcast_json(self, data: Dict[str, Any]) -> None:
         """
@@ -88,44 +83,19 @@ class ConnectionManager:
         for task in tasks:
             try:
                 await task
-            except WebSocketDisconnect as e:
-                # Client disconnected during broadcast
-                logger.warning("Client disconnected during JSON broadcast: %s", e)
-            except ConnectionError as e:
-                # Connection lost
-                logger.warning("Connection error during JSON broadcast: %s", e)
-            except RuntimeError as e:
+            except (WebSocketDisconnect, ConnectionError) as e:
+                # Client disconnected or connection lost during broadcast
+                logger.warning("Connection issue during JSON broadcast: %s", e)
+            except RuntimeError as e: # pragma: no cover
                 # WebSocket in wrong state
                 if "websocket state" in str(e).lower():
                     logger.warning(
                         "WebSocket in wrong state during JSON broadcast: %s", e
                     )
                 else:
-                    logger.warning("Runtime error during JSON broadcast: %s", e)
+                    logger.error("Runtime error during JSON broadcast: %s", e)
             except ValueError as e:
                 # JSON serialization error
-                logger.warning("JSON serialization error during broadcast: %s", e)
-            except Exception as e:
-                # Log error but don't stop broadcasting to other clients
-                logger.warning("Unexpected error during JSON broadcast: %s", e)
-                # Consider raising a custom exception for monitoring in production
-                # but don't raise here to avoid interrupting the broadcast
-
-
-# Factory function for creating ConnectionManager instances
-def create_connection_manager() -> ConnectionManager:
-    """Create and return a new ConnectionManager instance."""
-    return ConnectionManager()
-
-
-# Legacy compatibility: create a default instance
-# This will be removed once all code is migrated to DI
-import warnings
-
-warnings.warn(
-    "The global connection_manager instance is deprecated and will be removed in a future version. "
-    "Use dependency injection with IConnectionManager instead.",
-    DeprecationWarning,
-    stacklevel=2,
-)
-connection_manager = create_connection_manager()
+                logger.error("JSON serialization error during broadcast: %s", e, exc_info=True)
+            except Exception:
+                logger.error("Unexpected error during JSON broadcast.", exc_info=True)

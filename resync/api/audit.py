@@ -31,7 +31,7 @@ def get_flagged_memories(
         description="Search query in user_query or agent_response",
     ),
     audit_queue: IAuditQueue = Depends(get_audit_queue),
-):
+) -> List[Dict[str, Any]]:
     """
     Retrieves memories from the audit queue based on status and search query.
     """
@@ -63,7 +63,7 @@ async def review_memory(
     review: ReviewAction,
     audit_queue: IAuditQueue = Depends(get_audit_queue),
     knowledge_graph: IKnowledgeGraph = Depends(get_knowledge_graph),
-):
+) -> Dict[str, str]:
     """
     Processes a human review action for a flagged memory, updating its status in the database.
     """
@@ -99,7 +99,7 @@ async def review_memory(
 @router.get("/metrics", response_model=Dict[str, int])  # New endpoint for metrics
 def get_audit_metrics(
     audit_queue: IAuditQueue = Depends(get_audit_queue),
-):
+) -> Dict[str, int]:
     """
     Returns metrics for the audit queue (total pending, approved, rejected).
     """

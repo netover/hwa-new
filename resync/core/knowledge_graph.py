@@ -12,6 +12,13 @@ from typing import Any, Dict, List, Optional, cast
 
 from neo4j import AsyncGraphDatabase, AsyncDriver
 
+from resync.core.exceptions import (
+    DatabaseError,
+    KnowledgeGraphError,
+    LLMError,
+    NetworkError,
+)
+
 # Import settings
 from ..settings import settings
 
@@ -49,14 +56,14 @@ class AsyncKnowledgeGraph:
 
     def _get_driver(self) -> AsyncDriver:
         """Get or create the Neo4j async driver instance."""
-        if self._driver is None or self._driver.closed():
+        if self._driver is None or self._driver._closed:
             logger.info("Initializing new Neo4j driver.")
             self._driver = AsyncGraphDatabase.driver(self.uri, auth=self.auth)
         return self._driver
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the Neo4j driver connection."""
-        if self._driver and not self._driver.closed():
+        if self._driver and not self._driver._closed:
             await self.driver.close()
             logger.info("Neo4j driver closed.")
 
@@ -89,7 +96,7 @@ class AsyncKnowledgeGraph:
         async with self.driver.session() as session:
             result = await session.run(query, content=content, metadata=metadata)
             record = await result.single()
-            return record["uuid"] if record else ""
+            return str(record["uuid"]) if record else ""
 
     async def add_conversation(
         self,
@@ -125,7 +132,7 @@ class AsyncKnowledgeGraph:
                 query, user_query=user_query, agent_response=agent_response, agent_id=agent_id, context=context or {}
             )
             record = await result.single()
-            return record["uuid"] if record else ""
+            return str(record["uuid"]) if record else ""
 
     async def search_similar_issues(
         self, query: str, limit: int = 5
@@ -266,11 +273,11 @@ class AsyncKnowledgeGraph:
                 
                 # Handle different API response structures (OpenAI vs Ollama)
                 response_data = response.json()
-                if "response" in response_data: # Ollama
-                    cypher_query = response_data["response"]
-                elif "choices" in response_data and response_data["choices"] and "text" in response_data["choices"][0]: # OpenAI (legacy completion)
-                    cypher_query = response_data["choices"][0]["text"]
-                elif "choices" in response_data and response_data["choices"]: # OpenAI
+                if "response" in response_data:  # Ollama
+                    cypher_query = str(response_data["response"])
+                elif "choices" in response_data and response_data["choices"] and "text" in response_data["choices"][0]:  # OpenAI (legacy completion)
+                    cypher_query = str(response_data["choices"][0]["text"])
+                elif "choices" in response_data and response_data["choices"]:  # OpenAI
                     cypher_query = response_data["choices"][0]["message"]["content"]
                 else:
                     raise ValueError("Unsupported LLM API response format")
@@ -294,9 +301,27 @@ class AsyncKnowledgeGraph:
             # Format results for RAG context
             return str(records) if records else "No relevant information found in the knowledge graph."
 
+        except httpx.RequestError as e:
+            logger.error("Network error during Text-to-Cypher request: %s", e, exc_info=True)
+            raise NetworkError("Failed to connect to the LLM service for Cypher generation") from e
+        except httpx.HTTPStatusError as e:
+            logger.error("LLM API returned an error status during Text-to-Cypher: %s", e.response.text, exc_info=True)
+            raise LLMError(f"LLM API failed with status {e.response.status_code}") from e
+        except ValueError as e:
+            # This can be raised by our custom validation or JSON parsing
+            logger.error("Validation or data error during Text-to-Cypher: %s", e, exc_info=True)
+            raise KnowledgeGraphError("Failed to process or validate the generated Cypher query") from e
+        except (DatabaseError, KnowledgeGraphError) as e:
+            # Re-raise known database or graph errors
+            logger.error("Database error executing generated Cypher query: %s", e, exc_info=True)
+            raise
         except Exception as e:
-            logger.error(f"Error during Text-to-Cypher or execution: {e}", exc_info=True)
-            return "Error retrieving context from the knowledge graph."
+            # Catch any other unexpected errors
+            logger.critical(
+                "An unexpected critical error occurred during Text-to-Cypher or execution.",
+                exc_info=True
+            )
+            raise KnowledgeGraphError("An unexpected error occurred while retrieving context") from e
 
     # --- Additional methods for race condition fixes ---
 

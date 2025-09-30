@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
-from resync.core.connection_manager import connection_manager
+from resync.core.di_container import container
+from resync.core.interfaces import IAgentManager, IConnectionManager
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +13,12 @@ async def handle_config_change() -> None:
     """
     Handles the reloading of agent configurations and notifies clients.
     """
-    from resync.core.agent_manager import agent_manager
+    # Resolve dependencies from the DI container
+    from resync.core.agent_manager import AgentManager
+    from resync.core.connection_manager import ConnectionManager
+    
+    agent_manager = cast(AgentManager, container.get(IAgentManager))  # type: ignore[type-abstract]
+    connection_manager = cast(ConnectionManager, container.get(IConnectionManager))  # type: ignore[type-abstract]
 
     logger.info("Configuration change detected. Reloading agents...")
     try:

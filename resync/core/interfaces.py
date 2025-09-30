@@ -93,7 +93,7 @@ class IFileIngestor(Protocol):
     Defines methods for handling file uploads, saving, and processing for RAG.
     """
 
-    async def save_uploaded_file(self, file_name: str, file_content) -> Path:
+    async def save_uploaded_file(self, file_name: str, file_content: Any) -> Path:
         """Saves an uploaded file to the RAG directory."""
         ...
 

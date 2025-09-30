@@ -10,7 +10,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import redis
 from redis.asyncio import Redis as AsyncRedis
@@ -70,7 +70,7 @@ class AsyncAuditQueue(IAuditQueue):
     and pub/sub capabilities for real-time updates.
     """
 
-    def __init__(self, redis_url: str = None, settings_module: Any = settings):
+    def __init__(self, redis_url: Optional[str] = None, settings_module: Any = settings):
         """
         Initialize the Redis-based audit queue.
 
@@ -87,7 +87,7 @@ class AsyncAuditQueue(IAuditQueue):
                 else "redis://localhost:6379"
             ),
         )
-        self.sync_client = redis.from_url(self.redis_url)
+        self.sync_client = redis.from_url(self.redis_url)  # type: ignore[no-untyped-call]
         self.async_client = AsyncRedis.from_url(self.redis_url)
 
         # Use the new distributed audit lock for consistency
@@ -217,7 +217,7 @@ class AsyncAuditQueue(IAuditQueue):
             True if approved, False otherwise.
         """
         status = await self.async_client.hget(self.audit_status_key, memory_id)
-        return status and status.decode("utf-8") == "approved"
+        return bool(status and status.decode("utf-8") == "approved")
 
     async def delete_audit_record(self, memory_id: str) -> bool:
         """
@@ -252,7 +252,7 @@ class AsyncAuditQueue(IAuditQueue):
         Returns:
             Number of items in the queue.
         """
-        return await self.async_client.llen(self.audit_queue_key)
+        return int(await self.async_client.llen(self.audit_queue_key))
 
     async def cleanup_processed_audits(self, days_old: int = 30) -> int:
         """
@@ -343,7 +343,7 @@ class AsyncAuditQueue(IAuditQueue):
             logger.warning("Value error during lock release for %s: %s", lock_key, e)
             return False
 
-    async def with_lock(self, lock_key: str, timeout: int = 30):
+    async def with_lock(self, lock_key: str, timeout: int = 30) -> Any:
         """
         Context manager for distributed locking using the new DistributedAuditLock.
 
@@ -357,7 +357,7 @@ class AsyncAuditQueue(IAuditQueue):
 
     async def cleanup_expired_locks(
         self, lock_prefix: str = "memory:", max_age: int = 60
-    ):
+    ) -> int:
         """
         Cleans up expired locks to prevent deadlocks using the new DistributedAuditLock.
 
@@ -371,7 +371,7 @@ class AsyncAuditQueue(IAuditQueue):
         try:
             # Delegate to the new distributed audit lock
             return await self.distributed_lock.cleanup_expired_locks(max_age)
-        except Exception as e:
+        except (AuditError, DatabaseError, RedisError) as e:
             # Handle errors gracefully and return 0 to indicate no locks were cleaned
             logger.warning("Error during audit lock cleanup: %s", e)
             return 0
@@ -399,9 +399,6 @@ class AsyncAuditQueue(IAuditQueue):
             return False
         except (ConnectionError, TimeoutError) as e:
             logger.error("Connection error force releasing lock %s: %s", lock_key, e)
-            return False
-        except Exception as e:
-            logger.error("Unexpected error force releasing lock %s: %s", lock_key, e)
             return False
 
     async def get_all_audits(self) -> List[Dict[str, Any]]:
@@ -498,7 +495,7 @@ class AsyncAuditQueue(IAuditQueue):
         """
         try:
             # Simple ping to check if Redis is responsive
-            return await self.async_client.ping()
+            return bool(await self.async_client.ping())
         except RedisError as e:
             logger.error("Redis health check failed due to Redis error: %s", e)
             return False
@@ -608,34 +605,16 @@ class AsyncAuditQueue(IAuditQueue):
         return asyncio.run(self.is_memory_approved(memory_id))
 
 
-# Factory function for creating AsyncAuditQueue instances
-def create_audit_queue(
-    redis_url: str = None, settings_module: Any = settings
-) -> AsyncAuditQueue:
-    """Create and return a new AsyncAuditQueue instance."""
-    return AsyncAuditQueue(redis_url=redis_url, settings_module=settings_module)
-
-
-# Legacy compatibility: create a default instance
-# This will be removed once all code is migrated to DI
-import warnings
-
-warnings.warn(
-    "The global audit_queue instance is deprecated and will be removed in a future version. "
-    "Use dependency injection with IAuditQueue instead.",
-    DeprecationWarning,
-    stacklevel=2,
-)
-audit_queue = create_audit_queue()
-
-
 # Migration utilities for transitioning from SQLite
-async def migrate_from_sqlite():
+async def migrate_from_sqlite() -> None:
     """
     Migrates existing audit data from SQLite to Redis.
     This should be run once during deployment.
     """
     try:
+        # Temporarily create an instance for migration
+        migration_audit_queue = AsyncAuditQueue()
+
         import sqlite3
 
         sqlite_path = settings.BASE_DIR / "audit_queue.db"
@@ -662,13 +641,13 @@ async def migrate_from_sqlite():
                 "ia_audit_confidence": row["ia_audit_confidence"],
             }
 
-            success = await audit_queue.add_audit_record(memory)
+            success = await migration_audit_queue.add_audit_record(memory)
             if success:
                 migrated_count += 1
 
                 # Update status if not pending
                 if row["status"] != "pending":
-                    await audit_queue.update_audit_status(
+                    await migration_audit_queue.update_audit_status(
                         row["memory_id"], row["status"]
                     )
 
@@ -696,8 +675,8 @@ async def migrate_from_sqlite():
     except FileNotFoundError as e:
         logger.error("File not found during migration: %s", e, exc_info=True)
         raise FileProcessingError(f"File not found during migration: {e}") from e
-    except Exception as e:
-        logger.error(
+    except (ValueError, TypeError) as e:
+        logger.critical(
             "Unexpected error during SQLite to Redis migration: %s", e, exc_info=True
         )
         raise AuditError(

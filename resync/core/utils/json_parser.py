@@ -348,6 +348,10 @@ def safe_parse_llm_json_response(
     except KeyError as e:
         logger.warning("Key error in safe_parse_llm_json_response: %s", e)
         return None, f"Missing key: {str(e)}"
-    except Exception as e:
-        logger.error("Unexpected error in safe_parse_llm_json_response: %s", e)
-        return None, f"Unexpected error: {str(e)}"
+    except Exception:
+        # This is a critical catch-all. If we reach here, it's an unhandled case.
+        logger.critical(
+            "Unexpected critical error in safe_parse_llm_json_response.",
+            exc_info=True,
+        )
+        return None, "An unexpected critical error occurred during JSON parsing."

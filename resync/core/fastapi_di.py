@@ -9,7 +9,7 @@ that resolve services from the container.
 import inspect
 import logging
 from functools import wraps
-from typing import Any, Callable, Type, TypeVar
+from typing import Any, Callable, Optional, Type, TypeVar
 
 from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -174,7 +174,7 @@ class DIMiddleware(BaseHTTPMiddleware):
         return response
 
 
-def inject_container(app: FastAPI, container_instance: DIContainer = None) -> None:
+def inject_container(app: FastAPI, container_instance: Optional[DIContainer] = None) -> None:
     """
     Configure the application to use the DI container.
 

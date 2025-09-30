@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
@@ -24,7 +24,7 @@ api_router = APIRouter()
 
 # --- HTML serving endpoint for the main dashboard ---
 @api_router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
-async def get_dashboard():
+async def get_dashboard() -> HTMLResponse:
     """
     Serves the main `index.html` file for the dashboard.
     """
@@ -43,9 +43,9 @@ async def get_dashboard():
     response_model=List[AgentConfig],
     summary="Get All Agent Configurations",
 )
-def get_all_agents(
+def get_all_agents(  # This can remain sync as it's a simple getter
     agent_manager: IAgentManager = Depends(get_agent_manager),
-):
+) -> List[AgentConfig]:
     """
     Returns the full configuration for all loaded agents.
     """
@@ -56,7 +56,7 @@ def get_all_agents(
 @api_router.get("/status", response_model=SystemStatus)
 async def get_system_status(
     tws_client: ITWSClient = Depends(get_tws_client),
-):
+) -> SystemStatus:
     """
     Provides a comprehensive status of the TWS environment, including
     workstations, jobs, and critical path information.
@@ -84,7 +84,7 @@ async def get_system_status(
 
 # --- Health Check Endpoints ---
 @api_router.get("/health/app", summary="Check Application Health")
-def get_app_health():
+def get_app_health() -> Dict[str, str]:
     """Returns a simple 'ok' to indicate the FastAPI application is running."""
     return {"status": "ok"}
 
@@ -92,7 +92,7 @@ def get_app_health():
 @api_router.get("/health/tws", summary="Check TWS Connection Health")
 async def get_tws_health(
     tws_client: ITWSClient = Depends(get_tws_client),
-):
+) -> Dict[str, str]:
     """
     Performs a quick check to verify the connection to the TWS server is active.
     """
@@ -121,18 +121,15 @@ async def get_tws_health(
     summary="Get Application Metrics",
     response_class=PlainTextResponse,
 )
-def get_metrics():
+def get_metrics() -> str:
     """
     Returns application metrics in Prometheus text exposition format.
     """
     return metrics_registry.generate_prometheus_metrics()
 
 
-from typing import Dict
-
-
 @api_router.post("/chat")
-async def chat_endpoint(request: Dict):
+async def chat_endpoint(request: Dict[str, Any]) -> Dict[str, str]:
     """Chat endpoint for testing input validation."""
     message = request.get("message", "")
     if "<script>" in message:
@@ -141,7 +138,7 @@ async def chat_endpoint(request: Dict):
 
 
 @api_router.post("/sensitive")
-async def sensitive_endpoint(data: Dict):
+async def sensitive_endpoint(data: Dict[str, Any]) -> Dict[str, str]:
     """Sensitive endpoint for testing encryption."""
     from resync.core.encryption_service import encryption_service
 
@@ -165,7 +162,7 @@ async def admin_users_endpoint():
 
 
 class ReviewRequest(BaseModel):
-    content: str = Field(..., max_length=1000)
+    content: str = Field(..., max_length=1000)  # noqa: F821
 
 
 @api_router.post("/review")
@@ -181,7 +178,7 @@ class ExecuteRequest(BaseModel):
 
 
 @api_router.post("/execute")
-async def execute_endpoint(request: ExecuteRequest):
+async def execute_endpoint(request: ExecuteRequest) -> Dict[str, str]:
     """Execute endpoint for testing input validation."""
     forbidden_commands = ["rm", "del", ";", "`", "$"]
     if any(cmd in request.command for cmd in forbidden_commands):
@@ -190,7 +187,7 @@ async def execute_endpoint(request: ExecuteRequest):
 
 
 @api_router.get("/files/{path:path}")
-async def files_endpoint(path: str):
+async def files_endpoint(path: str) -> Dict[str, str]:
     """Files endpoint for testing path traversal."""
     if ".." in path or path.startswith("/"):
         raise HTTPException(status_code=400, detail="Invalid path")
@@ -199,7 +196,7 @@ async def files_endpoint(path: str):
 
 # --- TWS Monitoring Endpoints ---
 @api_router.get("/monitoring/metrics", summary="Get TWS Performance Metrics")
-async def get_tws_metrics():
+async def get_tws_metrics() -> Dict[str, Any]:
     """
     Returns comprehensive TWS performance metrics including:
     - API performance
@@ -212,7 +209,7 @@ async def get_tws_metrics():
 
 
 @api_router.get("/monitoring/alerts", summary="Get Recent System Alerts")
-async def get_tws_alerts(limit: int = 10):
+async def get_tws_alerts(limit: int = 10) -> List[Dict[str, Any]]:
     """
     Returns recent system alerts and warnings.
 
@@ -223,7 +220,7 @@ async def get_tws_alerts(limit: int = 10):
 
 
 @api_router.get("/monitoring/health", summary="Get TWS System Health")
-async def get_tws_health():
+async def get_tws_health_monitoring() -> Dict[str, Any]:  # Renamed to avoid conflict
     """
     Returns overall TWS system health status.
     """

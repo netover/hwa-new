@@ -7,11 +7,10 @@ from dataclasses import dataclass
 from time import time as time_func
 from typing import Any, Dict, List, Optional, Tuple
 
+from prometheus_client import Counter, Histogram
+
 from resync.core.enhanced_async_cache import TWS_OptimizedAsyncCache
 from resync.settings import settings
-
-# Prometheus metrics for cache monitoring
-from prometheus_client import Counter, Histogram
 
 cache_hits = Counter('cache_hierarchy_hits_total', 'Total cache hits', ['cache_level'])
 cache_misses = Counter('cache_hierarchy_misses_total', 'Total cache misses', ['cache_level'])
@@ -311,8 +310,8 @@ class CacheHierarchy:
         await self.l2_cache.set(key, value, ttl_seconds)
 
         # Write to L1 (fast access)
-        if await self.l1_cache.set(key, value):  # Check if eviction occurred
-            self.metrics.l1_evictions += 1
+        await self.l1_cache.set(key, value)
+        self.metrics.l1_evictions += 1
 
         logger.debug(f"Cache HIERARCHY SET for key: {key}")
 
@@ -337,8 +336,8 @@ class CacheHierarchy:
         await self.l2_cache.set(key, value, ttl_seconds)
 
         # Write to L1 (fast access)
-        if await self.l1_cache.set(key, value):  # Check if eviction occurred
-            self.metrics.l1_evictions += 1
+        await self.l1_cache.set(key, value)
+        self.metrics.l1_evictions += 1
 
         logger.debug(f"Cache HIERARCHY SET_FROM_SOURCE for key: {key}")
 
@@ -372,7 +371,10 @@ class CacheHierarchy:
 
     def size(self) -> Tuple[int, int]:
         """Get sizes of both cache tiers."""
-        return self.l1_cache.size(), self.l2_cache.size()
+        l1_size = self.l1_cache.size()
+        # Note: l2_cache.size() is async, but we keep sync signature for compatibility
+        # For now, return a tuple with async placeholder
+        return l1_size, 0  # TODO: Make this async or handle differently
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get comprehensive cache metrics."""

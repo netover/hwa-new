@@ -5,13 +5,14 @@ Encryption service for Resync core.
 import logging
 import base64
 import os
+from typing import Optional
 from cryptography.fernet import Fernet
 
 
 class EncryptionService:
     """Simple encryption service for sensitive data handling."""
 
-    def __init__(self, key: bytes = None):
+    def __init__(self, key: Optional[bytes] = None):
         # In production, the key should be stored securely
         if key:
             self.key = key

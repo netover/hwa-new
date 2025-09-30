@@ -49,9 +49,9 @@ async def send_error_message(websocket: WebSocket, message: str) -> None:
         logger.debug("Failed to send error message, WebSocket runtime error: %s", e)
     except ConnectionError as e:
         logger.debug("Failed to send error message, connection error: %s", e)
-    except Exception as e:
-        # Keep a generic handler as a last resort to prevent any issues
-        logger.debug("Failed to send error message, unexpected error: %s", e)
+    except Exception:
+        # Last resort to prevent the application from crashing if sending fails.
+        logger.warning("Failed to send error message due to an unexpected error.", exc_info=True)
 
 
 async def run_auditor_safely():
@@ -69,11 +69,68 @@ async def run_auditor_safely():
         logger.error("IA Auditor encountered a database error.", exc_info=True)
     except AuditError:
         logger.error("IA Auditor encountered an audit-specific error.", exc_info=True)
-    except Exception as e:
-        logger.error(
-            "IA Auditor background task failed unexpectedly: %s", str(e), exc_info=True
+    except Exception:
+        logger.critical(
+            "IA Auditor background task failed with an unhandled exception.", exc_info=True
         )
-        # Still catch general exceptions as a last resort to prevent task from dying
+
+
+async def _handle_agent_interaction(
+    websocket: WebSocket,
+    agent: Agent,
+    agent_id: str,
+    knowledge_graph: IKnowledgeGraph,
+    data: str,
+) -> None:
+    """Handles the core logic of agent interaction, RAG, and auditing."""
+    # Send the user's message back to the UI for display
+    await websocket.send_json({"type": "message", "sender": "user", "message": data})
+
+    # --- RAG Enhancement ---
+    context = await knowledge_graph.get_relevant_context(data)
+    logger.debug(f"Retrieved knowledge graph context: {context[:200]}...")
+
+    # --- Agent Interaction ---
+    enhanced_query = f"""
+Contexto de soluções anteriores:
+{context}
+
+Pergunta do usuário:
+{data}
+"""
+    response_message = ""
+    async for chunk in agent.stream(enhanced_query):
+        response_message += chunk
+        await websocket.send_json(
+            {"type": "stream", "sender": "agent", "message": chunk}
+        )
+
+    # Send a final message indicating the stream has ended
+    await websocket.send_json(
+        {
+            "type": "message",
+            "sender": "agent",
+            "message": response_message,
+            "is_final": True,
+        }
+    )
+    logger.info(f"Agent '{agent_id}' full response: {response_message}")
+
+    # --- Store Interaction in Knowledge Graph ---
+    await knowledge_graph.add_conversation(
+        user_query=data,
+        agent_response=response_message,
+        agent_id=agent_id,
+        context={
+            "agent_name": agent.name,
+            "agent_description": agent.description,
+            "model_used": agent.llm_model,
+        },
+    )
+
+    # --- IA Auditor ---
+    logger.info("Scheduling IA Auditor to run in the background.")
+    asyncio.create_task(run_auditor_safely())
 
 
 @chat_router.websocket("/ws/{agent_id}")
@@ -92,21 +149,13 @@ async def websocket_endpoint(
     agent: Agent | None = agent_manager.get_agent(agent_id)
 
     if not agent:
-        # If the agent doesn't exist, inform the client and close the connection.
         logger.warning(f"Agent '{agent_id}' not found for WebSocket connection.")
-        await websocket.send_json(
-            {
-                "type": "error",
-                "sender": "system",
-                "message": f"Agente '{agent_id}' não encontrado.",
-            }
-        )
+        await send_error_message(websocket, f"Agente '{agent_id}' não encontrado.")
         await websocket.close(code=1008)
         await connection_manager.disconnect(websocket)
         return
 
     try:
-        # Initial greeting to confirm connection
         await websocket.send_json(
             {
                 "type": "info",
@@ -116,68 +165,13 @@ async def websocket_endpoint(
         )
 
         while True:
-            # Wait for a message from the client
             data = await websocket.receive_text()
             logger.info(f"Received message for agent '{agent_id}': {data}")
-
-            # Send the user's message back to the UI for display
-            await websocket.send_json(
-                {"type": "message", "sender": "user", "message": data}
+            await _handle_agent_interaction(
+                websocket, agent, agent_id, knowledge_graph, data
             )
-
-            # --- RAG Enhancement ---
-            # Fetch relevant past solutions from the Knowledge Graph
-            context = await knowledge_graph.get_relevant_context(data)
-            logger.debug(f"Retrieved knowledge graph context: {context[:200]}...")
-
-            # --- Agent Interaction ---
-            # Stream the agent's response back to the client chunk by chunk
-            # Inject the context into the agent's system prompt via the input
-            enhanced_query = f"""
-Contexto de soluções anteriores:
-{context}
-
-Pergunta do usuário:
-{data}
-"""
-            response_message = ""
-            async for chunk in agent.stream(enhanced_query):
-                response_message += chunk
-                await websocket.send_json(
-                    {"type": "stream", "sender": "agent", "message": chunk}
-                )
-
-            # Send a final message indicating the stream has ended
-            await websocket.send_json(
-                {
-                    "type": "message",
-                    "sender": "agent",
-                    "message": response_message,
-                    "is_final": True,
-                }
-            )
-            logger.info(f"Agent '{agent_id}' full response: {response_message}")
-
-            # --- Store Interaction in Knowledge Graph ---
-            # Log the interaction for continuous learning
-            await knowledge_graph.add_conversation(
-                user_query=data,
-                agent_response=response_message,
-                agent_id=agent_id,
-                context={  # Refine context to include only relevant, non-sensitive info
-                    "agent_name": agent.name,
-                    "agent_description": agent.description,
-                    "model_used": agent.llm_model,
-                }
-            ),
-
-            # --- IA Auditor ---
-            # Recommendation 3: Run the auditor in a safe background task
-            logger.info("Scheduling IA Auditor to run in the background.")
-            asyncio.create_task(run_auditor_safely())
 
     except WebSocketDisconnect:
-        # Handle client disconnection gracefully
         logger.info(f"Client disconnected from agent '{agent_id}'.")
     except KnowledgeGraphError as e:
         logger.error(
@@ -196,12 +190,12 @@ Pergunta do usuário:
     except NetworkError as e:
         logger.error(f"Network error for agent '{agent_id}': {e}", exc_info=True)
         await send_error_message(websocket, f"Erro de conexão: {e}")
-    except Exception as e:
-        # Handle truly unexpected errors during the chat as a last resort
-        logger.error(
-            f"Unexpected error in WebSocket for agent '{agent_id}': {e}", exc_info=True
+    except Exception:
+        # A critical, unhandled error occurred. Log it for immediate investigation.
+        logger.critical(
+            "Unexpected critical error in WebSocket for agent '%s'", agent_id, exc_info=True
         )
-        await send_error_message(websocket, f"Ocorreu um erro inesperado: {e}")
+        await send_error_message(websocket, "Ocorreu um erro inesperado no servidor.")
     finally:
         # Ensure the connection is cleaned up
         await connection_manager.disconnect(websocket)

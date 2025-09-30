@@ -119,9 +119,9 @@ def read_pdf(file_path: Path) -> str:
     except ValueError as e:
         logger.error("Invalid PDF content: %s - %s", file_path, e, exc_info=True)
         return ""
-    except Exception as e:
-        logger.error("Unexpected error reading PDF %s: %s", file_path, e, exc_info=True)
-        raise FileProcessingError(f"Failed to read PDF {file_path}: {e}") from e
+    except Exception as e: # Catch any other pypdf or system errors
+        logger.critical("Unexpected error reading PDF %s: %s", file_path, e, exc_info=True)
+        raise FileProcessingError(f"Failed to process PDF {file_path}") from e
 
 
 def read_json(file_path: Path) -> str:
@@ -162,9 +162,9 @@ def read_json(file_path: Path) -> str:
     except UnicodeDecodeError as e:
         logger.error("Encoding error reading JSON file: %s - %s", file_path, e, exc_info=True)
         return ""
-    except Exception as e:
-        logger.error("Unexpected error reading JSON %s: %s", file_path, e, exc_info=True)
-        raise FileProcessingError(f"Failed to read JSON {file_path}: {e}") from e
+    except Exception as e: # Catch other potential OS or parsing errors
+        logger.critical("Unexpected error reading JSON %s: %s", file_path, e, exc_info=True)
+        raise FileProcessingError(f"Failed to process JSON {file_path}") from e
 
 
 def read_txt(file_path: Path) -> str:
@@ -184,9 +184,9 @@ def read_txt(file_path: Path) -> str:
     except UnicodeDecodeError as e:
         logger.error("Encoding error reading text file: %s - %s", file_path, e, exc_info=True)
         return ""
-    except Exception as e:
-        logger.error("Unexpected error reading text %s: %s", file_path, e, exc_info=True)
-        raise FileProcessingError(f"Failed to read text {file_path}: {e}") from e
+    except (OSError, IOError) as e:
+        logger.critical("Unexpected OS error reading text %s: %s", file_path, e, exc_info=True)
+        raise FileProcessingError(f"Failed to process text file {file_path}") from e
 
 
 def read_doc(file_path: Path) -> str:
@@ -199,7 +199,7 @@ def read_doc(file_path: Path) -> str:
             text = "\n".join(para.text for para in doc.paragraphs if para.text)
             if text.strip():
                 return text
-        except Exception:
+        except Exception: # docx library might fail on .doc
             pass
 
         # Fallback: try to use antiword or similar tool if available
@@ -215,9 +215,9 @@ def read_doc(file_path: Path) -> str:
             "Permission denied accessing DOC file: %s - %s", file_path, e, exc_info=True
         )
         return ""
-    except Exception as e:
-        logger.error("Unexpected error reading DOC %s: %s", file_path, e, exc_info=True)
-        raise FileProcessingError(f"Failed to read DOC {file_path}: {e}") from e
+    except Exception as e: # Catch other potential library or system errors
+        logger.critical("Unexpected error reading DOC %s: %s", file_path, e, exc_info=True)
+        raise FileProcessingError(f"Failed to process DOC file {file_path}") from e
 
 
 def read_xls(file_path: Path) -> str:
@@ -244,7 +244,7 @@ def read_xls(file_path: Path) -> str:
             workbook.close()
             return "\n".join(text_parts)
 
-        except Exception:
+        except Exception: # openpyxl might fail on .xls
             pass
 
         # Fallback: try to use xlrd if available, or return message
@@ -283,9 +283,9 @@ def read_xls(file_path: Path) -> str:
             "Permission denied accessing XLS file: %s - %s", file_path, e, exc_info=True
         )
         return ""
-    except Exception as e:
-        logger.error("Unexpected error reading XLS %s: %s", file_path, e, exc_info=True)
-        raise FileProcessingError(f"Failed to read XLS {file_path}: {e}") from e
+    except Exception as e: # Catch other potential library or system errors
+        logger.critical("Unexpected error reading XLS %s: %s", file_path, e, exc_info=True)
+        raise FileProcessingError(f"Failed to process XLS file {file_path}") from e
 
 
 def read_md(file_path: Path) -> str:
@@ -305,9 +305,9 @@ def read_md(file_path: Path) -> str:
     except UnicodeDecodeError as e:
         logger.error("Encoding error reading Markdown file: %s - %s", file_path, e, exc_info=True)
         return ""
-    except Exception as e:
-        logger.error("Unexpected error reading Markdown %s: %s", file_path, e, exc_info=True)
-        raise FileProcessingError(f"Failed to read Markdown {file_path}: {e}") from e
+    except (OSError, IOError) as e:
+        logger.critical("Unexpected OS error reading Markdown %s: %s", file_path, e, exc_info=True)
+        raise FileProcessingError(f"Failed to process Markdown file {file_path}") from e
 
 
 def read_docx(file_path: Path) -> str:
@@ -334,11 +334,11 @@ def read_docx(file_path: Path) -> str:
     except ValueError as e:
         logger.error("Invalid DOCX content: %s - %s", file_path, e, exc_info=True)
         return ""
-    except Exception as e:
-        logger.error(
+    except Exception as e: # Catch other potential library or system errors
+        logger.critical(
             "Unexpected error reading DOCX %s: %s", file_path, e, exc_info=True
         )
-        raise FileProcessingError(f"Failed to read DOCX {file_path}: {e}") from e
+        raise FileProcessingError(f"Failed to process DOCX file {file_path}") from e
 
 
 def read_excel(file_path: Path) -> str:
@@ -375,11 +375,11 @@ def read_excel(file_path: Path) -> str:
     except ValueError as e:
         logger.error("Invalid Excel content: %s - %s", file_path, e, exc_info=True)
         return ""
-    except Exception as e:
-        logger.error(
+    except Exception as e: # Catch other potential library or system errors
+        logger.critical(
             "Unexpected error reading Excel %s: %s", file_path, e, exc_info=True
         )
-        raise FileProcessingError(f"Failed to read Excel {file_path}: {e}") from e
+        raise FileProcessingError(f"Failed to process Excel file {file_path}") from e
 
 
 # --- Main Ingestion Logic --- #
@@ -446,11 +446,11 @@ class FileIngestor(IFileIngestor):
                 shutil.copyfileobj(file_content, buffer)
             logger.info(f"Successfully saved file to {destination}")
             return destination
-        except Exception as e:
-            logger.error(
+        except (IOError, OSError) as e:
+            logger.critical(
                 f"Failed to save uploaded file {safe_filename}: {e}", exc_info=True
             )
-            raise FileProcessingError(f"Could not save file: {e}") from e
+            raise FileProcessingError(f"Could not save file due to OS error: {e}") from e
 
     async def ingest_file(self, file_path: Path) -> bool:
         """
@@ -525,12 +525,11 @@ class FileIngestor(IFileIngestor):
                     e,
                     exc_info=True,
                 )
-            except Exception as e:
-                logger.error(
-                    "Unexpected error adding chunk %d from %s: %s",
+            except Exception:
+                logger.critical(
+                    "Critical unhandled error adding chunk %d from %s",
                     i + 1,
                     file_path,
-                    e,
                     exc_info=True,
                 )
                 # We don't re-raise here to allow processing of other chunks
@@ -575,8 +574,8 @@ async def load_existing_rag_documents(file_ingestor: IFileIngestor) -> int:
                         logger.info(f"Loading existing document: {file_path.name}")
                         await file_ingestor.ingest_file(file_path)
                         processed_count += 1
-                    except Exception as e:
-                        logger.error(f"Failed to load document {file_path}: {e}")
+                    except FileProcessingError as e:
+                        logger.error("Failed to process document %s: %s", file_path, e, exc_info=True)
                 else:
                     logger.debug(f"Skipping protected file: {file_path}")
 

@@ -30,32 +30,33 @@ ExceptionTypes = Union[Type[Exception], List[Type[Exception]]]
 
 def log_retry_attempt(retry_state: RetryCallState) -> None:
     """Log information about the retry attempt."""
-    exc = retry_state.outcome.exception()
-    if exc:
-        logger.warning(
-            "Retry attempt %d/%d after %0.2fs for %s: %s",
-            retry_state.attempt_number,
-            (
-                retry_state.retry_object.stop.max_attempt_number
-                if hasattr(retry_state.retry_object.stop, "max_attempt_number")
-                else "∞"
-            ),
-            retry_state.seconds_since_start,
-            retry_state.fn.__qualname__,
-            exc,
-        )
-    else:
-        logger.warning(
-            "Retry attempt %d/%d after %0.2fs for %s due to unexpected result",
-            retry_state.attempt_number,
-            (
-                retry_state.retry_object.stop.max_attempt_number
-                if hasattr(retry_state.retry_object.stop, "max_attempt_number")
-                else "∞"
-            ),
-            retry_state.seconds_since_start,
-            retry_state.fn.__qualname__,
-        )
+    if retry_state.outcome is not None:
+        exc = retry_state.outcome.exception()
+        if exc:
+            logger.warning(
+                "Retry attempt %d/%d after %0.2fs for %s: %s",
+                retry_state.attempt_number,
+                (
+                    retry_state.retry_object.stop.max_attempt_number
+                    if hasattr(retry_state.retry_object.stop, "max_attempt_number")
+                    else "∞"
+                ),
+                retry_state.seconds_since_start,
+                getattr(retry_state.fn, '__qualname__', str(retry_state.fn)),
+                exc,
+            )
+        else:
+            logger.warning(
+                "Retry attempt %d/%d after %0.2fs for %s due to unexpected result",
+                retry_state.attempt_number,
+                (
+                    retry_state.retry_object.stop.max_attempt_number
+                    if hasattr(retry_state.retry_object.stop, "max_attempt_number")
+                    else "∞"
+                ),
+                retry_state.seconds_since_start,
+                getattr(retry_state.fn, '__qualname__', str(retry_state.fn)),
+            )
 
 
 def http_retry(
@@ -77,17 +78,26 @@ def http_retry(
         Decorated function with retry logic
     """
     if exceptions is None:
-        exceptions = (
+        exceptions = [
             httpx.RequestError,
             httpx.HTTPStatusError,
             httpx.TimeoutException,
             ConnectionError,
-        )
+        ]
+
+    # Convert exceptions to a tuple for tenacity
+    exception_tuple: tuple[type[Exception], ...]
+    if isinstance(exceptions, list):
+        exception_tuple = tuple(exceptions)
+    elif isinstance(exceptions, type):
+        exception_tuple = (exceptions,)
+    else:
+        exception_tuple = exceptions if isinstance(exceptions, tuple) else (httpx.RequestError, httpx.HTTPStatusError, httpx.TimeoutException, ConnectionError)
 
     return retry(
         stop=stop_after_attempt(max_attempts),
         wait=wait_exponential(multiplier=1, min=min_wait, max=max_wait),
-        retry=retry_if_exception_type(exceptions),
+        retry=retry_if_exception_type(exception_tuple),
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
@@ -114,12 +124,21 @@ def database_retry(
     """
     # Default to common database exceptions - adjust based on your DB driver
     if exceptions is None:
-        exceptions = (ConnectionError, TimeoutError)
+        exceptions = [ConnectionError, TimeoutError]
+
+    # Convert exceptions to a tuple for tenacity
+    exception_tuple: tuple[type[Exception], ...]
+    if isinstance(exceptions, list):
+        exception_tuple = tuple(exceptions)
+    elif isinstance(exceptions, type):
+        exception_tuple = (exceptions,)
+    else:
+        exception_tuple = exceptions if isinstance(exceptions, tuple) else (ConnectionError, TimeoutError)
 
     return retry(
         stop=stop_after_attempt(max_attempts),
         wait=wait_exponential(multiplier=1, min=min_wait, max=max_wait),
-        retry=retry_if_exception_type(exceptions),
+        retry=retry_if_exception_type(exception_tuple),
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
@@ -145,12 +164,21 @@ def external_service_retry(
         Decorated function with retry logic
     """
     if exceptions is None:
-        exceptions = (ConnectionError, TimeoutError, httpx.RequestError)
+        exceptions = [ConnectionError, TimeoutError, httpx.RequestError]
+
+    # Convert exceptions to a tuple for tenacity
+    exception_tuple: tuple[type[Exception], ...]
+    if isinstance(exceptions, list):
+        exception_tuple = tuple(exceptions)
+    elif isinstance(exceptions, type):
+        exception_tuple = (exceptions,)
+    else:
+        exception_tuple = exceptions if isinstance(exceptions, tuple) else (ConnectionError, TimeoutError, httpx.RequestError)
 
     return retry(
         stop=(stop_after_attempt(max_attempts) | stop_after_delay(max_delay)),
         wait=wait_fixed(wait_time),
-        retry=retry_if_exception_type(exceptions),
+        retry=retry_if_exception_type(exception_tuple),
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )

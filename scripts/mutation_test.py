@@ -14,7 +14,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 # Define configuration
 CORE_MODULES: List[str] = [
@@ -26,7 +26,7 @@ CORE_MODULES: List[str] = [
 ]
 
 # Define mutmut configuration
-MUTMUT_CONFIG = {
+MUTMUT_CONFIG: Dict[str, Any] = {
     "runner": "pytest tests/ --tb=short",
     "timeout": 10,
     "output_file": "reports/mutation_results.json",
@@ -153,7 +153,7 @@ def check_success_criteria() -> bool:
         return False
 
 
-def main():
+def main() -> None:
     """Main entry point for mutation testing script."""
     print("🚀 Starting mutation testing for Resync core modules...")
 

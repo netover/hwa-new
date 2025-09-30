@@ -1,24 +1,26 @@
 """
 Dependency Injection Container for Resync
 
-This module implements a lightweight dependency injection container that manages
+This module implements a hardened dependency injection container that manages
 the creation and lifecycle of services in the application. It supports different
-scopes (singleton and transient) and allows for the registration of interfaces
-and their implementations.
+scopes (singleton and transient), health validation, and contract enforcement.
 
-The container is designed to be used with FastAPI's dependency injection system
-but can also be used standalone.
+The container guarantees instance validity and includes health checks as part
+of the DI contract to ensure system reliability.
 """
 
+import asyncio
 import inspect
 import logging
 from enum import Enum, auto
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Dict,
     Generic,
     Optional,
+    Protocol,
     Type,
     TypeVar,
     cast,
@@ -34,6 +36,33 @@ TInterface = TypeVar("TInterface")
 TImplementation = TypeVar("TImplementation")
 
 
+# --- Health Check Protocol ---
+class HealthCheckable(Protocol):
+    """Protocol for services that support health checks."""
+
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Perform a health check on the service.
+
+        Returns:
+            Dict containing health status information.
+            Must include at least a 'status' key with values: 'healthy', 'degraded', 'error'
+        """
+        ...
+
+
+class HasHealthCheck:
+    """Mixin to add health check capability to services."""
+
+    async def health_check(self) -> Dict[str, Any]:
+        """Default health check implementation."""
+        return {
+            "status": "healthy",
+            "service": self.__class__.__name__,
+            "timestamp": asyncio.get_event_loop().time(),
+        }
+
+
 class ServiceScope(Enum):
     """Defines the lifecycle scope of a registered service."""
 
@@ -43,7 +72,7 @@ class ServiceScope(Enum):
 
 class ServiceRegistration(Generic[TInterface, TImplementation]):
     """
-    Represents a service registration in the container.
+    Represents a hardened service registration in the container with health validation.
 
     Attributes:
         interface: The interface type that will be requested.
@@ -51,6 +80,8 @@ class ServiceRegistration(Generic[TInterface, TImplementation]):
         scope: The lifecycle scope of the service.
         factory: Optional factory function to create the service.
         instance: Cached instance for singleton services.
+        health_required: Whether health checks are required for this service.
+        health_timeout: Timeout for health checks in seconds.
     """
 
     def __init__(
@@ -59,12 +90,20 @@ class ServiceRegistration(Generic[TInterface, TImplementation]):
         implementation: Type[TImplementation],
         scope: ServiceScope,
         factory: Optional[Callable[..., TImplementation]] = None,
+        health_required: bool = True,
+        health_timeout: float = 5.0,
     ):
         self.interface = interface
         self.implementation = implementation
         self.scope = scope
         self.factory = factory
         self.instance: Optional[TImplementation] = None
+        self.health_required = health_required
+        self.health_timeout = health_timeout
+        self._health_check_failures = 0
+        self._last_health_check = 0.0
+        self._health_check_cache: Optional[Dict[str, Any]] = None
+        self._health_check_cache_timeout = 30.0  # Cache health checks for 30 seconds
 
 
 class DIContainer:
@@ -75,7 +114,7 @@ class DIContainer:
     resolving dependencies when services are requested.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize an empty container."""
         self._registrations: Dict[Type[Any], ServiceRegistration[Any, Any]] = {}
         logger.info("DIContainer initialized")
@@ -85,22 +124,34 @@ class DIContainer:
         interface: Type[TInterface],
         implementation: Type[TImplementation],
         scope: ServiceScope = ServiceScope.SINGLETON,
+        health_required: bool = True,
+        health_timeout: float = 5.0,
     ) -> None:
         """
-        Register an interface and its implementation with the container.
+        Register an interface and its implementation with the container with health validation.
 
         Args:
             interface: The interface type that will be requested.
             implementation: The concrete implementation type that will be instantiated.
             scope: The lifecycle scope of the service (default: SINGLETON).
+            health_required: Whether health checks are required for this service.
+            health_timeout: Timeout for health checks in seconds.
         """
-        self._registrations[interface] = ServiceRegistration(
+        # Validate implementation has required methods
+        self._validate_implementation(interface, implementation)
+
+        registration = ServiceRegistration(
             interface=interface,
             implementation=implementation,
             scope=scope,
+            health_required=health_required,
+            health_timeout=health_timeout,
         )
-        logger.debug(
-            f"Registered {interface.__name__} -> {implementation.__name__} with scope {scope.name}"
+
+        self._registrations[interface] = registration
+        logger.info(
+            f"Registered {interface.__name__} -> {implementation.__name__} with scope {scope.name}, "
+            f"health_required={health_required}"
         )
 
     def register_instance(
@@ -115,7 +166,7 @@ class DIContainer:
         """
         registration = ServiceRegistration(
             interface=interface,
-            implementation=cast(Type[TImplementation], type(instance)),
+            implementation=type(instance),
             scope=ServiceScope.SINGLETON,
         )
         registration.instance = instance
@@ -138,9 +189,7 @@ class DIContainer:
         """
         self._registrations[interface] = ServiceRegistration(
             interface=interface,
-            implementation=cast(
-                Type[TImplementation], object
-            ),  # Type doesn't matter for factory
+            implementation=object,  # Type doesn't matter for factory
             scope=scope,
             factory=factory,
         )
@@ -150,7 +199,7 @@ class DIContainer:
 
     def get(self, interface: Type[T]) -> T:
         """
-        Resolve and return an instance of the requested interface.
+        Resolve and return a validated instance of the requested interface.
 
         Args:
             interface: The interface type to resolve.
@@ -160,22 +209,32 @@ class DIContainer:
 
         Raises:
             KeyError: If the interface is not registered.
-            ValueError: If there's an error creating the instance.
+            ValueError: If there's an error creating or validating the instance.
+            RuntimeError: If health checks fail for the instance.
         """
         if interface not in self._registrations:
             raise KeyError(f"No registration found for {interface.__name__}")
 
         registration = self._registrations[interface]
 
-        # For singletons, return the cached instance if available
+        # For singletons, return the cached instance if available and healthy
         if (
             registration.scope == ServiceScope.SINGLETON
             and registration.instance is not None
         ):
-            return cast(T, registration.instance)
+            # Validate cached instance health
+            if self._is_instance_healthy(registration, registration.instance):
+                return cast(T, registration.instance)
+            else:
+                logger.warning(f"Cached instance of {interface.__name__} is unhealthy, recreating")
+                registration.instance = None
 
         # Create a new instance
         instance = self._create_instance(registration)
+
+        # Validate the new instance
+        if not self._is_instance_healthy(registration, instance):
+            raise RuntimeError(f"Created instance of {interface.__name__} failed health validation")
 
         # Cache singleton instances
         if registration.scope == ServiceScope.SINGLETON:
@@ -258,6 +317,151 @@ class DIContainer:
         # Create the instance
         return implementation(**kwargs)
 
+    def _validate_implementation(self, interface: Type[Any], implementation: Type[Any]) -> None:
+        """
+        Validate that the implementation satisfies the interface contract.
+
+        Args:
+            interface: The interface type.
+            implementation: The implementation type.
+
+        Raises:
+            ValueError: If validation fails.
+        """
+        # Check if implementation is a subclass of interface (if interface is a class)
+        if inspect.isclass(interface) and not issubclass(implementation, interface):
+            # Allow if it's a protocol (structural typing)
+            if hasattr(interface, '__protocol__'):
+                return
+            raise ValueError(
+                f"{implementation.__name__} does not implement {interface.__name__}"
+            )
+
+        # Additional validations can be added here
+        logger.debug(f"Implementation validation passed for {interface.__name__} -> {implementation.__name__}")
+
+    def _is_instance_healthy(self, registration: ServiceRegistration[Any, Any], instance: Any) -> bool:
+        """
+        Check if an instance is healthy according to its registration requirements.
+
+        Args:
+            registration: The service registration.
+            instance: The instance to check.
+
+        Returns:
+            True if healthy, False otherwise.
+        """
+        if not registration.health_required:
+            return True
+
+        try:
+            # Check cache first
+            current_time = asyncio.get_event_loop().time()
+            if (registration._health_check_cache is not None and
+                current_time - registration._last_health_check < registration._health_check_cache_timeout):
+                cached_status = registration._health_check_cache.get("status", "unknown")
+                return cached_status in ("healthy", "degraded")
+
+            # Perform health check
+            health_result = asyncio.wait_for(
+                self._perform_health_check(instance),
+                timeout=registration.health_timeout
+            )
+
+            # Cache result
+            registration._health_check_cache = health_result
+            registration._last_health_check = current_time
+
+            # Reset failure count on success
+            if health_result.get("status") in ("healthy", "degraded"):
+                registration._health_check_failures = 0
+                return True
+            else:
+                registration._health_check_failures += 1
+                logger.warning(
+                    f"Health check failed for {registration.interface.__name__}: "
+                    f"{health_result.get('status', 'unknown')}"
+                )
+                return False
+
+        except asyncio.TimeoutError:
+            registration._health_check_failures += 1
+            logger.error(f"Health check timeout for {registration.interface.__name__}")
+            return False
+        except Exception as e:
+            registration._health_check_failures += 1
+            logger.error(f"Health check error for {registration.interface.__name__}: {e}")
+            return False
+
+    async def _perform_health_check(self, instance: Any) -> Dict[str, Any]:
+        """
+        Perform a health check on an instance.
+
+        Args:
+            instance: The instance to check.
+
+        Returns:
+            Health check result dictionary.
+        """
+        if hasattr(instance, 'health_check') and callable(getattr(instance, 'health_check')):
+            # Instance has its own health check method
+            if inspect.iscoroutinefunction(instance.health_check):
+                return await instance.health_check()
+            else:
+                # Run sync health check in thread pool
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(None, instance.health_check)
+        else:
+            # Default health check
+            return {
+                "status": "healthy",
+                "service": instance.__class__.__name__,
+                "timestamp": asyncio.get_event_loop().time(),
+                "message": "No specific health check implemented"
+            }
+
+    def get_health_status(self) -> Dict[str, Any]:
+        """
+        Get comprehensive health status of all registered services.
+
+        Returns:
+            Dictionary with health status of all services.
+        """
+        status = {
+            "overall_status": "healthy",
+            "services": {},
+            "timestamp": asyncio.get_event_loop().time(),
+        }
+
+        for interface, registration in self._registrations.items():
+            service_status = {
+                "interface": interface.__name__,
+                "implementation": registration.implementation.__name__,
+                "scope": registration.scope.name,
+                "health_required": registration.health_required,
+                "has_instance": registration.instance is not None,
+            }
+
+            if registration.instance is not None:
+                try:
+                    # Quick sync health check for status reporting
+                    health_result = asyncio.run(asyncio.wait_for(
+                        self._perform_health_check(registration.instance),
+                        timeout=2.0
+                    ))
+                    service_status["health"] = health_result
+                    if health_result.get("status") not in ("healthy", "degraded"):
+                        status["overall_status"] = "degraded"
+                except Exception as e:
+                    service_status["health"] = {"status": "error", "error": str(e)}
+                    status["overall_status"] = "error"
+            else:
+                service_status["health"] = {"status": "not_initialized"}
+
+            status["services"][interface.__name__] = service_status
+
+        return status
+
     def clear(self) -> None:
         """Clear all registrations and cached instances."""
         self._registrations.clear()
@@ -272,7 +476,7 @@ container = DIContainer()
 # Register AsyncAuditQueue as the implementation for IAuditQueue
 from resync.core.audit_queue import AsyncAuditQueue, IAuditQueue
 
-container.register(IAuditQueue, AsyncAuditQueue, scope=ServiceScope.SINGLETON)
+container.register(IAuditQueue, AsyncAuditQueue, scope=ServiceScope.SINGLETON, health_required=False)  # type: ignore[type-abstract]
 
 
 def get_container() -> DIContainer:

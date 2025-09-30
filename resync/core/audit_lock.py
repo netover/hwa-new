@@ -8,7 +8,7 @@ to prevent race conditions during concurrent memory processing.
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Optional, cast
+from typing import Any, AsyncIterator, Optional, Type, cast
 
 from redis.asyncio import Redis as AsyncRedis
 from redis.exceptions import RedisError
@@ -83,7 +83,9 @@ class DistributedAuditLock:
         """
         return f"{self._lock_prefix}:{memory_id}"
 
-    async def acquire(self, memory_id: str, timeout: int = 5) -> "AuditLockContext":
+    async def acquire(
+        self, memory_id: str, timeout: int = 5
+    ) -> "AuditLockContext":
         """
         Acquire a distributed lock for a memory ID.
 
@@ -188,8 +190,10 @@ class DistributedAuditLock:
             logger.error("Value error in audit lock cleanup: %s", e)
             raise AuditError(f"Value error in audit lock cleanup: {e}") from e
         except Exception as e:
-            logger.error("Unexpected error cleaning up expired audit locks: %s", e)
-            raise AuditError(f"Unexpected error during audit lock cleanup: {e}") from e
+            logger.critical(
+                "Unexpected critical error cleaning up expired audit locks.", exc_info=True
+            )
+            raise AuditError("Unexpected critical error during audit lock cleanup") from e
 
 
 class AuditLockContext:
@@ -267,9 +271,9 @@ class AuditLockContext:
         try:
             # Use EVALSHA for atomic check-and-delete
             if self.release_script_sha:
-                result: int = await self.client.evalsha(
+                result = await self.client.evalsha(
                     self.release_script_sha, 1, self.lock_key, self.lock_value
-                )
+                )  # type: ignore[misc]
             else:
                 # Fallback to eval if script not loaded
                 logger.warning("Using eval fallback - script not loaded")
@@ -280,9 +284,9 @@ class AuditLockContext:
                     return 0
                 end
                 """
-                result: int = await self.client.eval(
+                result = await self.client.eval(
                     lua_script, 1, self.lock_key, self.lock_value
-                )
+                )  # type: ignore[misc]
 
             if result == 1:
                 logger.debug(f"Released audit lock: {self.lock_key}")
