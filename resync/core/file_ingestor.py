@@ -124,6 +124,192 @@ def read_pdf(file_path: Path) -> str:
         raise FileProcessingError(f"Failed to read PDF {file_path}: {e}") from e
 
 
+def read_json(file_path: Path) -> str:
+    """Extracts text from a JSON file."""
+    logger.info(f"Reading JSON file: {file_path}")
+    try:
+        import json
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # Convert JSON to readable text format
+        if isinstance(data, dict):
+            # For API specifications and structured data, create a readable representation
+            text_parts = []
+            for key, value in data.items():
+                if isinstance(value, (dict, list)):
+                    text_parts.append(f"{key}: {json.dumps(value, indent=2)}")
+                else:
+                    text_parts.append(f"{key}: {value}")
+            return "\n".join(text_parts)
+        elif isinstance(data, list):
+            return json.dumps(data, indent=2)
+        else:
+            return str(data)
+
+    except FileNotFoundError as e:
+        logger.error("JSON file not found: %s - %s", file_path, e, exc_info=True)
+        return ""
+    except PermissionError as e:
+        logger.error(
+            "Permission denied accessing JSON file: %s - %s", file_path, e, exc_info=True
+        )
+        return ""
+    except json.JSONDecodeError as e:
+        logger.error("Invalid JSON format: %s - %s", file_path, e, exc_info=True)
+        return ""
+    except UnicodeDecodeError as e:
+        logger.error("Encoding error reading JSON file: %s - %s", file_path, e, exc_info=True)
+        return ""
+    except Exception as e:
+        logger.error("Unexpected error reading JSON %s: %s", file_path, e, exc_info=True)
+        raise FileProcessingError(f"Failed to read JSON {file_path}: {e}") from e
+
+
+def read_txt(file_path: Path) -> str:
+    """Extracts text from a plain text file."""
+    logger.info(f"Reading text file: {file_path}")
+    try:
+        text = file_path.read_text(encoding="utf-8")
+        return text
+    except FileNotFoundError as e:
+        logger.error("Text file not found: %s - %s", file_path, e, exc_info=True)
+        return ""
+    except PermissionError as e:
+        logger.error(
+            "Permission denied accessing text file: %s - %s", file_path, e, exc_info=True
+        )
+        return ""
+    except UnicodeDecodeError as e:
+        logger.error("Encoding error reading text file: %s - %s", file_path, e, exc_info=True)
+        return ""
+    except Exception as e:
+        logger.error("Unexpected error reading text %s: %s", file_path, e, exc_info=True)
+        raise FileProcessingError(f"Failed to read text {file_path}: {e}") from e
+
+
+def read_doc(file_path: Path) -> str:
+    """Extracts text from a DOC file (older Word format)."""
+    logger.info(f"Reading DOC file: {file_path}")
+    try:
+        # Try to use python-docx first (it can sometimes handle .doc files)
+        try:
+            doc = docx.Document(file_path)
+            text = "\n".join(para.text for para in doc.paragraphs if para.text)
+            if text.strip():
+                return text
+        except Exception:
+            pass
+
+        # Fallback: try to use antiword or similar tool if available
+        # For now, return a message indicating the file type is not fully supported
+        logger.warning(f"DOC file {file_path} requires manual processing or external tool")
+        return f"[DOC file: {file_path.name} - Manual processing may be required]"
+
+    except FileNotFoundError as e:
+        logger.error("DOC file not found: %s - %s", file_path, e, exc_info=True)
+        return ""
+    except PermissionError as e:
+        logger.error(
+            "Permission denied accessing DOC file: %s - %s", file_path, e, exc_info=True
+        )
+        return ""
+    except Exception as e:
+        logger.error("Unexpected error reading DOC %s: %s", file_path, e, exc_info=True)
+        raise FileProcessingError(f"Failed to read DOC {file_path}: {e}") from e
+
+
+def read_xls(file_path: Path) -> str:
+    """Extracts text from an XLS file (older Excel format)."""
+    logger.info(f"Reading XLS file: {file_path}")
+    try:
+        # Try to use openpyxl first (it can sometimes handle .xls files)
+        try:
+            workbook = openpyxl.load_workbook(file_path, read_only=True)
+            text_parts = []
+
+            for sheet_name in workbook.sheetnames:
+                sheet = workbook[sheet_name]
+                text_parts.append(f"Sheet: {sheet_name}")
+
+                for row in sheet.iter_rows(values_only=True):
+                    # Convert row to text, filtering out None values
+                    row_text = " | ".join(str(cell) for cell in row if cell is not None)
+                    if row_text.strip():
+                        text_parts.append(row_text)
+
+                text_parts.append("")  # Empty line between sheets
+
+            workbook.close()
+            return "\n".join(text_parts)
+
+        except Exception:
+            pass
+
+        # Fallback: try to use xlrd if available, or return message
+        try:
+            import xlrd
+            workbook = xlrd.open_workbook(file_path)
+            text_parts = []
+
+            for sheet_name in workbook.sheet_names():
+                sheet = workbook.sheet_by_name(sheet_name)
+                text_parts.append(f"Sheet: {sheet_name}")
+
+                for row_idx in range(sheet.nrows):
+                    row = sheet.row_values(row_idx)
+                    # Convert row to text, filtering out None values
+                    row_text = " | ".join(str(cell) for cell in row if cell is not None and str(cell).strip())
+                    if row_text.strip():
+                        text_parts.append(row_text)
+
+                text_parts.append("")  # Empty line between sheets
+
+            return "\n".join(text_parts)
+
+        except ImportError:
+            logger.warning(f"XLS file {file_path} requires xlrd library for full support")
+            return f"[XLS file: {file_path.name} - Install xlrd for better support]"
+        except Exception as e:
+            logger.error(f"Error processing XLS file {file_path}: {e}")
+            return f"[XLS file: {file_path.name} - Processing error: {e}]"
+
+    except FileNotFoundError as e:
+        logger.error("XLS file not found: %s - %s", file_path, e, exc_info=True)
+        return ""
+    except PermissionError as e:
+        logger.error(
+            "Permission denied accessing XLS file: %s - %s", file_path, e, exc_info=True
+        )
+        return ""
+    except Exception as e:
+        logger.error("Unexpected error reading XLS %s: %s", file_path, e, exc_info=True)
+        raise FileProcessingError(f"Failed to read XLS {file_path}: {e}") from e
+
+
+def read_md(file_path: Path) -> str:
+    """Extracts text from a Markdown file."""
+    logger.info(f"Reading Markdown file: {file_path}")
+    try:
+        text = file_path.read_text(encoding="utf-8")
+        return text
+    except FileNotFoundError as e:
+        logger.error("Markdown file not found: %s - %s", file_path, e, exc_info=True)
+        return ""
+    except PermissionError as e:
+        logger.error(
+            "Permission denied accessing Markdown file: %s - %s", file_path, e, exc_info=True
+        )
+        return ""
+    except UnicodeDecodeError as e:
+        logger.error("Encoding error reading Markdown file: %s - %s", file_path, e, exc_info=True)
+        return ""
+    except Exception as e:
+        logger.error("Unexpected error reading Markdown %s: %s", file_path, e, exc_info=True)
+        raise FileProcessingError(f"Failed to read Markdown {file_path}: {e}") from e
+
+
 def read_docx(file_path: Path) -> str:
     """Extracts text from a DOCX file."""
     logger.info(f"Reading DOCX file: {file_path}")
@@ -219,6 +405,11 @@ class FileIngestor(IFileIngestor):
             ".pdf": read_pdf,
             ".docx": read_docx,
             ".xlsx": read_excel,
+            ".md": read_md,
+            ".json": read_json,
+            ".txt": read_txt,
+            ".doc": read_doc,
+            ".xls": read_xls,
         }
         # Ensure the RAG directory exists
         self.rag_directory.mkdir(exist_ok=True)
@@ -348,6 +539,49 @@ class FileIngestor(IFileIngestor):
             f"Successfully ingested {chunk_count}/{len(chunks)} chunks from {file_path}"
         )
         return chunk_count > 0
+
+
+async def load_existing_rag_documents(file_ingestor: IFileIngestor) -> int:
+    """
+    Load all existing documents from RAG directories into the knowledge graph.
+
+    Args:
+        file_ingestor: The file ingestor instance
+
+    Returns:
+        Number of documents processed
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    processed_count = 0
+
+    # Process all knowledge base directories
+    for knowledge_dir in settings.KNOWLEDGE_BASE_DIRS:
+        knowledge_path = settings.BASE_DIR / knowledge_dir
+
+        if not knowledge_path.exists():
+            logger.warning(f"Knowledge base directory not found: {knowledge_path}")
+            continue
+
+        logger.info(f"Processing knowledge base directory: {knowledge_path}")
+
+        # Walk through all files in the directory tree
+        for file_path in knowledge_path.rglob("*"):
+            if file_path.is_file() and not file_path.name.startswith("."):
+                # Check if file is in protected directories (should be processed)
+                if is_path_in_knowledge_base(file_path):
+                    try:
+                        logger.info(f"Loading existing document: {file_path.name}")
+                        await file_ingestor.ingest_file(file_path)
+                        processed_count += 1
+                    except Exception as e:
+                        logger.error(f"Failed to load document {file_path}: {e}")
+                else:
+                    logger.debug(f"Skipping protected file: {file_path}")
+
+    logger.info(f"Loaded {processed_count} existing RAG documents")
+    return processed_count
 
 
 def create_file_ingestor(knowledge_graph: IKnowledgeGraph) -> FileIngestor:

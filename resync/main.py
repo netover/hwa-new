@@ -28,7 +28,7 @@ from resync.api.rag_upload import router as rag_upload_router
 from resync.core.agent_manager import agent_manager
 from resync.core.config_watcher import handle_config_change
 from resync.core.cache_hierarchy import get_cache_hierarchy
-from resync.core.file_ingestor import FileIngestor
+from resync.core.file_ingestor import FileIngestor, load_existing_rag_documents
 from resync.core.di_container import get_container
 from resync.core.exceptions import ConfigError, FileProcessingError
 from resync.core.fastapi_di import inject_container
@@ -180,6 +180,12 @@ async def initialize_core_systems() -> None:
         file_ingestor = FileIngestor(knowledge_graph=knowledge_graph)
         container.register_instance(IFileIngestor, file_ingestor)
         logger.info(" File Ingestor initialized and registered")
+
+        # Load existing RAG documents into knowledge graph
+        logger.info("Loading existing RAG documents...")
+        loaded_docs = await load_existing_rag_documents(file_ingestor)
+        logger.info(f"Loaded {loaded_docs} existing RAG documents into knowledge graph")
+
     except Exception as e:
         logger.critical(f" Failed to initialize File Ingestor: {e}")
         raise SystemExit("File Ingestor initialization failed") from e

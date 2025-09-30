@@ -241,10 +241,15 @@ class TestFileIngestor:
 
             assert ingestor.knowledge_graph is mock_knowledge_graph
             assert ingestor.rag_directory.exists()
-            assert len(ingestor.file_readers) == 3
+            assert len(ingestor.file_readers) == 8
             assert ".pdf" in ingestor.file_readers
             assert ".docx" in ingestor.file_readers
             assert ".xlsx" in ingestor.file_readers
+            assert ".md" in ingestor.file_readers
+            assert ".json" in ingestor.file_readers
+            assert ".txt" in ingestor.file_readers
+            assert ".doc" in ingestor.file_readers
+            assert ".xls" in ingestor.file_readers
 
     async def test_save_uploaded_file_success(self, file_ingestor):
         """Test successful file upload and save."""
