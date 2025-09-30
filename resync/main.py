@@ -75,21 +75,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Phase 5: Initialize schedulers
         app.state.scheduler = await initialize_schedulers()
 
-        logger.info("✅ All systems initialized successfully")
+        logger.info("All systems initialized successfully")
 
         yield
 
     except KeyboardInterrupt:
-        logger.info("🛑 Application startup interrupted by user")
+        logger.info("Application startup interrupted by user")
         raise SystemExit("Startup interrupted by user") from KeyboardInterrupt
     except ImportError as e:
-        logger.critical(f"❌ Missing required dependencies: {e}")
+        logger.critical(f"Missing required dependencies: {e}")
         raise SystemExit(f"Dependency error: {e}") from e
     except (OSError, IOError) as e:
-        logger.critical(f"❌ File system error during startup: {e}")
+        logger.critical(f"File system error during startup: {e}")
         raise SystemExit(f"File system error: {e}") from e
     except Exception as e:
-        logger.critical(f"❌ Unexpected error during startup: {e}", exc_info=True)
+        logger.critical(f"Unexpected error during startup: {e}", exc_info=True)
         raise SystemExit(f"Critical failure during startup: {e}") from e
 
     finally:
@@ -99,7 +99,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def validate_settings() -> None:
     """Validate critical settings before startup."""
-    logger.info("🔧 Validating settings...")
+    logger.info("Validating settings...")
 
     required_vars = [
         "TWS_HOST",
@@ -118,7 +118,7 @@ def validate_settings() -> None:
 
     if missing:
         error_msg = f"Missing or empty required settings: {', '.join(missing)}"
-        logger.critical(f"❌ {error_msg}")
+        logger.critical(f"{error_msg}")
         raise ConfigError(error_msg)
 
     # Additional validations
@@ -128,36 +128,36 @@ def validate_settings() -> None:
         or settings.TWS_PORT > 65535
     ):
         error_msg = f"Invalid TWS_PORT: {settings.TWS_PORT} (must be integer 1-65535)"
-        logger.critical(f"❌ {error_msg}")
+        logger.critical(f"{error_msg}")
         raise ConfigError(error_msg)
 
     if settings.APP_ENV not in ["development", "production", "staging"]:
         error_msg = f"Invalid APP_ENV: {settings.APP_ENV}"
-        logger.critical(f"❌ {error_msg}")
+        logger.critical(f"{error_msg}")
         raise ConfigError(error_msg)
 
-    logger.info("✅ Settings validation completed")
+    logger.info("Settings validation completed")
 
 
 async def initialize_core_systems() -> None:
     """Initialize core systems with fail-fast behavior."""
-    logger.info("🔧 Initializing core systems...")
+    logger.info("Initializing core systems...")
 
     # Agent Manager (required)
     try:
         await agent_manager.load_agents_from_config()
-        logger.info("✅ Agent Manager initialized")
+        logger.info("Agent Manager initialized")
     except Exception as e:
-        logger.critical(f"❌ Failed to initialize Agent Manager: {e}")
+        logger.critical(f" Failed to initialize Agent Manager: {e}")
         raise SystemExit("Agent Manager initialization failed") from e
 
     # TWS Client (required for agents)
     try:
-        with redis_circuit_breaker: # Applying Circuit Breaker to TWS client initialization
-            await agent_manager._get_tws_client()
-        logger.info("✅ TWS Client initialized")
+        # Use circuit breaker for TWS client initialization
+        result = redis_circuit_breaker.call(await agent_manager._get_tws_client)
+        logger.info("TWS Client initialized")
     except Exception as e:
-        logger.critical(f"❌ Failed to initialize TWS Client: {e}")
+        logger.critical(f"Failed to initialize TWS Client: {e}")
         raise SystemExit("TWS Client initialization failed") from e
 
     # Knowledge Graph (required)
@@ -169,25 +169,25 @@ async def initialize_core_systems() -> None:
         knowledge_graph = AsyncKnowledgeGraph()
         container.register_instance(IKnowledgeGraph, knowledge_graph)
         container.register_instance(AsyncKnowledgeGraph, knowledge_graph)
-        logger.info("✅ Knowledge Graph initialized and registered")
+        logger.info(" Knowledge Graph initialized and registered")
 
     except Exception as e:
-        logger.critical(f"❌ Failed to initialize Knowledge Graph: {e}")
+        logger.critical(f" Failed to initialize Knowledge Graph: {e}")
         raise SystemExit("Knowledge Graph initialization failed") from e
 
     # File Ingestor (depends on KG)
     try:
         file_ingestor = FileIngestor(knowledge_graph=knowledge_graph)
         container.register_instance(IFileIngestor, file_ingestor)
-        logger.info("✅ File Ingestor initialized and registered")
+        logger.info(" File Ingestor initialized and registered")
     except Exception as e:
-        logger.critical(f"❌ Failed to initialize File Ingestor: {e}")
+        logger.critical(f" Failed to initialize File Ingestor: {e}")
         raise SystemExit("File Ingestor initialization failed") from e
 
 
 async def start_background_services() -> Dict[str, asyncio.Task]:
     """Start background services and return task references."""
-    logger.info("🔧 Starting background services...")
+    logger.info(" Starting background services...")
 
     tasks = {}
 
@@ -197,9 +197,9 @@ async def start_background_services() -> Dict[str, asyncio.Task]:
             watch_config_changes(settings.AGENT_CONFIG_PATH)
         )
         tasks["config_watcher"] = config_watcher_task
-        logger.info("✅ Configuration watcher started")
+        logger.info(" Configuration watcher started")
     except Exception as e:
-        logger.error(f"❌ Failed to start configuration watcher: {e}")
+        logger.error(f" Failed to start configuration watcher: {e}")
         raise
 
     # RAG directory watcher
@@ -209,9 +209,9 @@ async def start_background_services() -> Dict[str, asyncio.Task]:
         file_ingestor = container.resolve(IFileIngestor)
         rag_watcher_task = asyncio.create_task(watch_rag_directory(file_ingestor))
         tasks["rag_watcher"] = rag_watcher_task
-        logger.info("✅ RAG directory watcher started")
+        logger.info(" RAG directory watcher started")
     except Exception as e:
-        logger.error(f"❌ Failed to start RAG watcher: {e}")
+        logger.error(f" Failed to start RAG watcher: {e}")
         # Don't fail completely, but log the error
         logger.warning("Continuing without RAG watcher")
 
@@ -220,7 +220,7 @@ async def start_background_services() -> Dict[str, asyncio.Task]:
 
 async def initialize_schedulers() -> AsyncIOScheduler:
     """Initialize schedulers with environment-aware configuration."""
-    logger.info("🔧 Initializing schedulers...")
+    logger.info(" Initializing schedulers...")
 
     scheduler = AsyncIOScheduler()
 
@@ -238,13 +238,13 @@ async def initialize_schedulers() -> AsyncIOScheduler:
 
         scheduler.start()
         logger.info(
-            f"✅ IA Auditor scheduler initialized with {job_config['type']} schedule: {job_config['config']}"
+            f" IA Auditor scheduler initialized with {job_config['type']} schedule: {job_config['config']}"
         )
         if job_config.get("startup_enabled", False):
-            logger.info("✅ IA Auditor will run on startup")
+            logger.info(" IA Auditor will run on startup")
 
     except Exception as e:
-        logger.critical(f"❌ Failed to initialize scheduler: {e}")
+        logger.critical(f" Failed to initialize scheduler: {e}")
         raise SystemExit("Scheduler initialization failed") from e
 
     return scheduler
@@ -287,35 +287,35 @@ async def shutdown_application(
     app: FastAPI, background_tasks: Dict[str, asyncio.Task]
 ) -> None:
     """Gracefully shutdown all application components."""
-    logger.info("🛑 Shutting down application...")
+    logger.info(" Shutting down application...")
 
     # Cancel background tasks first (don't await them)
     for task_name, task in background_tasks.items():
         if not task.done():
             task.cancel()
-            logger.info(f"✅ {task_name} cancellation requested")
+            logger.info(f" {task_name} cancellation requested")
 
     # Wait for tasks to complete with timeout
     if background_tasks:
         try:
             await asyncio.gather(*background_tasks.values(), return_exceptions=True)
-            logger.info("✅ All background tasks completed")
+            logger.info(" All background tasks completed")
         except Exception as e:
-            logger.warning(f"⚠️ Some background tasks had issues during shutdown: {e}")
+            logger.warning(f" Some background tasks had issues during shutdown: {e}")
 
     # Stop Cache Hierarchy
     try:
         await get_cache_hierarchy().stop()
-        logger.info("✅ Cache Hierarchy stopped")
+        logger.info(" Cache Hierarchy stopped")
     except Exception as e:
-        logger.error(f"❌ Error stopping Cache Hierarchy: {e}")
+        logger.error(f" Error stopping Cache Hierarchy: {e}")
 
     # Stop TWS monitoring system
     try:
         await tws_monitor.stop_monitoring()
-        logger.info("✅ TWS monitoring system stopped")
+        logger.info(" TWS monitoring system stopped")
     except Exception as e:
-        logger.error(f"❌ Error stopping monitoring system: {e}")
+        logger.error(f" Error stopping monitoring system: {e}")
 
     # Stop scheduler
     try:
@@ -325,17 +325,17 @@ async def shutdown_application(
             and app.state.scheduler
         ):
             app.state.scheduler.shutdown()
-            logger.info("✅ IA Auditor scheduler stopped")
+            logger.info(" IA Auditor scheduler stopped")
     except Exception as e:
-        logger.error(f"❌ Error stopping scheduler: {e}")
+        logger.error(f" Error stopping scheduler: {e}")
 
     # Clean up resources
     try:
         if agent_manager.tws_client:
             await agent_manager.tws_client.close()
-            logger.info("✅ TWS client closed")
+            logger.info(" TWS client closed")
     except Exception as e:
-        logger.error(f"❌ Error closing TWS client: {e}")
+        logger.error(f" Error closing TWS client: {e}")
 
     # Close Knowledge Graph connection
     try:
@@ -344,9 +344,9 @@ async def shutdown_application(
             kg_instance = container.resolve(IKnowledgeGraph)
             if hasattr(kg_instance, "close"):
                 await kg_instance.close()
-            logger.info("✅ Knowledge Graph connection closed")
+            logger.info(" Knowledge Graph connection closed")
     except Exception as e:
-        logger.error(f"❌ Error closing Knowledge Graph connection: {e}")
+        logger.error(f" Error closing Knowledge Graph connection: {e}")
 
 
 @retry(
