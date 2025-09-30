@@ -31,17 +31,23 @@ from resync.api.audit import router as audit_router
 from resync.api.chat import chat_router
 from resync.api.endpoints import api_router
 from resync.api.rag_upload import router as rag_upload_router
-from resync.core.agent_manager import agent_manager
+from resync.core.circuit_breaker_manager import CircuitBreakerManager
 from resync.core.config_watcher import handle_config_change
 from resync.core.cache_hierarchy import get_cache_hierarchy
 from resync.core.file_ingestor import FileIngestor, load_existing_rag_documents
-from resync.core.di_container import get_container, ServiceScope
+from resync.core.di_container import DIContainer, ServiceScope
 from resync.core.exceptions import ConfigError, FileProcessingError
 from resync.core.fastapi_di import inject_container
-from resync.core.interfaces import IFileIngestor, IKnowledgeGraph
+from resync.core.interfaces import (
+    IAgentManager,
+    IFileIngestor,
+    IKnowledgeGraph,
+    ITWSMonitor,
+    ICircuitBreakerManager,
+    ITWSClient,
+)
 from resync.core.ia_auditor import analyze_and_flag_memories
 from resync.core.rag_watcher import watch_rag_directory
-from resync.core.tws_monitor import tws_monitor
 from resync.settings import settings
 logger = logging.getLogger(__name__)
 
@@ -287,158 +293,9 @@ class InputSanitizer:
 
         return resolved_path
 
-# --- Adaptive Circuit Breaker ---
-class AdaptiveCircuitBreaker:
-    """Adaptive circuit breaker with configurable thresholds and metrics."""
 
-    def __init__(self, name: str, operation: str):
-        self.name = name
-        self.operation = operation
-        self._metrics = {
-            "total_calls": 0,
-            "successful_calls": 0,
-            "failed_calls": 0,
-            "circuit_opened_count": 0,
-            "last_failure_time": None,
-            "failure_streak": 0,
-        }
-        self._circuit_breaker = None
-        self._create_circuit_breaker()
-
-    def _create_circuit_breaker(self):
-        """Create circuit breaker with configurable thresholds."""
-        # Get configurable thresholds from environment with defaults
-        fail_max = InputSanitizer.sanitize_environment_value(
-            f"CIRCUIT_BREAKER_{self.operation.upper()}_FAIL_MAX",
-            os.getenv(f"CIRCUIT_BREAKER_{self.operation.upper()}_FAIL_MAX", "5"),
-            int
-        )
-        reset_timeout = InputSanitizer.sanitize_environment_value(
-            f"CIRCUIT_BREAKER_{self.operation.upper()}_RESET_TIMEOUT",
-            os.getenv(f"CIRCUIT_BREAKER_{self.operation.upper()}_RESET_TIMEOUT", "60"),
-            int
-        )
-
-        # Validate ranges
-        fail_max = max(1, min(fail_max, 100))  # 1-100
-        reset_timeout = max(10, min(reset_timeout, 3600))  # 10 seconds to 1 hour
-
-        self._circuit_breaker = CircuitBreaker(
-            fail_max=fail_max,
-            reset_timeout=reset_timeout,
-            name=f"{self.name}_{self.operation}",
-            listeners=[self]
-        )
-
-        log_with_correlation(
-            logging.INFO, f"Created adaptive circuit breaker for {self.operation}",
-            correlation_id=AppContext.get_correlation_id(), component="circuit_breaker",
-            operation="create", fail_max=fail_max, reset_timeout=reset_timeout
-        )
-
-    async def call(self, func, *args, **kwargs):
-        """Execute function with circuit breaker protection."""
-        correlation_id = AppContext.get_correlation_id()
-        self._metrics["total_calls"] += 1
-
-        try:
-            result = await self._circuit_breaker.call(func, *args, **kwargs)
-            self._metrics["successful_calls"] += 1
-            self._metrics["failure_streak"] = 0
-
-            log_with_correlation(
-                logging.DEBUG, f"Circuit breaker call successful for {self.operation}",
-                correlation_id=correlation_id, component="circuit_breaker", operation="call_success",
-                total_calls=self._metrics["total_calls"], success_rate=self.get_success_rate()
-            )
-
-            return result
-
-        except pybreaker.CircuitBreakerError as e:
-            self._metrics["circuit_opened_count"] += 1
-            log_with_correlation(
-                logging.WARNING, f"Circuit breaker opened for {self.operation}",
-                correlation_id=correlation_id, component="circuit_breaker", operation="circuit_opened",
-                error=e, opened_count=self._metrics["circuit_opened_count"]
-            )
-            raise
-
-        except Exception as e:
-            self._metrics["failed_calls"] += 1
-            self._metrics["failure_streak"] += 1
-            self._metrics["last_failure_time"] = time_func()
-
-            log_with_correlation(
-                logging.WARNING, f"Circuit breaker call failed for {self.operation}",
-                correlation_id=correlation_id, component="circuit_breaker", operation="call_failed",
-                error=e, failure_streak=self._metrics["failure_streak"]
-            )
-            raise
-
-    def get_success_rate(self) -> float:
-        """Calculate success rate."""
-        total = self._metrics["total_calls"]
-        if total == 0:
-            return 1.0
-        return self._metrics["successful_calls"] / total
-
-    def get_metrics(self) -> Dict[str, Any]:
-        """Get circuit breaker metrics."""
-        return {
-            **self._metrics,
-            "success_rate": self.get_success_rate(),
-            "circuit_state": self._circuit_breaker.current_state.name if self._circuit_breaker else "unknown",
-            "fail_max": self._circuit_breaker.fail_max if self._circuit_breaker else 0,
-            "reset_timeout": self._circuit_breaker.reset_timeout if self._circuit_breaker else 0,
-        }
-
-    # CircuitBreaker listener methods
-    def state_change(self, cb, old_state, new_state):
-        """Called when circuit breaker state changes."""
-        correlation_id = AppContext.get_correlation_id()
-        log_with_correlation(
-            logging.INFO, f"Circuit breaker state changed for {self.operation}: {old_state.name} -> {new_state.name}",
-            correlation_id=correlation_id, component="circuit_breaker", operation="state_change",
-            old_state=old_state.name, new_state=new_state.name
-        )
-
-    def failure(self, cb, exc):
-        """Called on failure."""
-        pass  # Already handled in call method
-
-    def success(self, cb):
-        """Called on success."""
-        pass  # Already handled in call method
-
-
-class CircuitBreakerManager:
-    """Manager for multiple adaptive circuit breakers."""
-
-    def __init__(self):
-        self._breakers: Dict[str, AdaptiveCircuitBreaker] = {}
-
-    def get_breaker(self, operation: str) -> AdaptiveCircuitBreaker:
-        """Get or create circuit breaker for operation."""
-        if operation not in self._breakers:
-            self._breakers[operation] = AdaptiveCircuitBreaker(
-                name="adaptive_cb",
-                operation=operation
-            )
-        return self._breakers[operation]
-
-    def get_all_metrics(self) -> Dict[str, Dict[str, Any]]:
-        """Get metrics for all circuit breakers."""
-        return {
-            operation: breaker.get_metrics()
-            for operation, breaker in self._breakers.items()
-        }
-
-
-# Global circuit breaker manager
-circuit_breaker_manager = CircuitBreakerManager()
-
-# Legacy circuit breaker for backward compatibility
-redis_circuit_breaker = circuit_breaker_manager.get_breaker("tws_client")._circuit_breaker
+# The CircuitBreakerManager has been moved to its own module (`resync.core.circuit_breaker_manager`)
+# and is now managed by the DI container. The global instance and legacy breaker have been removed.
 
 
 # --- Resource Context Managers ---
@@ -513,22 +370,24 @@ async def managed_cache_hierarchy(correlation_id: str):
 
 
 @asynccontextmanager
-async def managed_tws_monitor(correlation_id: str):
+async def managed_tws_monitor(app: FastAPI, correlation_id: str):
     """Context manager for TWS Monitor with automatic cleanup."""
+    monitor = None
     try:
         log_with_correlation(
             logging.INFO, "Initializing TWS Monitor",
             correlation_id=correlation_id, component="tws_monitor_manager", operation="init_begin"
         )
-
-        await tws_monitor.start_monitoring()
+        container = app.state.container
+        monitor = container.get(ITWSMonitor)
+        await monitor.start_monitoring()
 
         log_with_correlation(
             logging.INFO, "TWS Monitor initialized successfully",
             correlation_id=correlation_id, component="tws_monitor_manager", operation="init_complete"
         )
 
-        yield tws_monitor
+        yield monitor
 
     except Exception as e:
         log_with_correlation(
@@ -537,9 +396,9 @@ async def managed_tws_monitor(correlation_id: str):
         )
         raise
     finally:
-        if hasattr(tws_monitor, 'is_monitoring') and tws_monitor.is_monitoring:
+        if monitor and hasattr(monitor, 'is_running') and monitor.is_running:
             try:
-                await tws_monitor.stop_monitoring()
+                await monitor.stop_monitoring()
                 log_with_correlation(
                     logging.INFO, "TWS Monitor stopped successfully",
                     correlation_id=correlation_id, component="tws_monitor_manager", operation="cleanup_complete"
@@ -592,7 +451,7 @@ async def managed_scheduler(correlation_id: str):
 
 
 @asynccontextmanager
-async def managed_background_tasks(correlation_id: str):
+async def managed_background_tasks(app: FastAPI, correlation_id: str):
     """Context manager for background tasks with asyncio.TaskGroup supervision."""
     task_group = None
     supervised_tasks = {}
@@ -602,18 +461,18 @@ async def managed_background_tasks(correlation_id: str):
             logging.INFO, "Initializing background tasks with TaskGroup supervision",
             correlation_id=correlation_id, component="background_manager", operation="init_begin"
         )
+        container = app.state.container
 
         # Create TaskGroup for supervision
         async with asyncio.TaskGroup() as task_group:
             # Create supervised tasks
             config_watcher_task = task_group.create_task(
-                watch_config_changes(settings.AGENT_CONFIG_PATH),
+                watch_config_changes(app, settings.AGENT_CONFIG_PATH),
                 name="config_watcher"
             )
             supervised_tasks["config_watcher"] = config_watcher_task
 
             # Get file ingestor from DI container
-            container = get_container()
             file_ingestor = container.get(IFileIngestor)
 
             rag_watcher_task = task_group.create_task(
@@ -671,20 +530,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     background_tasks = {}
 
     try:
-        # Phase 0: Setup DI (synchronous)
-        try:
-            inject_container(app)
-            log_with_correlation(
-                logging.INFO, "Dependency injection container initialized",
-                correlation_id=correlation_id, component="di", operation="setup"
-            )
-        except Exception as e:
-            log_with_correlation(
-                logging.CRITICAL, "Failed to setup dependency injection",
-                correlation_id=correlation_id, component="di", operation="setup", error=e
-            )
-            raise SystemExit(f"DI setup failed: {e}") from e
-
         # Phase 1: Validate configuration
         try:
             validate_settings()
@@ -705,11 +550,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             )
             raise SystemExit(f"Configuration validation failed: {e}") from e
 
-        # Phase 2: Initialize core systems (fail-fast)
+        # Phase 2: Asynchronously register and initialize core systems
         try:
-            await initialize_core_systems()
+            # Initialize the registered systems
+            await initialize_core_systems(app)
             log_with_correlation(
-                logging.INFO, "Core systems initialized successfully",
+                logging.INFO, "Core systems registered and initialized successfully",
                 correlation_id=correlation_id, component="core", operation="initialization"
             )
         except SystemExit as e:
@@ -724,9 +570,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         # Phase 3-5: Initialize infrastructure components using context managers
         # These will be automatically cleaned up even if errors occur later
-        async with managed_background_tasks(correlation_id) as background_tasks, \
+        async with managed_background_tasks(app, correlation_id) as background_tasks, \
                    managed_cache_hierarchy(correlation_id) as cache, \
-                   managed_tws_monitor(correlation_id) as monitor, \
+                   managed_tws_monitor(app, correlation_id) as monitor, \
                    managed_scheduler(correlation_id) as scheduler:
 
             # Store scheduler reference for health checks
@@ -1070,188 +916,48 @@ def validate_settings() -> None:
     logger.info("Settings validation completed successfully")
 
 
-async def initialize_core_systems() -> None:
-    """Initialize core systems with fail-fast behavior and granular error handling."""
+async def initialize_core_systems(app: FastAPI) -> None:
+    """
+    Initialize core systems using services from the DI container.
+    This function is called once during application startup.
+    """
     correlation_id = AppContext.get_correlation_id()
     log_with_correlation(
-        logging.INFO, "Initializing core systems",
+        logging.INFO, "Initializing core systems from DI container",
         correlation_id=correlation_id, component="core_init", operation="begin"
     )
+    container = app.state.container
 
-    # Agent Manager (required)
     try:
+        # Get services from the container
+        agent_manager = await container.get(IAgentManager)
+        file_ingestor = await container.get(IFileIngestor)
+
+        # Perform startup actions on the services
         await agent_manager.load_agents_from_config()
         log_with_correlation(
-            logging.INFO, "Agent Manager initialized successfully",
-            correlation_id=correlation_id, component="core_init", operation="agent_manager_init"
-        )
-    except (ConfigError, FileNotFoundError) as e:
-        log_with_correlation(
-            logging.CRITICAL, "Configuration error initializing Agent Manager",
-            correlation_id=correlation_id, component="core_init", operation="agent_manager_config_error", error=e
-        )
-        raise SystemExit("Agent Manager configuration failed") from e
-    except (ConnectionError, TimeoutError) as e:
-        log_with_correlation(
-            logging.CRITICAL, "Network error initializing Agent Manager",
-            correlation_id=correlation_id, component="core_init", operation="agent_manager_network_error", error=e
-        )
-        raise SystemExit("Agent Manager network connection failed") from e
-    except Exception as e:
-        log_with_correlation(
-            logging.CRITICAL, "Unexpected error initializing Agent Manager",
-            correlation_id=correlation_id, component="core_init", operation="agent_manager_unexpected_error", error=e
-        )
-        raise SystemExit("Agent Manager initialization failed") from e
-
-    # TWS Client (required for agents)
-    try:
-        # Use adaptive circuit breaker for TWS client initialization
-        tws_breaker = circuit_breaker_manager.get_breaker("tws_client")
-        result = await tws_breaker.call(agent_manager._get_tws_client)
-        log_with_correlation(
-            logging.INFO, "TWS Client initialized successfully",
-            correlation_id=correlation_id, component="core_init", operation="tws_client_init",
-            circuit_metrics=tws_breaker.get_metrics()
-        )
-    except pybreaker.CircuitBreakerError as e:
-        log_with_correlation(
-            logging.CRITICAL, "Circuit breaker open for TWS Client initialization",
-            correlation_id=correlation_id, component="core_init", operation="tws_client_circuit_breaker", error=e
-        )
-        raise SystemExit("TWS Client circuit breaker open") from e
-    except (ConnectionError, TimeoutError) as e:
-        log_with_correlation(
-            logging.CRITICAL, "Network error initializing TWS Client",
-            correlation_id=correlation_id, component="core_init", operation="tws_client_network_error", error=e
-        )
-        raise SystemExit("TWS Client network connection failed") from e
-    except Exception as e:
-        log_with_correlation(
-            logging.CRITICAL, "Unexpected error initializing TWS Client",
-            correlation_id=correlation_id, component="core_init", operation="tws_client_unexpected_error", error=e
-        )
-        raise SystemExit("TWS Client initialization failed") from e
-
-        # Knowledge Graph (required)
-    knowledge_graph = None
-    try:
-        from resync.core.knowledge_graph import AsyncKnowledgeGraph
-
-        log_with_correlation(
-            logging.INFO, "Initializing Knowledge Graph for continuous learning",
-            correlation_id=correlation_id, component="core_init", operation="kg_init_begin"
-        )
-        container = get_container()
-        knowledge_graph = AsyncKnowledgeGraph()
-        # Register concrete implementation for interface
-        container.register(AsyncKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON)
-        log_with_correlation(
-            logging.INFO, "Knowledge Graph initialized and registered successfully",
-            correlation_id=correlation_id, component="core_init", operation="kg_init_complete"
+            logging.INFO, "Agent configurations loaded successfully",
+            correlation_id=correlation_id, component="core_init", operation="agent_config_load"
         )
 
-    except ImportError as e:
-        log_with_correlation(
-            logging.CRITICAL, "Failed to import Knowledge Graph module",
-            correlation_id=correlation_id, component="core_init", operation="kg_import_error", error=e
-        )
-        raise SystemExit("Knowledge Graph import failed") from e
-    except (ConnectionError, TimeoutError) as e:
-        log_with_correlation(
-            logging.CRITICAL, "Network/database error initializing Knowledge Graph",
-            correlation_id=correlation_id, component="core_init", operation="kg_connection_error", error=e
-        )
-        raise SystemExit("Knowledge Graph connection failed") from e
-    except Exception as e:
-        log_with_correlation(
-            logging.CRITICAL, "Unexpected error initializing Knowledge Graph",
-            correlation_id=correlation_id, component="core_init", operation="kg_unexpected_error", error=e
-        )
-        raise SystemExit("Knowledge Graph initialization failed") from e
-
-    # File Ingestor (depends on KG)
-    try:
-        if knowledge_graph is None:
-            raise RuntimeError("Knowledge Graph not available for File Ingestor")
-
-        file_ingestor = FileIngestor(knowledge_graph=knowledge_graph)
-        # Register concrete implementation for interface
-        container.register(FileIngestor, FileIngestor, ServiceScope.SINGLETON)
-        log_with_correlation(
-            logging.INFO, "File Ingestor initialized and registered successfully",
-            correlation_id=correlation_id, component="core_init", operation="file_ingestor_init"
-        )
-
-        # Load existing RAG documents into knowledge graph
-        log_with_correlation(
-            logging.INFO, "Loading existing RAG documents",
-            correlation_id=correlation_id, component="core_init", operation="rag_loading_begin"
-        )
         loaded_docs = await load_existing_rag_documents(file_ingestor)
         log_with_correlation(
-            logging.INFO, f"Loaded {loaded_docs} existing RAG documents into knowledge graph",
-            correlation_id=correlation_id, component="core_init", operation="rag_loading_complete",
+            logging.INFO, f"Loaded {loaded_docs} existing RAG documents",
+            correlation_id=correlation_id, component="core_init", operation="rag_load",
             documents_loaded=loaded_docs
         )
-
-    except (FileNotFoundError, PermissionError) as e:
+    except (KeyError, RuntimeError) as e:
         log_with_correlation(
-            logging.CRITICAL, "File system error initializing File Ingestor",
-            correlation_id=correlation_id, component="core_init", operation="file_ingestor_fs_error", error=e
+            logging.CRITICAL, "Failed to retrieve and initialize core services from DI container",
+            correlation_id=correlation_id, component="core_init", operation="di_retrieval_error", error=e
         )
-        raise SystemExit("File Ingestor file system error") from e
-    except (ConnectionError, TimeoutError) as e:
-        log_with_correlation(
-            logging.CRITICAL, "Network/database error initializing File Ingestor",
-            correlation_id=correlation_id, component="core_init", operation="file_ingestor_connection_error", error=e
-        )
-        raise SystemExit("File Ingestor connection failed") from e
-    except RuntimeError as e:
-        log_with_correlation(
-            logging.CRITICAL, "Dependency error initializing File Ingestor",
-            correlation_id=correlation_id, component="core_init", operation="file_ingestor_dependency_error", error=e
-        )
-        raise SystemExit("File Ingestor dependency error") from e
+        raise SystemExit("Core service retrieval or initialization from DI container failed") from e
     except Exception as e:
         log_with_correlation(
-            logging.CRITICAL, "Unexpected error initializing File Ingestor",
-            correlation_id=correlation_id, component="core_init", operation="file_ingestor_unexpected_error", error=e
+            logging.CRITICAL, "A critical error occurred during core system startup tasks",
+            correlation_id=correlation_id, component="core_init", operation="startup_task_error", error=e
         )
-        raise SystemExit("File Ingestor initialization failed") from e
-
-
-async def start_background_services() -> Dict[str, asyncio.Task]:
-    """Start background services and return task references."""
-    logger.info(" Starting background services...")
-
-    tasks = {}
-
-    # Configuration watcher
-    try:
-        config_watcher_task: asyncio.Task[None] = asyncio.create_task(
-            watch_config_changes(settings.AGENT_CONFIG_PATH)
-        )
-        tasks["config_watcher"] = config_watcher_task
-        logger.info(" Configuration watcher started")
-    except Exception as e:
-        logger.error(f" Failed to start configuration watcher: {e}")
-        raise
-
-    # RAG directory watcher
-    try:
-        # Get the file_ingestor instance from the DI container
-        container = get_container()
-        file_ingestor = container.get(IFileIngestor)
-        rag_watcher_task: asyncio.Task[None] = asyncio.create_task(watch_rag_directory(file_ingestor))
-        tasks["rag_watcher"] = rag_watcher_task
-        logger.info(" RAG directory watcher started")
-    except Exception as e:
-        logger.error(f" Failed to start RAG watcher: {e}")
-        # Don't fail completely, but log the error
-        logger.warning("Continuing without RAG watcher")
-
-    return tasks
+        raise SystemExit("Core system startup tasks failed") from e
 
 
 async def initialize_schedulers() -> AsyncIOScheduler:
@@ -1373,9 +1079,9 @@ def get_auditor_job_config() -> Dict[str, Any]:
         )
 
         if app_env == "production":
-        # Production: Use production-specific settings if available
-        frequency_hours = getattr(settings, "IA_AUDITOR_FREQUENCY_HOURS", 6)
-        startup_enabled = getattr(settings, "IA_AUDITOR_STARTUP_ENABLED", False)
+            # Production: Use production-specific settings if available
+            frequency_hours = getattr(settings, "IA_AUDITOR_FREQUENCY_HOURS", 6)
+            startup_enabled = getattr(settings, "IA_AUDITOR_STARTUP_ENABLED", False)
 
             # Validate frequency_hours with detailed error
             if not isinstance(frequency_hours, (int, float)) or frequency_hours <= 0:
@@ -1399,7 +1105,7 @@ def get_auditor_job_config() -> Dict[str, Any]:
                 )
 
             config = {
-            "type": "cron",
+                "type": "cron",
                 "config": {"hour": f"*/{int(frequency_hours)}"},  # Every N hours
                 "startup_enabled": bool(startup_enabled),
             }
@@ -1411,20 +1117,19 @@ def get_auditor_job_config() -> Dict[str, Any]:
             return config
 
         elif app_env == "development":
-        # Development: More frequent for testing
+            # Development: More frequent for testing
             config = {
-            "type": "interval",
-            "config": {"minutes": 30},  # Every 30 minutes
-            "startup_enabled": True,
-        }
+                "type": "interval",
+                "config": {"minutes": 30},  # Every 30 minutes
+                "startup_enabled": True,
+            }
             log_with_correlation(
                 logging.INFO, "Development IA Auditor config: every 30 minutes with startup",
                 correlation_id=correlation_id, component="scheduler_config", operation="config_complete",
                 config=config
             )
             return config
-
-    else:
+        else:
             # Default: Conservative approach for unknown environments
             log_with_correlation(
                 logging.WARNING, f"Unknown APP_ENV '{app_env}', using default configuration",
@@ -1432,17 +1137,16 @@ def get_auditor_job_config() -> Dict[str, Any]:
                 app_env=app_env
             )
             config = {
-            "type": "cron",
-            "config": {"hour": "*/6"},  # Every 6 hours
-            "startup_enabled": True,
-        }
+                "type": "cron",
+                "config": {"hour": "*/6"},  # Every 6 hours
+                "startup_enabled": True,
+            }
             log_with_correlation(
                 logging.INFO, "Default IA Auditor config: every 6 hours with startup",
                 correlation_id=correlation_id, component="scheduler_config", operation="config_complete",
                 config=config
             )
             return config
-
     except AttributeError as e:
         log_with_correlation(
             logging.ERROR, "Missing required settings attribute",
@@ -1467,65 +1171,35 @@ async def shutdown_application(
         logging.INFO, "Shutting down remaining application components",
         correlation_id=correlation_id, component="shutdown", operation="begin"
     )
-
+    container = app.state.container
     shutdown_errors = []
 
-    # Clean up TWS client connection (not managed by context managers)
+    # Clean up TWS client connection
     try:
-        if hasattr(agent_manager, 'tws_client') and agent_manager.tws_client:
-            # Check if client has active connections before closing
-            if hasattr(agent_manager.tws_client, 'is_connected') and agent_manager.tws_client.is_connected:
-                await agent_manager.tws_client.close()
-                log_with_correlation(
-                    logging.INFO, "TWS client closed successfully",
-                    correlation_id=correlation_id, component="shutdown", operation="tws_client_close"
-                )
-            else:
-                log_with_correlation(
-                    logging.INFO, "TWS client was not connected, skipping close",
-                    correlation_id=correlation_id, component="shutdown", operation="tws_client_skip"
-                )
-        else:
+        tws_client = container.get(ITWSClient)
+        if hasattr(tws_client, 'is_connected') and tws_client.is_connected:
+            await tws_client.close()
             log_with_correlation(
-                logging.INFO, "TWS client not available, skipping close",
-                correlation_id=correlation_id, component="shutdown", operation="tws_client_not_found"
+                logging.INFO, "TWS client closed successfully",
+                correlation_id=correlation_id, component="shutdown", operation="tws_client_close"
             )
-    except Exception as e:
+    except (KeyError, Exception) as e:
         log_with_correlation(
             logging.ERROR, "Error closing TWS client",
             correlation_id=correlation_id, component="shutdown", operation="tws_client_error", error=e
         )
         shutdown_errors.append(("tws_client", str(e)))
 
-    # Close Knowledge Graph connection (not managed by context managers)
+    # Close Knowledge Graph connection
     try:
-        container = get_container()
-        try:
-            kg_instance = container.get(IKnowledgeGraph)
-            if hasattr(kg_instance, "close") and kg_instance is not None:
-                # Check if connection is active before closing
-                if hasattr(kg_instance, '_driver') and kg_instance._driver:
-                    await kg_instance.close()
-                    log_with_correlation(
-                        logging.INFO, "Knowledge Graph connection closed successfully",
-                        correlation_id=correlation_id, component="shutdown", operation="kg_close"
-                    )
-                else:
-                    log_with_correlation(
-                        logging.INFO, "Knowledge Graph was not connected, skipping close",
-                        correlation_id=correlation_id, component="shutdown", operation="kg_skip"
-                    )
-            else:
-                log_with_correlation(
-                    logging.INFO, "Knowledge Graph instance not available, skipping close",
-                    correlation_id=correlation_id, component="shutdown", operation="kg_not_available"
-                )
-        except KeyError as e:
+        kg_instance = container.get(IKnowledgeGraph)
+        if hasattr(kg_instance, "close") and kg_instance is not None:
+            await kg_instance.close()
             log_with_correlation(
-                logging.WARNING, "Knowledge Graph not registered in container, skipping close",
-                correlation_id=correlation_id, component="shutdown", operation="kg_not_registered", error=e
+                logging.INFO, "Knowledge Graph connection closed successfully",
+                correlation_id=correlation_id, component="shutdown", operation="kg_close"
             )
-    except Exception as e:
+    except (KeyError, Exception) as e:
         log_with_correlation(
             logging.ERROR, "Error closing Knowledge Graph connection",
             correlation_id=correlation_id, component="shutdown", operation="kg_error", error=e
@@ -1551,7 +1225,7 @@ async def shutdown_application(
     stop=stop_after_attempt(5),
     reraise=True,
 )
-async def watch_config_changes(config_path: Path) -> None:
+async def watch_config_changes(app: FastAPI, config_path: Path) -> None:
     """
     Watches the agent configuration file for changes and triggers a reload.
     Includes rate limiting, backoff, and platform-specific error handling.
@@ -1602,7 +1276,7 @@ async def watch_config_changes(config_path: Path) -> None:
 
             try:
                 # Handle the config change
-                await handle_config_change()
+                await handle_config_change(app)
                 last_change_time = current_time
                 recent_changes.append(current_time)
 
@@ -1661,11 +1335,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# --- Dependency Injection Setup ---
+# This must be done before the application starts.
+app_container = DIContainer()
+app.state.container = app_container
+inject_container(app, container_instance=app_container)
+
+
 # --- Middleware Setup ---
 # app.middleware("http")(oauth2_middleware)
-
-# --- Dependency Injection Setup ---
-inject_container(app)
 
 # --- Template Engine ---
 templates = Jinja2Templates(directory=settings.BASE_DIR / "templates")
@@ -1704,7 +1382,7 @@ async def root():
 
 
 @app.get("/health")
-async def health_check() -> Dict[str, Any]:
+async def health_check(request: Request) -> Dict[str, Any]:
     """
     Comprehensive health check endpoint for monitoring system status.
     Includes active component pings and state validation.
@@ -1724,9 +1402,9 @@ async def health_check() -> Dict[str, Any]:
 
     try:
         # Aggregate health from all subsystems
-        core_health = await health_check_core()
-        infra_health = await health_check_infrastructure()
-        services_health = await health_check_services()
+        core_health = await health_check_core(request)
+        infra_health = await health_check_infrastructure(request)
+        services_health = await health_check_services(request)
 
         health_status["components"].update(core_health["components"])
         health_status["components"].update(infra_health["components"])
@@ -1737,7 +1415,7 @@ async def health_check() -> Dict[str, Any]:
         if "error" in subsystem_statuses:
             health_status["status"] = "error"
         elif "degraded" in subsystem_statuses:
-                    health_status["status"] = "degraded"
+            health_status["status"] = "degraded"
 
         health_status["subsystems"] = {
             "core": core_health["status"],
@@ -1751,7 +1429,7 @@ async def health_check() -> Dict[str, Any]:
             overall_status=health_status["status"], subsystem_statuses=health_status["subsystems"]
         )
 
-            except Exception as e:
+    except Exception as e:
         health_status["status"] = "error"
         health_status["error"] = str(e)
         log_with_correlation(
@@ -1763,7 +1441,7 @@ async def health_check() -> Dict[str, Any]:
 
 
 @app.get("/health/di")
-async def health_check_di() -> Dict[str, Any]:
+async def health_check_di(request: Request) -> Dict[str, Any]:
     """
     Health check for Dependency Injection container and registered services.
     """
@@ -1774,8 +1452,8 @@ async def health_check_di() -> Dict[str, Any]:
     )
 
     try:
-        container = get_container()
-        health_status = container.get_health_status()
+        container = request.state.container
+        health_status = await container.get_health_status()
         health_status["correlation_id"] = correlation_id
 
         log_with_correlation(
@@ -1786,7 +1464,7 @@ async def health_check_di() -> Dict[str, Any]:
 
         return health_status
 
-            except Exception as e:
+    except Exception as e:
         health_status = {
             "status": "error",
             "correlation_id": correlation_id,
@@ -1845,12 +1523,13 @@ async def validate_config_endpoint() -> Dict[str, Any]:
 
 
 @app.get("/health/core")
-async def health_check_core() -> Dict[str, Any]:
+async def health_check_core(request: Request) -> Dict[str, Any]:
     """
     Health check for core application components.
     Critical components that must be operational for basic functionality.
     """
     correlation_id = AppContext.get_correlation_id()
+    container = request.state.container
     log_with_correlation(
         logging.DEBUG, "Core health check requested",
         correlation_id=correlation_id, component="health", operation="core_check"
@@ -1863,69 +1542,41 @@ async def health_check_core() -> Dict[str, Any]:
         "components": {}
     }
 
+    # Check Agent Manager (critical)
     try:
-        # Check Agent Manager (critical)
-        try:
-            # Agent manager is initialized at startup, check if it's accessible
-            if hasattr(agent_manager, 'agents') and agent_manager.agents is not None:
-                health_status["components"]["agent_manager"] = "initialized"
-        else:
-                health_status["components"]["agent_manager"] = "not_initialized"
-                health_status["status"] = "error"
-        except Exception as e:
-            health_status["components"]["agent_manager"] = f"error: {str(e)}"
-            health_status["status"] = "error"
-
-        # Check Knowledge Graph (critical)
-        try:
-            container = get_container()
-                kg_instance = container.get(IKnowledgeGraph)
-                if kg_instance is not None:
-                    health_status["components"]["knowledge_graph"] = "initialized"
-                else:
-                    health_status["components"]["knowledge_graph"] = "not_initialized"
-                health_status["status"] = "error"
-            except KeyError:
-                health_status["components"]["knowledge_graph"] = "not_registered"
-            health_status["status"] = "error"
-        except Exception as e:
-            health_status["components"]["knowledge_graph"] = f"error: {str(e)}"
-            health_status["status"] = "error"
-
-        # Check File Ingestor (critical)
-        try:
-            container = get_container()
-                file_ingestor = container.get(IFileIngestor)
-                if file_ingestor is not None:
-                    health_status["components"]["file_ingestor"] = "initialized"
-                else:
-                    health_status["components"]["file_ingestor"] = "not_initialized"
-                health_status["status"] = "error"
-            except KeyError:
-                health_status["components"]["file_ingestor"] = "not_registered"
-            health_status["status"] = "error"
-        except Exception as e:
-            health_status["components"]["file_ingestor"] = f"error: {str(e)}"
-            health_status["status"] = "error"
-
-    except Exception as e:
+        container.get(IAgentManager)
+        health_status["components"]["agent_manager"] = {"status": "ok"}
+    except (KeyError, Exception) as e:
+        health_status["components"]["agent_manager"] = {"status": "error", "error": str(e)}
         health_status["status"] = "error"
-        health_status["error"] = str(e)
-        log_with_correlation(
-            logging.ERROR, "Core health check failed",
-            correlation_id=correlation_id, component="health", operation="core_check_error", error=e
-        )
+
+    # Check Knowledge Graph (critical)
+    try:
+        container.get(IKnowledgeGraph)
+        health_status["components"]["knowledge_graph"] = {"status": "ok"}
+    except (KeyError, Exception) as e:
+        health_status["components"]["knowledge_graph"] = {"status": "error", "error": str(e)}
+        health_status["status"] = "error"
+
+    # Check File Ingestor (critical)
+    try:
+        container.get(IFileIngestor)
+        health_status["components"]["file_ingestor"] = {"status": "ok"}
+    except (KeyError, Exception) as e:
+        health_status["components"]["file_ingestor"] = {"status": "error", "error": str(e)}
+        health_status["status"] = "error"
 
     return health_status
 
 
 @app.get("/health/infrastructure")
-async def health_check_infrastructure() -> Dict[str, Any]:
+async def health_check_infrastructure(request: Request) -> Dict[str, Any]:
     """
     Health check for infrastructure components.
     Components that support the application but may have graceful degradation.
     """
     correlation_id = AppContext.get_correlation_id()
+    container = request.state.container
     log_with_correlation(
         logging.DEBUG, "Infrastructure health check requested",
         correlation_id=correlation_id, component="health", operation="infra_check"
@@ -1938,62 +1589,54 @@ async def health_check_infrastructure() -> Dict[str, Any]:
         "components": {}
     }
 
+    # Check Cache Hierarchy (important but not critical)
     try:
-        # Check Cache Hierarchy (important but not critical)
-        try:
-            cache_hierarchy = get_cache_hierarchy()
-            if hasattr(cache_hierarchy, 'is_running') and cache_hierarchy.is_running:
-                health_status["components"]["cache_hierarchy"] = "running"
-            else:
-                health_status["components"]["cache_hierarchy"] = "stopped"
-                health_status["status"] = "degraded"
-        except Exception as e:
-            health_status["components"]["cache_hierarchy"] = f"error: {str(e)}"
+        cache_hierarchy = get_cache_hierarchy()
+        if hasattr(cache_hierarchy, 'is_running') and cache_hierarchy.is_running:
+            health_status["components"]["cache_hierarchy"] = {"status": "running"}
+        else:
+            health_status["components"]["cache_hierarchy"] = {"status": "stopped"}
             health_status["status"] = "degraded"
-
-        # Check Scheduler (important but not critical)
-        try:
-            if hasattr(app.state, "scheduler") and app.state.scheduler:
-                scheduler_running = getattr(app.state.scheduler, 'running', False)
-                health_status["components"]["scheduler"] = "running" if scheduler_running else "stopped"
-                if not scheduler_running:
-                    health_status["status"] = "degraded"
-            else:
-                health_status["components"]["scheduler"] = "not_initialized"
-                health_status["status"] = "degraded"
-        except Exception as e:
-            health_status["components"]["scheduler"] = f"error: {str(e)}"
-            health_status["status"] = "degraded"
-
-        # Check TWS Monitor (important but not critical)
-        try:
-            if hasattr(tws_monitor, 'is_monitoring') and tws_monitor.is_monitoring:
-                health_status["components"]["tws_monitor"] = "active"
-            else:
-                health_status["components"]["tws_monitor"] = "inactive"
-                health_status["status"] = "degraded"
-        except Exception as e:
-            health_status["components"]["tws_monitor"] = f"error: {str(e)}"
-            health_status["status"] = "degraded"
-
     except Exception as e:
-        health_status["status"] = "error"
-        health_status["error"] = str(e)
-        log_with_correlation(
-            logging.ERROR, "Infrastructure health check failed",
-            correlation_id=correlation_id, component="health", operation="infra_check_error", error=e
-        )
+        health_status["components"]["cache_hierarchy"] = {"status": "error", "error": str(e)}
+        health_status["status"] = "degraded"
+
+    # Check Scheduler (important but not critical)
+    try:
+        if hasattr(request.app.state, "scheduler") and request.app.state.scheduler:
+            scheduler_running = getattr(request.app.state.scheduler, 'running', False)
+            health_status["components"]["scheduler"] = {"status": "running" if scheduler_running else "stopped"}
+            if not scheduler_running:
+                health_status["status"] = "degraded"
+        else:
+            health_status["components"]["scheduler"] = {"status": "not_initialized"}
+            health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["components"]["scheduler"] = {"status": "error", "error": str(e)}
+        health_status["status"] = "degraded"
+
+    # Check TWS Monitor (important but not critical)
+    try:
+        tws_monitor = container.get(ITWSMonitor)
+        monitor_health = await tws_monitor.health_check()
+        health_status["components"]["tws_monitor"] = monitor_health
+        if monitor_health.get("status") != "healthy":
+            health_status["status"] = "degraded"
+    except (KeyError, Exception) as e:
+        health_status["components"]["tws_monitor"] = {"status": "error", "error": str(e)}
+        health_status["status"] = "degraded"
 
     return health_status
 
 
 @app.get("/health/services")
-async def health_check_services() -> Dict[str, Any]:
+async def health_check_services(request: Request) -> Dict[str, Any]:
     """
     Health check for external services.
     Services that may be temporarily unavailable without breaking core functionality.
     """
     correlation_id = AppContext.get_correlation_id()
+    container = request.state.container
     log_with_correlation(
         logging.DEBUG, "Services health check requested",
         correlation_id=correlation_id, component="health", operation="services_check"
@@ -2006,60 +1649,38 @@ async def health_check_services() -> Dict[str, Any]:
         "components": {}
     }
 
+    # Check TWS Client (external service)
     try:
-        # Check TWS Client (external service)
-        if hasattr(agent_manager, "tws_client") and agent_manager.tws_client:
-            try:
-                # Try to ping the TWS server for active verification
-                if hasattr(agent_manager.tws_client, "ping"):
-                    await agent_manager.tws_client.ping()
-                    health_status["components"]["tws_client"] = "reachable"
-                elif hasattr(agent_manager.tws_client, "is_connected") and agent_manager.tws_client.is_connected:
-                    health_status["components"]["tws_client"] = "connected"
-                else:
-                    health_status["components"]["tws_client"] = "unknown"
-                    health_status["status"] = "degraded"
-            except Exception as e:
-                health_status["components"]["tws_client"] = f"error: {str(e)}"
-                health_status["status"] = "degraded"
+        tws_client = container.get(ITWSClient)
+        if hasattr(tws_client, "ping"):
+            await tws_client.ping()
+            health_status["components"]["tws_client"] = {"status": "reachable"}
+        elif hasattr(tws_client, "is_connected") and tws_client.is_connected:
+            health_status["components"]["tws_client"] = {"status": "connected"}
         else:
-            health_status["components"]["tws_client"] = "not_initialized"
+            health_status["components"]["tws_client"] = {"status": "unknown"}
             health_status["status"] = "degraded"
+    except (KeyError, Exception) as e:
+        health_status["components"]["tws_client"] = {"status": "error", "error": str(e)}
+        health_status["status"] = "degraded"
 
-        # Check Circuit Breaker metrics
-        try:
-            circuit_metrics = circuit_breaker_manager.get_all_metrics()
-            health_status["components"]["circuit_breakers"] = circuit_metrics
+    # Check Circuit Breaker metrics
+    try:
+        circuit_breaker_manager = container.get(ICircuitBreakerManager)
+        circuit_metrics = circuit_breaker_manager.get_all_metrics()
+        health_status["components"]["circuit_breakers"] = circuit_metrics
 
-            # Check if any circuit breakers are open
-            open_breakers = []
-            for operation, metrics in circuit_metrics.items():
-                if metrics.get("circuit_state") == "open":
-                    open_breakers.append(operation)
+        open_breakers = [
+            op for op, metrics in circuit_metrics.items() if metrics.get("state") == "open"
+        ]
 
-            if open_breakers:
-                health_status["components"]["circuit_breakers_status"] = f"open_circuits: {open_breakers}"
-                health_status["status"] = "degraded"
-            else:
-                health_status["components"]["circuit_breakers_status"] = "all_closed"
-
-        except Exception as e:
-            health_status["components"]["circuit_breakers"] = f"error: {str(e)}"
+        if open_breakers:
+            health_status["components"]["circuit_breakers_status"] = f"open_circuits: {open_breakers}"
             health_status["status"] = "degraded"
-
-    except (ConnectionError, TimeoutError) as e:
-        health_status["status"] = "error"
-        health_status["error"] = str(e)
-        log_with_correlation(
-            logging.ERROR, "Services health check failed due to connectivity",
-            correlation_id=correlation_id, component="health", operation="services_check_error", error=e
-        )
-    except Exception as e:
-        health_status["status"] = "error"
-        health_status["error"] = str(e)
-        log_with_correlation(
-            logging.ERROR, "Services health check failed",
-            correlation_id=correlation_id, component="health", operation="services_check_error", error=e
-        )
+        else:
+            health_status["components"]["circuit_breakers_status"] = "all_closed"
+    except (KeyError, Exception) as e:
+        health_status["components"]["circuit_breakers"] = {"status": "error", "error": str(e)}
+        health_status["status"] = "degraded"
 
     return health_status

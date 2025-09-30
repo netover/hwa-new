@@ -197,9 +197,9 @@ class DIContainer:
             f"Registered factory for {interface.__name__} with scope {scope.name}"
         )
 
-    def get(self, interface: Type[T]) -> T:
+    async def get(self, interface: Type[T]) -> T:
         """
-        Resolve and return a validated instance of the requested interface.
+        Resolve and return a validated instance of the requested interface asynchronously.
 
         Args:
             interface: The interface type to resolve.
@@ -222,18 +222,18 @@ class DIContainer:
             registration.scope == ServiceScope.SINGLETON
             and registration.instance is not None
         ):
-            # Validate cached instance health
-            if self._is_instance_healthy(registration, registration.instance):
+            # Asynchronously validate cached instance health
+            if await self._is_instance_healthy(registration, registration.instance):
                 return cast(T, registration.instance)
             else:
                 logger.warning(f"Cached instance of {interface.__name__} is unhealthy, recreating")
                 registration.instance = None
 
         # Create a new instance
-        instance = self._create_instance(registration)
+        instance = await self._create_instance(registration)
 
-        # Validate the new instance
-        if not self._is_instance_healthy(registration, instance):
+        # Asynchronously validate the new instance
+        if not await self._is_instance_healthy(registration, instance):
             raise RuntimeError(f"Created instance of {interface.__name__} failed health validation")
 
         # Cache singleton instances
@@ -242,7 +242,7 @@ class DIContainer:
 
         return cast(T, instance)
 
-    def _create_instance(self, registration: ServiceRegistration[Any, Any]) -> Any:
+    async def _create_instance(self, registration: ServiceRegistration[Any, Any]) -> Any:
         """
         Create an instance of the implementation based on the registration.
 
@@ -258,10 +258,13 @@ class DIContainer:
         try:
             # If a factory is provided, use it
             if registration.factory:
-                return registration.factory()
+                factory_result = registration.factory()
+                if asyncio.iscoroutine(factory_result):
+                    return await factory_result
+                return factory_result
 
             # Otherwise, try to instantiate the implementation with its dependencies
-            return self._instantiate_with_dependencies(registration.implementation)
+            return await self._instantiate_with_dependencies(registration.implementation)
         except Exception as e:
             logger.error(
                 f"Error creating instance of {registration.implementation.__name__}: {e}",
@@ -271,9 +274,9 @@ class DIContainer:
                 f"Error creating instance of {registration.implementation.__name__}: {e}"
             ) from e
 
-    def _instantiate_with_dependencies(self, implementation: Type[Any]) -> Any:
+    async def _instantiate_with_dependencies(self, implementation: Type[Any]) -> Any:
         """
-        Instantiate an implementation, resolving its constructor dependencies.
+        Instantiate an implementation, resolving its constructor dependencies asynchronously.
 
         Args:
             implementation: The implementation type to instantiate.
@@ -302,7 +305,7 @@ class DIContainer:
 
             # Try to resolve the parameter from the container
             try:
-                kwargs[param.name] = self.get(param_type)
+                kwargs[param.name] = await self.get(param_type)
             except KeyError:
                 # If the parameter has a default value, use it
                 if param.default is not param.empty:
@@ -340,9 +343,9 @@ class DIContainer:
         # Additional validations can be added here
         logger.debug(f"Implementation validation passed for {interface.__name__} -> {implementation.__name__}")
 
-    def _is_instance_healthy(self, registration: ServiceRegistration[Any, Any], instance: Any) -> bool:
+    async def _is_instance_healthy(self, registration: ServiceRegistration[Any, Any], instance: Any) -> bool:
         """
-        Check if an instance is healthy according to its registration requirements.
+        Check if an instance is healthy according to its registration requirements asynchronously.
 
         Args:
             registration: The service registration.
@@ -363,7 +366,7 @@ class DIContainer:
                 return cached_status in ("healthy", "degraded")
 
             # Perform health check
-            health_result = asyncio.wait_for(
+            health_result = await asyncio.wait_for(
                 self._perform_health_check(instance),
                 timeout=registration.health_timeout
             )
@@ -420,9 +423,9 @@ class DIContainer:
                 "message": "No specific health check implemented"
             }
 
-    def get_health_status(self) -> Dict[str, Any]:
+    async def get_health_status(self) -> Dict[str, Any]:
         """
-        Get comprehensive health status of all registered services.
+        Get comprehensive health status of all registered services asynchronously.
 
         Returns:
             Dictionary with health status of all services.
@@ -444,11 +447,11 @@ class DIContainer:
 
             if registration.instance is not None:
                 try:
-                    # Quick sync health check for status reporting
-                    health_result = asyncio.run(asyncio.wait_for(
+                    # Asynchronously perform the health check
+                    health_result = await asyncio.wait_for(
                         self._perform_health_check(registration.instance),
                         timeout=2.0
-                    ))
+                    )
                     service_status["health"] = health_result
                     if health_result.get("status") not in ("healthy", "degraded"):
                         status["overall_status"] = "degraded"
@@ -468,17 +471,7 @@ class DIContainer:
         logger.info("DIContainer cleared")
 
 
-# --- Global Container Instance ---
-# This is the default container used by the application.
-# It can be replaced with a custom container if needed.
-container = DIContainer()
-
-# Register AsyncAuditQueue as the implementation for IAuditQueue
-from resync.core.audit_queue import AsyncAuditQueue, IAuditQueue
-
-container.register(IAuditQueue, AsyncAuditQueue, scope=ServiceScope.SINGLETON, health_required=False)  # type: ignore[type-abstract]
-
-
-def get_container() -> DIContainer:
-    """Get the global DI container instance."""
-    return container
+# The global container and its accessor have been removed.
+# The DIContainer should be instantiated and managed at the application
+# entry point (e.g., in `resync.main.py`) and passed explicitly or via
+# request state. This enforces a clean, stateless architecture.

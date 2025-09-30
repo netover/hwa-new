@@ -41,8 +41,8 @@ from resync.core.exceptions import (
     MissingConfigError,
     NetworkError,
 )
+from resync.core.interfaces import ITWSClient
 from resync.core.metrics import runtime_metrics, log_with_correlation
-from resync.core import get_global_correlation_id, get_environment_tags
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
@@ -83,98 +83,75 @@ class AgentsConfig(BaseModel):
 class AgentManager:
     """
     Manages the lifecycle and operations of AI agents.
+    Dependencies are injected via the constructor.
     """
 
-    def __init__(self, settings_module: Any = settings) -> None:
+    def __init__(
+        self, tws_client: ITWSClient, settings_module: Any = settings
+    ) -> None:
         """
         Initializes the AgentManager with dependencies.
 
         Args:
-            settings_module: The settings module to use (default: global settings).
+            tws_client: An instance of a TWS client (real or mock).
+            settings_module: The settings module to use.
         """
-        global_correlation = get_global_correlation_id()
         correlation_id = runtime_metrics.create_correlation_id({
             "component": "agent_manager",
             "operation": "init",
-            "global_correlation": global_correlation,
-            "environment": get_environment_tags()
         })
 
         try:
-            # Fail-fast check: No MockAgent in production
+            # Fail-fast check for agno dependency
             if not AGNO_AVAILABLE:
-                runtime_metrics.agent_mock_fallbacks.increment()
-                is_production = getattr(settings_module, 'ENVIRONMENT', 'development').lower() == 'production'
-                if is_production:
-                    error_msg = "CRITICAL: agno.agent not available in production environment. Cannot proceed with MockAgent fallback."
-                    log_with_correlation(logging.CRITICAL, error_msg, correlation_id)
-                    runtime_metrics.record_health_check("agent_manager", "critical", {"error": "agno_unavailable_production"})
-                    raise AgentError(error_msg)
+                self._handle_agno_unavailable(settings_module, correlation_id)
 
-                log_with_correlation(logging.WARNING,
-                    "agno.agent not available in non-production environment. Using MockAgent fallback.",
-                    correlation_id)
-                runtime_metrics.record_health_check("agent_manager", "degraded", {"mock_fallback": True})
-
-            logger.info("Initializing AgentManager.")
+            log_with_correlation(logging.INFO, "Initializing AgentManager.", correlation_id)
             runtime_metrics.record_health_check("agent_manager", "initializing")
 
             self.settings = settings_module
+            self.tws_client = tws_client
             self.agents: Dict[str, Any] = {}
-            self.agent_configs: List[AgentConfig] = []  # Correct initialization
-            self.tools: Dict[str, Any] = self._discover_tools()
-            self.tws_client: Optional[OptimizedTWSClient] = None
-            self._mock_tws_client: Optional[MockTWSClient] = None
-            # Async lock to prevent race conditions during TWS client initialization
-            self._tws_init_lock: asyncio.Lock = asyncio.Lock()
+            self.agent_configs: List[AgentConfig] = []
+            self.tools: Dict[str, Any] = self._discover_and_configure_tools()
 
             runtime_metrics.record_health_check("agent_manager", "healthy")
-            log_with_correlation(logging.INFO, "AgentManager initialized successfully", correlation_id)
+            log_with_correlation(logging.INFO, "AgentManager initialized successfully.", correlation_id)
 
         except Exception as e:
             runtime_metrics.record_health_check("agent_manager", "failed", {"error": str(e)})
-            runtime_metrics.close_correlation_id(correlation_id)
+            log_with_correlation(logging.CRITICAL, f"AgentManager initialization failed: {e}", correlation_id, exc_info=True)
             raise
         finally:
             runtime_metrics.close_correlation_id(correlation_id)
 
-    def _discover_tools(self) -> Dict[str, Any]:
+    def _handle_agno_unavailable(self, settings_module: Any, correlation_id: str) -> None:
+        """Handles the case where the 'agno' library is not installed."""
+        runtime_metrics.agent_mock_fallbacks.increment()
+        is_production = getattr(settings_module, 'APP_ENV', 'development').lower() == 'production'
+        if is_production:
+            error_msg = "CRITICAL: agno.agent not available in production. Cannot proceed with MockAgent fallback."
+            log_with_correlation(logging.CRITICAL, error_msg, correlation_id)
+            runtime_metrics.record_health_check("agent_manager", "critical", {"error": "agno_unavailable_production"})
+            raise AgentError(error_msg)
+        else:
+            log_with_correlation(logging.WARNING, "agno.agent not available. Using MockAgent fallback.", correlation_id)
+            runtime_metrics.record_health_check("agent_manager", "degraded", {"mock_fallback": True})
+
+    def _discover_and_configure_tools(self) -> Dict[str, Any]:
         """
-        Discovers and registers available tools for the agents.
-        This makes the system extensible for new tools.
+        Discovers available tools and injects the TWS client into them.
         """
-        # In a real application, this could be dynamic using entry points
-        # For now, we manually register the known tools
-        return {
+        tools = {
             "tws_status_tool": tws_status_tool,
             "tws_troubleshooting_tool": tws_troubleshooting_tool,
         }
-
-    async def _get_tws_client(self) -> OptimizedTWSClient:
-        """
-        Lazily initializes and returns the TWS client.
-        Ensures a single client instance is reused with async-safe initialization.
-        """
-        if not self.tws_client:
-            # Use async lock to prevent race conditions during initialization
-            async with self._tws_init_lock:
-                # Double-check pattern: verify the client wasn't created while waiting for the lock
-                if not self.tws_client:
-                    logger.info("Initializing OptimizedTWSClient for the first time.")
-                    self.tws_client = OptimizedTWSClient(
-                        hostname=self.settings.TWS_HOST,
-                        port=self.settings.TWS_PORT,
-                        username=self.settings.TWS_USER,
-                        password=self.settings.TWS_PASSWORD,
-                        engine_name=self.settings.TWS_ENGINE_NAME,
-                        engine_owner=self.settings.TWS_ENGINE_OWNER,
-                    )
-                    # Inject the client into tools that need it
-                    for tool in self.tools.values():
-                        if isinstance(tool, TWSToolReadOnly):
-                            tool.tws_client = self.tws_client
-                    logger.info("TWS client initialization completed successfully.")
-        return self.tws_client
+        # Inject the client into tools that need it
+        for tool in tools.values():
+            if isinstance(tool, TWSToolReadOnly):
+                tool.tws_client = self.tws_client
+        logger.info(f"Discovered and configured {len(tools)} tools.")
+        return tools
 
     async def load_agents_from_config(self, config_path: Optional[Path] = None) -> None:
         """
@@ -188,8 +165,9 @@ class AgentManager:
         })
 
         try:
-            # Use provided config_path or get from settings
-            config_path = config_path or self.settings.AGENT_CONFIG_PATH
+            # Use provided config_path or get from settings, and ensure it's a Path object
+            path_str = config_path or self.settings.AGENT_CONFIG_PATH
+            config_path = Path(path_str)
             log_with_correlation(logging.INFO, f"Loading agent configurations from: {config_path}", correlation_id)
 
             if not config_path.exists():
@@ -267,8 +245,8 @@ class AgentManager:
         })
 
         agents = {}
-        # Ensure the TWS client is ready before creating agents that might need it
-        await self._get_tws_client()
+        # The TWS client is now injected via the constructor, so it's guaranteed
+        # to be available here. No need to fetch it again.
 
         for config in agent_configs:
             agent_correlation = runtime_metrics.create_correlation_id({
@@ -418,7 +396,6 @@ class AgentManager:
                 for config in self.agent_configs
             ],
             "health_status": runtime_metrics.get_health_status().get("agent_manager", {}),
-            "environment": get_environment_tags()
         }
 
     def create_agents_backup(self) -> Dict[str, Any]:
@@ -438,7 +415,6 @@ class AgentManager:
                 "agent_count": len(self.agents),
                 "tws_client_connected": self.tws_client is not None,
                 "tools_available": list(self.tools.keys()),
-                "environment": get_environment_tags()
             }
 
             log_with_correlation(logging.INFO, f"Created agent manager backup with {len(self.agent_configs)} configs", correlation_id)
@@ -498,5 +474,7 @@ class AgentManager:
             runtime_metrics.close_correlation_id(correlation_id)
 
 
-# Global singleton instance for backwards compatibility
-agent_manager = AgentManager()
+# The global singleton `agent_manager` has been removed as part of the
+# architectural refactoring to eliminate global state.
+# The AgentManager class should now be instantiated and managed by the
+# central dependency injection container.

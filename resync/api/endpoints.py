@@ -8,10 +8,9 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from resync.core.agent_manager import AgentConfig
-from resync.core.fastapi_di import get_agent_manager, get_tws_client
-from resync.core.interfaces import IAgentManager, ITWSClient
-from resync.core.metrics import metrics_registry
-from resync.core.tws_monitor import tws_monitor
+from resync.core.fastapi_di import get_agent_manager, get_tws_client, get_tws_monitor
+from resync.core.interfaces import IAgentManager, ITWSClient, ITWSMonitor
+from resync.core.metrics import runtime_metrics
 from resync.models.tws import SystemStatus
 from resync.settings import settings
 
@@ -69,14 +68,15 @@ async def get_system_status(
         status = SystemStatus(
             workstations=workstations, jobs=jobs, critical_jobs=critical_jobs
         )
-        # Record metrics upon successful status retrieval
-        metrics_registry.increment_counter("tws_status_requests_success")
-        metrics_registry.set_gauge("tws_workstations_total", len(workstations))
-        metrics_registry.set_gauge("tws_jobs_total", len(jobs))
+        # TODO: Refactor metrics to use the new runtime_metrics service
+        # runtime_metrics.increment_counter("tws_status_requests_success")
+        # runtime_metrics.set_gauge("tws_workstations_total", len(workstations))
+        # runtime_metrics.set_gauge("tws_jobs_total", len(jobs))
         return status
     except Exception as e:
         logger.error("Failed to get TWS system status: %s", e, exc_info=True)
-        metrics_registry.increment_counter("tws_status_requests_failed")
+        # TODO: Refactor metrics to use the new runtime_metrics service
+        # runtime_metrics.increment_counter("tws_status_requests_failed")
         raise HTTPException(
             status_code=503, detail=f"Falha ao comunicar com o TWS: {e}"
         ) from e
@@ -125,7 +125,8 @@ def get_metrics() -> str:
     """
     Returns application metrics in Prometheus text exposition format.
     """
-    return metrics_registry.generate_prometheus_metrics()
+    # TODO: Refactor to use runtime_metrics and a proper Prometheus exposition library.
+    return "# Metrics are currently disabled pending refactoring."
 
 
 @api_router.post("/chat")
@@ -196,7 +197,9 @@ async def files_endpoint(path: str) -> Dict[str, str]:
 
 # --- TWS Monitoring Endpoints ---
 @api_router.get("/monitoring/metrics", summary="Get TWS Performance Metrics")
-async def get_tws_metrics() -> Dict[str, Any]:
+async def get_tws_metrics(
+    tws_monitor: ITWSMonitor = Depends(get_tws_monitor),
+) -> Dict[str, Any]:
     """
     Returns comprehensive TWS performance metrics including:
     - API performance
@@ -209,7 +212,9 @@ async def get_tws_metrics() -> Dict[str, Any]:
 
 
 @api_router.get("/monitoring/alerts", summary="Get Recent System Alerts")
-async def get_tws_alerts(limit: int = 10) -> List[Dict[str, Any]]:
+async def get_tws_alerts(
+    limit: int = 10, tws_monitor: ITWSMonitor = Depends(get_tws_monitor)
+) -> List[Dict[str, Any]]:
     """
     Returns recent system alerts and warnings.
 
@@ -220,7 +225,9 @@ async def get_tws_alerts(limit: int = 10) -> List[Dict[str, Any]]:
 
 
 @api_router.get("/monitoring/health", summary="Get TWS System Health")
-async def get_tws_health_monitoring() -> Dict[str, Any]:  # Renamed to avoid conflict
+async def get_tws_health_monitoring(
+    tws_monitor: ITWSMonitor = Depends(get_tws_monitor),
+) -> Dict[str, Any]:  # Renamed to avoid conflict
     """
     Returns overall TWS system health status.
     """

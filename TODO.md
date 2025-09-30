@@ -18,7 +18,6 @@
 - [ ] Fix resync/core/metrics.py - Incompatible types in assignment
 - [ ] Fix resync/core/agent_manager.py - Multiple type issues
 - [ ] Fix resync/core/fastapi_di.py - Abstract type and callable issues
-- [ ] Fix resync/core/dependencies.py - Module attribute errors
 
 ### 3. API Security Issues [ ]
 - [ ] Fix resync/api/security/validations.py - Field overload and type errors

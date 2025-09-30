@@ -10,9 +10,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from resync.core.circuit_breaker import tws_api_breaker, tws_job_status_breaker
-from resync.core.llm_monitor import llm_cost_monitor
-
 logger = logging.getLogger(__name__)
 
 
@@ -62,11 +59,21 @@ class TWSMonitor:
     - Alert system for anomalies
     """
 
-    def __init__(self):
-        """Initialize TWS monitor."""
+    def __init__(self, api_breaker, job_status_breaker, cost_monitor):
+        """
+        Initialize TWS monitor with its dependencies.
+
+        Args:
+            api_breaker: The circuit breaker for the TWS API.
+            job_status_breaker: The circuit breaker for TWS job status checks.
+            cost_monitor: The monitor for LLM costs.
+        """
         self.metrics = TWSMetrics()
         self.metrics_history: List[TWSMetrics] = []
         self.alerts: List[Dict[str, Any]] = []
+        self.api_breaker = api_breaker
+        self.job_status_breaker = job_status_breaker
+        self.cost_monitor = cost_monitor
 
         # Monitoring intervals
         self.metrics_collection_interval = 60  # seconds
@@ -142,8 +149,8 @@ class TWSMonitor:
         self.metrics.api_response_times = self.metrics.api_response_times[-100:]
 
         # Circuit breaker metrics
-        api_stats = tws_api_breaker.get_stats()
-        job_stats = tws_job_status_breaker.get_stats()
+        api_stats = self.api_breaker.get_stats()
+        job_stats = self.job_status_breaker.get_stats()
 
         if api_stats["state"] == "open" or job_stats["state"] == "open":
             self.metrics.circuit_breaker_trips += 1
@@ -162,7 +169,7 @@ class TWSMonitor:
         )
 
         # LLM metrics
-        llm_report = llm_cost_monitor.get_usage_report()
+        llm_report = self.cost_monitor.get_usage_report()
         self.metrics.llm_requests = llm_report["total_requests"]
         self.metrics.llm_total_cost = llm_report["total_cost_usd"]
 
@@ -199,7 +206,7 @@ class TWSMonitor:
                 )
 
         # LLM cost check
-        llm_report = llm_cost_monitor.get_usage_report()
+        llm_report = self.cost_monitor.get_usage_report()
         daily_cost = sum(llm_report["daily_costs"].values())
         if daily_cost > self.alert_thresholds["llm_cost_daily"]:
             alerts_to_add.append(
@@ -268,13 +275,22 @@ class TWSMonitor:
         return {
             "current_metrics": self.get_current_metrics(),
             "alerts": self.get_alerts(10),
-            "llm_report": llm_cost_monitor.get_usage_report(),
+            "llm_report": self.cost_monitor.get_usage_report(),
             "circuit_breaker_stats": {
-                "tws_api": tws_api_breaker.get_stats(),
-                "tws_jobs": tws_job_status_breaker.get_stats(),
+                "tws_api": self.api_breaker.get_stats(),
+                "tws_jobs": self.job_status_breaker.get_stats(),
             },
         }
 
+    async def health_check(self) -> Dict[str, Any]:
+        """Health check for the TWS Monitor."""
+        return {
+            "status": "healthy" if self.is_running else "degraded",
+            "is_monitoring": self.is_running,
+            "alerts_count": len(self.alerts),
+            "timestamp": time.time(),
+        }
 
-# Global instance
-tws_monitor = TWSMonitor()
+
+# The global singleton `tws_monitor` has been removed.
+# This class should be instantiated and managed by the DI container.

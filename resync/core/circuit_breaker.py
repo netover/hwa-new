@@ -192,25 +192,6 @@ class CircuitBreakerOpen(Exception):
     """Exception raised when circuit breaker is open."""
 
 
-# Global circuit breakers for TWS services
-tws_api_breaker = CircuitBreaker(
-    CircuitBreakerConfig(
-        failure_threshold=5,
-        recovery_timeout=30.0,
-        expected_exception=Exception,  # Broad exception handling for TWS
-    )
-)
-
-tws_job_status_breaker = CircuitBreaker(
-    CircuitBreakerConfig(
-        failure_threshold=3, recovery_timeout=15.0, expected_exception=Exception
-    )
-)
-
-llm_api_breaker = CircuitBreaker(
-    CircuitBreakerConfig(
-        failure_threshold=5,
-        recovery_timeout=60.0,  # Longer recovery for LLM APIs
-        expected_exception=Exception,
-    )
-)
+# Global circuit breakers have been removed in favor of dependency injection.
+# Specific circuit breaker instances should be created and managed by the DI
+# container, configured with specific CircuitBreakerConfig instances as needed.

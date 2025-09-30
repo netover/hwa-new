@@ -225,5 +225,5 @@ class StreamingLLMResponse:
         return "".join(self.response_chunks)
 
 
-# Global instances
-llm_cost_monitor = LLMCostMonitor()
+# The global singleton `llm_cost_monitor` has been removed.
+# This class should be instantiated and managed by the DI container.

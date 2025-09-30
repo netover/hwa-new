@@ -46,26 +46,63 @@ class AgentManager:
 ## 2. Adding Integrations
 
 ### New Service Integration
-```python
-# resync/services/your_service.py
-from resync.core.dependencies import ServiceBase
 
-class YourService(ServiceBase):
-    def __init__(self, config: dict):
-        super().__init__(config)
-        self.base_url = config.get("base_url")
+1.  **Define an Interface (Contract)**
+    Create an abstract interface in `resync/core/interfaces.py` to define the service's contract.
 
-    async def make_request(self, endpoint: str):
-        # Implement request logic
-        return await self.client.get(endpoint)
-```
+    ```python
+    # resync/core/interfaces.py
+    from abc import ABC, abstractmethod
 
-### Dependency Injection
-```python
-# resync/core/dependencies.py
-def get_your_service dependency():
-    return YourService(settings.your_service_config)
-```
+    class IYourService(ABC):
+        @abstractmethod
+        async def make_request(self, endpoint: str) -> dict:
+            ...
+    ```
+
+2.  **Create the Concrete Implementation**
+    Implement the service in the `resync/services/` directory.
+
+    ```python
+    # resync/services/your_service.py
+    from resync.core.interfaces import IYourService
+
+    class YourService(IYourService):
+        def __init__(self, base_url: str):
+            self.base_url = base_url
+            # ... other setup, like an HTTP client
+
+        async def make_request(self, endpoint: str) -> dict:
+            # Implement request logic
+            # response = await self.client.get(f"{self.base_url}{endpoint}")
+            # return response.json()
+            return {"data": "example"}
+    ```
+
+3.  **Register the Service with the DI Container**
+    Register the interface and its implementation in `resync/core/fastapi_di.py`. Use a factory if the service has its own dependencies (like configuration).
+
+    ```python
+    # resync/core/fastapi_di.py
+
+    # ... other imports
+    from resync.core.interfaces import IYourService
+    from resync.services.your_service import YourService
+    from resync.settings import settings
+
+    def configure_container(app_container: DIContainer) -> DIContainer:
+        # ... other registrations
+
+        # Factory for YourService
+        def your_service_factory() -> IYourService:
+            return YourService(base_url=settings.YOUR_SERVICE_URL)
+
+        app_container.register_factory(
+            IYourService, your_service_factory, ServiceScope.SINGLETON
+        )
+
+        return app_container
+    ```
 
 ## 3. Extending AI Functionality
 

@@ -3,9 +3,9 @@
 
 # --- Variables ---
 # Use the project's virtual environment's Python interpreter
-PYTHON = .venv/bin/python
-PIP = .venv/bin/pip
-AGNO = .venv/bin/agno
+PYTHON = python
+PIP = pip
+AGNO = agno
 # Define the source directory for formatting and linting
 SRC_DIR = resync tests
 
@@ -17,14 +17,14 @@ venv:
 	@echo "--- Virtual environment created. Activate with 'source .venv/bin/activate' ---"
 
 .PHONY: install
-install: venv
+install:
 	@echo "--- Installing dependencies from requirements.txt ---"
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
 	@echo "--- Installing testing dependencies ---"
 	$(PIP) install pytest pytest-asyncio pytest-playwright
 	@echo "--- Installing Playwright browsers ---"
-	.venv/bin/playwright install --with-deps
+	playwright install --with-deps
 	@echo "--- Installation complete ---"
 
 # --- Code Quality & Formatting ---

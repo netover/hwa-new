@@ -17,17 +17,25 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from resync.core.agent_manager import AgentManager
 from resync.core.audit_queue import AsyncAuditQueue
 from resync.core.connection_manager import ConnectionManager
-from resync.core.di_container import DIContainer, ServiceScope, container
+from resync.core.di_container import DIContainer, ServiceScope
 from resync.core.file_ingestor import create_file_ingestor
+from resync.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+from resync.core.circuit_breaker_manager import CircuitBreakerManager
 from resync.core.interfaces import (
     IAgentManager,
     IAuditQueue,
+    ICircuitBreaker,
+    ICircuitBreakerManager,
     IConnectionManager,
     IFileIngestor,
     IKnowledgeGraph,
+    ILLMCostMonitor,
     ITWSClient,
+    ITWSMonitor,
 )
 from resync.core.knowledge_graph import AsyncKnowledgeGraph
+from resync.core.llm_monitor import LLMCostMonitor
+from resync.core.tws_monitor import TWSMonitor
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
@@ -61,32 +69,37 @@ def get_tws_client_factory():
         )
 
 
-def configure_container(app_container: DIContainer = container) -> DIContainer:
+def configure_container(app_container: DIContainer) -> DIContainer:
     """
     Configure the DI container with all service registrations.
 
+    This function is the single source of truth for defining how services
+    are created and what their dependencies are.
+
     Args:
-        app_container: The container to configure (default: global container).
+        app_container: The container instance to configure.
 
     Returns:
         The configured container.
     """
-    # Register interfaces and implementations
-    app_container.register(IAgentManager, AgentManager, ServiceScope.SINGLETON)
-    app_container.register(
-        IConnectionManager, ConnectionManager, ServiceScope.SINGLETON
-    )
-    app_container.register(IKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON)
-    app_container.register(IAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
+    # --- Service Factories ---
 
-    # Register TWS client with factory
+    # Factory for TWS Client (handles mock vs. real client)
     app_container.register_factory(
         ITWSClient, get_tws_client_factory, ServiceScope.SINGLETON
     )
 
-    # Register FileIngestor - depends on KnowledgeGraph
-    # Using a factory function to ensure dependencies are properly resolved
-    def file_ingestor_factory():
+    # Factory for AgentManager (depends on ITWSClient)
+    def agent_manager_factory() -> AgentManager:
+        tws_client = app_container.get(ITWSClient)
+        return AgentManager(tws_client=tws_client)
+
+    app_container.register_factory(
+        IAgentManager, agent_manager_factory, ServiceScope.SINGLETON
+    )
+
+    # Factory for FileIngestor (depends on IKnowledgeGraph)
+    def file_ingestor_factory() -> IFileIngestor:
         knowledge_graph = app_container.get(IKnowledgeGraph)
         return create_file_ingestor(knowledge_graph)
 
@@ -94,8 +107,40 @@ def configure_container(app_container: DIContainer = container) -> DIContainer:
         IFileIngestor, file_ingestor_factory, ServiceScope.SINGLETON
     )
 
-    # Register concrete types (for when the concrete type is requested directly)
-    app_container.register(AgentManager, AgentManager, ServiceScope.SINGLETON)
+    # Factory for TWSMonitor (depends on circuit breakers and cost monitor)
+    def tws_monitor_factory() -> ITWSMonitor:
+        # Instantiate dependencies required by TWSMonitor
+        api_breaker = CircuitBreaker(
+            CircuitBreakerConfig(failure_threshold=5, recovery_timeout=30.0)
+        )
+        job_status_breaker = CircuitBreaker(
+            CircuitBreakerConfig(failure_threshold=3, recovery_timeout=15.0)
+        )
+        cost_monitor = app_container.get(ILLMCostMonitor)
+        return TWSMonitor(
+            api_breaker=api_breaker,
+            job_status_breaker=job_status_breaker,
+            cost_monitor=cost_monitor,
+        )
+
+    app_container.register_factory(
+        ITWSMonitor, tws_monitor_factory, ServiceScope.SINGLETON
+    )
+
+    # --- Direct Registrations (services with no complex dependencies) ---
+    app_container.register(
+        IConnectionManager, ConnectionManager, ServiceScope.SINGLETON
+    )
+    app_container.register(IKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON)
+    app_container.register(IAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
+    app_container.register(ILLMCostMonitor, LLMCostMonitor, ServiceScope.SINGLETON)
+    app_container.register(ICircuitBreakerManager, CircuitBreakerManager, ServiceScope.SINGLETON)
+
+
+    # --- Concrete Type Registrations (for when a concrete type is requested) ---
+    # This allows injecting the concrete class itself, e.g., for type checking
+    # or when a specific implementation method is needed.
+    app_container.register_factory(AgentManager, agent_manager_factory, ServiceScope.SINGLETON)
     app_container.register(ConnectionManager, ConnectionManager, ServiceScope.SINGLETON)
     app_container.register(
         AsyncKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON
@@ -109,47 +154,56 @@ def configure_container(app_container: DIContainer = container) -> DIContainer:
     return app_container
 
 
-def get_service(service_type: Type[T]) -> Callable[[], T]:
+def get_service(service_type: Type[T]) -> Callable[[Request], T]:
     """
-    Create a FastAPI dependency that resolves a service from the container.
+    Create a FastAPI dependency that resolves a service from the container
+    stored in the request state.
 
     Args:
         service_type: The type of service to resolve.
 
     Returns:
-        A callable that resolves the service from the container.
+        A callable that FastAPI can use as a dependency.
     """
 
-    def _get_service() -> T:
-        return container.get(service_type)
+    def _get_service(request: Request) -> T:
+        """
+        Resolves and returns a service instance from the container attached to
+        the request.
+        """
+        try:
+            return request.state.container.get(service_type)
+        except AttributeError:
+            # This would indicate a severe configuration error
+            # where the middleware is not running.
+            logger.critical("DI container not found in request state. Is DIMiddleware configured?")
+            raise RuntimeError("DI container not found in request state.")
 
-    # Set the return annotation for FastAPI to use
-    _get_service.__annotations__ = {"return": service_type}
     return _get_service
 
 
 # Create specific dependencies for common services
-get_agent_manager = get_service(IAgentManager)
-get_connection_manager = get_service(IConnectionManager)
-get_knowledge_graph = get_service(IKnowledgeGraph)
-get_audit_queue = get_service(IAuditQueue)
-get_tws_client = get_service(ITWSClient)
-get_file_ingestor = get_service(IFileIngestor)
+get_agent_manager: Callable[[Request], IAgentManager] = get_service(IAgentManager)
+get_connection_manager: Callable[[Request], IConnectionManager] = get_service(IConnectionManager)
+get_knowledge_graph: Callable[[Request], IKnowledgeGraph] = get_service(IKnowledgeGraph)
+get_audit_queue: Callable[[Request], IAuditQueue] = get_service(IAuditQueue)
+get_tws_client: Callable[[Request], ITWSClient] = get_service(ITWSClient)
+get_file_ingestor: Callable[[Request], IFileIngestor] = get_service(IFileIngestor)
+get_tws_monitor: Callable[[Request], ITWSMonitor] = get_service(ITWSMonitor)
 
 
 class DIMiddleware(BaseHTTPMiddleware):
     """
-    Middleware that ensures the DI container is properly initialized and
-    available for each request.
+    Middleware that attaches the application's DI container to each request's state.
     """
 
-    def __init__(self, app: FastAPI, container_instance: DIContainer = container):
+    def __init__(self, app: FastAPI, container_instance: DIContainer):
         """
-        Initialize the middleware with the application and container.
+        Initialize the middleware with the application and the container.
 
         Args:
             app: The FastAPI application.
-            container_instance: The DI container to use.
+            container_instance: The authoritative DI container instance.
         """
         super().__init__(app)
         self.container = container_instance
@@ -157,91 +211,35 @@ class DIMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> Any:
         """
-        Process the request and attach the container to it.
-
-        Args:
-            request: The incoming request.
-            call_next: The next middleware or route handler.
-
-        Returns:
-            The response from the next handler.
+        Attach the container to the request state and process the request.
         """
-        # Attach the container to the request state
         request.state.container = self.container
-
-        # Continue processing the request
         response = await call_next(request)
         return response
 
 
-def inject_container(app: FastAPI, container_instance: Optional[DIContainer] = None) -> None:
+def inject_container(app: FastAPI, container_instance: DIContainer) -> None:
     """
-    Configure the application to use the DI container.
+    Configures the application to use the specified DI container.
 
     This function:
-    1. Configures the container with all service registrations
-    2. Adds the DIMiddleware to the application
+    1. Configures the container by registering all services.
+    2. Adds the DIMiddleware to the application stack.
 
     Args:
         app: The FastAPI application.
-        container_instance: The DI container to use (default: global container).
+        container_instance: The authoritative DI container for the application.
     """
-    # Use the provided container or the global one
-    container_to_use = container_instance or container
+    # Configure the container with all service definitions
+    configure_container(container_instance)
 
-    # Configure the container
-    configure_container(container_to_use)
-
-    # Add the middleware
-    app.add_middleware(DIMiddleware, container_instance=container_to_use)
+    # Add the middleware to make the container available in requests
+    app.add_middleware(DIMiddleware, container_instance=container_instance)
 
     logger.info("DI container injected into FastAPI application")
 
 
-def with_injection(func: Callable) -> Callable:
-    """
-    Decorator that injects dependencies into a function from the container.
-
-    This decorator inspects the function's signature and resolves dependencies
-    from the container based on type annotations.
-
-    Args:
-        func: The function to inject dependencies into.
-
-    Returns:
-        A wrapper function that resolves dependencies from the container.
-    """
-    signature = inspect.signature(func)
-    parameters = list(signature.parameters.values())
-
-    @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        # Get type hints for parameters
-        type_hints = get_type_hints(func)
-
-        # Build arguments for the function
-        for param in parameters:
-            # Skip if the parameter is already provided
-            if param.name in kwargs:
-                continue
-
-            # Skip *args and **kwargs
-            if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
-                continue
-
-            # Get parameter type
-            param_type = type_hints.get(param.name, Any)
-
-            # Try to resolve the parameter from the container
-            try:
-                kwargs[param.name] = container.get(param_type)
-            except KeyError:
-                # If the parameter has a default value, use it
-                if param.default is not param.empty:
-                    kwargs[param.name] = param.default
-                # Otherwise, just skip it and let the function handle it
-
-        # Call the function with the resolved dependencies
-        return func(*args, **kwargs)
-
-    return wrapper
+# The `with_injection` decorator has been removed as it was a relic of the
+# previous global container system and is no longer used.
+# FastAPI's `Depends` mechanism is the standard way to handle dependency
+# injection in this architecture.

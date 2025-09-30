@@ -13,7 +13,7 @@ settings = Dynaconf(
         f"settings.{os.environ.get('APP_ENV', 'development')}.toml"  # Environment-specific overrides
     ],
     environments=True,  # Enable environment-specific loading
-    load_dotenv=False,  # Disable automatic .env loading for CI/CD compatibility
+    load_dotenv=True,  # Load .env file for local development
     env_switcher="APP_ENV",  # Use APP_ENV to switch environments
 )
 
