@@ -142,7 +142,7 @@ class AsyncTTLCache:
                                 "key_hash": key_hash,
                                 "num_shards": self.num_shards,
                             }
-                        ).id
+                        )
                     },
                 )
 
@@ -281,7 +281,7 @@ class AsyncTTLCache:
             TypeError: If key is invalid
         """
         correlation_id = runtime_metrics.create_correlation_id(
-            {"component": "async_cache", "operation": "get", "key": key}
+            {"component": "async_cache", "operation": "get", "key": repr(key)}
         )
 
         try:
@@ -404,7 +404,7 @@ class AsyncTTLCache:
             runtime_metrics.close_correlation_id(correlation_id)
 
     async def set(
-        self, key: str, value: Any, ttl_seconds: Optional[int] = None
+        self, key: str, value: Any, ttl_seconds: Optional[float] = None
     ) -> None:
         """
         Asynchronously add an item to the cache with comprehensive input validation.
@@ -422,7 +422,7 @@ class AsyncTTLCache:
             {
                 "component": "async_cache",
                 "operation": "set",
-                "key": key,
+                "key": repr(key),
                 "ttl_seconds": ttl_seconds,
             }
         )
@@ -477,13 +477,15 @@ class AsyncTTLCache:
                 f"Cache SET failed for key {repr(key)}: {e}",
                 correlation_id,
             )
+            # Re-raising the exception to make the caller aware of the failure.
+            # Silent failures in cache operations are dangerous.
             raise
         finally:
             runtime_metrics.close_correlation_id(correlation_id)
 
     def _validate_cache_inputs(
-        self, key: Any, value: Any, ttl_seconds: Optional[int]
-    ) -> tuple[str, int]:
+        self, key: Any, value: Any, ttl_seconds: Optional[float]
+    ) -> tuple[str, float]:
         """
         Comprehensive input validation based on fuzzing failures.
 
@@ -540,7 +542,7 @@ class AsyncTTLCache:
             pickle.dumps(value, protocol=0)  # Use protocol 0 for basic compatibility
         except (TypeError, AttributeError, pickle.PicklingError) as e:
             # Allow some common non-pickleable types that are safe
-            if not isinstance(value, (object, type, function)):
+            if not isinstance(value, (object, type, lambda: None)):
                 raise ValueError(f"Cache value must be serializable: {e}")
 
         # TTL VALIDATION - PREVENT EDGE CASES
@@ -552,10 +554,8 @@ class AsyncTTLCache:
             raise ValueError(f"TTL cannot be negative: {ttl_seconds}")
         elif ttl_seconds > 86400 * 365:  # Max 1 year
             raise ValueError(f"TTL too large: {ttl_seconds} seconds (max 1 year)")
-        elif ttl_seconds == 0:
-            raise ValueError("TTL cannot be zero (use delete instead)")
 
-        return key, int(ttl_seconds)
+        return key, float(ttl_seconds)
 
     async def delete(self, key: str) -> bool:
         """
@@ -759,7 +759,7 @@ class AsyncTTLCache:
             True if within bounds, False if too large
         """
         current_size = self.size()
-        max_safe_size = 50000  # Max 50K entries per cache instance
+        max_safe_size = 100000  # Max 100K entries per cache instance
 
         if current_size > max_safe_size:
             logger.warning(
@@ -772,7 +772,7 @@ class AsyncTTLCache:
                             "current_size": current_size,
                             "max_safe_size": max_safe_size,
                         }
-                    ).id
+                    )
                 },
             )
             return False
@@ -790,7 +790,7 @@ class AsyncTTLCache:
                             "estimated_mb": estimated_memory_mb,
                             "current_size": current_size,
                         }
-                    ).id
+                    )
                 },
             )
             return False

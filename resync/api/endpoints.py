@@ -143,9 +143,9 @@ async def sensitive_endpoint(data: Dict[str, Any]) -> Dict[str, str]:
     from resync.core.encryption_service import encryption_service
 
     encrypted = encryption_service.encrypt(data["data"])
-    from resync.core.logger import log_info
+    from resync.core.logger import log_with_correlation
 
-    log_info("Processing sensitive data (encrypted successfully)")
+    log_with_correlation(logging.INFO, "Processing sensitive data (encrypted successfully)", component="api")
     return {"encrypted": encrypted}
 
 

@@ -5,131 +5,135 @@ This module tests the dependency injection patterns implemented in the applicati
 ensuring proper AgentManager instance management and dependency resolution.
 """
 
-from unittest.mock import MagicMock, patch
-
+from unittest.mock import MagicMock, patch, AsyncMock
 import pytest
+import pytest_asyncio
 
 from resync.core.agent_manager import AgentManager
 from resync.core.dependencies import get_tws_client
-
+from resync.services.mock_tws_service import MockTWSClient
 
 class TestDependencyInjection:
     """Test dependency injection patterns."""
 
-    @pytest.mark.di
-    def test_tws_client_dependency_injection(self, mock_agent_manager):
-        """Test TWS client dependency injection."""
-        with patch(
-            "resync.core.dependencies.agent_manager"
-        ) as mock_agent_manager_module:
-            mock_agent_manager_module._get_tws_client.return_value = MagicMock()
+    @pytest_asyncio.fixture(autouse=True)
+    def reset_singleton(self):
+        """Reset the AgentManager singleton before each test in this class."""
+        # This is a robust way to reset the singleton used by the dependency injector
+        if "resync.core.dependencies" in __import__("sys").modules:
+            # Re-importing won't work due to caching, so we directly manipulate the singleton
+            __import__("sys").modules["resync.core.dependencies"].agent_manager = AgentManager()
+            AgentManager._instance = None
 
-            # Test that we can get TWS client
-            gen = get_tws_client()
-            client = next(gen)
-            assert client is not None
 
-    @pytest.mark.di
-    def test_tws_client_mock_mode(self):
-        """Test TWS client in mock mode."""
-        with patch("resync.core.dependencies.settings") as mock_settings:
-            with patch("resync.core.dependencies.agent_manager") as mock_agent_manager:
-                mock_settings.TWS_MOCK_MODE = True
-                mock_agent_manager._mock_tws_client = MagicMock()
+    @pytest.mark.asyncio
+    async def test_tws_client_dependency_injection_real(self):
+        """Test REAL TWS client dependency injection when TWS_MOCK_MODE is False."""
+        mock_tws_client_instance = AsyncMock()
 
-                # Test that mock client is returned when TWS_MOCK_MODE is True
-                gen = get_tws_client()
-                client = next(gen)
-                assert client is not None
+        with patch("resync.core.dependencies.settings") as mock_settings, \
+             patch("resync.core.dependencies.agent_manager._get_tws_client", return_value=mock_tws_client_instance) as mock_get_client:
 
-    @pytest.mark.di
-    def test_dependency_error_handling(self):
+            mock_settings.TWS_MOCK_MODE = False
+
+            client = await anext(get_tws_client())
+
+            assert client is mock_tws_client_instance
+            mock_get_client.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_tws_client_dependency_injection_mock(self):
+        """Test MOCK TWS client dependency injection when TWS_MOCK_MODE is True."""
+        mock_tws_client_instance = MagicMock(spec=MockTWSClient)
+
+        with patch("resync.core.dependencies.settings") as mock_settings, \
+             patch("resync.core.dependencies.agent_manager") as mock_agent_manager_module:
+
+            mock_settings.TWS_MOCK_MODE = True
+            mock_agent_manager_module._mock_tws_client = mock_tws_client_instance
+
+            client = await anext(get_tws_client())
+
+            assert client is mock_tws_client_instance
+
+    @pytest.mark.asyncio
+    async def test_dependency_error_handling(self):
         """Test error handling in dependency injection."""
-        with patch("resync.core.dependencies.agent_manager") as mock_agent_manager:
-            # Simulate agent manager failure
-            mock_agent_manager._get_tws_client.side_effect = Exception(
-                "TWS client unavailable"
-            )
+        with patch("resync.core.dependencies.settings") as mock_settings, \
+             patch("resync.core.dependencies.agent_manager._get_tws_client", new_callable=AsyncMock) as mock_get_client:
 
-            gen = get_tws_client()
+            mock_settings.TWS_MOCK_MODE = False
+            mock_get_client.side_effect = Exception("TWS client unavailable")
+
             with pytest.raises(Exception, match="TWS client unavailable"):
-                next(gen)
+                await anext(get_tws_client())
 
-    @pytest.mark.di
-    def test_dependency_caching(self):
-        """Test that dependencies are properly cached."""
-        call_count = 0
-
-        def mock_tws_factory():
-            nonlocal call_count
-            call_count += 1
-            return MagicMock()
-
-        with patch("resync.core.dependencies.agent_manager") as mock_agent_manager:
-            mock_agent_manager._get_tws_client.side_effect = mock_tws_factory
-
-            # First call should create new instance
-            gen1 = get_tws_client()
-            client1 = next(gen1)
-            assert call_count == 1
-
-            # Second call should reuse cached instance
-            gen2 = get_tws_client()
-            client2 = next(gen2)
-            assert call_count == 1  # Should still be 1, not 2
-
-    @pytest.mark.di
-    def test_environment_specific_dependencies(self):
-        """Test environment-specific dependency configuration."""
+    @pytest.mark.asyncio
+    async def test_dependency_caching(self):
+        """Test that dependencies are properly cached by the manager by mocking the constructor."""
         with patch("resync.core.dependencies.settings") as mock_settings:
-            with patch("resync.core.dependencies.agent_manager") as mock_agent_manager:
-                # Test with mock mode enabled
-                mock_settings.TWS_MOCK_MODE = True
-                mock_agent_manager._mock_tws_client = MagicMock()
+            mock_settings.TWS_MOCK_MODE = False
 
-                client = next(get_tws_client())
-                assert client is not None
+            # Since get_tws_client uses the global agent_manager, we need to reset its client
+            __import__("sys").modules["resync.core.dependencies"].agent_manager.tws_client = None
+
+            with patch("resync.core.agent_manager.OptimizedTWSClient") as MockClientClass:
+                mock_instance = MagicMock()
+                MockClientClass.return_value = mock_instance
+
+                # First call should create and cache the client
+                client1 = await anext(get_tws_client())
+                MockClientClass.assert_called_once()
+                assert client1 is mock_instance
+
+                # Second call should return the cached client
+                client2 = await anext(get_tws_client())
+                MockClientClass.assert_called_once()
+
+                assert client1 is client2
 
 
-class TestAgentManager:
-    """Test AgentManager functionality."""
+class TestAgentManagerDI:
+    """Test AgentManager functionality within a DI context."""
 
-    @pytest.mark.di
-    def test_agent_manager_initialization(self):
+    @pytest_asyncio.fixture
+    def agent_manager(self):
+        """Fixture to provide a clean instance of AgentManager for each test."""
+        AgentManager._instance = None
+        manager = AgentManager()
+        with patch.object(manager, 'load_agents_from_config', new_callable=AsyncMock):
+            yield manager
+
+    @pytest.mark.asyncio
+    async def test_agent_manager_initialization(self, agent_manager):
         """Test AgentManager initialization."""
-        with patch.object(AgentManager, "load_agents_from_config", return_value=[]):
-            manager = AgentManager()
-            assert manager is not None
-            assert manager.agents == {}
-            assert manager.agent_configs == []
+        assert agent_manager is not None
+        assert agent_manager.agents == {}
+        assert agent_manager.agent_configs == []
 
-    @pytest.mark.di
-    def test_agent_manager_singleton_behavior(self):
+    @pytest.mark.asyncio
+    async def test_agent_manager_singleton_behavior(self, agent_manager):
         """Test that AgentManager behaves as singleton."""
-        manager1 = AgentManager()
+        manager1 = agent_manager
         manager2 = AgentManager()
         assert manager1 is manager2
 
-    @pytest.mark.di
-    def test_agent_manager_get_agent(self):
+    @pytest.mark.asyncio
+    async def test_agent_manager_get_agent(self, agent_manager):
         """Test AgentManager get_agent method."""
-        manager = AgentManager()
-        agent = manager.get_agent("nonexistent")
+        agent = await agent_manager.get_agent("nonexistent")
         assert agent is None
 
-    @pytest.mark.di
-    def test_agent_manager_get_all_agents(self):
+    @pytest.mark.asyncio
+    async def test_agent_manager_get_all_agents(self, agent_manager):
         """Test AgentManager get_all_agents method."""
-        with patch.object(AgentManager, "load_agents_from_config", return_value=[]):
-            manager = AgentManager()
-            agents = manager.get_all_agents()
-            assert agents == []
+        agents = await agent_manager.get_all_agents()
+        assert agents == []
 
-    @pytest.mark.di
-    def test_agent_manager_tools_discovery(self):
+    @pytest.mark.asyncio
+    async def test_agent_manager_tools_discovery(self, agent_manager):
         """Test AgentManager tools discovery."""
-        manager = AgentManager()
-        tools = manager._discover_tools()
+        tools = agent_manager._discover_tools()
         assert isinstance(tools, dict)
         assert "tws_status_tool" in tools
         assert "tws_troubleshooting_tool" in tools

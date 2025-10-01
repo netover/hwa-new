@@ -118,7 +118,7 @@ class AdaptiveCircuitBreaker:
         return {
             **self._metrics,
             "success_rate": self.get_success_rate(),
-            "circuit_state": self._circuit_breaker.current_state.name
+            "circuit_state": self._circuit_breaker.current_state
             if self._circuit_breaker
             else "unknown",
             "fail_max": self._circuit_breaker.fail_max if self._circuit_breaker else 0,

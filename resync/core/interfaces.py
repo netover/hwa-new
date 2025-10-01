@@ -162,6 +162,22 @@ class ITWSClient(Protocol):
         """Retrieves the current TWS system status."""
         ...
 
+    async def get_workstations_status(self) -> List[Dict[str, Any]]:
+        """Retrieves the status of all workstations."""
+        ...
+
+    async def get_jobs_status(self) -> List[Dict[str, Any]]:
+        """Retrieves the status of all jobs."""
+        ...
+
+    async def get_critical_path_status(self) -> List[Dict[str, Any]]:
+        """Retrieves the status of jobs on the critical path."""
+        ...
+
+    async def check_connection(self) -> bool:
+        """Checks if the connection to TWS is active."""
+        ...
+
     @property
     def is_connected(self) -> bool:
         """Checks if the TWS client is currently connected."""

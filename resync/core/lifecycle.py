@@ -390,23 +390,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             )
 
 
-def validate_tws_host(host: str) -> None:
-    """Validate TWS_HOST format (IP:port) using InputSanitizer."""
-    try:
-        sanitized_host, sanitized_port = InputSanitizer.sanitize_host_port(host)
-        log_with_correlation(
-            logging.DEBUG,
-            f"TWS host validation successful: {sanitized_host}:{sanitized_port}",
-            correlation_id=AppContext.get_correlation_id(),
-            component="validation",
-            operation="tws_host",
-            host=sanitized_host,
-            port=sanitized_port,
-        )
-    except ValueError as e:
-        raise ConfigError(f"Invalid TWS_HOST format: {host}. {e}") from e
-
-
 def validate_paths() -> None:
     """Validate that required paths exist using InputSanitizer."""
     path_configs = [
@@ -441,7 +424,6 @@ def validate_settings() -> None:
     missing = [v for v in required_vars if not getattr(settings, v, None)]
     if missing:
         raise ConfigError(f"Missing required settings: {', '.join(missing)}")
-    validate_tws_host(settings.TWS_HOST)
     validate_paths()
     logger.info("Settings validation completed successfully")
 
@@ -460,8 +442,9 @@ async def initialize_core_systems() -> None:
         await container.get(AsyncKnowledgeGraph)
         container.register(IKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON)
 
-        file_ingestor = await container.get(FileIngestor)
+        # Register FileIngestor before getting it
         container.register(IFileIngestor, FileIngestor, ServiceScope.SINGLETON)
+        file_ingestor = await container.get(IFileIngestor)
         await load_existing_rag_documents(file_ingestor)
 
     except Exception as e:

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from resync.core.agent_manager import AgentManager
+from resync.tool_definitions.tws_tools import TWSStatusTool
 
 
 @pytest.fixture
@@ -15,7 +16,6 @@ def agent_manager_instance() -> AgentManager:
     """Provides a clean instance of the AgentManager for each test."""
     # Reset the singleton for isolation between tests
     AgentManager._instance = None
-    AgentManager._initialized = False
     return AgentManager()
 
 
@@ -70,8 +70,9 @@ async def test_load_agents_from_config(
     agent = await agent_manager_instance.get_agent("test-agent-1")
     assert agent is not None
     # Check if the system prompt was constructed correctly
-    assert "You are Test Agent 1" in agent.system
-    assert "tws_status_tool" in [t.name for t in agent.tools]
+    assert "You are Test Agent 1" in agent.instructions
+    # Check that the correct tool instance is present by its type
+    assert any(isinstance(t, TWSStatusTool) for t in agent.tools)
 
 
 @pytest.mark.asyncio
@@ -97,16 +98,22 @@ async def test_load_agents_from_invalid_json(
     agent_manager_instance: AgentManager, tmp_path: Path
 ):
     """
-    Tests that the agent manager handles a malformed JSON file gracefully.
+    Tests that the agent manager handles a malformed JSON file gracefully
+    by raising a DataParsingError.
     """
+    from resync.core.exceptions import DataParsingError
+
     # Arrange
     invalid_json_file = tmp_path / "invalid.json"
     invalid_json_file.write_text("{'invalid': 'json',}")  # Malformed JSON
 
-    # Act
-    await agent_manager_instance.load_agents_from_config(config_path=invalid_json_file)
+    # Act & Assert
+    with pytest.raises(DataParsingError):
+        await agent_manager_instance.load_agents_from_config(
+            config_path=invalid_json_file
+        )
 
-    # Assert
+    # Also assert that the internal state remains clean
     assert agent_manager_instance.agents == {}
 
 
@@ -116,9 +123,8 @@ async def test_tws_client_race_condition_prevention():
     Tests that multiple concurrent calls to initialize TWS client
     only result in a single actual initialization.
     """
-    # Arrange
+    # Arrange - get a clean singleton instance
     AgentManager._instance = None
-    AgentManager._initialized = False
     agent_manager = AgentManager()
 
     # Mock the OptimizedTWSClient to track initialization calls
@@ -166,9 +172,8 @@ async def test_async_agent_loading(mock_config_file: Path):
     """
     Tests that agent loading works correctly with async methods.
     """
-    # Arrange
+    # Arrange - get a clean singleton instance
     AgentManager._instance = None
-    AgentManager._initialized = False
     agent_manager = AgentManager()
 
     with patch("resync.core.agent_manager.OptimizedTWSClient") as mock_tws_client:

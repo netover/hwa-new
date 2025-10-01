@@ -84,15 +84,26 @@ class AgentsConfig(BaseModel):
 class AgentManager:
     """
     Manages the lifecycle and operations of AI agents.
+    Implements the singleton pattern to ensure a single instance.
     """
+
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(AgentManager, cls).__new__(cls)
+        return cls._instance
 
     def __init__(self, settings_module: Any = settings) -> None:
         """
-        Initializes the AgentManager with dependencies.
-
-        Args:
-            settings_module: The settings module to use (default: global settings).
+        Initializes the AgentManager.
+        Note: Due to the singleton pattern, this will only run the first time.
         """
+        # Prevent re-initialization
+        if hasattr(self, "_initialized"):
+            return
+        self._initialized = True
+
         global_correlation = get_global_correlation_id()
         correlation_id = runtime_metrics.create_correlation_id(
             {
@@ -135,7 +146,7 @@ class AgentManager:
 
             self.settings = settings_module
             self.agents: Dict[str, Any] = {}
-            self.agent_configs: List[AgentConfig] = []  # Correct initialization
+            self.agent_configs: List[AgentConfig] = []
             self.tools: Dict[str, Any] = self._discover_tools()
             self.tws_client: Optional[OptimizedTWSClient] = None
             self._mock_tws_client: Optional[MockTWSClient] = None
@@ -181,7 +192,7 @@ class AgentManager:
                     logger.info("Initializing OptimizedTWSClient for the first time.")
                     self.tws_client = OptimizedTWSClient(
                         hostname=self.settings.TWS_HOST,
-                        port=self.settings.TWS_PORT,
+            port=self.settings.TWS_PORT,
                         username=self.settings.TWS_USER,
                         password=self.settings.TWS_PASSWORD,
                         engine_name=self.settings.TWS_ENGINE_NAME,
@@ -220,11 +231,8 @@ class AgentManager:
             if not config_path.exists():
                 error_msg = f"Agent configuration file not found at {config_path}"
                 log_with_correlation(logging.ERROR, error_msg, correlation_id)
-                # runtime_metrics.record_health_check(
-                #     "agent_config", "missing", {"path": str(config_path)}
-                # )
                 self.agents = {}
-                self.agent_configs = []  # Ensure it's reset if config not found
+                self.agent_configs = []
                 return
 
             try:
@@ -232,7 +240,7 @@ class AgentManager:
                     config_data = json.load(f)
 
                 config = AgentsConfig.parse_obj(config_data)
-                self.agent_configs = config.agents  # Correct assignment
+                self.agent_configs = config.agents
                 self.agents = await self._create_agents(config.agents)
 
                 log_with_correlation(
@@ -372,10 +380,7 @@ class AgentManager:
                 # Using agno.Agent to create the agent instance
                 agent = Agent(
                     tools=agent_tools,
-                    # Note: The 'model' parameter in agno.Client refers to the LLM.
-                    # We use 'model_name' from our config.
-                    model=config.model_name,  # type: ignore[arg-type]
-                    # system prompt is constructed from agent personality
+                    model=config.model_name,
                     instructions=(
                         f"You are {config.name}, a specialized AI agent. "
                         f"Your role is: {config.role}. "
@@ -465,27 +470,17 @@ class AgentManager:
     async def get_agent(self, agent_id: str) -> Optional[Any]:
         """
         Retrieves a loaded agent by its ID.
-        Ensures agents are loaded before retrieval.
         """
-        if not self.agents:
-            logger.info("Agents not loaded. Triggering load from get_agent.")
-            await self.load_agents_from_config()
         return self.agents.get(agent_id)
 
     async def get_all_agents(self) -> List[AgentConfig]:
         """
         Returns the configuration of all loaded agents.
-        Ensures agents are loaded before returning the list.
         """
-        if not self.agent_configs:
-            logger.info(
-                "Agent configs not loaded. Triggering load from get_all_agents."
-            )
-            await self.load_agents_from_config()
         return self.agent_configs
 
     async def get_agent_with_tool(self, agent_id: str, tool_name: str) -> Optional[Any]:
-        """Retrieves an agent that has the specified tool, raising ValueError if not found."""
+        """Retrieves an agent if it has the specified tool, raising ValueError if not found."""
         correlation_id = runtime_metrics.create_correlation_id(
             {
                 "component": "agent_manager",
@@ -503,7 +498,12 @@ class AgentManager:
                 )
                 raise ValueError(f"Agent {agent_id} not found")
 
-            if any(t.name == tool_name for t in agent.tools):
+            # Correctly check against the agent's configuration
+            agent_config = next(
+                (c for c in self.agent_configs if c.id == agent_id), None
+            )
+
+            if agent_config and tool_name in agent_config.tools:
                 return agent
             else:
                 log_with_correlation(

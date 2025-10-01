@@ -36,31 +36,25 @@ class CoreBootManager:
         self._failed_imports: Set[str] = set()
         self._global_correlation_context = {
             "boot_id": self._correlation_id,
-            "environment": env_detector._environment,
-            "security_level": env_detector._security_level,
+            "environment": "unknown",  # Will be set by env_detector
+            "security_level": "unknown",
             "start_time": time.time(),
             "events": [],
         }
 
-    def register_component(
-        self, name: str, component: Any, health_check: bool = True
-    ) -> None:
-        """Register a component with health validation."""
+    def register_component(self, name: str, component: Any) -> None:
+        """Register a component. Health checks are deferred."""
         with self._boot_lock:
             start_time = time.time()
             try:
                 self._components[name] = component
                 self._boot_times[name] = time.time() - start_time
 
-                if health_check and hasattr(component, "health_check"):
-                    # Perform immediate health check
-                    health_result = asyncio.run(self._check_component_health(component))
-                    self._health_status[name] = health_result
-                else:
-                    self._health_status[name] = {
-                        "status": "unknown",
-                        "message": "No health check available",
-                    }
+                # Defer health check to avoid blocking on import
+                self._health_status[name] = {
+                    "status": "pending_check",
+                    "message": "Health check deferred",
+                }
 
                 logger.info(
                     f"Component '{name}' registered successfully",
@@ -296,6 +290,8 @@ env_detector = EnvironmentDetector()
 
 # Global boot manager instance
 boot_manager = CoreBootManager()
+boot_manager._global_correlation_context["environment"] = env_detector._environment
+boot_manager._global_correlation_context["security_level"] = env_detector._security_level
 
 
 # --- Hardened Encryption Service ---
@@ -425,9 +421,7 @@ def register_core_components():
 
     # Encryption service with environment awareness
     encryption_svc = EncryptionService()
-    boot_manager.register_component(
-        "encryption_service", encryption_svc, health_check=True
-    )
+    boot_manager.register_component("encryption_service", encryption_svc)
 
 
 # Initialize components

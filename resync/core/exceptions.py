@@ -96,6 +96,22 @@ class AgentError(ProcessingError):
     """Raised when an agent operation fails."""
 
 
+class ToolError(ProcessingError):
+    """Base exception for tool-related errors."""
+
+
+class ToolConnectionError(ToolError):
+    """Raised when a tool fails to connect to a service."""
+
+
+class ToolTimeoutError(ToolError):
+    """Raised when a tool operation times out."""
+
+
+class ToolProcessingError(ToolError):
+    """Raised for general processing errors within a tool."""
+
+
 class AuditError(ProcessingError):
     """Raised when an audit operation fails."""
 
@@ -114,3 +130,7 @@ class FileProcessingError(ProcessingError):
 
 class KnowledgeGraphError(ProcessingError):
     """Raised when a knowledge graph operation fails."""
+
+
+class LockError(ProcessingError):
+    """Raised for errors related to distributed locking."""

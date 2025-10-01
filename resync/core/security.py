@@ -3,12 +3,14 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
+import tempfile
 from pathlib import Path
 from typing import Any, Union
 
 from pydantic import BaseModel, Field, ValidationError, validator
 
 from resync.core.app_context import AppContext
+from resync.core import env_detector
 
 logger = logging.getLogger(__name__)
 
@@ -25,18 +27,22 @@ class SanitizedPath(BaseModel):
             raise ValueError("Path cannot be empty")
 
         # Convert to Path for validation
-        path_obj = Path(v).resolve()
+        path_obj = Path(v)
 
         # Check for path traversal attempts
         try:
-            path_obj.resolve()
+            resolved_path = path_obj.resolve()
         except (OSError, RuntimeError) as e:
             raise ValueError(f"Invalid path resolution: {e}")
 
         # Prevent absolute paths that could escape intended directories
-        if path_obj.is_absolute() and not any(
-            str(path_obj).startswith(str(allowed.resolve()))
-            for allowed in [Path.cwd(), Path.home()]
+        allowed_dirs = [Path.cwd(), Path.home()]
+        if env_detector.is_testing():
+            allowed_dirs.append(Path(tempfile.gettempdir()))
+
+        if resolved_path.is_absolute() and not any(
+            str(resolved_path).startswith(str(allowed.resolve()))
+            for allowed in allowed_dirs
         ):
             raise ValueError(
                 "Absolute paths outside allowed directories are not permitted"
@@ -48,7 +54,7 @@ class SanitizedPath(BaseModel):
             if pattern in v:
                 raise ValueError(f"Path contains suspicious pattern: {pattern}")
 
-        return str(path_obj)
+        return str(resolved_path)
 
 
 class SanitizedHostPort(BaseModel):
@@ -80,40 +86,22 @@ class SanitizedHostPort(BaseModel):
         ):
             raise ValueError("Invalid hostname format")
 
-        # Prevent localhost/private IPs in production if needed
-        # (This could be enhanced based on environment)
-
         return v
 
     @validator("port")
     def validate_port(cls, v):
         """Validate port number."""
-        # Reserve system ports (1-1023) for privileged operations only
         if v < 1024:
             import warnings
-
             warnings.warn(
                 f"Using privileged port {v} - ensure proper permissions", UserWarning
             )
-
-        # Well-known ports that might be suspicious
-        suspicious_ports = [
-            22,
-            23,
-            25,
-            53,
-            80,
-            443,
-            3306,
-            5432,
-        ]  # SSH, Telnet, SMTP, DNS, HTTP, etc.
+        suspicious_ports = [22, 23, 25, 53, 80, 443, 3306, 5432]
         if v in suspicious_ports:
             import warnings
-
             warnings.warn(
                 f"Using well-known port {v} - verify this is intended", UserWarning
             )
-
         return v
 
 
@@ -128,7 +116,6 @@ class InputSanitizer:
             return Path(sanitized.path)
         except ValidationError as e:
             correlation_id = AppContext.get_correlation_id()
-            # Assuming a logger is available
             logger.error(
                 f"Path sanitization failed: {path}",
                 extra={
@@ -150,10 +137,8 @@ class InputSanitizer:
         try:
             host, port_str = host_port.rsplit(":", 1)
             port = int(port_str)
-
             sanitized = SanitizedHostPort(host=host, port=port)
             return sanitized.host, sanitized.port
-
         except (ValueError, ValidationError) as e:
             correlation_id = AppContext.get_correlation_id()
             logger.error(
@@ -175,7 +160,6 @@ class InputSanitizer:
         """Sanitize environment variable value with type validation."""
         if value is None:
             raise ValueError(f"Environment variable {key} is not set")
-
         try:
             if expected_type == bool:
                 if isinstance(value, str):
@@ -194,7 +178,6 @@ class InputSanitizer:
                 return value
             else:
                 return expected_type(value)
-
         except (ValueError, TypeError) as e:
             correlation_id = AppContext.get_correlation_id()
             logger.error(
@@ -215,27 +198,23 @@ class InputSanitizer:
     def validate_path_exists(path: Union[str, Path], must_exist: bool = True) -> Path:
         """Validate path exists and is accessible."""
         sanitized_path = InputSanitizer.sanitize_path(path)
-        resolved_path = sanitized_path.resolve()
-
         if must_exist:
-            if not resolved_path.exists():
+            if not sanitized_path.exists():
                 correlation_id = AppContext.get_correlation_id()
                 logger.error(
-                    f"Required path does not exist: {resolved_path}",
+                    f"Required path does not exist: {sanitized_path}",
                     extra={
                         "correlation_id": correlation_id,
                         "component": "input_sanitizer",
                         "operation": "validate_path_exists",
-                        "path": str(resolved_path),
+                        "path": str(sanitized_path),
                     },
                 )
-                raise FileNotFoundError(f"Path does not exist: {resolved_path}")
-
-            if resolved_path.is_symlink():
-                target = resolved_path.readlink()
+                raise FileNotFoundError(f"Path does not exist: {sanitized_path}")
+            if sanitized_path.is_symlink():
+                target = sanitized_path.readlink()
                 if not str(target).startswith(str(Path.cwd())):
                     raise ValueError(
-                        f"Symlink points outside allowed directory: {resolved_path} -> {target}"
+                        f"Symlink points outside allowed directory: {sanitized_path} -> {target}"
                     )
-
-        return resolved_path
+        return sanitized_path

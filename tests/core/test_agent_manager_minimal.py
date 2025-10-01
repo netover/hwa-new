@@ -11,7 +11,6 @@ def agent_manager():
     """Fixture to provide a clean instance of AgentManager for each test."""
     # Reset the singleton for isolation between tests
     AgentManager._instance = None
-    AgentManager._initialized = False
     return AgentManager()
 
 
@@ -31,29 +30,36 @@ def test_agent_config():
     }
 
 
-def test_singleton_pattern():
+def test_singleton_pattern(agent_manager):
     """Test that AgentManager follows singleton pattern."""
-    manager1 = AgentManager()
+    manager1 = agent_manager
     manager2 = AgentManager()
     assert manager1 is manager2
 
 
-def test_init(agent_manager):
+@pytest.mark.asyncio
+async def test_init(agent_manager):
     """Test initialization of AgentManager."""
+    # After init, these should be empty lists/dicts, not None
     assert isinstance(agent_manager.agents, dict)
     assert len(agent_manager.agents) == 0
     assert isinstance(agent_manager.agent_configs, list)
     assert len(agent_manager.agent_configs) == 0
+    # Also test that loading methods work on a fresh instance
+    assert await agent_manager.get_agent("non_existent_id") is None
+    assert await agent_manager.get_all_agents() == []
 
 
-def test_get_agent_non_existent(agent_manager):
+@pytest.mark.asyncio
+async def test_get_agent_non_existent(agent_manager):
     """Test retrieving a non-existent agent."""
-    assert agent_manager.get_agent("non_existent_id") is None
+    assert await agent_manager.get_agent("non_existent_id") is None
 
 
-def test_get_all_agents_empty(agent_manager):
+@pytest.mark.asyncio
+async def test_get_all_agents_empty(agent_manager):
     """Test getting all agents when none are loaded."""
-    assert len(agent_manager.get_all_agents()) == 0
+    assert await agent_manager.get_all_agents() == []
 
 
 @pytest.mark.asyncio
@@ -108,17 +114,20 @@ def test_discover_tools(agent_manager):
 
 
 @pytest.mark.asyncio
-async def test_error_handling_missing_tool(agent_manager, caplog):
+async def test_error_handling_missing_tool(agent_manager, test_agent_config, tmp_path, caplog):
     """Test error handling when getting agent with missing tool."""
-    # Arrange: Load from default config
-    await agent_manager.load_agents_from_config()
+    # Arrange: Load a valid config first
+    config_data = {"agents": [test_agent_config]}
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps(config_data))
+    await agent_manager.load_agents_from_config(config_file)
 
     # Act & Assert
-    with pytest.raises(ValueError, match="not found"):
-        agent_manager.get_agent_with_tool("test-agent-1", "non_existent_tool")
+    with pytest.raises(ValueError, match="Tool non_existent_tool not found for agent test_agent_1"):
+        await agent_manager.get_agent_with_tool("test_agent_1", "non_existent_tool")
 
     # Check log
-    assert "Tool 'non_existent_tool' not found for agent 'test-agent-1'" in caplog.text
+    assert "Tool 'non_existent_tool' not found for agent 'test_agent_1'" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -149,8 +158,11 @@ async def test_multiple_agents_loading(agent_manager, test_agent_config, tmp_pat
 @pytest.mark.asyncio
 async def test_invalid_agent_id(agent_manager, tmp_path):
     """Test loading an agent with an invalid ID format."""
+    # This test is more about ensuring pydantic validation is wired up.
+    # We'll assume for this minimal test that any string is a valid ID,
+    # but a more robust implementation might have regex validation in the model.
     invalid_config = {
-        "id": "invalid_id",
+        "id": "an-id-that-is-technically-valid-but-could-be-bad",
         "name": "Test Agent",
         "role": "Test Role",
         "goal": "Test Goal",
@@ -166,5 +178,6 @@ async def test_invalid_agent_id(agent_manager, tmp_path):
 
     await agent_manager.load_agents_from_config(config_file)
 
-    assert "invalid_id" in agent_manager.agents
-    # Add assertions based on expected validation behavior
+    assert "an-id-that-is-technically-valid-but-could-be-bad" in agent_manager.agents
+    agent = await agent_manager.get_agent("an-id-that-is-technically-valid-but-could-be-bad")
+    assert agent is not None

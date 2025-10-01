@@ -10,6 +10,7 @@ from resync.tool_definitions.tws_tools import (
     TWSStatusTool,
     TWSTroubleshootingTool,
 )
+from resync.core.exceptions import ToolProcessingError
 
 
 @pytest.fixture
@@ -137,18 +138,21 @@ async def test_tws_troubleshooting_tool_no_failures(mock_tws_client):
 @pytest.mark.asyncio
 async def test_tool_handles_client_exception(mock_tws_client):
     """
-    Tests that tools gracefully handle exceptions from the TWS client.
+    Tests that tools gracefully handle exceptions from the TWS client
+    by raising a specific ToolError.
     """
     # Arrange
-    mock_tws_client.get_system_status.side_effect = Exception("Connection Refused")
+    original_exception = Exception("Connection Refused")
+    mock_tws_client.get_system_status.side_effect = original_exception
 
     status_tool = TWSStatusTool(tws_client=mock_tws_client)
     trouble_tool = TWSTroubleshootingTool(tws_client=mock_tws_client)
 
-    # Act
-    status_result = await status_tool.get_tws_status()
-    trouble_result = await trouble_tool.analyze_failures()
+    # Act & Assert
+    with pytest.raises(ToolProcessingError, match="Erro inesperado ao obter o status do TWS") as excinfo_status:
+        await status_tool.get_tws_status()
+    assert excinfo_status.value.__cause__ is original_exception
 
-    # Assert
-    assert "Erro ao obter o status do TWS: Connection Refused" in status_result
-    assert "Erro ao analisar as falhas do TWS: Connection Refused" in trouble_result
+    with pytest.raises(ToolProcessingError, match="Erro inesperado ao analisar as falhas do TWS") as excinfo_trouble:
+        await trouble_tool.analyze_failures()
+    assert excinfo_trouble.value.__cause__ is original_exception
