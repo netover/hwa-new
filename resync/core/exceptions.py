@@ -1,136 +1,92 @@
-"""
-Custom exceptions for the Resync application.
-
-This module defines a hierarchy of custom exceptions for the Resync application,
-allowing for more specific error handling and better error messages.
-"""
+"""Módulo para exceções customizadas da aplicação Resync."""
 
 
-# Base Exceptions
-class ResyncError(Exception):
-    """Base exception for all Resync errors."""
+class ResyncException(Exception):
+    """Classe base para todas as exceções customizadas do Resync."""
+
+    def __init__(self, message: str, original_exception: Exception | None = None):
+        """
+        Inicializa a exceção.
+
+        Args:
+            message: A mensagem de erro.
+            original_exception: A exceção original que causou este erro, se houver.
+        """
+        super().__init__(message)
+        self.original_exception = original_exception
 
 
-class ConfigError(ResyncError):
-    """Base exception for configuration-related errors."""
+class ConfigurationError(ResyncException):
+    """Exceção para erros de configuração."""
 
 
-class NetworkError(ResyncError):
-    """Base exception for network-related errors."""
+class InvalidConfigError(ConfigurationError):
+    """Exceção para erros de dados de configuração inválidos."""
 
 
-class DataError(ResyncError):
-    """Base exception for data-related errors."""
+class MissingConfigError(ConfigurationError):
+    """Exceção para quando um arquivo de configuração não é encontrado."""
 
 
-class SecurityError(ResyncError):
-    """Base exception for security-related errors."""
+class AgentError(ResyncException):
+    """Exceção para erros relacionados à criação ou gerenciamento de agentes."""
 
 
-class ProcessingError(ResyncError):
-    """Base exception for processing-related errors."""
+class TWSConnectionError(ResyncException):
+    """Exceção para erros de conexão com a API do TWS."""
 
 
-# Configuration Exceptions
-class SettingsError(ConfigError):
-    """Raised when there's an issue with application settings."""
+class AgentExecutionError(ResyncException):
+    """Exceção para erros durante a execução de um agente de IA."""
 
 
-class MissingConfigError(ConfigError):
-    """Raised when a required configuration is missing."""
+class ToolExecutionError(ResyncException):
+    """Exceção para erros durante a execução de uma ferramenta (tool)."""
 
 
-class InvalidConfigError(ConfigError):
-    """Raised when a configuration is invalid."""
+class ToolConnectionError(ToolExecutionError):
+    """Exceção para erros de conexão dentro de uma ferramenta."""
 
 
-# Network Exceptions
-class ConnectionFailedError(NetworkError):
-    """Raised when a connection attempt fails."""
+class ToolTimeoutError(ToolExecutionError):
+    """Exceção para timeouts durante a execução de uma ferramenta."""
 
 
-class APIError(NetworkError):
-    """Raised when an API request fails."""
+class ToolProcessingError(ToolExecutionError):
+    """Exceção para erros de processamento de dados dentro de uma ferramenta."""
 
 
-class WebSocketError(NetworkError):
-    """Raised when a WebSocket operation fails."""
+class KnowledgeGraphError(ResyncException):
+    """Exceção para erros relacionados ao Knowledge Graph (ex: Mem0)."""
 
 
-class TimeoutError(NetworkError):
-    """Raised when a network operation times out."""
+class AuditError(ResyncException):
+    """Exceção para erros no sistema de auditoria (queue, lock, etc.)."""
 
 
-# Data Exceptions
-class ValidationError(DataError):
-    """Raised when data validation fails."""
+class FileIngestionError(ResyncException):
+    """Exceção para erros durante a ingestão de arquivos."""
 
 
-class DataParsingError(DataError):
-    """Raised when data parsing fails."""
+class LLMError(ResyncException):
+    """Exceção para erros na comunicação com o Large Language Model."""
 
 
-class DatabaseError(DataError):
-    """Raised when a database operation fails."""
+class ParsingError(ResyncException):
+    """Exceção para erros de parsing de dados (JSON, etc.)."""
 
 
-class CacheError(DataError):
-    """Raised when a cache operation fails."""
+class NetworkError(ResyncException):
+    """Exceção para erros de rede genéricos."""
 
 
-# Security Exceptions
-class AuthenticationError(SecurityError):
-    """Raised when authentication fails."""
+class WebSocketError(ResyncException):
+    """Exceção para erros específicos de WebSocket."""
 
 
-class AuthorizationError(SecurityError):
-    """Raised when authorization fails."""
+class DatabaseError(ResyncException):
+    """Exceção para erros de interação com o banco de dados."""
 
 
-class TokenError(SecurityError):
-    """Raised when there's an issue with a token."""
-
-
-# Processing Exceptions
-class AgentError(ProcessingError):
-    """Raised when an agent operation fails."""
-
-
-class ToolError(ProcessingError):
-    """Base exception for tool-related errors."""
-
-
-class ToolConnectionError(ToolError):
-    """Raised when a tool fails to connect to a service."""
-
-
-class ToolTimeoutError(ToolError):
-    """Raised when a tool operation times out."""
-
-
-class ToolProcessingError(ToolError):
-    """Raised for general processing errors within a tool."""
-
-
-class AuditError(ProcessingError):
-    """Raised when an audit operation fails."""
-
-
-class LLMError(ProcessingError):
-    """Raised when an LLM operation fails."""
-
-
-class MemoryError(ProcessingError):
-    """Raised when a memory operation fails."""
-
-
-class FileProcessingError(ProcessingError):
-    """Raised when file processing fails."""
-
-
-class KnowledgeGraphError(ProcessingError):
-    """Raised when a knowledge graph operation fails."""
-
-
-class LockError(ProcessingError):
-    """Raised for errors related to distributed locking."""
+class NotFoundError(ResyncException):
+    """Exceção para quando um recurso não é encontrado."""

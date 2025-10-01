@@ -7,6 +7,7 @@ from typing import Any, AsyncGenerator, List
 import httpx
 
 from resync.core.cache_hierarchy import get_cache_hierarchy
+from resync.core.exceptions import TWSConnectionError
 from resync.core.retry import http_retry
 from resync.models.tws import (
     CriticalJob,
@@ -103,13 +104,19 @@ class OptimizedTWSClient:
                 e.response.status_code,
                 e.response.text,
             )
-            raise ConnectionError(f"HTTP error: {e.response.status_code}") from e
+            raise TWSConnectionError(
+                f"HTTP error: {e.response.status_code}", original_exception=e
+            )
         except httpx.RequestError as e:
             logger.error("Network error during API request: %s", str(e))
-            raise ConnectionError(f"Network error: {str(e)}") from e
+            raise TWSConnectionError(
+                f"Network error during API request: {e.request.url}",
+                original_exception=e,
+            )
         except Exception as e:
             logger.error("An unexpected error occurred during API request: %s", e)
-            raise ConnectionError(f"Unexpected error: {str(e)}") from e
+            # Wrap unexpected errors for consistent error handling
+            raise TWSConnectionError("An unexpected error occurred", original_exception=e)
 
     async def ping(self) -> None:
         """
@@ -119,30 +126,31 @@ class OptimizedTWSClient:
         without processing the full API response, making it suitable for health checks.
 
         Raises:
-            ConnectionError: If the server is unreachable or unresponsive
-            TimeoutError: If the server doesn't respond within the timeout
+            TWSConnectionError: If the server is unreachable, unresponsive, or times out.
         """
         try:
             # Use a simple HEAD request to the base URL to test connectivity
             # The client already has the base_url configured with protocol
             response = await self.client.head("", timeout=5.0)
             response.raise_for_status()
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as e:
             logger.warning("TWS server ping timed out")
-            raise TimeoutError("TWS server ping timed out")
+            raise TWSConnectionError("TWS server ping timed out", original_exception=e)
         except httpx.RequestError as e:
             logger.error(f"TWS server ping failed: {e}")
-            raise ConnectionError(f"TWS server unreachable: {e}")
+            raise TWSConnectionError(
+                f"TWS server unreachable: {e.request.url}", original_exception=e
+            )
         except Exception as e:
             logger.error(f"Unexpected error during TWS ping: {e}")
-            raise ConnectionError(f"TWS ping failed: {e}")
+            raise TWSConnectionError("TWS ping failed unexpectedly", original_exception=e)
 
     async def check_connection(self) -> bool:
         """Verifies the connection to the TWS server is active."""
         try:
             async with self._api_request("GET", "/plan/current") as data:
                 return "planId" in data
-        except ConnectionError:
+        except TWSConnectionError:
             return False
 
     async def get_workstations_status(self) -> List[WorkstationStatus]:

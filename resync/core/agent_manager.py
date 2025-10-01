@@ -35,12 +35,12 @@ except ImportError:
 from pydantic import BaseModel
 
 from resync.core.exceptions import (
-    AgentError,
-    ConfigError,
-    DataParsingError,
+    AgentError,  # Renamed from AgentExecutionError for broader scope
+    ConfigurationError,
     InvalidConfigError,
     MissingConfigError,
     NetworkError,
+    ParsingError,
 )
 from resync.core.metrics import runtime_metrics, log_with_correlation
 from resync.core import get_global_correlation_id, get_environment_tags
@@ -158,12 +158,13 @@ class AgentManager:
                 logging.INFO, "AgentManager initialized successfully", correlation_id
             )
 
-        except Exception as e:
+        except AgentError as e:
+            # Capture specific, known critical errors during initialization
             runtime_metrics.record_health_check(
                 "agent_manager", "failed", {"error": str(e)}
             )
-            runtime_metrics.close_correlation_id(correlation_id)
-            raise
+            log_with_correlation(logging.CRITICAL, f"AgentManager failed to initialize: {e}", correlation_id, exc_info=True)
+            raise  # Re-raise the specific AgentError
         finally:
             runtime_metrics.close_correlation_id(correlation_id)
 
@@ -264,7 +265,7 @@ class AgentManager:
                 )
                 self.agents = {}
                 self.agent_configs = []
-                raise DataParsingError(
+                raise ParsingError(
                     f"Invalid JSON format in agent configuration file: {config_path}"
                 ) from e
             except FileNotFoundError as e:
@@ -294,7 +295,7 @@ class AgentManager:
                 )
                 self.agents = {}
                 self.agent_configs = []
-                raise ConfigError(
+                raise ConfigurationError(
                     f"Permission denied accessing agent configuration file: {config_path}"
                 ) from e
             except ValueError as e:
@@ -311,21 +312,6 @@ class AgentManager:
                 self.agent_configs = []
                 raise InvalidConfigError(
                     f"Invalid agent configuration data: {e}"
-                ) from e
-            except Exception as e:
-                log_with_correlation(
-                    logging.CRITICAL,
-                    f"An unexpected critical error occurred while loading agents from {config_path}: {e}",
-                    correlation_id,
-                    exc_info=True,
-                )
-                runtime_metrics.record_health_check(
-                    "agent_config", "critical_error", {"error": str(e)}
-                )
-                self.agents = {}
-                self.agent_configs = []
-                raise ConfigError(
-                    f"A critical error occurred while loading agent configurations from {config_path}"
                 ) from e
         finally:
             runtime_metrics.close_correlation_id(correlation_id)
@@ -447,17 +433,6 @@ class AgentManager:
                 raise AgentError(
                     f"Network error initializing agent '{config.id}': {e}"
                 ) from e
-            except Exception as e:
-                runtime_metrics.agent_creation_failures.increment()
-                log_with_correlation(
-                    logging.CRITICAL,
-                    f"Failed to create agent '{config.id}' due to an unhandled exception: {e}",
-                    agent_correlation,
-                    exc_info=True,
-                )
-                raise AgentError(
-                    f"An unexpected error occurred while creating agent '{config.id}': {e}"
-                ) from e
             finally:
                 runtime_metrics.close_correlation_id(agent_correlation)
 
@@ -472,6 +447,14 @@ class AgentManager:
         Retrieves a loaded agent by its ID.
         """
         return self.agents.get(agent_id)
+
+    async def get_agent_config(self, agent_id: str) -> Optional[AgentConfig]:
+        """Retrieves the configuration for a single agent by its ID."""
+        # This is a fast, in-memory lookup
+        for config in self.agent_configs:
+            if config.id == agent_id:
+                return config
+        return None
 
     async def get_all_agents(self) -> List[AgentConfig]:
         """

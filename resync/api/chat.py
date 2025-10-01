@@ -8,10 +8,13 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from resync.core.exceptions import (
     AgentError,
+    AgentExecutionError,
     AuditError,
+    ConfigurationError,
     DatabaseError,
     KnowledgeGraphError,
-    NetworkError,
+    LLMError,
+    ToolExecutionError,
     WebSocketError,
 )
 from resync.core.fastapi_di import (
@@ -176,23 +179,33 @@ async def websocket_endpoint(
 
     except WebSocketDisconnect:
         logger.info(f"Client disconnected from agent '{agent_id}'.")
+    except ConfigurationError as e:
+        logger.error(f"Configuration error for agent '{agent_id}': {e}", exc_info=True)
+        await send_error_message(
+            websocket, f"Erro de configuração do servidor: {e}"
+        )
     except KnowledgeGraphError as e:
         logger.error(
             f"Knowledge graph error for agent '{agent_id}': {e}", exc_info=True
         )
         await send_error_message(websocket, f"Erro no grafo de conhecimento: {e}")
+    except ToolExecutionError as e:
+        logger.error(f"Tool execution error for agent '{agent_id}': {e}", exc_info=True)
+        await send_error_message(websocket, f"Erro ao executar uma ferramenta interna: {e}")
+    except AgentExecutionError as e:
+        logger.error(
+            f"Agent execution error for agent '{agent_id}': {e}", exc_info=True
+        )
+        await send_error_message(websocket, f"Erro na execução do agente: {e}")
+    except LLMError as e:
+        logger.error(f"LLM communication error for agent '{agent_id}': {e}", exc_info=True)
+        await send_error_message(websocket, f"Erro de comunicação com o modelo de IA: {e}")
     except AgentError as e:
         logger.error(f"Agent error for '{agent_id}': {e}", exc_info=True)
         await send_error_message(websocket, f"Erro no agente: {e}")
     except asyncio.TimeoutError as e:
         logger.error(f"Timeout in WebSocket for agent '{agent_id}': {e}", exc_info=True)
         await send_error_message(websocket, "A operação excedeu o tempo limite.")
-    except WebSocketError as e:
-        logger.error(f"WebSocket error for agent '{agent_id}': {e}", exc_info=True)
-        # No need to send message as the WebSocket is likely broken
-    except NetworkError as e:
-        logger.error(f"Network error for agent '{agent_id}': {e}", exc_info=True)
-        await send_error_message(websocket, f"Erro de conexão: {e}")
     except Exception:
         # A critical, unhandled error occurred. Log it for immediate investigation.
         logger.critical(

@@ -7,14 +7,10 @@ from openai import (  # Import OpenAIError for specific exception handling
     OpenAIError,
 )
 
-from resync.core.exceptions import LLMError, NetworkError
+from resync.core.exceptions import LLMError
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
-
-
-class LLMCallError(LLMError):
-    """Custom exception for LLM call failures."""
 
 
 async def call_llm(
@@ -40,7 +36,7 @@ async def call_llm(
         The content of the LLM's response.
 
     Raises:
-        LLMCallError: If the LLM call fails after all retry attempts.
+        LLMError: If the LLM call fails after all retry attempts.
     """
     api_key = (
         settings.LLM_API_KEY
@@ -75,10 +71,10 @@ async def call_llm(
                     f"LLM call failed after {max_retries} retries for model {model} at {settings.LLM_ENDPOINT}: {e}",
                     exc_info=True,
                 )
-                raise LLMCallError(
+                raise LLMError(
                     f"LLM call failed after {max_retries} retries: {e}"
                 ) from e
-        except ConnectionError as e:
+        except (ConnectionError, TimeoutError) as e:
             logger.error(
                 "Connection error during LLM call (attempt %d/%d): %s",
                 attempt + 1,
@@ -91,24 +87,8 @@ async def call_llm(
                 logger.info("Retrying LLM call in %.2f seconds...", delay)
                 await asyncio.sleep(delay)
             else:
-                raise NetworkError(
-                    f"Connection error during LLM call after {max_retries} retries: {e}"
-                ) from e
-        except TimeoutError as e:
-            logger.error(
-                "Timeout during LLM call (attempt %d/%d): %s",
-                attempt + 1,
-                max_retries + 1,
-                e,
-                exc_info=True,
-            )
-            if attempt < max_retries:
-                delay = initial_backoff * (2**attempt)
-                logger.info("Retrying LLM call in %.2f seconds...", delay)
-                await asyncio.sleep(delay)
-            else:
-                raise NetworkError(
-                    f"Timeout during LLM call after {max_retries} retries: {e}"
+                raise LLMError(
+                    f"Network-related error during LLM call after {max_retries} retries: {e}"
                 ) from e
         except ValueError as e:
             logger.error(
@@ -123,7 +103,7 @@ async def call_llm(
                 logger.info("Retrying LLM call in %.2f seconds...", delay)
                 await asyncio.sleep(delay)
             else:
-                raise LLMCallError(
+                raise LLMError(
                     f"Value error during LLM call after {max_retries} retries: {e}"
                 ) from e
         except Exception as e:  # Catch any other unexpected errors
@@ -139,6 +119,6 @@ async def call_llm(
                 logger.info("Retrying LLM call in %.2f seconds...", delay)
                 await asyncio.sleep(delay)
             else:
-                raise LLMCallError(
+                raise LLMError(
                     f"Unexpected error during LLM call after {max_retries} retries: {e}"
                 ) from e

@@ -1,6 +1,7 @@
 # resync/core/ia_auditor.py
 import asyncio
 import logging
+import httpx
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from resync.core.audit_queue import AsyncAuditQueue
@@ -10,6 +11,7 @@ from resync.core.exceptions import (
     DatabaseError,
     KnowledgeGraphError,
     LLMError,
+    ParsingError,
 )
 from resync.core.knowledge_graph import AsyncKnowledgeGraph
 from resync.core.utils.json_parser import parse_llm_json_response
@@ -92,9 +94,18 @@ async def _get_llm_analysis(
             result,
             required_keys=["is_incorrect", "confidence", "reason"],
         )
+    except (httpx.RequestError, httpx.HTTPStatusError) as e:
+        logger.error("IA Auditor: Network error during LLM call: %s", e, exc_info=True)
+        raise LLMError("Network error during memory audit analysis") from e
+    except ParsingError as e:
+        logger.error(
+            "IA Auditor: Failed to parse LLM JSON response: %s", e, exc_info=True
+        )
+        # Return None to indicate a non-critical failure for this memory
+        return None
     except Exception as e:
-        logger.error("IA Auditor: LLM analysis failed: %s", e, exc_info=True)
-        # Encapsulate the original error in a domain-specific one
+        logger.critical("IA Auditor: Unexpected error in LLM analysis: %s", e, exc_info=True)
+        # Encapsulate unexpected errors in a domain-specific one
         raise LLMError("Failed to get LLM analysis for memory audit") from e
 
 
@@ -175,10 +186,13 @@ async def analyze_memory(
             "IA Auditor: Could not acquire lock for memory %s: %s", memory_id, e
         )
         return None
-    except Exception:
-        # Catch any other unexpected errors during the analysis of a single memory
+    except (KnowledgeGraphError, DatabaseError) as e:
+        # Catch specific data access errors
         logger.error(
-            "IA Auditor: Unexpected error analyzing memory %s", memory_id, exc_info=True
+            "IA Auditor: Database or KnowledgeGraph error analyzing memory %s: %s",
+            memory_id,
+            e,
+            exc_info=True,
         )
         return None
 
