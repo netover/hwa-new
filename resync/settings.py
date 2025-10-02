@@ -50,6 +50,7 @@ def validate_settings(config: Dynaconf) -> None:
         "NEO4J_PASSWORD",
         "REDIS_URL",
         "LLM_ENDPOINT",
+        "LLM_API_KEY",
         "ADMIN_USERNAME",
         "ADMIN_PASSWORD",
     ]
@@ -58,11 +59,21 @@ def validate_settings(config: Dynaconf) -> None:
     if not config.get("TWS_MOCK_MODE", False):
         required_keys.extend(["TWS_HOST", "TWS_PORT", "TWS_USER", "TWS_PASSWORD"])
 
-    # Set default admin credentials if not provided (for testing)
-    if not config.get("ADMIN_USERNAME"):
-        config.ADMIN_USERNAME = "admin"
-    if not config.get("ADMIN_PASSWORD"):
-        config.ADMIN_PASSWORD = "admin"
+    # Admin credentials must be explicitly defined - no insecure defaults allowed
+    # This prevents default admin/admin credentials in production environments
+    # Check for placeholder values that indicate insecure defaults
+    placeholder_checks = {
+        "LLM_API_KEY": "your_default_api_key_here",
+        "JWT_SECRET_KEY": "dummy-secret-key"  # This comes from the OAuth2 file
+    }
+    
+    for setting_name, placeholder_value in placeholder_checks.items():
+        current_value = config.get(setting_name)
+        if current_value and current_value == placeholder_value:
+            raise ConfigurationError(
+                f"Setting '{setting_name}' is using an insecure default value. "
+                f"Please provide a proper value for production use."
+            )
 
     missing_keys = [key for key in required_keys if not config.get(key)]
 

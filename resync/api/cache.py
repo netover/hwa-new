@@ -5,6 +5,7 @@ import secrets
 from resync.core.fastapi_di import get_tws_client
 from resync.core.interfaces import ITWSClient
 from resync.settings import settings
+from resync.core.rate_limiter import authenticated_rate_limit
 
 cache_router = APIRouter()
 
@@ -55,11 +56,13 @@ async def verify_admin_credentials(creds: HTTPBasicCredentials = Depends(securit
 @cache_router.post(
     "/invalidate",
     summary="Invalidate TWS Cache",
-    dependencies=[Depends(verify_admin_credentials)],
 )
+@authenticated_rate_limit
 async def invalidate_tws_cache(
     scope: str = "system",  # 'system', 'jobs', 'workstations'
     tws_client: ITWSClient = Depends(get_tws_client),
+    # Call verify_admin_credentials inside the function to handle rate limiting properly
+    creds: HTTPBasicCredentials = Depends(security)
 ):
     """
     Invalidates the TWS data cache based on the specified scope.
@@ -69,6 +72,8 @@ async def invalidate_tws_cache(
     - **scope='jobs'**: Invalidates only the main job list cache.
     - **scope='workstations'**: Invalidates only the workstation list cache.
     """
+    # Verify admin credentials inside the function to handle rate limiting properly
+    verify_admin_credentials(creds)
     if scope == "system":
         await tws_client.invalidate_system_cache()
         return {"status": "success", "detail": "Full TWS system cache invalidated."}

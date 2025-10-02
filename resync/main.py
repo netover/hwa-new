@@ -17,7 +17,7 @@ from resync.api.health import config_router, health_router
 from resync.api.rag_upload import router as rag_upload_router
 from resync.api.cors_monitoring import cors_monitor_router
 from resync.core.fastapi_di import inject_container
-from resync.core.exceptions import (
+from resync.core.exceptions_enhanced import (
     ResyncException,
     ConfigurationError,
     NotFoundError,
@@ -190,8 +190,8 @@ async def csp_violation_report(request: Request):
 
 @app.get("/", include_in_schema=False)
 async def root():
-    """Redirects the root URL to the main API docs page."""
-    return RedirectResponse(url="/docs", status_code=302)
+    """Redirects the root URL to the login page."""
+    return RedirectResponse(url="/login", status_code=302)
 
 # --- Application Entry Point (for direct execution) ---
 if __name__ == "__main__":

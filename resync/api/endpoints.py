@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from resync.core.agent_manager import AgentConfig
@@ -36,7 +36,8 @@ async def get_dashboard(request: Request) -> HTMLResponse:
         raise HTTPException(
             status_code=404, detail="Interface do dashboard não encontrada."
         )
-    return index_path.read_text()
+    content = index_path.read_text(encoding="utf-8")
+    return HTMLResponse(content=content)
 
 
 # --- Agent Endpoints ---
@@ -202,13 +203,138 @@ async def execute_endpoint(request: Request, data: ExecuteRequest) -> Dict[str, 
     return {"result": "executed"}
 
 
+from urllib.parse import unquote
+
 @api_router.get("/files/{path:path}")
 @public_rate_limit
 async def files_endpoint(request: Request, path: str) -> Dict[str, str]:
     """Files endpoint for testing path traversal."""
-    if ".." in path or path.startswith("/"):
+    # URL decode the path to prevent bypasses with encoded characters
+    decoded_path = unquote(path)
+    
+    # Check for path traversal attempts
+    if ".." in decoded_path or decoded_path.startswith("/") or "//" in decoded_path:
         raise HTTPException(status_code=400, detail="Invalid path")
-    return {"path": path}
+    
+    # Normalize the path to remove any potential traversal patterns
+    import os
+    normalized_path = os.path.normpath(decoded_path)
+    
+    # Ensure the normalized path doesn't try to go up directories
+    if normalized_path.startswith("..") or "/.." in normalized_path:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    
+    return {"path": normalized_path}
+
+
+# --- Login Endpoint ---
+@api_router.get("/login", response_class=HTMLResponse, include_in_schema=False)
+@public_rate_limit
+async def login_page(request: Request) -> HTMLResponse:
+    """
+    Serve the login page for email authentication.
+    """
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Login - Resync</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #f5f5f5;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+            }
+            .login-container {
+                background-color: white;
+                padding: 2rem;
+                border-radius: 8px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                width: 100%;
+                max-width: 400px;
+            }
+            .login-title {
+                text-align: center;
+                margin-bottom: 1.5rem;
+                color: #333;
+            }
+            .form-group {
+                margin-bottom: 1rem;
+            }
+            .form-group label {
+                display: block;
+                margin-bottom: 0.5rem;
+                color: #555;
+            }
+            .form-group input {
+                width: 100%;
+                padding: 0.75rem;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                box-sizing: border-box;
+            }
+            .btn {
+                width: 100%;
+                padding: 0.75rem;
+                background-color: #007bff;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 1rem;
+            }
+            .btn:hover {
+                background-color: #0056b3;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="login-container">
+            <h2 class="login-title">Acesso ao Resync</h2>
+            <form method="post" action="/login">
+                <div class="form-group">
+                    <label for="email">E-mail:</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                <button type="submit" class="btn">Acessar</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+
+@api_router.post("/login", include_in_schema=False)
+@public_rate_limit
+async def login(request: Request, email: str = Form(...)):
+    """
+    Handle login form submission and redirect to dashboard.
+    """
+    # For now, just store the email in session for auditing purposes
+    # In a real implementation, we would validate the email format
+    # and potentially check if it's in a whitelist
+    
+    # Create a redirect response to dashboard
+    response = RedirectResponse(url="/dashboard", status_code=302)
+    
+    # Store the user email in session for auditing (in a real app, we'd use proper session management)
+    # For now we just log the access for auditing
+    logger.info(f"User accessed with email: {email}")
+    
+    return response
+
+
+# Redirect root to login page
+@api_router.get("/", include_in_schema=False)
+async def root_redirect():
+    return RedirectResponse(url="/login")
 
 
 # --- TWS Monitoring Endpoints ---

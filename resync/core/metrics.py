@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class MetricCounter:
-    """Thread-safe counter for metrics."""
+    """Thread-safe counter for metrics. Uses threading.Lock for performance since operations are very fast."""
 
     value: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -37,7 +37,7 @@ class MetricCounter:
 
 @dataclass
 class MetricGauge:
-    """Thread-safe gauge for current values."""
+    """Thread-safe gauge for current values. Uses threading.Lock for performance since operations are very fast."""
 
     value: float = 0.0
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -53,7 +53,7 @@ class MetricGauge:
 
 @dataclass
 class MetricHistogram:
-    """Simple histogram for tracking distributions."""
+    """Simple histogram for tracking distributions. Uses threading.Lock for performance since operations are very fast."""
 
     buckets: Dict[str, int] = field(default_factory=dict)
     samples: List[float] = field(default_factory=list)
@@ -110,11 +110,11 @@ class RuntimeMetrics:
 
         # Correlation tracking
         self._correlation_context: Dict[str, Dict[str, Any]] = {}
-        self._correlation_lock = threading.Lock()
+        self._correlation_lock = threading.Lock()  # Fast operations, safe to use threading.Lock
 
         # Health monitoring
         self._health_checks: Dict[str, Dict[str, Any]] = {}
-        self._health_lock = threading.Lock()
+        self._health_lock = threading.Lock()  # Fast operations, safe to use threading.Lock
 
         logger.info("RuntimeMetrics initialized")
 

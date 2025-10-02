@@ -9,7 +9,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
-from resync.core.container import app_container
+from resync.core.di_container import container
 from resync.core.interfaces import IAgentManager, IKnowledgeGraph, ITWSClient
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ async def validate_runtime_config() -> dict:
         
         # Validate agent manager
         try:
-            agent_manager = app_container.get(IAgentManager)
+            agent_manager = container.get(IAgentManager)
             validation_results["services"]["agent_manager"] = "configured"
         except Exception as e:
             validation_results["services"]["agent_manager"] = f"error: {str(e)}"
@@ -40,7 +40,7 @@ async def validate_runtime_config() -> dict:
         
         # Validate TWS client
         try:
-            tws_client = app_container.get(ITWSClient)
+            tws_client = container.get(ITWSClient)
             validation_results["services"]["tws_client"] = "configured"
         except Exception as e:
             validation_results["services"]["tws_client"] = f"error: {str(e)}"
@@ -48,7 +48,7 @@ async def validate_runtime_config() -> dict:
         
         # Validate knowledge graph
         try:
-            kg = app_container.get(IKnowledgeGraph)
+            kg = container.get(IKnowledgeGraph)
             validation_results["services"]["knowledge_graph"] = "configured"
         except Exception as e:
             validation_results["services"]["knowledge_graph"] = f"error: {str(e)}"
@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
     """
     # --- Startup ---
     logger.info("Application startup: Initializing services...")
-    agent_manager = app_container.get(IAgentManager)
+    agent_manager = container.get(IAgentManager)
     await agent_manager.load_agents_from_config()
     logger.info("Application startup complete.")
 
@@ -86,8 +86,8 @@ async def lifespan(app: FastAPI):
 
     # --- Shutdown ---
     logger.info("Application shutdown: Closing resources...")
-    tws_client = app_container.get(ITWSClient)
+    tws_client = container.get(ITWSClient)
     await tws_client.close()
-    knowledge_graph = app_container.get(IKnowledgeGraph)
+    knowledge_graph = container.get(IKnowledgeGraph)
     await knowledge_graph.close()
     logger.info("Application shutdown complete.")

@@ -372,7 +372,7 @@ async def recover_component(component_name: str) -> Dict[str, Any]:
         recovery_success = await health_service.attempt_recovery(component_name)
         
         # Get updated component health
-        component_health = health_service.get_component_health(component_name)
+        component_health = await health_service.get_component_health(component_name)
         
         response_data = {
             "component": component_name,

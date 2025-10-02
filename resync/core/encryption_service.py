@@ -8,6 +8,8 @@ import os
 from typing import Optional
 from cryptography.fernet import Fernet
 
+logger = logging.getLogger(__name__)
+
 
 class EncryptionService:
     """Simple encryption service for sensitive data handling."""
@@ -43,9 +45,10 @@ class EncryptionService:
             encrypted_bytes = base64.b64decode(encrypted_data.encode())
             decrypted_data = self.cipher_suite.decrypt(encrypted_bytes)
             return decrypted_data.decode()
-        except Exception:
-            # If decryption fails, return the original data
-            return encrypted_data
+        except Exception as e:
+            # If decryption fails, raise an exception instead of returning original data
+            logger.error(f"Decryption failed for data: {encrypted_data[:50]}... Error: {str(e)}")
+            raise ValueError(f"Decryption failed: {str(e)}") from e
 
 
 # Global instance

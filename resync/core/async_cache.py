@@ -54,32 +54,28 @@ class AsyncTTLCache:
         )
 
         try:
-            # Read TTL and cleanup interval from configuration, if available
-            # Assuming get_config() reads from config.yaml
-            try:
-                from your_config_module import get_config  # Replace your_config_module
+            # Read TTL and cleanup interval from the main settings, if available
+            from resync.settings import settings
 
-                config = get_config()
-                self.ttl_seconds = config.get("async_cache", {}).get(
-                    "ttl_seconds", ttl_seconds
-                )
-                self.cleanup_interval = config.get("async_cache", {}).get(
-                    "cleanup_interval", cleanup_interval
-                )
-                log_with_correlation(
-                    logging.DEBUG,
-                    "Loaded cache config from external module",
-                    correlation_id,
-                )
-            except ImportError:
-                # Handle the case where your_config_module is not available
-                self.ttl_seconds = ttl_seconds
-                self.cleanup_interval = cleanup_interval
-                log_with_correlation(
-                    logging.WARNING,
-                    "External config module not available, using defaults",
-                    correlation_id,
-                )
+            self.ttl_seconds = getattr(settings, "ASYNC_CACHE_TTL", ttl_seconds)
+            self.cleanup_interval = getattr(settings, "ASYNC_CACHE_CLEANUP_INTERVAL", cleanup_interval)
+            self.num_shards = getattr(settings, "ASYNC_CACHE_NUM_SHARDS", num_shards)
+            
+            log_with_correlation(
+                logging.DEBUG,
+                "Loaded cache config from settings module",
+                correlation_id,
+            )
+        except ImportError:
+            # Handle the case where settings module is not available
+            self.ttl_seconds = ttl_seconds
+            self.cleanup_interval = cleanup_interval
+            self.num_shards = num_shards
+            log_with_correlation(
+                logging.WARNING,
+                "Settings module not available, using defaults",
+                correlation_id,
+            )
 
             self.num_shards = num_shards
             self.shards: List[Dict[str, CacheEntry]] = [{} for _ in range(num_shards)]

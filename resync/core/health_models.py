@@ -62,6 +62,7 @@ class HealthCheckConfig:
     
     # Component-specific thresholds
     database_timeout_seconds: int = 10
+    database_connection_threshold_percent: float = 90.0  # Active connections warning threshold (percentage of total)
     redis_timeout_seconds: int = 5
     external_api_timeout_seconds: int = 15
     file_system_threshold_percent: float = 90.0  # Disk usage warning threshold
@@ -80,6 +81,15 @@ class HealthCheckConfig:
     history_retention_hours: int = 24
     error_threshold_count: int = 10  # Number of errors to trigger alert
     response_time_threshold_ms: int = 1000  # Response time threshold in milliseconds
+    
+    # Memory bounds configuration
+    max_history_entries: int = 1000  # Maximum number of health history entries
+    history_cleanup_threshold: float = 0.8  # Cleanup when 80% of max entries reached
+    history_cleanup_batch_size: int = 100  # Number of entries to remove per cleanup
+    enable_memory_monitoring: bool = True  # Enable memory usage monitoring
+    memory_usage_threshold_mb: int = 50  # Alert when memory usage exceeds this (MB)
+    history_compression_enabled: bool = False  # Enable compression for old entries
+    history_retention_days: int = 7  # Maximum days to retain history
 
 @dataclass
 class HealthStatusHistory:
