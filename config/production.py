@@ -50,3 +50,17 @@ class ProductionSettings(Settings):
     # Mem0 settings for production
     # MEM0_STORAGE_HOST: str = "your_prod_qdrant_host"
     # MEM0_STORAGE_PORT: int = 6333
+
+    # --- CORS Configuration for Production ---
+    CORS_ALLOWED_ORIGINS: str = Field(
+        default="",  # Must be configured explicitly in production
+        description="Comma-separated list of allowed origins for CORS in production."
+    )
+    CORS_ALLOW_CREDENTIALS: bool = Field(
+        default=False,  # More restrictive for production
+        description="Allow credentials in CORS requests (disabled by default in production)."
+    )
+    CORS_LOG_VIOLATIONS: bool = Field(
+        default=True,  # Always log violations in production
+        description="Log CORS violations for security monitoring in production."
+    )

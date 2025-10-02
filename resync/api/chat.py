@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import logging
 
 from agno.agent import Agent
@@ -23,10 +24,13 @@ from resync.core.fastapi_di import (
     get_knowledge_graph,
 )
 from resync.core.ia_auditor import analyze_and_flag_memories
+from resync.core.security import sanitize_input, SafeAgentID
 from resync.core.interfaces import IAgentManager, IConnectionManager, IKnowledgeGraph
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
+
+from resync.core.rate_limiter import websocket_rate_limit
 
 # --- APIRouter Initialization ---
 chat_router = APIRouter()
@@ -81,51 +85,58 @@ async def run_auditor_safely():
         )
 
 
-async def _handle_agent_interaction(
-    websocket: WebSocket,
-    agent: Agent,
-    agent_id: str,
-    knowledge_graph: IKnowledgeGraph,
-    data: str,
-) -> None:
-    """Handles the core logic of agent interaction, RAG, and auditing."""
-    # Send the user's message back to the UI for display
-    await websocket.send_json({"type": "message", "sender": "user", "message": data})
-
-    # --- RAG Enhancement ---
-    context = await knowledge_graph.get_relevant_context(data)
+async def _get_enhanced_query(
+    knowledge_graph: IKnowledgeGraph, sanitized_data: str, original_data: str
+) -> str:
+    """Retrieves RAG context and constructs the enhanced query for the agent."""
+    context = await knowledge_graph.get_relevant_context(sanitized_data)
     logger.debug(f"Retrieved knowledge graph context: {context[:200]}...")
-
-    # --- Agent Interaction ---
-    enhanced_query = f"""
+    return f"""
 Contexto de soluções anteriores:
 {context}
 
 Pergunta do usuário:
-{data}
+{original_data}
 """
+
+
+async def _stream_agent_response(
+    websocket: WebSocket, agent: Agent, query: str
+) -> str:
+    """Streams the agent's response to the WebSocket and returns the full message."""
     response_message = ""
-    async for chunk in agent.stream(enhanced_query):
+    async for chunk in agent.stream(query):
         response_message += chunk
         await websocket.send_json(
             {"type": "stream", "sender": "agent", "message": chunk}
         )
+    return response_message
 
+
+async def _finalize_and_store_interaction(
+    websocket: WebSocket,
+    knowledge_graph: IKnowledgeGraph,
+    agent: Agent,
+    agent_id: str,
+    sanitized_query: str,
+    full_response: str,
+):
+    """Sends the final message, stores the conversation, and schedules the auditor."""
     # Send a final message indicating the stream has ended
     await websocket.send_json(
         {
             "type": "message",
             "sender": "agent",
-            "message": response_message,
+            "message": full_response,
             "is_final": True,
         }
     )
-    logger.info(f"Agent '{agent_id}' full response: {response_message}")
+    logger.info(f"Agent '{agent_id}' full response: {full_response}")
 
-    # --- Store Interaction in Knowledge Graph ---
+    # Store the interaction in the Knowledge Graph
     await knowledge_graph.add_conversation(
-        user_query=data,
-        agent_response=response_message,
+        user_query=sanitized_query,
+        agent_response=full_response,
         agent_id=agent_id,
         context={
             "agent_name": agent.name,
@@ -134,15 +145,45 @@ Pergunta do usuário:
         },
     )
 
-    # --- IA Auditor ---
+    # Schedule the IA Auditor to run in the background
     logger.info("Scheduling IA Auditor to run in the background.")
     asyncio.create_task(run_auditor_safely())
 
 
+async def _handle_agent_interaction(
+    websocket: WebSocket,
+    agent: Agent,
+    agent_id: str,
+    knowledge_graph: IKnowledgeGraph,
+    data: str,
+) -> None:
+    """Handles the core logic of agent interaction, RAG, and auditing."""
+    sanitized_data = sanitize_input(data)
+    # Send the user's message back to the UI for display
+    await websocket.send_json({"type": "message", "sender": "user", "message": sanitized_data})
+
+    # 1. Get context and create the enhanced query for the agent
+    enhanced_query = await _get_enhanced_query(knowledge_graph, sanitized_data, data)
+
+    # 2. Stream the agent's response to the client and get the full response
+    full_response = await _stream_agent_response(websocket, agent, enhanced_query)
+
+    # 3. Finalize the interaction: send final message, store, and audit
+    await _finalize_and_store_interaction(
+        websocket=websocket,
+        knowledge_graph=knowledge_graph,
+        agent=agent,
+        agent_id=agent_id,
+        sanitized_query=sanitized_data,
+        full_response=full_response,
+    )
+
+
 @chat_router.websocket("/ws/{agent_id}")
+@websocket_rate_limit
 async def websocket_endpoint(
     websocket: WebSocket,
-    agent_id: str,
+    agent_id: SafeAgentID,
     agent_manager: IAgentManager = Depends(get_agent_manager),
     connection_manager: IConnectionManager = Depends(get_connection_manager),
     knowledge_graph: IKnowledgeGraph = Depends(get_knowledge_graph),
@@ -171,10 +212,11 @@ async def websocket_endpoint(
         )
 
         while True:
-            data = await websocket.receive_text()
-            logger.info(f"Received message for agent '{agent_id}': {data}")
+            raw_data = await websocket.receive_text()
+            logger.info(f"Received message for agent '{agent_id}': {raw_data}")
+            # A sanitização ocorre dentro de _handle_agent_interaction
             await _handle_agent_interaction(
-                websocket, agent, agent_id, knowledge_graph, data
+                websocket, agent, agent_id, knowledge_graph, raw_data
             )
 
     except WebSocketDisconnect:

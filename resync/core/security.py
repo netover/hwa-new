@@ -1,220 +1,172 @@
-from __future__ import annotations
+"""Módulo para funções de segurança e validação de input."""
 
-import ipaddress
-import logging
+import os
 import re
-import tempfile
-from pathlib import Path
-from typing import Any, Union
+from typing import Annotated, Any, Optional, Type, Union
+from fastapi import Query
 
-from pydantic import BaseModel, Field, ValidationError, validator
-
-from resync.core.app_context import AppContext
-from resync.core import env_detector
-
-logger = logging.getLogger(__name__)
-
-
-class SanitizedPath(BaseModel):
-    """Sanitized file/directory path with security validations."""
-
-    path: str = Field(..., min_length=1, max_length=4096)
-
-    @validator("path")
-    def validate_path(cls, v):
-        """Validate path for security issues."""
-        if not v or not v.strip():
-            raise ValueError("Path cannot be empty")
-
-        # Convert to Path for validation
-        path_obj = Path(v)
-
-        # Check for path traversal attempts
-        try:
-            resolved_path = path_obj.resolve()
-        except (OSError, RuntimeError) as e:
-            raise ValueError(f"Invalid path resolution: {e}")
-
-        # Prevent absolute paths that could escape intended directories
-        allowed_dirs = [Path.cwd(), Path.home()]
-        if env_detector.is_testing():
-            allowed_dirs.append(Path(tempfile.gettempdir()))
-
-        if resolved_path.is_absolute() and not any(
-            str(resolved_path).startswith(str(allowed.resolve()))
-            for allowed in allowed_dirs
-        ):
-            raise ValueError(
-                "Absolute paths outside allowed directories are not permitted"
-            )
-
-        # Check for suspicious patterns
-        suspicious_patterns = ["..", "\\", "\x00", "\n", "\r"]
-        for pattern in suspicious_patterns:
-            if pattern in v:
-                raise ValueError(f"Path contains suspicious pattern: {pattern}")
-
-        return str(resolved_path)
-
-
-class SanitizedHostPort(BaseModel):
-    """Sanitized IP address and port combination."""
-
-    host: str = Field(..., min_length=1, max_length=253)
-    port: int = Field(..., ge=1, le=65535)
-
-    @validator("host")
-    def validate_host(cls, v):
-        """Validate host as IP address or valid hostname."""
-        if not v or not v.strip():
-            raise ValueError("Host cannot be empty")
-
-        # Remove whitespace
-        v = v.strip()
-
-        # Try to parse as IP address first
-        try:
-            ipaddress.ip_address(v)
-            return v
-        except ValueError:
-            pass
-
-        # Validate as hostname
-        if not re.match(
-            r"^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$",
-            v,
-        ):
-            raise ValueError("Invalid hostname format")
-
-        return v
-
-    @validator("port")
-    def validate_port(cls, v):
-        """Validate port number."""
-        if v < 1024:
-            import warnings
-            warnings.warn(
-                f"Using privileged port {v} - ensure proper permissions", UserWarning
-            )
-        suspicious_ports = [22, 23, 25, 53, 80, 443, 3306, 5432]
-        if v in suspicious_ports:
-            import warnings
-            warnings.warn(
-                f"Using well-known port {v} - verify this is intended", UserWarning
-            )
-        return v
+# Expressão regular para permitir caracteres alfanuméricos, espaços, e pontuação comum.
+# Isso ajuda a prevenir a injeção de caracteres de controle ou scripts complexos.
+SAFE_STRING_PATTERN = re.compile(r"^[a-zA-Z0-9\s.,!?'\"()\-:;]*$")
 
 
 class InputSanitizer:
-    """Global input sanitization utilities."""
-
-    @staticmethod
-    def sanitize_path(path: Union[str, Path]) -> Path:
-        """Sanitize and validate file/directory path."""
-        try:
-            sanitized = SanitizedPath(path=str(path))
-            return Path(sanitized.path)
-        except ValidationError as e:
-            correlation_id = AppContext.get_correlation_id()
-            logger.error(
-                f"Path sanitization failed: {path}",
-                extra={
-                    "correlation_id": correlation_id,
-                    "component": "input_sanitizer",
-                    "operation": "sanitize_path",
-                    "error": e,
-                    "invalid_path": str(path),
-                },
-            )
-            raise ValueError(f"Invalid path: {e}") from e
-
-    @staticmethod
-    def sanitize_host_port(host_port: str) -> tuple[str, int]:
-        """Sanitize and validate host:port combination."""
-        if ":" not in host_port:
-            raise ValueError("Host:port format required (host:port)")
-
-        try:
-            host, port_str = host_port.rsplit(":", 1)
-            port = int(port_str)
-            sanitized = SanitizedHostPort(host=host, port=port)
-            return sanitized.host, sanitized.port
-        except (ValueError, ValidationError) as e:
-            correlation_id = AppContext.get_correlation_id()
-            logger.error(
-                f"Host:port sanitization failed: {host_port}",
-                extra={
-                    "correlation_id": correlation_id,
-                    "component": "input_sanitizer",
-                    "operation": "sanitize_host_port",
-                    "error": e,
-                    "invalid_host_port": host_port,
-                },
-            )
-            raise ValueError(f"Invalid host:port format: {e}") from e
-
+    """
+    Class for sanitizing and validating user inputs.
+    Provides methods for cleaning various types of input data.
+    """
+    
     @staticmethod
     def sanitize_environment_value(
-        key: str, value: Any, expected_type: type = str
+        env_var_name: str, 
+        default_value: Any, 
+        value_type: Type = str
     ) -> Any:
-        """Sanitize environment variable value with type validation."""
-        if value is None:
-            raise ValueError(f"Environment variable {key} is not set")
+        """
+        Sanitize and validate environment variable values.
+        
+        Args:
+            env_var_name: Name of the environment variable
+            default_value: Default value if env var is not set or invalid
+            value_type: Expected type of the value (str, int, float, bool)
+            
+        Returns:
+            Sanitized value of the specified type
+        """
+        raw_value = os.getenv(env_var_name, default_value)
+        
         try:
-            if expected_type == bool:
-                if isinstance(value, str):
-                    return value.lower() in ("true", "1", "yes", "on")
-                return bool(value)
-            elif expected_type == int:
-                return int(value)
-            elif expected_type == float:
-                return float(value)
-            elif expected_type == str:
-                if not isinstance(value, str):
-                    value = str(value)
-                value = value.strip()
-                if not value:
-                    raise ValueError(f"Environment variable {key} cannot be empty")
-                return value
+            if value_type == str:
+                return str(raw_value)
+            elif value_type == int:
+                return int(raw_value)
+            elif value_type == float:
+                return float(raw_value)
+            elif value_type == bool:
+                # Handle boolean conversion from string
+                if isinstance(raw_value, str):
+                    return raw_value.lower() in ('true', '1', 'yes', 'on')
+                return bool(raw_value)
             else:
-                return expected_type(value)
-        except (ValueError, TypeError) as e:
-            correlation_id = AppContext.get_correlation_id()
-            logger.error(
-                f"Environment variable sanitization failed: {key}={value}",
-                extra={
-                    "correlation_id": correlation_id,
-                    "component": "input_sanitizer",
-                    "operation": "sanitize_env",
-                    "error": e,
-                    "env_key": key,
-                    "env_value": str(value),
-                    "expected_type": expected_type.__name__,
-                },
-            )
-            raise ValueError(f"Invalid environment variable {key}: {e}") from e
-
+                # For other types, try to convert using the type constructor
+                return value_type(raw_value)
+        except (ValueError, TypeError):
+            # If conversion fails, return the default value
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Invalid value for environment variable {env_var_name}: {raw_value}. Using default: {default_value}")
+            return default_value
+    
     @staticmethod
-    def validate_path_exists(path: Union[str, Path], must_exist: bool = True) -> Path:
-        """Validate path exists and is accessible."""
-        sanitized_path = InputSanitizer.sanitize_path(path)
-        if must_exist:
-            if not sanitized_path.exists():
-                correlation_id = AppContext.get_correlation_id()
-                logger.error(
-                    f"Required path does not exist: {sanitized_path}",
-                    extra={
-                        "correlation_id": correlation_id,
-                        "component": "input_sanitizer",
-                        "operation": "validate_path_exists",
-                        "path": str(sanitized_path),
-                    },
-                )
-                raise FileNotFoundError(f"Path does not exist: {sanitized_path}")
-            if sanitized_path.is_symlink():
-                target = sanitized_path.readlink()
-                if not str(target).startswith(str(Path.cwd())):
-                    raise ValueError(
-                        f"Symlink points outside allowed directory: {sanitized_path} -> {target}"
-                    )
-        return sanitized_path
+    def sanitize_string(text: str, max_length: int = 1000) -> str:
+        """
+        Remove caracteres potencialmente perigosos de uma string de entrada.
+        Esta é uma camada de defesa básica e deve ser adaptada conforme a necessidade.
+
+        Args:
+            text: A string de entrada do usuário.
+            max_length: Maximum length allowed for the string.
+
+        Returns:
+            A string sanitizada.
+        """
+        if not text:
+            return ""
+        
+        # Truncate to max length
+        text = text[:max_length]
+        
+        # Exemplo simples: remove tudo que não corresponder ao padrão seguro.
+        # Em um cenário real, pode-se usar bibliotecas como `bleach` para sanitizar HTML.
+        sanitized_text = "".join(SAFE_STRING_PATTERN.findall(text))
+        return sanitized_text
+    
+    @staticmethod
+    def sanitize_dict(data: dict, max_depth: int = 3, current_depth: int = 0) -> dict:
+        """
+        Recursively sanitize a dictionary.
+        
+        Args:
+            data: Dictionary to sanitize
+            max_depth: Maximum recursion depth
+            current_depth: Current recursion depth
+            
+        Returns:
+            Sanitized dictionary
+        """
+        if current_depth >= max_depth:
+            return {}
+            
+        sanitized = {}
+        for key, value in data.items():
+            # Sanitize key
+            clean_key = InputSanitizer.sanitize_string(str(key), 100)
+            
+            # Sanitize value based on type
+            if isinstance(value, str):
+                sanitized[clean_key] = InputSanitizer.sanitize_string(value)
+            elif isinstance(value, dict):
+                sanitized[clean_key] = InputSanitizer.sanitize_dict(value, max_depth, current_depth + 1)
+            elif isinstance(value, list):
+                sanitized[clean_key] = InputSanitizer.sanitize_list(value, max_depth, current_depth + 1)
+            elif isinstance(value, (int, float, bool)):
+                sanitized[clean_key] = value
+            else:
+                # Convert other types to string and sanitize
+                sanitized[clean_key] = InputSanitizer.sanitize_string(str(value))
+                
+        return sanitized
+    
+    @staticmethod
+    def sanitize_list(data: list, max_depth: int = 3, current_depth: int = 0) -> list:
+        """
+        Recursively sanitize a list.
+        
+        Args:
+            data: List to sanitize
+            max_depth: Maximum recursion depth
+            current_depth: Current recursion depth
+            
+        Returns:
+            Sanitized list
+        """
+        if current_depth >= max_depth:
+            return []
+            
+        sanitized = []
+        for item in data:
+            if isinstance(item, str):
+                sanitized.append(InputSanitizer.sanitize_string(item))
+            elif isinstance(item, dict):
+                sanitized.append(InputSanitizer.sanitize_dict(item, max_depth, current_depth + 1))
+            elif isinstance(item, list):
+                sanitized.append(InputSanitizer.sanitize_list(item, max_depth, current_depth + 1))
+            elif isinstance(item, (int, float, bool)):
+                sanitized.append(item)
+            else:
+                # Convert other types to string and sanitize
+                sanitized.append(InputSanitizer.sanitize_string(str(item)))
+                
+        return sanitized
+
+
+def sanitize_input(text: str) -> str:
+    """
+    Remove caracteres potencialmente perigosos de uma string de entrada.
+    Esta é uma camada de defesa básica e deve ser adaptada conforme a necessidade.
+
+    Args:
+        text: A string de entrada do usuário.
+
+    Returns:
+        A string sanitizada.
+    """
+    # Exemplo simples: remove tudo que não corresponder ao padrão seguro.
+    # Em um cenário real, pode-se usar bibliotecas como `bleach` para sanitizar HTML.
+    sanitized_text = "".join(SAFE_STRING_PATTERN.findall(text))
+    return sanitized_text
+
+
+# Tipo anotado para IDs, garantindo que eles sigam um formato seguro.
+SafeAgentID = Annotated[
+    str, Query(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$")
+]

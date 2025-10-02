@@ -52,9 +52,9 @@ def get_tws_client_factory():
     else:
         logger.info("Creating OptimizedTWSClient.")
         return OptimizedTWSClient(
-            hostname=settings.TWS_HOSTNAME,
+            hostname=settings.TWS_HOST,
             port=settings.TWS_PORT,
-            username=settings.TWS_USERNAME,
+            username=settings.TWS_USER,
             password=settings.TWS_PASSWORD,
             engine_name=settings.TWS_ENGINE_NAME,
             engine_owner=settings.TWS_ENGINE_OWNER,

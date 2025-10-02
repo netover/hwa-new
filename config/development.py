@@ -25,3 +25,17 @@ class DevelopmentSettings(Settings):
         default=[Settings.BASE_DIR / "resync/RAG/BASE"],
         description="Core knowledge base directory protected from deletion"
     )
+
+    # --- CORS Configuration for Development ---
+    CORS_ALLOWED_ORIGINS: str = Field(
+        default="*",  # Permissive for development
+        description="Comma-separated list of allowed origins for CORS in development."
+    )
+    CORS_ALLOW_CREDENTIALS: bool = Field(
+        default=True,  # Permissive for development
+        description="Allow credentials in CORS requests (enabled by default in development)."
+    )
+    CORS_LOG_VIOLATIONS: bool = Field(
+        default=True,  # Log violations even in development
+        description="Log CORS violations for debugging in development."
+    )

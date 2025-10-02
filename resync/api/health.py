@@ -1,145 +1,437 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from time import time as time_func
-from typing import Any, Dict
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel
 
-from resync.core.agent_manager import agent_manager
-from resync.core.app_context import AppContext
-from resync.core.cache_hierarchy import get_cache_hierarchy
-from resync.core.di_container import get_container
-from resync.core.interfaces import IFileIngestor, IKnowledgeGraph
-from resync.core.lifecycle import validate_runtime_config
-from resync.core.logger import log_with_correlation
-from resync.core.resilience import circuit_breaker_manager
-from resync.core.tws_monitor import tws_monitor
+from resync.core.health_models import (
+    HealthStatus, ComponentType, ComponentHealth, HealthCheckResult,
+    get_status_color, get_status_description
+)
+from resync.core.health_service import get_health_check_service, shutdown_health_check_service
+from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
-health_router = APIRouter(prefix="/health", tags=["Health"])
-config_router = APIRouter(prefix="/config", tags=["Configuration"])
 
+router = APIRouter(prefix="/health", tags=["health"])
 
-@health_router.get("/")
-async def health_check(app_state: dict = Depends(lambda: {})) -> Dict[str, Any]:
+# Health check response models
+class HealthSummaryResponse(BaseModel):
+    """Health check summary response."""
+    status: str
+    status_color: str
+    status_description: str
+    timestamp: str
+    correlation_id: str
+    summary: Dict[str, Any]
+    alerts: List[str]
+    performance_metrics: Dict[str, Any]
+
+class ComponentHealthResponse(BaseModel):
+    """Individual component health response."""
+    name: str
+    component_type: str
+    status: str
+    status_color: str
+    message: str
+    response_time_ms: Optional[float]
+    last_check: str
+    error_count: int
+    metadata: Optional[Dict[str, Any]]
+
+class DetailedHealthResponse(BaseModel):
+    """Detailed health check response."""
+    overall_status: str
+    overall_status_color: str
+    timestamp: str
+    correlation_id: str
+    components: Dict[str, ComponentHealthResponse]
+    summary: Dict[str, Any]
+    alerts: List[str]
+    performance_metrics: Dict[str, Any]
+    history: List[Dict[str, Any]]
+
+class CoreHealthResponse(BaseModel):
+    """Core components health response."""
+    status: str
+    status_color: str
+    timestamp: str
+    core_components: Dict[str, ComponentHealthResponse]
+    summary: Dict[str, Any]
+
+# Core components that are critical for system operation
+CORE_COMPONENTS = {
+    "database", "redis", "connection_pools", "file_system"
+}
+
+@router.get("/", response_model=HealthSummaryResponse)
+async def get_health_summary() -> HealthSummaryResponse:
     """
-    Comprehensive health check endpoint for monitoring system status.
+    Get overall system health summary with status indicators.
+    
+    Returns:
+        HealthSummaryResponse: Overall system health status with color-coded indicators
     """
-    correlation_id = AppContext.get_correlation_id()
-    log_with_correlation(
-        logging.DEBUG,
-        "Global health check requested",
-        correlation_id=correlation_id,
-        component="health",
-        operation="global_check",
-    )
-
-    health_status: Dict[str, Any] = {
-        "status": "healthy",
-        "timestamp": time_func(),
-        "correlation_id": correlation_id,
-        "components": {},
-    }
-
     try:
-        core_health = await health_check_core()
-        infra_health = await health_check_infrastructure(app_state)
-        services_health = await health_check_services()
-
-        health_status["components"].update(core_health["components"])
-        health_status["components"].update(infra_health["components"])
-        health_status["components"].update(services_health["components"])
-
-        subsystem_statuses = [
-            core_health["status"],
-            infra_health["status"],
-            services_health["status"],
-        ]
-        if "error" in subsystem_statuses:
-            health_status["status"] = "error"
-        elif "degraded" in subsystem_statuses:
-            health_status["status"] = "degraded"
-
+        health_service = await get_health_check_service()
+        health_result = await health_service.perform_comprehensive_health_check()
+        
+        return HealthSummaryResponse(
+            status=health_result.overall_status.value,
+            status_color=get_status_color(health_result.overall_status),
+            status_description=get_status_description(health_result.overall_status),
+            timestamp=health_result.timestamp.isoformat(),
+            correlation_id=health_result.correlation_id,
+            summary=health_result.summary,
+            alerts=health_result.alerts,
+            performance_metrics=health_result.performance_metrics
+        )
     except Exception as e:
-        health_status["status"] = "error"
-        health_status["error"] = str(e)
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Health check system error: {str(e)}"
+        )
 
-    return health_status
-
-
-@health_router.get("/di")
-async def health_check_di() -> Dict[str, Any]:
-    """Health check for Dependency Injection container."""
-    container = get_container()
-    return await container.get_health_status()
-
-
-@config_router.get("/validate")
-async def validate_config_endpoint() -> Dict[str, Any]:
-    """Runtime configuration validation endpoint."""
-    return await validate_runtime_config()
-
-
-@health_router.get("/core")
-async def health_check_core() -> Dict[str, Any]:
-    """Health check for core application components."""
-    status: Dict[str, Any] = {"status": "healthy", "components": {}}
+@router.get("/core", response_model=CoreHealthResponse)
+async def get_core_health() -> CoreHealthResponse:
+    """
+    Get health status for core system components only.
+    
+    Returns:
+        CoreHealthResponse: Health status of core components with status indicators
+    """
     try:
-        container = get_container()
-        # Check Agent Manager
-        status["components"]["agent_manager"] = "initialized" if agent_manager.agents else "not_initialized"
-        # Check Knowledge Graph
-        await container.get(IKnowledgeGraph)
-        status["components"]["knowledge_graph"] = "initialized"
-        # Check File Ingestor
-        await container.get(IFileIngestor)
-        status["components"]["file_ingestor"] = "initialized"
+        health_service = await get_health_check_service()
+        health_result = await health_service.perform_comprehensive_health_check()
+        
+        # Filter only core components
+        core_components = {
+            name: component for name, component in health_result.components.items()
+            if name in CORE_COMPONENTS
+        }
+        
+        # Calculate core status (more strict - any unhealthy core component = unhealthy overall)
+        core_status = HealthStatus.HEALTHY
+        for component in core_components.values():
+            if component.status == HealthStatus.UNHEALTHY:
+                core_status = HealthStatus.UNHEALTHY
+                break
+            elif component.status == HealthStatus.DEGRADED:
+                core_status = HealthStatus.DEGRADED
+        
+        # Convert components to response format
+        core_components_response = {
+            name: ComponentHealthResponse(
+                name=component.name,
+                component_type=component.component_type.value,
+                status=component.status.value,
+                status_color=get_status_color(component.status),
+                message=component.message,
+                response_time_ms=component.response_time_ms,
+                last_check=component.last_check.isoformat(),
+                error_count=component.error_count,
+                metadata=component.metadata
+            )
+            for name, component in core_components.items()
+        }
+        
+        # Generate core summary
+        core_summary = {
+            "total_core_components": len(core_components),
+            "healthy_core_components": sum(
+                1 for c in core_components.values() if c.status == HealthStatus.HEALTHY
+            ),
+            "unhealthy_core_components": sum(
+                1 for c in core_components.values() if c.status == HealthStatus.UNHEALTHY
+            ),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return CoreHealthResponse(
+            status=core_status.value,
+            status_color=get_status_color(core_status),
+            timestamp=health_result.timestamp.isoformat(),
+            core_components=core_components_response,
+            summary=core_summary
+        )
     except Exception as e:
-        status["status"] = "error"
-        status["error"] = str(e)
-    return status
+        logger.error(f"Core health check failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Core health check system error: {str(e)}"
+        )
 
-
-@health_router.get("/infrastructure")
-async def health_check_infrastructure(app_state: dict = Depends(lambda: {})) -> Dict[str, Any]:
-    """Health check for infrastructure components."""
-    status: Dict[str, Any] = {"status": "healthy", "components": {}}
-    # Check Cache
-    cache = get_cache_hierarchy()
-    status["components"]["cache_hierarchy"] = "running" if cache.is_running else "stopped"
-    # Check Scheduler
-    scheduler = app_state.get("scheduler")
-    status["components"]["scheduler"] = "running" if scheduler and scheduler.running else "stopped"
-    # Check TWS Monitor
-    status["components"]["tws_monitor"] = "active" if tws_monitor.is_running else "inactive"
-
-    if any(v != "running" and v != "active" for v in status["components"].values()):
-        status["status"] = "degraded"
-    return status
-
-
-@health_router.get("/services")
-async def health_check_services() -> Dict[str, Any]:
-    """Health check for external services."""
-    status: Dict[str, Any] = {"status": "healthy", "components": {}}
-    # Check TWS Client
+@router.get("/detailed", response_model=DetailedHealthResponse)
+async def get_detailed_health(
+    include_history: bool = Query(False, description="Include health history in response"),
+    history_hours: int = Query(24, description="Hours of history to include", ge=1, le=168)
+) -> DetailedHealthResponse:
+    """
+    Get detailed health check with all components and optional history.
+    
+    Args:
+        include_history: Whether to include historical health data
+        history_hours: Number of hours of history to include (1-168)
+    
+    Returns:
+        DetailedHealthResponse: Comprehensive health status with all components
+    """
     try:
-        if agent_manager.tws_client and hasattr(agent_manager.tws_client, "ping"):
-            await agent_manager.tws_client.ping()
-            status["components"]["tws_client"] = "reachable"
-        else:
-            status["components"]["tws_client"] = "unknown"
-            status["status"] = "degraded"
+        health_service = await get_health_check_service()
+        health_result = await health_service.perform_comprehensive_health_check()
+        
+        # Convert components to response format
+        components_response = {
+            name: ComponentHealthResponse(
+                name=component.name,
+                component_type=component.component_type.value,
+                status=component.status.value,
+                status_color=get_status_color(component.status),
+                message=component.message,
+                response_time_ms=component.response_time_ms,
+                last_check=component.last_check.isoformat(),
+                error_count=component.error_count,
+                metadata=component.metadata
+            )
+            for name, component in health_result.components.items()
+        }
+        
+        # Get history if requested
+        history_data = []
+        if include_history:
+            history = health_service.get_health_history(history_hours)
+            history_data = [
+                {
+                    "timestamp": entry.timestamp.isoformat(),
+                    "overall_status": entry.overall_status.value,
+                    "overall_status_color": get_status_color(entry.overall_status),
+                    "summary": entry.summary
+                }
+                for entry in history
+            ]
+        
+        return DetailedHealthResponse(
+            overall_status=health_result.overall_status.value,
+            overall_status_color=get_status_color(health_result.overall_status),
+            timestamp=health_result.timestamp.isoformat(),
+            correlation_id=health_result.correlation_id,
+            components=components_response,
+            summary=health_result.summary,
+            alerts=health_result.alerts,
+            performance_metrics=health_result.performance_metrics,
+            history=history_data
+        )
     except Exception as e:
-        status["components"]["tws_client"] = f"error: {str(e)}"
-        status["status"] = "degraded"
+        logger.error(f"Detailed health check failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Detailed health check system error: {str(e)}"
+        )
 
-    # Check Circuit Breakers
-    metrics = circuit_breaker_manager.get_all_metrics()
-    status["components"]["circuit_breakers"] = metrics
-    if any(m.get("circuit_state") == "open" for m in metrics.values()):
-        status["status"] = "degraded"
+@router.get("/ready")
+async def readiness_probe() -> Dict[str, Any]:
+    """
+    Kubernetes readiness probe endpoint.
+    
+    Returns 503 Service Unavailable if core components are unhealthy,
+    200 OK if system is ready to serve requests.
+    
+    Returns:
+        Dict[str, Any]: Readiness status with core component details
+    """
+    try:
+        health_service = await get_health_check_service()
+        health_result = await health_service.perform_comprehensive_health_check()
+        
+        # Check only core components for readiness
+        core_components = {
+            name: component for name, component in health_result.components.items()
+            if name in CORE_COMPONENTS
+        }
+        
+        # System is ready if all core components are healthy
+        ready = all(
+            component.status == HealthStatus.HEALTHY 
+            for component in core_components.values()
+        )
+        
+        response_data = {
+            "status": "ready" if ready else "not_ready",
+            "timestamp": datetime.now().isoformat(),
+            "correlation_id": health_result.correlation_id,
+            "core_components": {
+                name: {
+                    "status": component.status.value,
+                    "status_color": get_status_color(component.status),
+                    "message": component.message
+                }
+                for name, component in core_components.items()
+            }
+        }
+        
+        if not ready:
+            # Return 503 Service Unavailable if not ready
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=response_data
+            )
+        
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"Readiness probe failed: {e}")
+        # Always return 503 on probe failure
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "status": "not_ready",
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e)
+            }
+        )
 
-    return status
+@router.get("/live")
+async def liveness_probe() -> Dict[str, Any]:
+    """
+    Kubernetes liveness probe endpoint.
+    
+    Returns 503 Service Unavailable if the health check system itself is failing,
+    200 OK if the system is alive and responding.
+    
+    Returns:
+        Dict[str, Any]: Liveness status
+    """
+    try:
+        health_service = await get_health_check_service()
+        
+        # Simple liveness check - just verify the service is responding
+        # We don't check actual component health, just that the system is alive
+        current_time = datetime.now()
+        
+        # Check if we can get basic service info
+        last_check = health_service.last_health_check
+        
+        # System is considered alive if it has performed health checks recently
+        # or if it's the first check (last_check is None)
+        alive = (
+            last_check is None or 
+            (current_time - last_check).total_seconds() < 300  # 5 minutes
+        )
+        
+        if not alive:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "status": "dead",
+                    "timestamp": current_time.isoformat(),
+                    "last_health_check": last_check.isoformat() if last_check else None,
+                    "message": "Health check system appears to be stuck"
+                }
+            )
+        
+        return {
+            "status": "alive",
+            "timestamp": current_time.isoformat(),
+            "last_health_check": last_check.isoformat() if last_check else None,
+            "message": "System is responding"
+        }
+        
+    except Exception as e:
+        logger.error(f"Liveness probe failed: {e}")
+        # Always return 503 on probe failure
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "status": "dead",
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e)
+            }
+        )
+
+@router.post("/component/{component_name}/recover")
+async def recover_component(component_name: str) -> Dict[str, Any]:
+    """
+    Attempt to recover a specific component.
+    
+    Args:
+        component_name: Name of the component to recover
+        
+    Returns:
+        Dict[str, Any]: Recovery attempt result
+    """
+    try:
+        health_service = await get_health_check_service()
+        
+        # Attempt recovery
+        recovery_success = await health_service.attempt_recovery(component_name)
+        
+        # Get updated component health
+        component_health = health_service.get_component_health(component_name)
+        
+        response_data = {
+            "component": component_name,
+            "recovery_attempted": True,
+            "recovery_successful": recovery_success,
+            "current_status": component_health.status.value if component_health else "unknown",
+            "status_color": get_status_color(component_health.status) if component_health else "⚪",
+            "message": component_health.message if component_health else "Component not found",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        if not recovery_success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=response_data
+            )
+        
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"Component recovery failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "component": component_name,
+                "recovery_attempted": True,
+                "recovery_successful": False,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+
+@router.get("/components")
+async def list_components() -> Dict[str, List[Dict[str, str]]]:
+    """
+    List all available health check components.
+    
+    Returns:
+        Dict[str, List[Dict[str, str]]]: List of available components
+    """
+    components = [
+        {"name": "database", "type": ComponentType.DATABASE.value, "description": "Database connectivity and performance"},
+        {"name": "redis", "type": ComponentType.REDIS.value, "description": "Redis cache connectivity"},
+        {"name": "cache_hierarchy", "type": ComponentType.CACHE.value, "description": "Cache hierarchy health"},
+        {"name": "file_system", "type": ComponentType.FILE_SYSTEM.value, "description": "File system and disk space"},
+        {"name": "memory", "type": ComponentType.MEMORY.value, "description": "Memory usage monitoring"},
+        {"name": "cpu", "type": ComponentType.CPU.value, "description": "CPU load monitoring"},
+        {"name": "tws_monitor", "type": ComponentType.EXTERNAL_API.value, "description": "TWS external service health"},
+        {"name": "connection_pools", "type": ComponentType.CONNECTION_POOL.value, "description": "Database connection pools"},
+        {"name": "websocket_pool", "type": ComponentType.WEBSOCKET.value, "description": "WebSocket connection pools"},
+    ]
+    
+    return {"components": components}
+
+@router.on_event("shutdown")
+async def shutdown_health_service():
+    """Shutdown health check service on application shutdown."""
+    try:
+        await shutdown_health_check_service()
+        logger.info("Health service shutdown completed")
+    except Exception as e:
+        logger.error(f"Error during health service shutdown: {e}")

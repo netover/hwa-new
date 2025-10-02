@@ -14,6 +14,7 @@ from resync.core.metrics import runtime_metrics
 from resync.core.tws_monitor import tws_monitor
 from resync.models.tws import SystemStatus
 from resync.settings import settings
+from resync.core.rate_limiter import public_rate_limit, authenticated_rate_limit
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -24,7 +25,8 @@ api_router = APIRouter()
 
 # --- HTML serving endpoint for the main dashboard ---
 @api_router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
-async def get_dashboard() -> HTMLResponse:
+@public_rate_limit
+async def get_dashboard(request: Request) -> HTMLResponse:
     """
     Serves the main `index.html` file for the dashboard.
     """
@@ -43,7 +45,9 @@ async def get_dashboard() -> HTMLResponse:
     response_model=List[AgentConfig],
     summary="Get All Agent Configurations",
 )
+@public_rate_limit
 async def get_all_agents(
+    request: Request,
     agent_manager: IAgentManager = Depends(get_agent_manager),
 ) -> List[AgentConfig]:
     """
@@ -54,7 +58,9 @@ async def get_all_agents(
 
 # --- System Status Endpoints ---
 @api_router.get("/status", response_model=SystemStatus)
+@public_rate_limit
 async def get_system_status(
+    request: Request,
     tws_client: ITWSClient = Depends(get_tws_client),
 ) -> SystemStatus:
     """
@@ -84,13 +90,16 @@ async def get_system_status(
 
 # --- Health Check Endpoints ---
 @api_router.get("/health/app", summary="Check Application Health")
-def get_app_health() -> Dict[str, str]:
+@public_rate_limit
+def get_app_health(request: Request) -> Dict[str, str]:
     """Returns a simple 'ok' to indicate the FastAPI application is running."""
     return {"status": "ok"}
 
 
 @api_router.get("/health/tws", summary="Check TWS Connection Health")
+@public_rate_limit
 async def get_tws_health(
+    request: Request,
     tws_client: ITWSClient = Depends(get_tws_client),
 ) -> Dict[str, str]:
     """
@@ -121,7 +130,8 @@ async def get_tws_health(
     summary="Get Application Metrics",
     response_class=PlainTextResponse,
 )
-def get_metrics() -> str:
+@public_rate_limit
+def get_metrics(request: Request) -> str:
     """
     Returns application metrics in Prometheus text exposition format.
     """
@@ -129,16 +139,18 @@ def get_metrics() -> str:
 
 
 @api_router.post("/chat")
-async def chat_endpoint(request: Dict[str, Any]) -> Dict[str, str]:
+@public_rate_limit
+async def chat_endpoint(request: Request, data: Dict[str, Any]) -> Dict[str, str]:
     """Chat endpoint for testing input validation."""
-    message = request.get("message", "")
+    message = data.get("message", "")
     if "<script>" in message:
         raise HTTPException(status_code=400, detail="XSS detected")
     return {"response": "ok"}
 
 
 @api_router.post("/sensitive")
-async def sensitive_endpoint(data: Dict[str, Any]) -> Dict[str, str]:
+@authenticated_rate_limit
+async def sensitive_endpoint(request: Request, data: Dict[str, Any]) -> Dict[str, str]:
     """Sensitive endpoint for testing encryption."""
     from resync.core.encryption_service import encryption_service
 
@@ -150,13 +162,15 @@ async def sensitive_endpoint(data: Dict[str, Any]) -> Dict[str, str]:
 
 
 @api_router.get("/protected")
-async def protected_endpoint():
+@authenticated_rate_limit
+async def protected_endpoint(request: Request):
     """Protected endpoint for testing authentication."""
     raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 @api_router.get("/admin/users")
-async def admin_users_endpoint():
+@authenticated_rate_limit
+async def admin_users_endpoint(request: Request):
     """Admin endpoint for testing authorization."""
     raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -166,9 +180,10 @@ class ReviewRequest(BaseModel):
 
 
 @api_router.post("/review")
-async def review_endpoint(request: ReviewRequest):
+@public_rate_limit
+async def review_endpoint(request: Request, data: ReviewRequest):
     """Review endpoint for testing input validation."""
-    if "<script>" in request.content:
+    if "<script>" in data.content:
         raise HTTPException(status_code=400, detail="XSS detected")
     return {"status": "reviewed"}
 
@@ -178,16 +193,18 @@ class ExecuteRequest(BaseModel):
 
 
 @api_router.post("/execute")
-async def execute_endpoint(request: ExecuteRequest) -> Dict[str, str]:
+@public_rate_limit
+async def execute_endpoint(request: Request, data: ExecuteRequest) -> Dict[str, str]:
     """Execute endpoint for testing input validation."""
     forbidden_commands = ["rm", "del", ";", "`", "$"]
-    if any(cmd in request.command for cmd in forbidden_commands):
+    if any(cmd in data.command for cmd in forbidden_commands):
         raise HTTPException(status_code=400, detail="Invalid command")
     return {"result": "executed"}
 
 
 @api_router.get("/files/{path:path}")
-async def files_endpoint(path: str) -> Dict[str, str]:
+@public_rate_limit
+async def files_endpoint(request: Request, path: str) -> Dict[str, str]:
     """Files endpoint for testing path traversal."""
     if ".." in path or path.startswith("/"):
         raise HTTPException(status_code=400, detail="Invalid path")
@@ -196,7 +213,8 @@ async def files_endpoint(path: str) -> Dict[str, str]:
 
 # --- TWS Monitoring Endpoints ---
 @api_router.get("/monitoring/metrics", summary="Get TWS Performance Metrics")
-async def get_tws_metrics() -> Dict[str, Any]:
+@authenticated_rate_limit
+async def get_tws_metrics(request: Request) -> Dict[str, Any]:
     """
     Returns comprehensive TWS performance metrics including:
     - API performance
@@ -209,7 +227,8 @@ async def get_tws_metrics() -> Dict[str, Any]:
 
 
 @api_router.get("/monitoring/alerts", summary="Get Recent System Alerts")
-async def get_tws_alerts(limit: int = 10) -> List[Dict[str, Any]]:
+@authenticated_rate_limit
+async def get_tws_alerts(request: Request, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Returns recent system alerts and warnings.
 
@@ -220,7 +239,8 @@ async def get_tws_alerts(limit: int = 10) -> List[Dict[str, Any]]:
 
 
 @api_router.get("/monitoring/health", summary="Get TWS System Health")
-async def get_tws_health_monitoring() -> Dict[str, Any]:  # Renamed to avoid conflict
+@authenticated_rate_limit
+async def get_tws_health_monitoring(request: Request) -> Dict[str, Any]:  # Renamed to avoid conflict
     """
     Returns overall TWS system health status.
     """

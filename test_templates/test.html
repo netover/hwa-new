@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSP Test</title>
+</head>
+<body>
+    <h1>CSP Test Page</h1>
+    <script nonce="{{ request.state.csp_nonce if request and request.state.csp_nonce else '' }}">
+        console.log('Test script with nonce');
+    </script>
+</body>
+</html>

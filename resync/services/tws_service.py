@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+import re
 from typing import Any, AsyncGenerator, List
 
 import httpx
@@ -9,6 +10,7 @@ import httpx
 from resync.core.cache_hierarchy import get_cache_hierarchy
 from resync.core.exceptions import TWSConnectionError
 from resync.core.retry import http_retry
+from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.models.tws import (
     CriticalJob,
     JobStatus,
@@ -19,6 +21,9 @@ from resync.settings import settings  # New import
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
+
+# Regex para validar job_ids, permitindo alfanuméricos, underscores e hifens.
+SAFE_JOB_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 # --- Constants ---
 # Default timeout for HTTP requests to prevent indefinite hangs
@@ -45,6 +50,7 @@ class OptimizedTWSClient:
         password: str,
         engine_name: str = "tws-engine",
         engine_owner: str = "tws-owner",
+        use_connection_pool: bool = True,
     ):
         self.hostname = hostname
         self.port = port
@@ -55,36 +61,84 @@ class OptimizedTWSClient:
         self.timeout = DEFAULT_TIMEOUT
         self.base_url = f"http://{hostname}:{port}/twsd"
         self.auth = (username, password)
+        self.use_connection_pool = use_connection_pool
+        self._pool_manager = None
 
-        # Asynchronous client with TWS-optimized connection pooling
-        self.client = httpx.AsyncClient(
-            base_url=self.base_url,
-            auth=self.auth,
-            verify=False,  # Development: TWS often uses self-signed certs
-            timeout=httpx.Timeout(
-                connect=10,  # TWS can be slow to connect
-                read=30,  # TWS responses can be large/slow
-                write=10,
-                pool=5,
-            ),
-            limits=httpx.Limits(
-                max_connections=20,  # 15 users + 4M jobs/month = need more connections
-                max_keepalive_connections=8,
-            ),
-        )
-        # Caching layer to reduce redundant API calls - now using cache hierarchy
+        if use_connection_pool:
+            # Use connection pool manager for enhanced connection management
+            logger.info("Using connection pool manager for TWS HTTP client")
+        else:
+            # Legacy direct httpx client for backward compatibility
+            self.client = httpx.AsyncClient(
+                base_url=self.base_url,
+                auth=self.auth,
+                verify=False,  # Development: TWS often uses self-signed certs
+                timeout=httpx.Timeout(
+                    connect=settings.TWS_CONNECT_TIMEOUT,
+                    read=settings.TWS_READ_TIMEOUT,
+                    write=settings.TWS_WRITE_TIMEOUT,
+                    pool=settings.TWS_POOL_TIMEOUT,
+                ),
+                limits=httpx.Limits(
+                    max_connections=settings.TWS_MAX_CONNECTIONS,
+                    max_keepalive_connections=settings.TWS_MAX_KEEPALIVE,
+                ),
+            )
+            
+        # Caching layer to reduce redundant API calls - using a direct Redis cache
         self.cache = get_cache_hierarchy()
         logger.info("OptimizedTWSClient initialized for base URL: %s", self.base_url)
+
+    async def _get_http_client(self):
+        """Get HTTP client from connection pool or use direct client."""
+        if self.use_connection_pool:
+            if self._pool_manager is None:
+                self._pool_manager = await get_connection_pool_manager()
+            pool = self._pool_manager.get_pool("tws_http")
+            if pool:
+                return await pool.get_connection()
+            else:
+                logger.warning("TWS HTTP connection pool not available, falling back to direct client")
+                # Fallback to direct client if pool not available
+                if not hasattr(self, 'client'):
+                    self.client = httpx.AsyncClient(
+                        base_url=self.base_url,
+                        auth=self.auth,
+                        verify=False,
+                        timeout=httpx.Timeout(
+                            connect=settings.TWS_CONNECT_TIMEOUT,
+                            read=settings.TWS_READ_TIMEOUT,
+                            write=settings.TWS_WRITE_TIMEOUT,
+                            pool=settings.TWS_POOL_TIMEOUT,
+                        ),
+                        limits=httpx.Limits(
+                            max_connections=settings.TWS_MAX_CONNECTIONS,
+                            max_keepalive_connections=settings.TWS_MAX_KEEPALIVE,
+                        ),
+                    )
+                return self.client
+        else:
+            return self.client if hasattr(self, 'client') else None
 
     @http_retry(max_attempts=3, min_wait=1.0, max_wait=5.0)
     async def _make_request(
         self, method: str, url: str, **kwargs: Any
     ) -> httpx.Response:
-        """Makes an HTTP request with retry logic."""
+        """Makes an HTTP request with retry logic using connection pool."""
         logger.debug("Making request: %s %s", method.upper(), url)
-        response = await self.client.request(method, url, **kwargs)
-        response.raise_for_status()
-        return response
+        
+        # Get client from connection pool or use direct client
+        client = await self._get_http_client()
+        if client is None:
+            raise TWSConnectionError("No HTTP client available")
+            
+        try:
+            response = await client.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response
+        except Exception as e:
+            logger.error(f"HTTP request failed: {method} {url} - {e}")
+            raise
 
     @asynccontextmanager
     async def _api_request(
@@ -167,9 +221,7 @@ class OptimizedTWSClient:
                 if isinstance(data, list)
                 else []
             )
-            await self.cache.set_from_source(
-                cache_key, workstations, ttl_seconds=settings.TWS_CACHE_TTL
-            )
+            await self.cache.set(cache_key, workstations, ttl=settings.TWS_CACHE_TTL)
             return workstations
 
     async def get_jobs_status(self) -> List[JobStatus]:
@@ -182,9 +234,7 @@ class OptimizedTWSClient:
         url = f"/model/jobdefinition?engineName={self.engine_name}&engineOwner={self.engine_owner}"
         async with self._api_request("GET", url) as data:
             jobs = [JobStatus(**job) for job in data] if isinstance(data, list) else []
-            await self.cache.set_from_source(
-                cache_key, jobs, ttl_seconds=settings.TWS_CACHE_TTL
-            )
+            await self.cache.set(cache_key, jobs, ttl=settings.TWS_CACHE_TTL)
             return jobs
 
     async def get_critical_path_status(self) -> List[CriticalJob]:
@@ -202,9 +252,7 @@ class OptimizedTWSClient:
                 if isinstance(jobs_data, list)
                 else []
             )
-            await self.cache.set_from_source(
-                cache_key, critical_jobs, ttl_seconds=settings.TWS_CACHE_TTL
-            )
+            await self.cache.set(cache_key, critical_jobs, ttl=settings.TWS_CACHE_TTL)
             return critical_jobs
 
     async def get_system_status(self) -> SystemStatus:
@@ -231,6 +279,12 @@ class OptimizedTWSClient:
 
         # Check cache for each job
         for job_id in job_ids:
+            # Validação de segurança para prevenir Path Traversal ou injeção de URL
+            if not SAFE_JOB_ID_PATTERN.match(job_id):
+                logger.warning(f"Skipping invalid job_id format: {job_id}")
+                results[job_id] = None
+                continue
+
             cache_key = f"job_status:{job_id}"
             cached_data = await self.cache.get(cache_key)
             if cached_data:
@@ -256,10 +310,10 @@ class OptimizedTWSClient:
                             )
                             results[job_id] = None
                         # Cache the result
-                        await self.cache.set_from_source(
+                        await self.cache.set(
                             f"job_status:{job_id}",
                             job_status,
-                            ttl_seconds=settings.TWS_CACHE_TTL,
+                            ttl=settings.TWS_CACHE_TTL,
                         )
                 except Exception as e:
                     logger.warning(f"Failed to get status for job {job_id}: {e}")
@@ -270,6 +324,11 @@ class OptimizedTWSClient:
 
     async def close(self) -> None:
         """Closes the underlying HTTPX client and its connections."""
-        if not self.client.is_closed:
-            await self.client.aclose()
-            logger.info("HTTPX client has been closed.")
+        if self.use_connection_pool:
+            # Connection pool manager handles cleanup
+            logger.info("TWS client using connection pool - cleanup handled by pool manager")
+        else:
+            # Close direct client if it exists
+            if hasattr(self, 'client') and not self.client.is_closed:
+                await self.client.aclose()
+                logger.info("HTTPX client has been closed.")

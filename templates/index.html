@@ -73,6 +73,6 @@
         </footer>
     </div>
 
-    <script src="/static/js/main.js"></script>
+    <script src="/static/js/main.js" nonce="{{ request.state.csp_nonce if request and request.state.csp_nonce else '' }}"></script>
 </body>
 </html>

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import aiofiles
 from pathlib import Path
 from time import time
 from typing import Any, Dict, List, Optional
@@ -237,8 +238,9 @@ class AgentManager:
                 return
 
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    config_data = json.load(f)
+                async with aiofiles.open(config_path, "r", encoding="utf-8") as f:
+                    content = await f.read()
+                    config_data = json.loads(content)
 
                 config = AgentsConfig.parse_obj(config_data)
                 self.agent_configs = config.agents
@@ -441,6 +443,69 @@ class AgentManager:
         )
         runtime_metrics.close_correlation_id(correlation_id)
         return agents
+
+    async def _create_single_agent(
+        self, config: AgentConfig, parent_correlation_id: str
+    ) -> Agent | None:
+        """Creates a single agent instance from its configuration."""
+        agent_correlation = runtime_metrics.create_correlation_id(
+            {
+                "component": "agent_manager",
+                "operation": "create_single_agent",
+                "agent_id": config.id,
+                "parent_correlation": parent_correlation_id,
+            }
+        )
+
+        try:
+            runtime_metrics.agent_initializations.increment()
+
+            agent_tools = [
+                self.tools[tool_name]
+                for tool_name in config.tools
+                if tool_name in self.tools
+            ]
+
+            missing_tools = [
+                tool_name for tool_name in config.tools if tool_name not in self.tools
+            ]
+            if missing_tools:
+                log_with_correlation(
+                    logging.WARNING,
+                    f"Tools not found for agent '{config.id}': {missing_tools}. Agent will be created without them.",
+                    agent_correlation,
+                )
+
+            agent = Agent(
+                tools=agent_tools,
+                model=config.model_name,
+                instructions=(
+                    f"You are {config.name}, a specialized AI agent. "
+                    f"Your role is: {config.role}. "
+                    f"Your primary goal is: {config.goal}. "
+                    f"Your backstory: {config.backstory}"
+                ),
+            )
+
+            log_with_correlation(
+                logging.DEBUG,
+                f"Successfully created agent: {config.id}",
+                agent_correlation,
+            )
+            return agent
+
+        except (KeyError, ImportError, ValueError, TypeError, NetworkError) as e:
+            runtime_metrics.agent_creation_failures.increment()
+            log_with_correlation(
+                logging.ERROR,
+                f"Failed to create agent '{config.id}' due to an error: {e}",
+                agent_correlation,
+                exc_info=True,
+            )
+            # We log the error but don't raise it, allowing other agents to be created.
+            return None
+        finally:
+            runtime_metrics.close_correlation_id(agent_correlation)
 
     async def get_agent(self, agent_id: str) -> Optional[Any]:
         """

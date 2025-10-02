@@ -68,12 +68,20 @@ class FileIngestionError(ResyncException):
     """Exceção para erros durante a ingestão de arquivos."""
 
 
+class FileProcessingError(ResyncException):
+    """Exceção para erros durante o processamento de arquivos."""
+
+
 class LLMError(ResyncException):
     """Exceção para erros na comunicação com o Large Language Model."""
 
 
 class ParsingError(ResyncException):
     """Exceção para erros de parsing de dados (JSON, etc.)."""
+
+
+class DataParsingError(ParsingError):
+    """Exceção para erros específicos de parsing de dados."""
 
 
 class NetworkError(ResyncException):
@@ -86,6 +94,10 @@ class WebSocketError(ResyncException):
 
 class DatabaseError(ResyncException):
     """Exceção para erros de interação com o banco de dados."""
+
+
+class CacheError(ResyncException):
+    """Exceção para erros relacionados ao sistema de cache."""
 
 
 class NotFoundError(ResyncException):

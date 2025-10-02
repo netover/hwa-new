@@ -174,6 +174,115 @@ class Settings(AgnoSettings):
         default="tws-owner", description="Owner of the TWS engine."
     )
 
+    # --- Connection Pool Configuration ---
+    # Database Connection Pool Settings
+    DB_POOL_MIN_SIZE: int = Field(
+        default=int(os.environ.get("DB_POOL_MIN_SIZE", 5)),
+        description="Minimum number of database connections in the pool.",
+    )
+    DB_POOL_MAX_SIZE: int = Field(
+        default=int(os.environ.get("DB_POOL_MAX_SIZE", 20)),
+        description="Maximum number of database connections in the pool.",
+    )
+    DB_POOL_TIMEOUT: int = Field(
+        default=int(os.environ.get("DB_POOL_TIMEOUT", 30)),
+        description="Timeout in seconds for acquiring a database connection from the pool.",
+    )
+    DB_POOL_RETRY_ATTEMPTS: int = Field(
+        default=int(os.environ.get("DB_POOL_RETRY_ATTEMPTS", 3)),
+        description="Number of retry attempts for database connection acquisition.",
+    )
+    DB_POOL_RETRY_DELAY: int = Field(
+        default=int(os.environ.get("DB_POOL_RETRY_DELAY", 1)),
+        description="Delay in seconds between database connection retry attempts.",
+    )
+    DB_POOL_HEALTH_CHECK_INTERVAL: int = Field(
+        default=int(os.environ.get("DB_POOL_HEALTH_CHECK_INTERVAL", 60)),
+        description="Interval in seconds for database connection health checks.",
+    )
+    DB_POOL_IDLE_TIMEOUT: int = Field(
+        default=int(os.environ.get("DB_POOL_IDLE_TIMEOUT", 300)),
+        description="Timeout in seconds before idle database connections are closed.",
+    )
+
+    # Redis Connection Pool Settings
+    REDIS_POOL_MIN_SIZE: int = Field(
+        default=int(os.environ.get("REDIS_POOL_MIN_SIZE", 5)),
+        description="Minimum number of Redis connections in the pool.",
+    )
+    REDIS_POOL_MAX_SIZE: int = Field(
+        default=int(os.environ.get("REDIS_POOL_MAX_SIZE", 20)),
+        description="Maximum number of Redis connections in the pool.",
+    )
+    REDIS_POOL_TIMEOUT: int = Field(
+        default=int(os.environ.get("REDIS_POOL_TIMEOUT", 30)),
+        description="Timeout in seconds for acquiring a Redis connection from the pool.",
+    )
+    REDIS_POOL_RETRY_ATTEMPTS: int = Field(
+        default=int(os.environ.get("REDIS_POOL_RETRY_ATTEMPTS", 3)),
+        description="Number of retry attempts for Redis connection acquisition.",
+    )
+    REDIS_POOL_RETRY_DELAY: int = Field(
+        default=int(os.environ.get("REDIS_POOL_RETRY_DELAY", 1)),
+        description="Delay in seconds between Redis connection retry attempts.",
+    )
+    REDIS_POOL_HEALTH_CHECK_INTERVAL: int = Field(
+        default=int(os.environ.get("REDIS_POOL_HEALTH_CHECK_INTERVAL", 60)),
+        description="Interval in seconds for Redis connection health checks.",
+    )
+    REDIS_POOL_IDLE_TIMEOUT: int = Field(
+        default=int(os.environ.get("REDIS_POOL_IDLE_TIMEOUT", 300)),
+        description="Timeout in seconds before idle Redis connections are closed.",
+    )
+
+    # HTTP/TWS Connection Pool Settings
+    TWS_CONNECT_TIMEOUT: int = Field(
+        default=int(os.environ.get("TWS_CONNECT_TIMEOUT", 10)),
+        description="Timeout in seconds for establishing TWS connections.",
+    )
+    TWS_READ_TIMEOUT: int = Field(
+        default=int(os.environ.get("TWS_READ_TIMEOUT", 30)),
+        description="Timeout in seconds for reading TWS responses.",
+    )
+    TWS_WRITE_TIMEOUT: int = Field(
+        default=int(os.environ.get("TWS_WRITE_TIMEOUT", 30)),
+        description="Timeout in seconds for writing TWS requests.",
+    )
+    TWS_POOL_TIMEOUT: int = Field(
+        default=int(os.environ.get("TWS_POOL_TIMEOUT", 30)),
+        description="Timeout in seconds for acquiring TWS connections from the pool.",
+    )
+    TWS_MAX_CONNECTIONS: int = Field(
+        default=int(os.environ.get("TWS_MAX_CONNECTIONS", 100)),
+        description="Maximum number of TWS connections in the pool.",
+    )
+    TWS_MAX_KEEPALIVE: int = Field(
+        default=int(os.environ.get("TWS_MAX_KEEPALIVE", 20)),
+        description="Maximum number of keep-alive TWS connections.",
+    )
+    TWS_POOL_RETRY_ATTEMPTS: int = Field(
+        default=int(os.environ.get("TWS_POOL_RETRY_ATTEMPTS", 3)),
+        description="Number of retry attempts for TWS connection acquisition.",
+    )
+    TWS_POOL_RETRY_DELAY: int = Field(
+        default=int(os.environ.get("TWS_POOL_RETRY_DELAY", 1)),
+        description="Delay in seconds between TWS connection retry attempts.",
+    )
+
+    # WebSocket Connection Pool Settings
+    WS_POOL_MAX_SIZE: int = Field(
+        default=int(os.environ.get("WS_POOL_MAX_SIZE", 1000)),
+        description="Maximum number of WebSocket connections.",
+    )
+    WS_POOL_CLEANUP_INTERVAL: int = Field(
+        default=int(os.environ.get("WS_POOL_CLEANUP_INTERVAL", 60)),
+        description="Interval in seconds for WebSocket connection cleanup.",
+    )
+    WS_CONNECTION_TIMEOUT: int = Field(
+        default=int(os.environ.get("WS_CONNECTION_TIMEOUT", 30)),
+        description="Timeout in seconds for WebSocket connections.",
+    )
+
     # --- Logging Configuration ---
     LOG_LEVEL: str = Field(
         default=os.environ.get("LOG_LEVEL", "INFO"),
@@ -188,6 +297,28 @@ class Settings(AgnoSettings):
     LOG_FILE_PATH: str = Field(
         default=os.environ.get("LOG_FILE_PATH", "logs/resync.log"),
         description="Path to log file.",
+    )
+
+    # --- CORS Configuration ---
+    CORS_ENABLED: bool = Field(
+        default=bool(os.environ.get("CORS_ENABLED", True)),
+        description="Enable CORS middleware.",
+    )
+    CORS_ENVIRONMENT: str = Field(
+        default=os.environ.get("CORS_ENVIRONMENT", "development"),
+        description="CORS environment (development, production, test).",
+    )
+    CORS_ALLOWED_ORIGINS: str = Field(
+        default=os.environ.get("CORS_ALLOWED_ORIGINS", ""),
+        description="Comma-separated list of allowed origins for CORS.",
+    )
+    CORS_ALLOW_CREDENTIALS: bool = Field(
+        default=bool(os.environ.get("CORS_ALLOW_CREDENTIALS", False)),
+        description="Allow credentials in CORS requests.",
+    )
+    CORS_LOG_VIOLATIONS: bool = Field(
+        default=bool(os.environ.get("CORS_LOG_VIOLATIONS", True)),
+        description="Log CORS violations for security monitoring.",
     )
 
     class Config:
