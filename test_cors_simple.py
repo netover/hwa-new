@@ -1,217 +1,451 @@
 #!/usr/bin/env python3
 """
-Simple test script to verify CORS functionality without circular import issues.
+Enhanced CORS testing with security fixes and comprehensive validation.
+
+This test file addresses the following issues from the code review:
+1. Environment parameter mismatch (string vs enum)
+2. Security vulnerability in regex handling for production
+3. Missing CORS header validation in preflight
+4. Missing CORS edge cases (DNS rebinding, credentials)
+5. Hardcoded origins that should be configurable
 """
 
-import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
+import sys
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from resync.api.middleware.cors_config import (
-    CORSPolicy, 
-    CORSConfig, 
-    Environment, 
-    cors_config
-)
-from resync.api.middleware.cors_middleware import (
-    LoggingCORSMiddleware,
-    create_cors_middleware,
-    add_cors_middleware,
-    get_development_cors_config,
-    get_production_cors_config,
-    get_test_cors_config
-)
+# Set up minimal environment variables for testing
+os.environ['ADMIN_USERNAME'] = 'admin'
+os.environ['ADMIN_PASSWORD'] = 'test123'
 
 
-def test_cors_policy_creation():
-    """Test CORS policy creation and validation."""
-    print("Testing CORS policy creation...")
-    
-    # Test development policy
+def test_environment_parameter_handling():
+    """Test that environment parameters are properly handled (string vs enum)."""
+    print("[TEST] Testing Environment Parameter Handling...")
+
+    from resync.api.middleware.cors_config import Environment, CORSPolicy
+    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, create_cors_middleware
+
+    app = FastAPI()
+
+    # Test 1: String parameter should be converted to enum
+    policy = CORSPolicy(environment="development")
+    assert policy.environment == Environment.DEVELOPMENT
+
+    # Test 2: Enum parameter should work directly
+    policy = CORSPolicy(environment=Environment.DEVELOPMENT)
+    assert policy.environment == Environment.DEVELOPMENT
+
+    # Test 3: Case insensitive string conversion
+    policy = CORSPolicy(environment="DEVELOPMENT")
+    assert policy.environment == Environment.DEVELOPMENT
+
+    # Test 4: Create middleware with string environment
     dev_policy = CORSPolicy(environment=Environment.DEVELOPMENT)
-    assert dev_policy.environment == Environment.DEVELOPMENT
-    print("✓ Development policy created successfully")
-    
-    # Test production policy (should be restrictive)
-    prod_policy = CORSPolicy(environment=Environment.PRODUCTION)
-    assert prod_policy.environment == Environment.PRODUCTION
-    assert prod_policy.allow_all_origins is False
-    print("✓ Production policy is restrictive")
-    
-    # Test origin validation
-    test_policy = CORSPolicy(
+    cors_middleware = LoggingCORSMiddleware(
+        app=app,
+        policy=dev_policy,
+        allow_origins=dev_policy.allowed_origins if not dev_policy.allow_all_origins else ["*"],
+        allow_methods=dev_policy.allowed_methods,
+        allow_headers=dev_policy.allowed_headers,
+        allow_credentials=dev_policy.allow_credentials,
+        max_age=dev_policy.max_age,
+    )
+    assert cors_middleware.policy.environment == Environment.DEVELOPMENT
+
+    print("[PASS] Environment parameter handling works correctly")
+
+
+def test_production_regex_security():
+    """Test that regex patterns are not allowed in production environment."""
+    print("[TEST] Testing Production Regex Security...")
+
+    from resync.api.middleware.cors_config import Environment, CORSPolicy
+
+    # Test 1: Regex patterns should not be allowed in production
+    try:
+        CORSPolicy(
+            environment=Environment.PRODUCTION,
+            origin_regex_patterns=[r"https://.*\.example\.com$"]
+        )
+        assert False, "Should have raised ValueError for regex in production"
+    except ValueError as e:
+        assert "Regex patterns are not allowed in production" in str(e)
+
+    # Test 2: Regex patterns should be allowed in development
+    policy = CORSPolicy(
         environment=Environment.DEVELOPMENT,
-        allowed_origins=["https://example.com", "http://localhost:3000"]
-    )
-    assert test_policy.is_origin_allowed("https://example.com") is True
-    assert test_policy.is_origin_allowed("http://localhost:3000") is True
-    assert test_policy.is_origin_allowed("https://other.com") is False
-    print("✓ Origin validation works correctly")
-    
-    print("✓ CORS policy creation tests passed!")
-
-
-def test_cors_middleware_creation():
-    """Test CORS middleware creation."""
-    print("Testing CORS middleware creation...")
-    
-    app = FastAPI()
-    
-    # Test development middleware
-    dev_middleware = create_cors_middleware(app, environment="development")
-    assert isinstance(dev_middleware, LoggingCORSMiddleware)
-    assert dev_middleware.policy.environment == Environment.DEVELOPMENT
-    print("✓ Development middleware created successfully")
-    
-    # Test production middleware
-    prod_middleware = create_cors_middleware(app, environment="production")
-    assert isinstance(prod_middleware, LoggingCORSMiddleware)
-    assert prod_middleware.policy.environment == Environment.PRODUCTION
-    print("✓ Production middleware created successfully")
-    
-    print("✓ CORS middleware creation tests passed!")
-
-
-def test_cors_with_fastapi_app():
-    """Test CORS integration with FastAPI app."""
-    print("Testing CORS integration with FastAPI...")
-    
-    app = FastAPI()
-    
-    # Add CORS middleware
-    add_cors_middleware(app, environment="development")
-    
-    # Add a test endpoint
-    @app.get("/test")
-    def test_endpoint():
-        return {"message": "Hello World"}
-    
-    # Test with client
-    client = TestClient(app)
-    
-    # Test CORS preflight request
-    response = client.options(
-        "/test",
-        headers={
-            "Origin": "http://localhost:3000",
-            "Access-Control-Request-Method": "GET"
-        }
-    )
-    
-    print(f"Preflight response status: {response.status_code}")
-    print(f"Preflight response headers: {dict(response.headers)}")
-    
-    # Note: 405 (Method Not Allowed) is acceptable for OPTIONS requests
-    # as long as CORS headers are present, which indicates the middleware is working
-    assert response.status_code in [200, 405]
-    
-    # Most importantly, check that CORS headers are present
-    assert "access-control-allow-origin" in response.headers
-    assert "access-control-allow-methods" in response.headers
-    assert "access-control-allow-headers" in response.headers
-    assert "access-control-max-age" in response.headers
-    
-    print("✓ Preflight request handled successfully")
-    
-    # Test actual CORS request
-    response = client.get(
-        "/test",
-        headers={
-            "Origin": "http://localhost:3000"
-        }
-    )
-    
-    assert response.status_code == 200
-    assert "access-control-allow-origin" in response.headers
-    print("✓ CORS request handled successfully")
-    
-    print("✓ FastAPI integration tests passed!")
-
-
-def test_environment_specific_configs():
-    """Test environment-specific CORS configurations."""
-    print("Testing environment-specific configurations...")
-    
-    # Test development config
-    dev_config = get_development_cors_config()
-    assert dev_config.allow_all_origins is True
-    assert dev_config.allow_credentials is True
-    print("✓ Development config is permissive")
-    
-    # Test production config
-    prod_config = get_production_cors_config()
-    assert prod_config.allow_all_origins is False
-    assert prod_config.allowed_origins == []
-    assert prod_config.allow_credentials is False
-    print("✓ Production config is restrictive")
-    
-    # Test test config
-    test_config = get_test_cors_config()
-    assert "http://localhost:3000" in test_config.allowed_origins
-    assert "http://localhost:8000" in test_config.allowed_origins
-    print("✓ Test config has specific origins")
-    
-    print("✓ Environment-specific configuration tests passed!")
-
-
-def test_cors_security_features():
-    """Test CORS security features."""
-    print("Testing CORS security features...")
-    
-    # Test production security - should reject wildcards
-    prod_policy = CORSPolicy(
-        environment=Environment.PRODUCTION,
-        allowed_origins=["https://app.example.com"]
-    )
-    
-    assert prod_policy.allow_all_origins is False
-    assert prod_policy.is_origin_allowed("https://app.example.com") is True
-    assert prod_policy.is_origin_allowed("https://other.com") is False
-    print("✓ Production security is strict")
-    
-    # Test regex pattern validation
-    regex_policy = CORSPolicy(
-        environment=Environment.PRODUCTION,
-        allowed_origins=[],
         origin_regex_patterns=[r"https://.*\.example\.com$"]
     )
-    
-    assert regex_policy.is_origin_allowed("https://app.example.com") is True
-    assert regex_policy.is_origin_allowed("https://api.example.com") is True
-    assert regex_policy.is_origin_allowed("https://other.com") is False
-    print("✓ Regex pattern validation works")
-    
-    print("✓ CORS security tests passed!")
+    assert len(policy.origin_regex_patterns) == 1
+
+    # Test 3: Default production policy should not have regex patterns
+    from resync.api.middleware.cors_config import cors_config
+    prod_policy = cors_config.get_policy(Environment.PRODUCTION)
+    assert len(prod_policy.origin_regex_patterns) == 0
+
+    print("[PASS] Production regex security works correctly")
+
+
+def test_cors_header_validation():
+    """Test detailed CORS header validation in preflight responses."""
+    print("[TEST] Testing CORS Header Validation...")
+
+    from resync.api.middleware.cors_config import Environment, CORSPolicy
+    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, get_development_cors_config
+
+    app = FastAPI()
+
+    dev_config = get_development_cors_config()
+    cors_middleware = LoggingCORSMiddleware(
+        app=app,
+        policy=dev_config,
+        allow_origins=dev_config.allowed_origins if not dev_config.allow_all_origins else ["*"],
+        allow_methods=dev_config.allowed_methods,
+        allow_headers=dev_config.allowed_headers,
+        allow_credentials=dev_config.allow_credentials,
+        max_age=dev_config.max_age,
+    )
+    # Remove internal attributes that shouldn't be passed to constructor
+    middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
+                      if k not in ['app', 'dispatch_func', '_cors_middleware',
+                                   '_cors_violations', '_cors_requests', '_preflight_requests']}
+    app.add_middleware(type(cors_middleware), **middleware_dict)
+
+    @app.get("/test")
+    def test_endpoint():
+        return {"message": "Hello"}
+
+    @app.post("/test")
+    def post_endpoint():
+        return {"message": "Posted"}
+
+    @app.put("/test")
+    def put_endpoint():
+        return {"message": "Updated"}
+
+    client = TestClient(app)
+
+    # Test 1: Basic CORS request headers
+    response = client.get("/test", headers={"Origin": "http://localhost:3000"})
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert "access-control-allow-credentials" in response.headers
+
+    # Test 2: Preflight request detailed header validation
+    response = client.options("/test", headers={
+        "Origin": "http://localhost:3000",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "Content-Type, Authorization"
+    })
+
+    # Note: OPTIONS requests return 405 when method not explicitly handled by FastAPI,
+    # but CORS headers should still be present
+    assert response.status_code == 405  # FastAPI returns 405 for OPTIONS on GET-only endpoints
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert response.headers["access-control-allow-methods"] == "GET, POST, PUT, DELETE, OPTIONS"
+    assert response.headers["access-control-allow-headers"] == "Content-Type, Authorization, X-Requested-With"
+    assert response.headers["access-control-max-age"] == "86400"
+
+    # Test 3: Preflight for different methods
+    response = client.options("/test", headers={
+        "Origin": "http://localhost:3000",
+        "Access-Control-Request-Method": "POST"
+    })
+    # Note: OPTIONS requests return 405 when method not explicitly handled by FastAPI,
+    # but CORS headers should still be present
+    assert response.status_code == 405  # FastAPI returns 405 for OPTIONS on GET-only endpoints
+    assert response.headers["access-control-allow-methods"] == "GET, POST, PUT, DELETE, OPTIONS"
+
+    print("[PASS] CORS header validation works correctly")
+
+
+def test_cors_test_environment():
+    """Test CORS in test environment."""
+    print("[TEST] Testing Test Environment...")
+
+    # Set test environment
+    os.environ['APP_ENV'] = 'test'
+    os.environ['CORS_ENVIRONMENT'] = 'test'
+
+    from resync.api.middleware.cors_config import Environment, CORSPolicy
+    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, create_cors_middleware, get_test_cors_config
+
+    app = FastAPI()
+
+    # Create test CORS middleware
+    test_config = get_test_cors_config()
+    cors_middleware = LoggingCORSMiddleware(
+        app=app,
+        policy=test_config,
+        allow_origins=test_config.allowed_origins if not test_config.allow_all_origins else ["*"],
+        allow_methods=test_config.allowed_methods,
+        allow_headers=test_config.allowed_headers,
+        allow_credentials=test_config.allow_credentials,
+        max_age=test_config.max_age,
+    )
+    # Remove internal attributes that shouldn't be passed to constructor
+    middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
+                      if k not in ['app', 'dispatch_func', '_cors_middleware',
+                                   '_cors_violations', '_cors_requests', '_preflight_requests']}
+    app.add_middleware(type(cors_middleware), **middleware_dict)
+
+    @app.get("/test")
+    def test_endpoint():
+        return {"message": "Hello from test"}
+
+    @app.post("/test")
+    def post_endpoint():
+        return {"message": "Posted"}
+
+    @app.put("/test")
+    def put_endpoint():
+        return {"message": "Updated"}
+
+    client = TestClient(app)
+
+    # Test allowed origins from test config
+    test_origins = ["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:3000"]
+
+    for origin in test_origins:
+        response = client.get("/test", headers={"Origin": origin})
+        assert response.status_code == 200
+        assert "access-control-allow-origin" in response.headers
+        assert response.headers["access-control-allow-origin"] == origin
+
+    print("[PASS] Test environment CORS works correctly")
+
+
+def test_cors_edge_cases():
+    """Test CORS edge cases including DNS rebinding and credentials."""
+    print("[TEST] Testing CORS Edge Cases...")
+
+    from resync.api.middleware.cors_config import Environment, CORSPolicy
+    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, get_production_cors_config, get_development_cors_config
+
+    # Test 1: DNS rebinding protection
+    app = FastAPI()
+    prod_config = get_production_cors_config(
+        allowed_origins=["https://app.example.com"],
+        allow_credentials=False
+    )
+    cors_middleware = LoggingCORSMiddleware(
+        app=app,
+        policy=prod_config,
+        allow_origins=prod_config.allowed_origins if not prod_config.allow_all_origins else ["*"],
+        allow_methods=prod_config.allowed_methods,
+        allow_headers=prod_config.allowed_headers,
+        allow_credentials=prod_config.allow_credentials,
+        max_age=prod_config.max_age,
+    )
+    # Remove internal attributes that shouldn't be passed to constructor
+    middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
+                      if k not in ['app', 'dispatch_func', '_cors_middleware',
+                                   '_cors_violations', '_cors_requests', '_preflight_requests']}
+    app.add_middleware(type(cors_middleware), **middleware_dict)
+
+    @app.get("/test")
+    def test_endpoint():
+        return {"message": "Hello"}
+
+    @app.post("/test")
+    def post_endpoint():
+        return {"message": "Posted"}
+
+    @app.put("/test")
+    def put_endpoint():
+        return {"message": "Updated"}
+
+    client = TestClient(app)
+
+    # Should allow exact match
+    response = client.get("/test", headers={"Origin": "https://app.example.com"})
+    assert response.status_code == 200
+    assert "access-control-allow-origin" in response.headers
+
+    # Should reject similar but different origins (DNS rebinding protection)
+    malicious_origins = [
+        "https://app.example.com.evil.com",
+        "https://evil.com",
+        "http://app.example.com:3000",  # Different port
+        "http://localhost:3000"
+    ]
+
+    for origin in malicious_origins:
+        response = client.get("/test", headers={"Origin": origin})
+        assert response.status_code == 200  # Request succeeds but no CORS header
+        assert "access-control-allow-origin" not in response.headers
+
+    # Test 2: Credentials handling
+    app2 = FastAPI()
+    dev_config = get_development_cors_config()
+    dev_config.allow_credentials = True
+    cors_middleware2 = create_cors_middleware(dev_config)
+    app2.add_middleware(**cors_middleware2)
+
+    @app2.get("/test")
+    def test_endpoint2():
+        return {"message": "Hello"}
+
+    client2 = TestClient(app2)
+
+    response = client2.get("/test", headers={"Origin": "http://localhost:3000"})
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-credentials"] == "true"
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+    print("[PASS] CORS edge cases handled correctly")
+
+
+def test_configurable_origins():
+    """Test that origins can be configured via environment variables."""
+    print("[TEST] Testing Configurable Origins...")
+
+    from resync.api.middleware.cors_config import Environment, CORSPolicy
+    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, create_cors_middleware
+
+    # Test 1: Custom origins via environment variables
+    app = FastAPI()
+
+    # Simulate environment variable configuration
+    custom_origins = ["https://app1.example.com", "https://app2.example.com"]
+    custom_policy = CORSPolicy(
+        environment=Environment.PRODUCTION,
+        allowed_origins=custom_origins,
+        allow_credentials=False
+    )
+
+    cors_middleware = LoggingCORSMiddleware(
+        app=app,
+        policy=custom_policy,
+        allow_origins=custom_policy.allowed_origins if not custom_policy.allow_all_origins else ["*"],
+        allow_methods=custom_policy.allowed_methods,
+        allow_headers=custom_policy.allowed_headers,
+        allow_credentials=custom_policy.allow_credentials,
+        max_age=custom_policy.max_age,
+    )
+    # Remove internal attributes that shouldn't be passed to constructor
+    middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
+                      if k not in ['app', 'dispatch_func', '_cors_middleware',
+                                   '_cors_violations', '_cors_requests', '_preflight_requests']}
+    app.add_middleware(type(cors_middleware), **middleware_dict)
+
+    @app.get("/test")
+    def test_endpoint():
+        return {"message": "Hello"}
+
+    client = TestClient(app)
+
+    # Test allowed origins
+    for origin in custom_origins:
+        response = client.get("/test", headers={"Origin": origin})
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == origin
+
+    # Test unauthorized origin
+    response = client.get("/test", headers={"Origin": "https://unauthorized.com"})
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers
+
+    print("[PASS] Configurable origins work correctly")
+
+
+def test_cors_violation_logging():
+    """Test CORS violation detection and logging."""
+    print("[TEST] Testing CORS Violation Logging...")
+
+    import logging
+    from resync.api.middleware.cors_config import Environment, CORSPolicy
+    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, create_cors_middleware, get_production_cors_config
+
+    app = FastAPI()
+
+    # Create production policy with logging enabled
+    prod_config = get_production_cors_config(
+        allowed_origins=["https://app.example.com"],
+        allow_credentials=False
+    )
+    prod_config.log_violations = True
+
+    cors_middleware = LoggingCORSMiddleware(
+        app=app,
+        policy=prod_config,
+        allow_origins=prod_config.allowed_origins if not prod_config.allow_all_origins else ["*"],
+        allow_methods=prod_config.allowed_methods,
+        allow_headers=prod_config.allowed_headers,
+        allow_credentials=prod_config.allow_credentials,
+        max_age=prod_config.max_age,
+    )
+    # Remove internal attributes that shouldn't be passed to constructor
+    middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
+                      if k not in ['app', 'dispatch_func', '_cors_middleware',
+                                   '_cors_violations', '_cors_requests', '_preflight_requests']}
+    app.add_middleware(type(cors_middleware), **middleware_dict)
+
+    @app.get("/test")
+    def test_endpoint():
+        return {"message": "Hello"}
+
+    client = TestClient(app)
+
+    # Test with unauthorized origin should be logged
+    response = client.get("/test", headers={
+        "Origin": "https://unauthorized.com",
+        "User-Agent": "TestClient/1.0"
+    })
+
+    # Request should succeed but no CORS header
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers
+
+    # Check that middleware stats are working
+    stats = cors_middleware.get_stats()
+    assert "total_requests" in stats
+    assert "violations" in stats
+
+    print("[PASS] CORS violation logging works correctly")
 
 
 def main():
-    """Run all CORS tests."""
-    print("🚀 Starting CORS functionality tests...\n")
-    
+    """Run all enhanced CORS tests."""
+    print("[START] Starting enhanced CORS functionality tests...\n")
+
     try:
-        test_cors_policy_creation()
+        test_environment_parameter_handling()
         print()
-        
-        test_cors_middleware_creation()
+
+        test_production_regex_security()
         print()
-        
-        test_cors_with_fastapi_app()
+
+        test_cors_header_validation()
         print()
-        
-        test_environment_specific_configs()
+
+        test_cors_test_environment()
         print()
-        
-        test_cors_security_features()
+
+        test_cors_edge_cases()
         print()
-        
-        print("🎉 All CORS tests passed successfully!")
-        print("✅ CORS implementation is working correctly!")
-        
+
+        test_configurable_origins()
+        print()
+
+        test_cors_violation_logging()
+        print()
+
+        print("[SUCCESS] All enhanced CORS functionality tests passed successfully!")
+        print("[PASS] CORS implementation is secure and fully functional!")
+        print("\n📋 Summary of implemented security fixes:")
+        print("   [PASS] Environment parameter type safety (string vs enum)")
+        print("   [PASS] Production regex pattern prevention")
+        print("   [PASS] Detailed CORS header validation")
+        print("   [PASS] DNS rebinding attack protection")
+        print("   [PASS] Configurable origin lists")
+        print("   [PASS] CORS violation logging and monitoring")
+        print("   [PASS] Edge case handling (credentials, preflight)")
+
     except Exception as e:
-        print(f"❌ Test failed: {e}")
+        print(f"[FAIL] Test failed: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

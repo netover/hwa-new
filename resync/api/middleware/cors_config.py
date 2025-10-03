@@ -143,8 +143,17 @@ class CORSPolicy(BaseModel):
         return v
     
     @validator('origin_regex_patterns', each_item=True)
-    def validate_regex_pattern(cls, v):
-        """Validate regex patterns are compilable."""
+    def validate_regex_pattern(cls, v, values):
+        """Validate regex patterns are compilable and not allowed in production."""
+        environment = values.get('environment')
+
+        # Security check: prevent regex patterns in production
+        if environment == Environment.PRODUCTION:
+            raise ValueError(
+                "Regex patterns are not allowed in production environment for security reasons. "
+                "Use explicit origin lists instead."
+            )
+
         try:
             re.compile(v)
         except re.error as e:
@@ -243,6 +252,7 @@ class CORSConfig(BaseModel):
             allow_all_origins=False,
             allow_credentials=False,  # More restrictive for production
             log_violations=True,
+            origin_regex_patterns=[],  # No regex patterns in production for security
         ),
         description="CORS policy for production environment"
     )

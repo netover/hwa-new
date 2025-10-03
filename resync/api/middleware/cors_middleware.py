@@ -208,12 +208,12 @@ def create_cors_middleware(
 ) -> LoggingCORSMiddleware:
     """
     Create and configure CORS middleware for the application.
-    
+
     Args:
         app: FastAPI application
-        environment: Environment name (development, production, test)
+        environment: Environment name (development, production, test) or Environment enum
         custom_policy: Custom CORS policy (overrides environment-based policy)
-        
+
     Returns:
         Configured CORS middleware instance
     """
@@ -225,7 +225,11 @@ def create_cors_middleware(
             environment = getattr(settings, "ENVIRONMENT", "development")
         except ImportError:
             environment = "development"
-    
+
+    # Ensure environment is properly converted to Environment enum
+    if isinstance(environment, str):
+        environment = Environment(environment.lower())
+
     # Get CORS policy
     if custom_policy:
         policy = custom_policy
@@ -258,15 +262,28 @@ def add_cors_middleware(
 ) -> None:
     """
     Add CORS middleware to the FastAPI application.
-    
+
     This is a convenience function that creates and adds the CORS middleware
     to the application in one step.
-    
+
     Args:
         app: FastAPI application
-        environment: Environment name (development, production, test)
+        environment: Environment name (development, production, test) or Environment enum
         custom_policy: Custom CORS policy (overrides environment-based policy)
     """
+    # Determine environment if not provided
+    if environment is None:
+        # Try to get from settings or default to development
+        try:
+            from resync.settings import settings
+            environment = getattr(settings, "ENVIRONMENT", "development")
+        except ImportError:
+            environment = "development"
+
+    # Ensure environment is properly converted to Environment enum
+    if isinstance(environment, str):
+        environment = Environment(environment.lower())
+
     # Get CORS policy
     if custom_policy:
         policy = custom_policy
