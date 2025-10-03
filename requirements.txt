@@ -28,3 +28,4 @@ python-dotenv>=1.0.0  # For environment variable loading
 openai>=1.0.0  # For OpenAI API integration
 authlib>=1.2.0  # For JWS/JWT compliance testing
 mutmut>=2.4.0  # For mutation testing
+aiohttp>=3.8.0  # For async HTTP requests

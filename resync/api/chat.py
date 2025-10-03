@@ -223,6 +223,18 @@ async def websocket_endpoint(
 
         while True:
             raw_data = await websocket.receive_text()
+            
+            # Input validation and size check
+            if len(raw_data) > 10000:  # Limit message size to 10KB
+                await send_error_message(websocket, "Mensagem muito longa. Máximo de 10.000 caracteres permitido.")
+                continue
+                
+            # Additional validation: check for potential injection attempts
+            if "<script>" in raw_data or "javascript:" in raw_data.lower():
+                logger.warning(f"Potential injection attempt detected from agent '{agent_id}': {raw_data[:100]}...")
+                await send_error_message(websocket, "Conteúdo não permitido detectado.")
+                continue
+            
             logger.info(f"Received message for agent '{agent_id}': {raw_data}")
             # A sanitização ocorre dentro de _handle_agent_interaction
             await _handle_agent_interaction(

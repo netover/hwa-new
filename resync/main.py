@@ -5,11 +5,12 @@ import redis.asyncio as redis
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from resync.api.agents import agents_router
+from resync.api.admin import admin_router
 from resync.api.audit import router as audit_router
 from resync.api.chat import chat_router
 from resync.api.endpoints import api_router
@@ -136,6 +137,7 @@ templates = Jinja2Templates(directory=settings.BASE_DIR / "templates")
 
 # --- Mount Routers and Static Files ---
 app.include_router(api_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")  # Admin endpoints under /api/admin
 app.include_router(rag_upload_router)
 app.include_router(chat_router, prefix="/ws", tags=["WebSocket Chat"])
 app.include_router(audit_router)

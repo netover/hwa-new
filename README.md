@@ -1,5 +1,7 @@
 # Resync: AI-Powered HWA/TWS Interface
 
+> **Teste de Permissão**: Esta linha foi adicionada para testar as permissões de leitura e escrita das ferramentas.
+
 ## Propósito Principal
 
 O Resync é uma interface de conversação inteligente, alimentada por Inteligência Artificial, para comunicação com o scheduler de cargas de trabalho **HCL Workload Automation (HWA)**, anteriormente conhecido como IBM Tivoli Workload Scheduler (TWS).

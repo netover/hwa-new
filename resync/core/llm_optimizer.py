@@ -209,21 +209,66 @@ class TWS_LLMOptimizer:
 
         return response
 
-    async def _stream_response(self, prompt: str, model: str, context: dict) -> Any:
+    async def stream_llm_response(self, prompt: str, model: str = "gpt-4") -> str:
         """
-        Stream LLM response for long outputs.
-
+        Streams response from LLM with caching.
+        
         Args:
-            prompt: LLM prompt
-            model: Model to use
-            context: Additional context
-
+            prompt: The input prompt
+            model: The LLM model to use
+            
         Returns:
             Streamed response
         """
-        # For now, return regular response
-        # TODO: Implement actual streaming when LLM provider supports it
-        return await call_llm(prompt, model=model, max_tokens=1000)
+        # Check cache first
+        cache_key = f"stream_{hash(prompt)}_{model}"
+        cached = await self.response_cache.get(cache_key)
+        
+        if cached:
+            logger.info(f"LLM stream cache hit for key: {cache_key}")
+            return cached
+        
+        # Use litellm for streaming capability
+        try:
+            import litellm
+            from litellm import acompletion
+            
+            # Prepare the message in the required format
+            messages = [{"content": prompt, "role": "user"}]
+            
+            # Create async generator for streaming
+            response = await acompletion(
+                model=model,
+                messages=messages,
+                stream=True,
+                max_tokens=1000,
+                temperature=0.7
+            )
+            
+            full_response = ""
+            async for chunk in response:
+                if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
+                    content = chunk.choices[0].get('delta', {}).get('content', '')
+                    if content:
+                        full_response += content
+            
+            # Cache the result
+            await self.response_cache.set(cache_key, full_response)
+            
+            return full_response
+            
+        except ImportError:
+            # Fallback to non-streaming if litellm not available
+            logger.warning("litellm not available, using fallback LLM call")
+            result = await call_llm(prompt, model=model, max_tokens=1000)
+            await self.response_cache.set(cache_key, result)
+            return result
+        except Exception as e:
+            logger.error(f"Error in LLM streaming: {e}")
+            # Fallback to original method
+            result = await call_llm(prompt, model=model, max_tokens=1000)
+            await self.response_cache.set(cache_key, result)
+            return result
 
     async def clear_caches(self) -> None:
         """Clear both prompt and response caches."""

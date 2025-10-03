@@ -1,5 +1,4 @@
-"""
-FastAPI Integration for Dependency Injection
+"""FastAPI Integration for Dependency Injection
 
 This module provides utilities for integrating the DIContainer with FastAPI's
 dependency injection system. It includes functions for creating FastAPI dependencies
@@ -28,6 +27,7 @@ from resync.core.interfaces import (
     ITWSClient,
 )
 from resync.core.knowledge_graph import AsyncKnowledgeGraph
+from resync.core.teams_integration import TeamsIntegration, get_teams_integration
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
@@ -61,6 +61,18 @@ def get_tws_client_factory():
         )
 
 
+def get_teams_integration_factory():
+    """
+    Factory function to create Teams integration service.
+
+    Returns:
+        TeamsIntegration service instance.
+    """
+    logger.info("Creating TeamsIntegration service.")
+    # This will create a singleton instance
+    return TeamsIntegration()
+
+
 def configure_container(app_container: DIContainer = container) -> DIContainer:
     """
     Configure the DI container with all service registrations.
@@ -82,6 +94,11 @@ def configure_container(app_container: DIContainer = container) -> DIContainer:
     # Register TWS client with factory
     app_container.register_factory(
         ITWSClient, get_tws_client_factory, ServiceScope.SINGLETON
+    )
+    
+    # Register Teams integration with factory
+    app_container.register_factory(
+        TeamsIntegration, get_teams_integration_factory, ServiceScope.SINGLETON
     )
 
     # Register FileIngestor - depends on KnowledgeGraph
@@ -135,6 +152,7 @@ get_knowledge_graph = get_service(IKnowledgeGraph)
 get_audit_queue = get_service(IAuditQueue)
 get_tws_client = get_service(ITWSClient)
 get_file_ingestor = get_service(IFileIngestor)
+get_teams_integration = get_service(TeamsIntegration)
 
 
 class DIMiddleware(BaseHTTPMiddleware):

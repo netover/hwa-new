@@ -90,7 +90,7 @@ class CSPMiddleware(BaseHTTPMiddleware):
         directives = {
             "default-src": ["'self'"],
             "script-src": ["'self'", f"'nonce-{nonce}'"],
-            "style-src": ["'self'", "'unsafe-inline'"],  # Allow inline styles
+            "style-src": ["'self'"],  # Removed unsafe-inline for security
             "img-src": ["'self'", "data:", "https:"],  # Allow data URLs and HTTPS images
             "font-src": ["'self'"],
             "connect-src": ["'self'"],  # Allow API calls to same origin

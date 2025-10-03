@@ -132,17 +132,28 @@ class AsyncAuditQueue(IAuditQueue):
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        async with self.async_client.pipeline() as pipe:
-            # Add to queue (left push for FIFO)
-            pipe.lpush(self.audit_queue_key, memory_id)
-            # Store status
-            pipe.hset(self.audit_status_key, memory_id, "pending")
-            # Store data
-            pipe.hset(self.audit_data_key, memory_id, json.dumps(memory_data))
-            await pipe.execute()
+        try:
+            async with self.async_client.pipeline() as pipe:
+                # Add to queue (left push for FIFO)
+                pipe.lpush(self.audit_queue_key, memory_id)
+                # Store status
+                pipe.hset(self.audit_status_key, memory_id, "pending")
+                # Store data
+                pipe.hset(self.audit_data_key, memory_id, json.dumps(memory_data))
+                await pipe.execute()
 
-        logger.info(f"Added memory {memory_id} to audit queue.")
-        return True
+            logger.info(f"Added memory {memory_id} to audit queue.")
+            return True
+        except RedisError as e:
+            logger.error(f"Redis error while adding memory {memory_id} to audit queue: {e}", exc_info=True)
+            # Consider this a critical error - raise exception to handle appropriately
+            raise AuditError(f"Failed to add memory to audit queue due to Redis error: {e}") from e
+        except TypeError as e:
+            logger.error(f"Type error while adding memory {memory_id} to audit queue: {e}", exc_info=True)
+            raise DataParsingError(f"Failed to serialize memory data for audit: {e}") from e
+        except Exception as e:
+            logger.error(f"Unexpected error while adding memory {memory_id} to audit queue: {e}", exc_info=True)
+            raise AuditError(f"Failed to add memory to audit queue due to unexpected error: {e}") from e
 
     async def get_pending_audits(self, limit: int = 50) -> List[Dict[str, Any]]:
         """
@@ -154,27 +165,42 @@ class AsyncAuditQueue(IAuditQueue):
         Returns:
             List of pending audit records.
         """
-        # Get memory IDs from queue
-        memory_ids = await self.async_client.lrange(self.audit_queue_key, 0, limit - 1)
+        try:
+            # Get memory IDs from queue
+            memory_ids = await self.async_client.lrange(self.audit_queue_key, 0, limit - 1)
 
-        if not memory_ids:
-            return []
+            if not memory_ids:
+                return []
 
-        # Get data for pending items only
-        pending_audits = []
-        for memory_id in memory_ids:
-            memory_id_str = memory_id.decode("utf-8")
-            status = await self.async_client.hget(self.audit_status_key, memory_id_str)
+            # Get data for pending items only
+            pending_audits = []
+            for memory_id in memory_ids:
+                memory_id_str = memory_id.decode("utf-8")
+                status = await self.async_client.hget(self.audit_status_key, memory_id_str)
 
-            if status and status.decode("utf-8") == "pending":
-                data_json = await self.async_client.hget(
-                    self.audit_data_key, memory_id_str
-                )
-                if data_json:
-                    data = json.loads(data_json.decode("utf-8"))
-                    pending_audits.append(data)
+                if status and status.decode("utf-8") == "pending":
+                    data_json = await self.async_client.hget(
+                        self.audit_data_key, memory_id_str
+                    )
+                    if data_json:
+                        try:
+                            data = json.loads(data_json.decode("utf-8"))
+                            pending_audits.append(data)
+                        except json.JSONDecodeError as e:
+                            logger.error(f"Failed to decode JSON for memory {memory_id_str}: {e}", exc_info=True)
+                            # Continue processing other items instead of failing completely
+                            continue
+                        except UnicodeDecodeError as e:
+                            logger.error(f"Failed to decode UTF-8 for memory {memory_id_str}: {e}", exc_info=True)
+                            continue
 
-        return pending_audits
+            return pending_audits
+        except RedisError as e:
+            logger.error(f"Redis error while retrieving pending audits: {e}", exc_info=True)
+            raise AuditError(f"Failed to retrieve pending audits due to Redis error: {e}") from e
+        except Exception as e:
+            logger.error(f"Unexpected error while retrieving pending audits: {e}", exc_info=True)
+            raise AuditError(f"Failed to retrieve pending audits due to unexpected error: {e}") from e
 
     async def update_audit_status(self, memory_id: str, status: str) -> bool:
         """
@@ -187,26 +213,42 @@ class AsyncAuditQueue(IAuditQueue):
         Returns:
             True if successfully updated, False if not found.
         """
-        # Check if exists
-        current_status = await self.async_client.hget(self.audit_status_key, memory_id)
-        if not current_status:
-            logger.warning(f"Memory {memory_id} not found in audit queue.")
-            return False
+        try:
+            # Check if exists
+            current_status = await self.async_client.hget(self.audit_status_key, memory_id)
+            if not current_status:
+                logger.warning(f"Memory {memory_id} not found in audit queue.")
+                return False
 
-        # Update status
-        async with self.async_client.pipeline() as pipe:
-            pipe.hset(self.audit_status_key, memory_id, status)
-            # Add reviewed timestamp to data
-            data_json = await self.async_client.hget(self.audit_data_key, memory_id)
-            if data_json:
-                data = json.loads(data_json.decode("utf-8"))
-                data["status"] = status
-                data["reviewed_at"] = datetime.now(timezone.utc).isoformat()
-                pipe.hset(self.audit_data_key, memory_id, json.dumps(data))
-            await pipe.execute()
+            # Update status
+            async with self.async_client.pipeline() as pipe:
+                pipe.hset(self.audit_status_key, memory_id, status)
+                # Add reviewed timestamp to data
+                data_json = await self.async_client.hget(self.audit_data_key, memory_id)
+                if data_json:
+                    try:
+                        data = json.loads(data_json.decode("utf-8"))
+                        data["status"] = status
+                        data["reviewed_at"] = datetime.now(timezone.utc).isoformat()
+                        pipe.hset(self.audit_data_key, memory_id, json.dumps(data))
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to decode JSON for memory {memory_id}: {e}", exc_info=True)
+                        # Continue with the update but without updating the data part
+                        pass
+                    except UnicodeDecodeError as e:
+                        logger.error(f"Failed to decode UTF-8 for memory {memory_id}: {e}", exc_info=True)
+                        # Continue with the update but without updating the data part
+                        pass
+                await pipe.execute()
 
-        logger.info(f"Updated memory {memory_id} status to {status}.")
-        return True
+            logger.info(f"Updated memory {memory_id} status to {status}.")
+            return True
+        except RedisError as e:
+            logger.error(f"Redis error while updating audit status for {memory_id}: {e}", exc_info=True)
+            raise AuditError(f"Failed to update audit status due to Redis error: {e}") from e
+        except Exception as e:
+            logger.error(f"Unexpected error while updating audit status for {memory_id}: {e}", exc_info=True)
+            raise AuditError(f"Failed to update audit status due to unexpected error: {e}") from e
 
     async def is_memory_approved(self, memory_id: str) -> bool:
         """

@@ -100,5 +100,13 @@ class CacheError(ResyncException):
     """Exceção para erros relacionados ao sistema de cache."""
 
 
+class NotificationError(ResyncException):
+    """Exceção para erros durante o envio de notificações."""
+
+
+class NotFoundError(ResyncException):
+    """Exceção para quando um recurso não é encontrado."""
+
+
 class NotFoundError(ResyncException):
     """Exceção para quando um recurso não é encontrado."""
