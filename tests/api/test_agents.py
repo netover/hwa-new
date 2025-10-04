@@ -1,10 +1,11 @@
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 from fastapi.testclient import TestClient
 
-from resync.main import app
 from resync.core.agent_manager import AgentConfig
 from resync.core.fastapi_di import get_agent_manager
+from resync.main import app
 
 # Use the TestClient with our main FastAPI app
 client = TestClient(app)

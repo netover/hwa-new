@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
 import re
+from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, List
 
 import httpx
 
 from resync.core.cache_hierarchy import get_cache_hierarchy
+from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.core.exceptions import TWSConnectionError
 from resync.core.retry import http_retry
-from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.models.tws import (
     CriticalJob,
     JobStatus,
@@ -72,7 +72,7 @@ class OptimizedTWSClient:
             self.client = httpx.AsyncClient(
                 base_url=self.base_url,
                 auth=self.auth,
-                verify=False,  # Development: TWS often uses self-signed certs
+                verify=True,  # Development: TWS often uses self-signed certs
                 timeout=httpx.Timeout(
                     connect=settings.TWS_CONNECT_TIMEOUT,
                     read=settings.TWS_READ_TIMEOUT,
@@ -84,7 +84,7 @@ class OptimizedTWSClient:
                     max_keepalive_connections=settings.TWS_MAX_KEEPALIVE,
                 ),
             )
-            
+
         # Caching layer to reduce redundant API calls - using a direct Redis cache
         self.cache = get_cache_hierarchy()
         logger.info("OptimizedTWSClient initialized for base URL: %s", self.base_url)
@@ -104,7 +104,7 @@ class OptimizedTWSClient:
                     self.client = httpx.AsyncClient(
                         base_url=self.base_url,
                         auth=self.auth,
-                        verify=False,
+                        verify=True,
                         timeout=httpx.Timeout(
                             connect=settings.TWS_CONNECT_TIMEOUT,
                             read=settings.TWS_READ_TIMEOUT,
@@ -126,12 +126,12 @@ class OptimizedTWSClient:
     ) -> httpx.Response:
         """Makes an HTTP request with retry logic using connection pool."""
         logger.debug("Making request: %s %s", method.upper(), url)
-        
+
         # Get client from connection pool or use direct client
         client = await self._get_http_client()
         if client is None:
             raise TWSConnectionError("No HTTP client available")
-            
+
         try:
             response = await client.request(method, url, **kwargs)
             response.raise_for_status()
@@ -256,17 +256,41 @@ class OptimizedTWSClient:
             return critical_jobs
 
     async def get_system_status(self) -> SystemStatus:
-        """Retrieves a comprehensive system status."""
-        workstations = await self.get_workstations_status()
-        jobs = await self.get_jobs_status()
-        critical_jobs = await self.get_critical_path_status()
+        """Retrieves a comprehensive system status with parallel execution."""
+        # Execute all three calls concurrently
+        workstations_task = asyncio.create_task(self.get_workstations_status())
+        jobs_task = asyncio.create_task(self.get_jobs_status())
+        critical_jobs_task = asyncio.create_task(self.get_critical_path_status())
+        
+        workstations, jobs, critical_jobs = await asyncio.gather(
+            workstations_task, 
+            jobs_task, 
+            critical_jobs_task,
+            return_exceptions=True
+        )
+        
+        # Handle potential exceptions
+        if isinstance(workstations, Exception):
+            logger.error(f"Failed to get workstations status: {workstations}")
+            workstations = []
+        
+        if isinstance(jobs, Exception):
+            logger.error(f"Failed to get jobs status: {jobs}")
+            jobs = []
+        
+        if isinstance(critical_jobs, Exception):
+            logger.error(f"Failed to get critical path status: {critical_jobs}")
+            critical_jobs = []
+        
         return SystemStatus(
-            workstations=workstations, jobs=jobs, critical_jobs=critical_jobs
+            workstations=workstations, 
+            jobs=jobs, 
+            critical_jobs=critical_jobs
         )
 
     async def get_job_status_batch(self, job_ids: List[str]) -> dict[str, JobStatus]:
         """
-        Batch multiple job status queries in a single optimized request.
+        Batch multiple job status queries using parallel execution.
 
         Args:
             job_ids: List of job IDs to query
@@ -275,9 +299,9 @@ class OptimizedTWSClient:
             Dictionary mapping job_id to JobStatus
         """
         results = {}
+        
+        # Separate cached and uncached jobs
         uncached_jobs = []
-
-        # Check cache for each job
         for job_id in job_ids:
             # Validação de segurança para prevenir Path Traversal ou injeção de URL
             if not SAFE_JOB_ID_PATTERN.match(job_id):
@@ -292,33 +316,45 @@ class OptimizedTWSClient:
             else:
                 uncached_jobs.append(job_id)
 
-        # Batch request for uncached jobs
+        # Process uncached jobs in parallel with concurrency control
         if uncached_jobs:
-            # TWS API may support batch queries - if not, make individual calls
-            for job_id in uncached_jobs:
-                try:
-                    # This would ideally be a batch API call
-                    # For now, make individual calls (can be optimized further)
-                    url = f"/model/jobdefinition/{job_id}?engineName={self.engine_name}&engineOwner={self.engine_owner}"
-                    async with self._api_request("GET", url) as data:
-                        if isinstance(data, dict):
-                            job_status = JobStatus(**data)
-                            results[job_id] = job_status
-                        else:
-                            logger.warning(
-                                f"Unexpected data format for job {job_id}: expected dict, got {type(data)}"
-                            )
-                            results[job_id] = None
-                        # Cache the result
-                        await self.cache.set(
-                            f"job_status:{job_id}",
-                            job_status,
-                            ttl=settings.TWS_CACHE_TTL,
-                        )
-                except Exception as e:
-                    logger.warning(f"Failed to get status for job {job_id}: {e}")
-                    # Return None or a default status for failed jobs
-                    results[job_id] = None
+            # Limit concurrent requests to prevent overwhelming the server
+            semaphore = asyncio.Semaphore(settings.TWS_MAX_CONCURRENT_REQUESTS or 10)
+            
+            async def fetch_single_job(job_id: str) -> tuple[str, JobStatus]:
+                async with semaphore:
+                    try:
+                        url = f"/model/jobdefinition/{job_id}?engineName={self.engine_name}&engineOwner={self.engine_owner}"
+                        async with self._api_request("GET", url) as data:
+                            if isinstance(data, dict):
+                                job_status = JobStatus(**data)
+                                # Cache the result
+                                await self.cache.set(
+                                    f"job_status:{job_id}",
+                                    job_status,
+                                    ttl=settings.TWS_CACHE_TTL,
+                                )
+                                return job_id, job_status
+                            else:
+                                logger.warning(
+                                    f"Unexpected data format for job {job_id}: expected dict, got {type(data)}"
+                                )
+                                return job_id, None
+                    except Exception as e:
+                        logger.warning(f"Failed to get status for job {job_id}: {e}")
+                        return job_id, None
+
+            # Execute all requests concurrently
+            tasks = [fetch_single_job(job_id) for job_id in uncached_jobs]
+            parallel_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process results
+            for result in parallel_results:
+                if isinstance(result, Exception):
+                    logger.error(f"Error in parallel job status fetch: {result}")
+                else:
+                    job_id, job_status = result
+                    results[job_id] = job_status
 
         return results
 

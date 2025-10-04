@@ -5,8 +5,8 @@ Test runner for health check tests with proper environment setup.
 
 import os
 import sys
-import subprocess
 from pathlib import Path
+
 
 def setup_test_environment():
     """Set up the test environment variables."""
@@ -20,7 +20,7 @@ def setup_test_environment():
     os.environ['LOG_LEVEL'] = 'DEBUG'
     os.environ['HEALTH_CHECK_ENABLED'] = 'true'
     os.environ['HEALTH_CHECK_INTERVAL'] = '30'
-    
+
     print("✅ Test environment configured")
 
 def run_tests():
@@ -28,11 +28,11 @@ def run_tests():
     try:
         # Import and run tests directly
         import pytest
-        
+
         # Change to testbed directory if needed
         testbed_dir = Path(__file__).parent
         os.chdir(testbed_dir)
-        
+
         # Run pytest with specific test file
         result = pytest.main([
             'tests/test_health_checks.py',
@@ -40,9 +40,9 @@ def run_tests():
             '--tb=short',
             '--log-level=INFO'
         ])
-        
+
         return result
-        
+
     except ImportError as e:
         print(f"❌ Error importing pytest: {e}")
         return 1
@@ -53,18 +53,18 @@ def run_tests():
 def main():
     """Main function."""
     print("🚀 Starting health check tests...")
-    
+
     # Setup environment
     setup_test_environment()
-    
+
     # Run tests
     result = run_tests()
-    
+
     if result == 0:
         print("✅ All tests passed!")
     else:
         print(f"❌ Tests failed with exit code: {result}")
-    
+
     return result
 
 if __name__ == "__main__":

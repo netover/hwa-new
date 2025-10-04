@@ -4,15 +4,14 @@ API Endpoints Tests for Health Checks.
 This module tests the /health API endpoints for functionality, ensuring they
 respond correctly and reflect the state of their dependencies.
 """
-import asyncio
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 # Import the specific routers we want to test
-from resync.api.health import health_router, config_router
+from resync.api.health import config_router, health_router
 
 
 @pytest.fixture

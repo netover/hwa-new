@@ -1,21 +1,20 @@
 """Unit tests for error models only, without importing the full application."""
 
+
 import pytest
-from datetime import datetime
-from uuid import uuid4
 
 from resync.models.error_models import (
-    BaseErrorResponse,
-    ValidationErrorResponse,
     AuthenticationErrorResponse,
     AuthorizationErrorResponse,
+    BaseErrorResponse,
     BusinessLogicErrorResponse,
-    SystemErrorResponse,
-    ExternalServiceErrorResponse,
-    RateLimitErrorResponse,
     ErrorCategory,
     ErrorSeverity,
-    ValidationErrorDetail
+    ExternalServiceErrorResponse,
+    RateLimitErrorResponse,
+    SystemErrorResponse,
+    ValidationErrorDetail,
+    ValidationErrorResponse,
 )
 
 
@@ -26,7 +25,7 @@ def test_base_error_response_creation():
         message="Test error message",
         category=ErrorCategory.SYSTEM
     )
-    
+
     assert error.error_code == "TEST_ERROR"
     assert error.message == "Test error message"
     assert error.category == ErrorCategory.SYSTEM
@@ -45,12 +44,12 @@ def test_validation_error_response_from_pydantic_errors():
             "input": None
         }
     ]
-    
+
     error_response = ValidationErrorResponse.from_pydantic_errors(
         pydantic_errors,
         correlation_id="test-123"
     )
-    
+
     assert error_response.error_code == "VALIDATION_ERROR"
     assert len(error_response.details) == 1
     assert error_response.details[0].field == "field1"
@@ -65,7 +64,7 @@ def test_authentication_error_response_factories():
     assert unauthorized.error_code == "UNAUTHORIZED"
     assert unauthorized.category == ErrorCategory.AUTHENTICATION
     assert unauthorized.correlation_id == "test-123"
-    
+
     invalid_creds = AuthenticationErrorResponse.invalid_credentials(correlation_id="test-456")
     assert invalid_creds.error_code == "INVALID_CREDENTIALS"
     assert invalid_creds.category == ErrorCategory.AUTHENTICATION
@@ -78,7 +77,7 @@ def test_authorization_error_response_factories():
     assert forbidden.error_code == "FORBIDDEN"
     assert forbidden.category == ErrorCategory.AUTHORIZATION
     assert "users" in forbidden.message
-    
+
     insufficient = AuthorizationErrorResponse.insufficient_permissions(
         ["admin", "write"], ["read"], correlation_id="test-456"
     )
@@ -95,7 +94,7 @@ def test_business_logic_error_response_factories():
     assert "User not found: user123" in not_found.message
     assert not_found.entity_type == "User"
     assert not_found.entity_id == "user123"
-    
+
     invalid_state = BusinessLogicErrorResponse.invalid_state("Order", "order456", "cancelled", correlation_id="test-456")
     assert invalid_state.error_code == "INVALID_STATE"
     assert invalid_state.category == ErrorCategory.BUSINESS_LOGIC
@@ -110,7 +109,7 @@ def test_system_error_response_factories():
     assert internal_error.category == ErrorCategory.SYSTEM
     assert internal_error.component == "database"
     assert len(internal_error.troubleshooting_hints) >= 1
-    
+
     config_error = SystemErrorResponse.configuration_error("cache", "redis_url", correlation_id="test-456")
     assert config_error.error_code == "CONFIGURATION_ERROR"
     assert config_error.category == ErrorCategory.SYSTEM
@@ -123,7 +122,7 @@ def test_external_service_error_response_factories():
     assert service_unavailable.error_code == "SERVICE_UNAVAILABLE"
     assert service_unavailable.category == ErrorCategory.EXTERNAL_SERVICE
     assert service_unavailable.service_name == "TWS"
-    
+
     service_error = ExternalServiceErrorResponse.service_error(
         "TWS", "CONNECTION_TIMEOUT", "Connection timed out", correlation_id="test-456"
     )
@@ -153,7 +152,7 @@ def test_error_response_json_serialization():
         category=ErrorCategory.SYSTEM,
         correlation_id="test-123"
     )
-    
+
     json_data = error.model_dump()
     assert json_data["error_code"] == "TEST_ERROR"
     assert json_data["message"] == "Test error message"
@@ -170,7 +169,7 @@ def test_validation_error_detail():
         value=None,
         location="body"
     )
-    
+
     assert detail.field == "username"
     assert detail.message == "Field required"
     assert detail.value is None

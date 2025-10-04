@@ -5,14 +5,14 @@ job status monitoring, and conversational AI capabilities.
 """
 
 import asyncio
-import json
 import logging
-import aiohttp
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from resync.core.exceptions import NotificationError, ConfigurationError
+import aiohttp
+
+from resync.core.exceptions import NotificationError
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TeamsConfig:
     """Configuration for Microsoft Teams integration."""
-    
+
     enabled: bool = False
     webhook_url: Optional[str] = None
     channel_name: Optional[str] = None
@@ -37,7 +37,7 @@ class TeamsConfig:
 @dataclass
 class TeamsNotification:
     """Structure for Teams notification data."""
-    
+
     title: str
     message: str
     severity: str = "info"  # info, warning, error, critical
@@ -50,21 +50,21 @@ class TeamsNotification:
 
 class TeamsIntegration:
     """Microsoft Teams integration service."""
-    
+
     def __init__(self, config: Optional[TeamsConfig] = None):
         """Initialize Teams integration service.
-        
+
         Args:
             config: Teams configuration. If None, loads from settings.
         """
         self.config = config or self._load_config_from_settings()
         self.session: Optional[aiohttp.ClientSession] = None
         self._session_lock = asyncio.Lock()
-        
+
     def _load_config_from_settings(self) -> TeamsConfig:
         """Load Teams configuration from application settings."""
         config = TeamsConfig()
-        
+
         # Load configuration from settings if available
         teams_settings = getattr(settings, "TEAMS_INTEGRATION", {})
         if teams_settings:
@@ -78,9 +78,9 @@ class TeamsIntegration:
             config.monitored_tws_instances = teams_settings.get("monitored_tws_instances", [])
             config.job_status_filters = teams_settings.get("job_status_filters", ["ABEND", "ERROR", "FAILED"])
             config.notification_types = teams_settings.get("notification_types", ["job_status", "alerts", "performance"])
-            
+
         return config
-    
+
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp client session."""
         async with self._session_lock:
@@ -93,38 +93,38 @@ class TeamsIntegration:
                     headers={"Content-Type": "application/json"}
                 )
             return self.session
-    
+
     async def _close_session(self) -> None:
         """Close aiohttp client session."""
         async with self._session_lock:
             if self.session and not self.session.closed:
                 await self.session.close()
                 self.session = None
-    
+
     async def send_notification(self, notification: TeamsNotification) -> bool:
         """Send notification to Microsoft Teams.
-        
+
         Args:
             notification: Teams notification data
-            
+
         Returns:
             True if notification was sent successfully, False otherwise
-            
+
         Raises:
             NotificationError: If notification fails due to configuration issues
         """
         if not self.config.enabled:
             logger.debug("Teams integration is disabled, skipping notification")
             return False
-            
+
         if not self.config.webhook_url:
             logger.warning("Teams webhook URL not configured, cannot send notification")
             raise NotificationError("Teams webhook URL not configured")
-            
+
         try:
             # Format message for Teams
             teams_message = self._format_teams_message(notification)
-            
+
             # Send to Teams webhook
             session = await self._get_session()
             async with session.post(self.config.webhook_url, json=teams_message) as response:
@@ -135,31 +135,25 @@ class TeamsIntegration:
                     error_text = await response.text()
                     logger.error(f"Failed to send Teams notification: {response.status} - {error_text}")
                     return False
-                    
+
         except aiohttp.ClientError as e:
             logger.error(f"Network error sending Teams notification: {e}", exc_info=True)
             raise NotificationError(f"Network error sending Teams notification: {e}") from e
         except Exception as e:
             logger.error(f"Unexpected error sending Teams notification: {e}", exc_info=True)
             raise NotificationError(f"Unexpected error sending Teams notification: {e}") from e
-    
+
     def _format_teams_message(self, notification: TeamsNotification) -> Dict[str, Any]:
         """Format notification as Microsoft Teams message card.
-        
+
         Args:
             notification: Teams notification data
-            
+
         Returns:
             Formatted message card for Teams
         """
         # Determine color based on severity
-        color_map = {
-            "info": "0078D7",      # Blue
-            "warning": "FFA500",   # Orange
-            "error": "FF0000",     # Red
-            "critical": "8B0000"   # Dark Red
-        }
-        
+
         # Create adaptive card for Teams
         message_card = {
             "type": "message",
@@ -188,34 +182,34 @@ class TeamsIntegration:
                 }
             ]
         }
-        
+
         # Add additional information if available
         facts = []
-        
+
         if notification.instance_name:
             facts.append({
                 "title": "Instance",
                 "value": notification.instance_name
             })
-            
+
         if notification.job_id:
             facts.append({
                 "title": "Job ID",
                 "value": notification.job_id
             })
-            
+
         if notification.job_status:
             facts.append({
                 "title": "Job Status",
                 "value": notification.job_status
             })
-            
+
         # Add timestamp
         facts.append({
             "title": "Timestamp",
             "value": notification.timestamp.isoformat()
         })
-        
+
         # Add facts to card if any exist
         if facts:
             message_card["attachments"][0]["content"]["body"].extend([
@@ -224,7 +218,7 @@ class TeamsIntegration:
                     "facts": facts
                 }
             ])
-        
+
         # Add additional data if provided
         if notification.additional_data:
             additional_section = {
@@ -237,37 +231,37 @@ class TeamsIntegration:
                     }
                 ]
             }
-            
+
             for key, value in notification.additional_data.items():
                 additional_section["items"].append({
                     "type": "TextBlock",
                     "text": f"{key}: {value}",
                     "wrap": True
                 })
-                
+
             message_card["attachments"][0]["content"]["body"].append(additional_section)
-        
+
         # Add custom styling
         if self.config.bot_name:
             message_card["attachments"][0]["content"]["$schema"] = "http://adaptivecards.io/schemas/adaptive-card.json"
-            
+
         return message_card
-    
+
     async def monitor_job_status(self, job_data: Dict[str, Any], instance_name: str) -> None:
         """Monitor job status and send notifications for configured job status changes.
-        
+
         Args:
             job_data: Job status data from TWS
             instance_name: Name of the TWS instance
         """
         if not self.config.enabled or not self.config.enable_job_notifications:
             return
-            
+
         # Check if this instance is being monitored
-        if (self.config.monitored_tws_instances and 
+        if (self.config.monitored_tws_instances and
             instance_name not in self.config.monitored_tws_instances):
             return
-            
+
         # Check if job status matches filters
         job_status = job_data.get("status", "").upper()
         if job_status in [status.upper() for status in self.config.job_status_filters]:
@@ -286,32 +280,32 @@ class TeamsIntegration:
                     "owner": job_data.get("owner")
                 }
             )
-            
+
             try:
                 await self.send_notification(notification)
             except NotificationError as e:
                 logger.error(f"Failed to send job status notification: {e}")
             except Exception as e:
                 logger.error(f"Unexpected error sending job status notification: {e}")
-    
+
     async def learn_from_conversation(self, message: str, context: Dict[str, Any]) -> None:
         """Learn from Teams conversation for AI enhancement.
-        
+
         Args:
             message: Message content from Teams
             context: Message context (sender, timestamp, etc.)
         """
         if not self.config.enabled or not self.config.enable_conversation_learning:
             return
-            
+
         logger.info(f"Learning from Teams conversation: {message[:100]}...")
         # This would integrate with the knowledge graph/learning system
         # For now, just log that we're learning from the conversation
         pass
-    
+
     async def health_check(self) -> Dict[str, Any]:
         """Perform health check of Teams integration.
-        
+
         Returns:
             Health status dictionary
         """
@@ -323,7 +317,7 @@ class TeamsIntegration:
             "monitored_instances": len(self.config.monitored_tws_instances),
             "last_check": datetime.now().isoformat()
         }
-        
+
         if self.config.enabled and self.config.webhook_url:
             try:
                 # Test webhook connectivity
@@ -334,9 +328,9 @@ class TeamsIntegration:
                 status["webhook_accessible"] = False
                 status["webhook_error"] = str(e)
                 logger.warning(f"Teams webhook health check failed: {e}")
-        
+
         return status
-    
+
     async def shutdown(self) -> None:
         """Shutdown Teams integration service."""
         await self._close_session()
@@ -349,7 +343,7 @@ _teams_integration: Optional[TeamsIntegration] = None
 
 async def get_teams_integration() -> TeamsIntegration:
     """Get global Teams integration instance.
-    
+
     Returns:
         TeamsIntegration instance
     """

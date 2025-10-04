@@ -1,5 +1,5 @@
+
 from locust import HttpUser, task
-from typing import Any
 
 
 class AuditUser(HttpUser):

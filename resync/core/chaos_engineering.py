@@ -9,19 +9,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import random
+import secrets
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Callable, Awaitable
-from unittest.mock import patch, MagicMock
+from typing import Any, Callable, Dict, List
+from unittest.mock import patch
 
-from resync.core.async_cache import AsyncTTLCache
+from resync.core import get_environment_tags, get_global_correlation_id
 from resync.core.agent_manager import AgentManager
+from resync.core.async_cache import AsyncTTLCache
 from resync.core.audit_db import add_audit_records_batch, get_audit_metrics
-from resync.core.metrics import runtime_metrics, log_with_correlation
-from resync.core import get_global_correlation_id, get_environment_tags
+from resync.core.metrics import log_with_correlation, runtime_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +95,7 @@ class ChaosEngineer:
             ]
 
             # Run tests with timeout
-            timeout = duration_minutes * 60
+            duration_minutes * 60
             results = await asyncio.gather(*test_tasks, return_exceptions=True)
 
             # Process results
@@ -538,7 +537,7 @@ class ChaosEngineer:
                             try:
                                 await cache.set("test_key", "test_value")
                                 anomalies.append("Cache set should have failed")
-                            except Exception:
+                            except Exception as e:
                                 pass  # Expected
 
                         await cache.stop()
@@ -854,7 +853,7 @@ class FuzzingEngine:
                         else:
                             results["failed"] += 1
                             results["errors"].append(f"Value {i}: mismatch")
-                    except Exception:
+                    except Exception as e:
                         # For objects that can't be compared, just check if retrieval worked
                         if retrieved is not None:
                             results["passed"] += 1

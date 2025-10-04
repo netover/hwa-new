@@ -1,6 +1,4 @@
 import asyncio
-import time
-from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -9,7 +7,6 @@ from resync.core.cache_hierarchy import (
     CacheHierarchy,
     CacheMetrics,
     L1Cache,
-    get_cache_hierarchy,
 )
 
 

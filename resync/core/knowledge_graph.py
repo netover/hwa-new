@@ -2,7 +2,8 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from neo4j import AsyncGraphDatabase, exceptions as neo4j_exceptions
+from neo4j import AsyncGraphDatabase
+from neo4j import exceptions as neo4j_exceptions
 
 from resync.core.exceptions import KnowledgeGraphError
 from resync.settings import settings
@@ -44,7 +45,7 @@ class AsyncKnowledgeGraph:
         RETURN id(n) as node_id
         """
         params = {"content": content, "metadata": metadata}
-        
+
         try:
             async with self.driver.session() as session:
                 result = await session.run(query, params)
@@ -123,13 +124,13 @@ class AsyncKnowledgeGraph:
         cypher_query = """
         MATCH (c:Conversation)
         WHERE c.user_query CONTAINS $query OR c.agent_response CONTAINS $query
-        RETURN c.user_query as user_query, c.agent_response as agent_response, 
+        RETURN c.user_query as user_query, c.agent_response as agent_response,
                c.agent_id as agent_id, c.timestamp as timestamp
         ORDER BY c.timestamp DESC
         LIMIT $limit
         """
         params = {"query": query, "limit": limit}
-        
+
         try:
             async with self.driver.session() as session:
                 result = await session.run(cypher_query, params)
@@ -149,14 +150,14 @@ class AsyncKnowledgeGraph:
         """Optimized search method for conversations."""
         cypher_query = """
         MATCH (c:Conversation)
-        RETURN c.user_query as user_query, c.agent_response as agent_response, 
-               c.agent_id as agent_id, c.model_used as model_used, 
+        RETURN c.user_query as user_query, c.agent_response as agent_response,
+               c.agent_id as agent_id, c.model_used as model_used,
                c.timestamp as timestamp
         ORDER BY c.timestamp DESC
         LIMIT $limit
         """
         params = {"limit": limit}
-        
+
         try:
             async with self.driver.session() as session:
                 result = await session.run(cypher_query, params)
@@ -175,7 +176,7 @@ class AsyncKnowledgeGraph:
         SET c.feedback = $feedback, c.rating = $rating
         """
         params = {"memory_id": int(memory_id), "feedback": feedback, "rating": rating}
-        
+
         try:
             async with self.driver.session() as session:
                 await session.run(query, params)
@@ -219,7 +220,7 @@ class AsyncKnowledgeGraph:
         """Deletes a memory from the knowledge graph."""
         query = "MATCH (c:Conversation) WHERE id(c) = $memory_id DELETE c"
         params = {"memory_id": int(memory_id)}
-        
+
         try:
             async with self.driver.session() as session:
                 await session.run(query, params)
@@ -234,7 +235,7 @@ class AsyncKnowledgeGraph:
         SET c.observations = $observations
         """
         params = {"memory_id": int(memory_id), "observations": observations}
-        
+
         try:
             async with self.driver.session() as session:
                 await session.run(query, params)
@@ -249,7 +250,7 @@ class AsyncKnowledgeGraph:
         RETURN c.processed AS processed
         """
         params = {"memory_id": int(memory_id)}
-        
+
         try:
             async with self.driver.session() as session:
                 result = await session.run(query, params)
@@ -265,12 +266,12 @@ class AsyncKnowledgeGraph:
         """Atomically checks if memory is already processed, and if not, flags it."""
         query = """
         MATCH (c:Conversation) WHERE id(c) = $memory_id
-        SET c.is_flagged = true, c.flag_reason = $reason, 
+        SET c.is_flagged = true, c.flag_reason = $reason,
             c.flag_confidence = $confidence, c.processed = true
         RETURN c.processed AS was_already_processed
         """
         params = {"memory_id": int(memory_id), "reason": reason, "confidence": confidence}
-        
+
         try:
             async with self.driver.session() as session:
                 result = await session.run(query, params)
@@ -291,7 +292,7 @@ class AsyncKnowledgeGraph:
         RETURN was_already_processed
         """
         params = {"memory_id": int(memory_id)}
-        
+
         try:
             async with self.driver.session() as session:
                 result = await session.run(query, params)

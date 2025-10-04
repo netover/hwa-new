@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import time
 import logging
 
 from agno.agent import Agent
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from fastapi.security import HTTPBearer
 
 from resync.core.exceptions import (
     AgentError,
@@ -17,7 +15,6 @@ from resync.core.exceptions import (
     KnowledgeGraphError,
     LLMError,
     ToolExecutionError,
-    WebSocketError,
 )
 from resync.core.fastapi_di import (
     get_agent_manager,
@@ -25,14 +22,18 @@ from resync.core.fastapi_di import (
     get_knowledge_graph,
 )
 from resync.core.ia_auditor import analyze_and_flag_memories
-from resync.core.security import sanitize_input, SafeAgentID
 from resync.core.interfaces import IAgentManager, IConnectionManager, IKnowledgeGraph
-from resync.security.oauth2 import verify_oauth2_token
+from resync.core.llm_wrapper import optimized_llm
+from resync.core.rate_limiter import websocket_rate_limit
+from resync.core.security import SafeAgentID, sanitize_input
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
 
-from resync.core.rate_limiter import websocket_rate_limit
+# Module-level dependencies to avoid B008 errors
+agent_manager_dependency = Depends(get_agent_manager)
+connection_manager_dependency = Depends(get_connection_manager)
+knowledge_graph_dependency = Depends(get_knowledge_graph)
 
 # --- APIRouter Initialization ---
 chat_router = APIRouter()
@@ -102,6 +103,32 @@ Pergunta do usuário:
 """
 
 
+async def _get_optimized_response(
+    query: str,
+    context: dict = None,
+    use_cache: bool = True,
+    stream: bool = False
+) -> str:
+    """
+    Get response using the TWS-optimized LLM optimizer.
+    
+    This is used for queries that might benefit from special TWS-specific
+    optimizations like template matching, caching, and model selection.
+    """
+    try:
+        response = await optimized_llm.get_response(
+            query=query,
+            context=context or {},
+            use_cache=use_cache,
+            stream=stream
+        )
+        return response
+    except Exception as e:
+        logger.error(f"LLM optimization failed, falling back to regular processing: {e}")
+        # Return the original query to be handled by the normal agent flow
+        return query
+
+
 async def _stream_agent_response(
     websocket: WebSocket, agent: Agent, query: str
 ) -> str:
@@ -164,21 +191,67 @@ async def _handle_agent_interaction(
     # Send the user's message back to the UI for display
     await websocket.send_json({"type": "message", "sender": "user", "message": sanitized_data})
 
-    # 1. Get context and create the enhanced query for the agent
-    enhanced_query = await _get_enhanced_query(knowledge_graph, sanitized_data, data)
+    # Check if query would benefit from LLM optimization
+    # For certain TWS-specific queries, we can use the optimized approach
+    if _should_use_llm_optimization(data):
+        logger.info(f"Using LLM optimization for query from agent {agent_id}")
+        
+        # Get optimized response
+        optimized_response = await _get_optimized_response(
+            query=data,
+            context={"agent_id": agent_id, "user_query": sanitized_data}
+        )
+        
+        # Send the optimized response
+        await websocket.send_json(
+            {
+                "type": "message",
+                "sender": "agent",
+                "message": optimized_response,
+                "is_optimized": True,
+                "is_final": True,
+            }
+        )
+        
+        # Store the optimized interaction
+        await _finalize_and_store_interaction(
+            websocket=websocket,
+            knowledge_graph=knowledge_graph,
+            agent=agent,
+            agent_id=agent_id,
+            sanitized_query=sanitized_data,
+            full_response=optimized_response,
+        )
+    else:
+        # 1. Get context and create the enhanced query for the agent
+        enhanced_query = await _get_enhanced_query(knowledge_graph, sanitized_data, data)
 
-    # 2. Stream the agent's response to the client and get the full response
-    full_response = await _stream_agent_response(websocket, agent, enhanced_query)
+        # 2. Stream the agent's response to the client and get the full response
+        full_response = await _stream_agent_response(websocket, agent, enhanced_query)
 
-    # 3. Finalize the interaction: send final message, store, and audit
-    await _finalize_and_store_interaction(
-        websocket=websocket,
-        knowledge_graph=knowledge_graph,
-        agent=agent,
-        agent_id=agent_id,
-        sanitized_query=sanitized_data,
-        full_response=full_response,
-    )
+        # 3. Finalize the interaction: send final message, store, and audit
+        await _finalize_and_store_interaction(
+            websocket=websocket,
+            knowledge_graph=knowledge_graph,
+            agent=agent,
+            agent_id=agent_id,
+            sanitized_query=sanitized_data,
+            full_response=full_response,
+        )
+
+
+def _should_use_llm_optimization(query: str) -> bool:
+    """Determine if a query would benefit from LLM optimization."""
+    query_lower = query.lower()
+    
+    # Use optimization for specific TWS-related queries
+    tws_indicators = [
+        "status", "estado", "job", "tws", "system", "health", "saúde", 
+        "sistema", "dependency", "dependenc", "troubleshoot", "problem",
+        "analyze", "failure", "error", "erro", "falha"
+    ]
+    
+    return any(indicator in query_lower for indicator in tws_indicators)
 
 
 @chat_router.websocket("/ws/{agent_id}")
@@ -186,17 +259,17 @@ async def _handle_agent_interaction(
 async def websocket_endpoint(
     websocket: WebSocket,
     agent_id: SafeAgentID,
-    agent_manager: IAgentManager = Depends(get_agent_manager),
-    connection_manager: IConnectionManager = Depends(get_connection_manager),
-    knowledge_graph: IKnowledgeGraph = Depends(get_knowledge_graph),
+    agent_manager: IAgentManager = agent_manager_dependency,
+    connection_manager: IConnectionManager = connection_manager_dependency,
+    knowledge_graph: IKnowledgeGraph = knowledge_graph_dependency,
 ):
     # First, accept the WebSocket connection to establish it
     await websocket.accept()
-    
+
     # For now, we'll allow access without authentication since we're using email-based session
     # In a real implementation, we would validate session/cookie information
     # For this implementation, we'll just log the access for auditing
-    
+
     logger.info(f"WebSocket connection established for agent {agent_id}")
     """
     Handles the WebSocket connection for real-time chat with a specific agent.
@@ -223,18 +296,12 @@ async def websocket_endpoint(
 
         while True:
             raw_data = await websocket.receive_text()
-            
-            # Input validation and size check
-            if len(raw_data) > 10000:  # Limit message size to 10KB
-                await send_error_message(websocket, "Mensagem muito longa. Máximo de 10.000 caracteres permitido.")
+
+            # Validate input
+            validation_result = _validate_input(raw_data, agent_id, websocket)
+            if not validation_result["is_valid"]:
                 continue
-                
-            # Additional validation: check for potential injection attempts
-            if "<script>" in raw_data or "javascript:" in raw_data.lower():
-                logger.warning(f"Potential injection attempt detected from agent '{agent_id}': {raw_data[:100]}...")
-                await send_error_message(websocket, "Conteúdo não permitido detectado.")
-                continue
-            
+
             logger.info(f"Received message for agent '{agent_id}': {raw_data}")
             # A sanitização ocorre dentro de _handle_agent_interaction
             await _handle_agent_interaction(
@@ -281,3 +348,19 @@ async def websocket_endpoint(
     finally:
         # Ensure the connection is cleaned up
         await connection_manager.disconnect(websocket)
+
+
+async def _validate_input(raw_data: str, agent_id: str, websocket: WebSocket) -> dict:
+    """Validate input data for size and potential injection attempts."""
+    # Input validation and size check
+    if len(raw_data) > 10000:  # Limit message size to 10KB
+        await send_error_message(websocket, "Mensagem muito longa. Máximo de 10.000 caracteres permitido.")
+        return {"is_valid": False}
+
+    # Additional validation: check for potential injection attempts
+    if "<script>" in raw_data or "javascript:" in raw_data.lower():
+        logger.warning(f"Potential injection attempt detected from agent '{agent_id}': {raw_data[:100]}...")
+        await send_error_message(websocket, "Conteúdo não permitido detectado.")
+        return {"is_valid": False}
+
+    return {"is_valid": True}

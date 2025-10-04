@@ -13,17 +13,15 @@ Tests verify:
 
 import asyncio
 import logging
-from unittest.mock import AsyncMock, patch, ANY
-import uuid
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 import pytest_asyncio
-from redis.exceptions import ResponseError, RedisError
+from redis.exceptions import ResponseError
 
 from resync.core.audit_lock import (
     AuditLockContext,
     DistributedAuditLock,
-    audit_lock as global_audit_lock,
 )
 from resync.core.exceptions import AuditError, DatabaseError
 

@@ -89,8 +89,34 @@ class AsyncAuditQueue(IAuditQueue):
                 else "redis://localhost:6379"
             ),
         )
-        self.sync_client = redis.from_url(self.redis_url)  # type: ignore[no-untyped-call]
-        self.async_client = AsyncRedis.from_url(self.redis_url)
+        # Implement connection pooling with settings configuration
+        sync_pool = redis.ConnectionPool.from_url(
+            self.redis_url,
+            max_connections=getattr(self.settings, "REDIS_POOL_MAX_SIZE", 20),
+            min_connections=getattr(self.settings, "REDIS_POOL_MIN_SIZE", 5),
+            retry_on_timeout=True,
+            health_check_interval=getattr(self.settings, "REDIS_POOL_HEALTH_CHECK_INTERVAL", 60),
+            socket_keepalive=True,
+            socket_keepalive_options={},
+            encoding='utf-8',
+            decode_responses=False
+        )
+        self.sync_client = redis.Redis(connection_pool=sync_pool)
+
+        # Use async connection pool correctly
+        from redis.asyncio import ConnectionPool as AsyncConnectionPool
+        
+        async_pool = AsyncConnectionPool.from_url(
+            self.redis_url,
+            max_connections=getattr(self.settings, "REDIS_POOL_MAX_SIZE", 20),
+            min_connections=getattr(self.settings, "REDIS_POOL_MIN_SIZE", 5),
+            retry_on_timeout=True,
+            health_check_interval=getattr(self.settings, "REDIS_POOL_HEALTH_CHECK_INTERVAL", 60),
+            socket_keepalive=True,
+            encoding='utf-8',
+            decode_responses=False
+        )
+        self.async_client = AsyncRedis(connection_pool=async_pool)
 
         # Use the new distributed audit lock for consistency
         self.distributed_lock = DistributedAuditLock(self.redis_url)

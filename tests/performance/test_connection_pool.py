@@ -79,7 +79,7 @@ class TestConnectionPoolPerformance:
 
         # Process large dataset multiple times
         for _ in range(10):
-            processed = [item for item in large_data if item["id"] % 2 == 0]
+            [item for item in large_data if item["id"] % 2 == 0]
 
         final_memory = process.memory_info().rss
         memory_increase = final_memory - initial_memory
@@ -223,7 +223,7 @@ class TestAuditQueuePerformance:
         """Process a batch of audit records."""
         processed_count = 0
 
-        for record in records:
+        for _record in records:
             # Simulate audit processing
             await asyncio.sleep(0.001)  # Small processing delay
             processed_count += 1
@@ -281,7 +281,7 @@ class TestMemoryLeakDetection:
             connections = []
 
             # Create many connections
-            for i in range(200):
+            for _i in range(200):
                 conn = mock_manager.return_value.get_connection()
                 connections.append(conn)
 

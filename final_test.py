@@ -3,8 +3,10 @@
 Final test of implemented improvements.
 """
 import asyncio
+
 from resync.core.async_cache import AsyncTTLCache
 from resync.core.audit_db import _validate_audit_record
+
 
 async def main():
     print("FINAL IMPROVEMENT TEST")

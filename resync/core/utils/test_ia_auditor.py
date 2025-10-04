@@ -1,8 +1,9 @@
-import pytest
 from unittest.mock import AsyncMock, patch
 
-from resync.core.exceptions import LLMError, AuditError, DatabaseError
-from resync.core.ia_auditor import analyze_memory, analyze_and_flag_memories
+import pytest
+
+from resync.core.exceptions import AuditError, DatabaseError, LLMError
+from resync.core.ia_auditor import analyze_and_flag_memories, analyze_memory
 
 # Marks all tests in this file as async
 pytestmark = pytest.mark.asyncio

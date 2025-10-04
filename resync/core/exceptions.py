@@ -108,5 +108,5 @@ class NotFoundError(ResyncException):
     """Exceção para quando um recurso não é encontrado."""
 
 
-class NotFoundError(ResyncException):
-    """Exceção para quando um recurso não é encontrado."""
+class PerformanceError(ResyncException):
+    """Exceção para erros relacionados à performance do sistema."""

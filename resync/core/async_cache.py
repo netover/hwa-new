@@ -7,7 +7,7 @@ from time import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from resync.core.exceptions import CacheError
-from resync.core.metrics import runtime_metrics, log_with_correlation
+from resync.core.metrics import log_with_correlation, runtime_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -54,32 +54,33 @@ class AsyncTTLCache:
         )
 
         try:
-            # Read TTL and cleanup interval from the main settings, if available
-            from resync.settings import settings
+            try:
+                # Read TTL and cleanup interval from the main settings, if available
+                from resync.settings import settings
 
-            self.ttl_seconds = getattr(settings, "ASYNC_CACHE_TTL", ttl_seconds)
-            self.cleanup_interval = getattr(settings, "ASYNC_CACHE_CLEANUP_INTERVAL", cleanup_interval)
-            self.num_shards = getattr(settings, "ASYNC_CACHE_NUM_SHARDS", num_shards)
-            
-            log_with_correlation(
-                logging.DEBUG,
-                "Loaded cache config from settings module",
-                correlation_id,
-            )
-        except ImportError:
-            # Handle the case where settings module is not available
-            self.ttl_seconds = ttl_seconds
-            self.cleanup_interval = cleanup_interval
-            self.num_shards = num_shards
-            log_with_correlation(
-                logging.WARNING,
-                "Settings module not available, using defaults",
-                correlation_id,
-            )
+                self.ttl_seconds = getattr(settings, "ASYNC_CACHE_TTL", ttl_seconds)
+                self.cleanup_interval = getattr(settings, "ASYNC_CACHE_CLEANUP_INTERVAL", cleanup_interval)
+                self.num_shards = getattr(settings, "ASYNC_CACHE_NUM_SHARDS", num_shards)
 
-            self.num_shards = num_shards
-            self.shards: List[Dict[str, CacheEntry]] = [{} for _ in range(num_shards)]
-            self.shard_locks = [asyncio.Lock() for _ in range(num_shards)]
+                log_with_correlation(
+                    logging.DEBUG,
+                    "Loaded cache config from settings module",
+                    correlation_id,
+                )
+            except ImportError:
+                # Handle the case where settings module is not available
+                self.ttl_seconds = ttl_seconds
+                self.cleanup_interval = cleanup_interval
+                self.num_shards = num_shards
+                log_with_correlation(
+                    logging.WARNING,
+                    "Settings module not available, using defaults",
+                    correlation_id,
+                )
+
+            # Initialize cache shards and locks regardless of settings loading outcome
+            self.shards: List[Dict[str, CacheEntry]] = [{} for _ in range(self.num_shards)]
+            self.shard_locks = [asyncio.Lock() for _ in range(self.num_shards)]
             self.cleanup_task: Optional[asyncio.Task[None]] = None
             self.is_running = False
 
@@ -152,6 +153,18 @@ class AsyncTTLCache:
             )
 
         return self.shards[shard_index], self.shard_locks[shard_index]
+
+    def _get_lru_key(self, shard: Dict[str, CacheEntry]) -> str:
+        """
+        Get the least recently used key in a shard.
+        This is used for LRU eviction when cache bounds are exceeded.
+        """
+        if not shard:
+            return None
+        
+        # Find the entry with the oldest timestamp
+        lru_key = min(shard.keys(), key=lambda k: shard[k].timestamp)
+        return lru_key
 
     def _start_cleanup_task(self) -> None:
         """Start the background cleanup task."""
@@ -228,14 +241,16 @@ class AsyncTTLCache:
         runtime_metrics.close_correlation_id(correlation_id)
 
     async def _remove_expired_entries(self) -> None:
-        """Remove expired entries from cache."""
+        """Remove expired entries from cache using parallel processing."""
         correlation_id = runtime_metrics.create_correlation_id(
             {"component": "async_cache", "operation": "remove_expired"}
         )
 
         current_time = time()
         total_removed = 0
-        for i in range(self.num_shards):
+        
+        # Function to process a single shard
+        async def process_shard(i):
             shard = self.shards[i]
             lock = self.shard_locks[i]
             async with lock:
@@ -251,7 +266,14 @@ class AsyncTTLCache:
                         f"Removed expired cache entry: {key}",
                         correlation_id,
                     )
-                total_removed += len(expired_keys)
+                return len(expired_keys)
+
+        # Process all shards concurrently
+        shard_indices = list(range(self.num_shards))
+        tasks = [process_shard(i) for i in shard_indices]
+        results = await asyncio.gather(*tasks)
+        
+        total_removed = sum(results)
 
         if total_removed > 0:
             runtime_metrics.cache_evictions.increment(total_removed)
@@ -432,34 +454,51 @@ class AsyncTTLCache:
 
             shard, lock = self._get_shard(key)
             async with lock:
-                # BOUNDS CHECKING - Prevent cache overflow before setting
-                if not self._check_cache_bounds():
-                    # Cache is too large, trigger emergency cleanup
-                    log_with_correlation(
-                        logging.WARNING,
-                        f"Cache bounds exceeded before SET operation, triggering emergency cleanup",
-                        correlation_id,
-                    )
-                    # Remove oldest entries in this shard to make room
-                    current_time = time()
-                    expired_keys = [
-                        k
-                        for k, e in shard.items()
-                        if current_time - e.timestamp > e.ttl
-                    ]
-                    for k in expired_keys[:10]:  # Remove up to 10 expired entries
-                        del shard[k]
+                # Check bounds and handle eviction if necessary
+                while not self._check_cache_bounds():
+                    # Cache is too large, trigger LRU eviction
+                    lru_key = self._get_lru_key(shard)
+                    if lru_key:
+                        # Remove LRU entry from this shard
+                        del shard[lru_key]
+                        runtime_metrics.cache_evictions.increment()
                         log_with_correlation(
                             logging.DEBUG,
-                            f"Emergency cleanup removed expired key: {k}",
+                            f"LRU eviction removed key: {lru_key}",
                             correlation_id,
                         )
+                    else:
+                        # If no entries in this shard, try to remove from other shards
+                        break
+                        
+                # If cache is still too large after evicting from this shard,
+                # try to evict from other shards
+                if not self._check_cache_bounds():
+                    # Evict from other shards if needed
+                    for i, other_shard in enumerate(self.shards):
+                        if i == self.shards.index(shard):
+                            continue  # Skip current shard since we just cleaned it
+                            
+                        if not self._check_cache_bounds():
+                            other_lock = self.shard_locks[i]
+                            async with other_lock:
+                                lru_key = self._get_lru_key(other_shard)
+                                if lru_key:
+                                    del other_shard[lru_key]
+                                    runtime_metrics.cache_evictions.increment()
+                                    log_with_correlation(
+                                        logging.DEBUG,
+                                        f"LRU eviction removed key from shard {i}: {lru_key}",
+                                        correlation_id,
+                                    )
+                        else:
+                            break
 
-                    # If still over bounds, reject the operation
-                    if not self._check_cache_bounds():
-                        raise ValueError(
-                            f"Cache bounds exceeded: cannot add key {repr(key)} (cache too large)"
-                        )
+                # Final bounds check - reject if still over bounds
+                if not self._check_cache_bounds():
+                    raise ValueError(
+                        f"Cache bounds exceeded: cannot add key {repr(key)} (cache too large)"
+                    )
 
                 shard[key] = entry
                 runtime_metrics.cache_sets.increment()
@@ -497,6 +536,14 @@ class AsyncTTLCache:
             ValueError: For invalid inputs
             TypeError: For incorrect types
         """
+        validated_key = self._validate_cache_key(key)
+        self._validate_cache_value(value)
+        validated_ttl = self._validate_cache_ttl(ttl_seconds)
+
+        return validated_key, float(validated_ttl)
+
+    def _validate_cache_key(self, key: Any) -> str:
+        """Validate the cache key."""
         # KEY VALIDATION - HARDENED AGAINST FUZZING
         if key is None:
             raise TypeError("Cache key cannot be None")
@@ -526,6 +573,10 @@ class AsyncTTLCache:
         if "\x00" in key or "\r" in key or "\n" in key:
             raise ValueError("Cache key cannot contain control characters")
 
+        return key
+
+    def _validate_cache_value(self, value: Any) -> None:
+        """Validate the cache value."""
         # VALUE VALIDATION - DEFEND AGAINST MALICIOUS INPUTS
         if value is None:
             raise ValueError("Cache value cannot be None")
@@ -541,9 +592,11 @@ class AsyncTTLCache:
             if not isinstance(value, (object, type, lambda: None)):
                 raise ValueError(f"Cache value must be serializable: {e}")
 
+    def _validate_cache_ttl(self, ttl_seconds: Optional[float]) -> float:
+        """Validate the TTL value."""
         # TTL VALIDATION - PREVENT EDGE CASES
         if ttl_seconds is None:
-            ttl_seconds = self.ttl_seconds
+            return self.ttl_seconds
         elif not isinstance(ttl_seconds, (int, float)):
             raise TypeError(f"TTL must be numeric: {type(ttl_seconds)}")
         elif ttl_seconds < 0:
@@ -551,7 +604,7 @@ class AsyncTTLCache:
         elif ttl_seconds > 86400 * 365:  # Max 1 year
             raise ValueError(f"TTL too large: {ttl_seconds} seconds (max 1 year)")
 
-        return key, float(ttl_seconds)
+        return ttl_seconds
 
     async def delete(self, key: str) -> bool:
         """
@@ -755,8 +808,9 @@ class AsyncTTLCache:
             True if within bounds, False if too large
         """
         current_size = self.size()
+        
+        # Check item count bounds
         max_safe_size = 100000  # Max 100K entries per cache instance
-
         if current_size > max_safe_size:
             logger.warning(
                 f"Cache size {current_size} exceeds safe bounds {max_safe_size}",
@@ -773,23 +827,72 @@ class AsyncTTLCache:
             )
             return False
 
-        # Check memory usage estimate (rough calculation)
-        estimated_memory_mb = current_size * 0.5  # ~500KB per 1000 entries
-        if estimated_memory_mb > 100:  # Max 100MB per cache
+        # More accurate memory usage estimation
+        try:
+            import sys
+            estimated_memory_mb = 0
+            
+            # Calculate more accurate memory usage by sampling some entries
+            sample_size = min(100, current_size)  # Sample up to 100 entries
+            sample_count = 0
+            sample_memory = 0
+            
+            for shard in self.shards:
+                for key, entry in shard.items():
+                    if sample_count >= sample_size:
+                        break
+                    # Estimate memory for key and value
+                    sample_memory += sys.getsizeof(key)
+                    sample_memory += sys.getsizeof(entry.data)
+                    sample_memory += sys.getsizeof(entry.timestamp)
+                    sample_memory += sys.getsizeof(entry.ttl)
+                    sample_count += 1
+                if sample_count >= sample_size:
+                    break
+            
+            # Extrapolate to full cache size
+            if sample_count > 0:
+                avg_memory_per_item = sample_memory / sample_count
+                estimated_memory_mb = (avg_memory_per_item * current_size) / (1024 * 1024)
+            else:
+                # Fallback to rough calculation if no items sampled
+                estimated_memory_mb = current_size * 0.5  # ~500KB per 1000 entries
+            
+            # Max 100MB per cache
+            if estimated_memory_mb > 100:
+                logger.warning(
+                    f"Estimated cache memory usage {estimated_memory_mb:.1f}MB exceeds 100MB limit",
+                    extra={
+                        "correlation_id": runtime_metrics.create_correlation_id(
+                            {
+                                "component": "async_cache",
+                                "operation": "memory_bounds_check",
+                                "estimated_mb": estimated_memory_mb,
+                                "current_size": current_size,
+                                "sample_count": sample_count,
+                                "avg_memory_per_item": avg_memory_per_item if sample_count > 0 else 0,
+                            }
+                        )
+                    }
+                )
+                return False
+        except Exception as e:
+            # If memory estimation fails, log and continue with basic size check
             logger.warning(
-                f"Estimated cache memory usage {estimated_memory_mb:.1f}MB exceeds 100MB limit",
+                f"Failed to estimate memory usage: {e}, proceeding with basic size check",
                 extra={
                     "correlation_id": runtime_metrics.create_correlation_id(
                         {
                             "component": "async_cache",
-                            "operation": "memory_bounds_check",
-                            "estimated_mb": estimated_memory_mb,
-                            "current_size": current_size,
+                            "operation": "memory_bounds_check_error",
+                            "error": str(e),
                         }
                     )
-                },
+                }
             )
-            return False
+            # If we can't estimate memory, just check the size limit
+            if current_size > max_safe_size:
+                return False
 
         return True
 
@@ -983,6 +1086,234 @@ class AsyncTTLCache:
                 pass
         logger.debug("AsyncTTLCache stopped")
 
+    async def _health_check_functionality(self, correlation_id) -> Dict[str, Any]:
+        """
+        Perform basic functionality tests for the health check.
+        
+        Args:
+            correlation_id: Correlation ID for logging
+            
+        Returns:
+            Dict with status or error details if functionality tests fail
+        """
+        test_key = f"health_check_{correlation_id.id}_{int(time())}"
+        test_value = {
+            "test": "data",
+            "timestamp": time(),
+            "correlation_id": correlation_id.id,
+        }
+
+        # Test set operation with validation
+        try:
+            await self.set(
+                test_key, test_value, ttl_seconds=300
+            )  # 5 min TTL for safety
+        except Exception as e:
+            return {
+                "status": "critical",
+                "component": "async_cache",
+                "error": f"SET operation failed: {e}",
+                "correlation_id": correlation_id.id,
+                "production_ready": False,
+            }
+
+        # Test get operation
+        try:
+            retrieved = await self.get(test_key)
+            if retrieved != test_value:
+                return {
+                    "status": "critical",
+                    "component": "async_cache",
+                    "error": "GET operation data mismatch",
+                    "expected": test_value,
+                    "received": retrieved,
+                    "correlation_id": correlation_id.id,
+                    "production_ready": False,
+                }
+        except Exception as e:
+            return {
+                "status": "critical",
+                "component": "async_cache",
+                "error": f"GET operation failed: {e}",
+                "correlation_id": correlation_id.id,
+                "production_ready": False,
+            }
+
+        # Test delete operation
+        try:
+            deleted = await self.delete(test_key)
+            if not deleted:
+                return {
+                    "status": "warning",
+                    "component": "async_cache",
+                    "error": "DELETE operation returned False",
+                    "correlation_id": correlation_id.id,
+                    "production_ready": True,  # Not critical for production
+                }
+        except Exception as e:
+            return {
+                "status": "error",
+                "component": "async_cache",
+                "error": f"DELETE operation failed: {e}",
+                "correlation_id": correlation_id.id,
+                "production_ready": False,
+            }
+        
+        return {"status": "ok"}
+    
+    async def _health_check_integrity(self, is_production: bool, correlation_id) -> Dict[str, Any]:
+        """
+        Perform cache bounds and integrity checks.
+        
+        Args:
+            is_production: Whether the environment is production
+            correlation_id: Correlation ID for logging
+            
+        Returns:
+            Dict with status or error details if integrity checks fail
+        """
+        current_size = self.size()
+        if current_size < 0:
+            return {
+                "status": "critical",
+                "component": "async_cache",
+                "error": f"Invalid cache size: {current_size}",
+                "correlation_id": correlation_id.id,
+                "production_ready": False,
+            }
+
+        # Check bounds compliance
+        bounds_ok = self._check_cache_bounds()
+        if not bounds_ok:
+            return {
+                "status": "warning",
+                "component": "async_cache",
+                "error": "Cache bounds exceeded",
+                "current_size": current_size,
+                "correlation_id": correlation_id.id,
+                "production_ready": is_production,  # Only critical in production
+            }
+
+        # 3. SHARD INTEGRITY CHECKS
+        shard_sizes = [len(shard) for shard in self.shards]
+        total_from_shards = sum(shard_sizes)
+
+        if total_from_shards != current_size:
+            return {
+                "status": "critical",
+                "component": "async_cache",
+                "error": "Shard size inconsistency",
+                "total_size": current_size,
+                "shard_total": total_from_shards,
+                "shard_sizes": shard_sizes,
+                "correlation_id": correlation_id.id,
+                "production_ready": False,
+            }
+
+        # Check for shard size imbalances (should be roughly equal)
+        if self.num_shards > 1:
+            avg_shard_size = current_size / self.num_shards
+            max_shard_size = max(shard_sizes)
+            if max_shard_size > avg_shard_size * 3:  # Allow 3x imbalance
+                return {
+                    "status": "warning",
+                    "component": "async_cache",
+                    "error": "Shard size imbalance detected",
+                    "avg_shard_size": avg_shard_size,
+                    "max_shard_size": max_shard_size,
+                    "shard_sizes": shard_sizes,
+                    "correlation_id": correlation_id.id,
+                    "production_ready": True,  # Not critical but worth monitoring
+                }
+        
+        return {"status": "ok", "current_size": current_size, "shard_sizes": shard_sizes, "bounds_ok": bounds_ok}
+    
+    async def _health_check_background_tasks(self, is_production: bool, correlation_id) -> Dict[str, str]:
+        """
+        Check the status of background tasks.
+        
+        Args:
+            is_production: Whether the environment is production
+            correlation_id: Correlation ID for logging
+            
+        Returns:
+            Dict with status or error details if background task checks fail
+        """
+        cleanup_status = (
+            "running"
+            if self.cleanup_task and not self.cleanup_task.done()
+            else "stopped"
+        )
+        if is_production and cleanup_status != "running":
+            return {
+                "status": "error",
+                "component": "async_cache",
+                "error": "Background cleanup task not running in production",
+                "cleanup_status": cleanup_status,
+                "correlation_id": correlation_id.id,
+                "production_ready": False,
+            }
+        
+        return {"status": "ok", "cleanup_status": cleanup_status}
+    
+    async def _health_check_performance(self, correlation_id) -> Dict[str, Any]:
+        """
+        Check performance metrics.
+        
+        Args:
+            correlation_id: Correlation ID for logging
+            
+        Returns:
+            Dict with status or error details if performance checks fail
+        """
+        metrics = self.get_detailed_metrics()
+        hit_rate = metrics.get("hit_rate", 0)
+        if hit_rate < 0 or hit_rate > 1:
+            return {
+                "status": "error",
+                "component": "async_cache",
+                "error": "Invalid hit rate metrics",
+                "hit_rate": hit_rate,
+                "correlation_id": correlation_id.id,
+                "production_ready": False,
+            }
+        
+        return {"status": "ok", "hit_rate": hit_rate}
+    
+    async def _health_check_config(self, correlation_id) -> Dict[str, Any]:
+        """
+        Check configuration validity.
+        
+        Args:
+            correlation_id: Correlation ID for logging
+            
+        Returns:
+            Dict with status or error details if config validation fails
+        """
+        # 6. PRODUCTION READINESS VALIDATION
+        production_issues = []
+
+        # Check configuration validity
+        if self.ttl_seconds <= 0 or self.ttl_seconds > 86400:
+            production_issues.append(
+                f"Invalid TTL configuration: {self.ttl_seconds}"
+            )
+
+        if self.num_shards <= 0 or self.num_shards > 256:
+            production_issues.append(f"Invalid shard count: {self.num_shards}")
+
+        if len(production_issues) > 0:
+            return {
+                "status": "error",
+                "component": "async_cache",
+                "error": "Production configuration issues",
+                "issues": production_issues,
+                "correlation_id": correlation_id.id,
+                "production_ready": False,
+            }
+        
+        return {"status": "ok"}
+
     async def health_check(self) -> Dict[str, Any]:
         """
         Perform PRODUCTION-GRADE comprehensive health check of the cache with rigorous validation.
@@ -999,174 +1330,34 @@ class AsyncTTLCache:
             security_level = env_detector.get_security_level()
 
             # 1. BASIC FUNCTIONALITY TESTS
-            test_key = f"health_check_{correlation_id.id}_{int(time())}"
-            test_value = {
-                "test": "data",
-                "timestamp": time(),
-                "correlation_id": correlation_id.id,
-            }
-
-            # Test set operation with validation
-            try:
-                await self.set(
-                    test_key, test_value, ttl_seconds=300
-                )  # 5 min TTL for safety
-            except Exception as e:
-                return {
-                    "status": "critical",
-                    "component": "async_cache",
-                    "error": f"SET operation failed: {e}",
-                    "correlation_id": correlation_id.id,
-                    "production_ready": False,
-                }
-
-            # Test get operation
-            try:
-                retrieved = await self.get(test_key)
-                if retrieved != test_value:
-                    return {
-                        "status": "critical",
-                        "component": "async_cache",
-                        "error": "GET operation data mismatch",
-                        "expected": test_value,
-                        "received": retrieved,
-                        "correlation_id": correlation_id.id,
-                        "production_ready": False,
-                    }
-            except Exception as e:
-                return {
-                    "status": "critical",
-                    "component": "async_cache",
-                    "error": f"GET operation failed: {e}",
-                    "correlation_id": correlation_id.id,
-                    "production_ready": False,
-                }
-
-            # Test delete operation
-            try:
-                deleted = await self.delete(test_key)
-                if not deleted:
-                    return {
-                        "status": "warning",
-                        "component": "async_cache",
-                        "error": "DELETE operation returned False",
-                        "correlation_id": correlation_id.id,
-                        "production_ready": True,  # Not critical for production
-                    }
-            except Exception as e:
-                return {
-                    "status": "error",
-                    "component": "async_cache",
-                    "error": f"DELETE operation failed: {e}",
-                    "correlation_id": correlation_id.id,
-                    "production_ready": False,
-                }
+            functionality_result = await self._health_check_functionality(correlation_id)
+            if functionality_result["status"] != "ok":
+                return functionality_result
 
             # 2. CACHE BOUNDS AND INTEGRITY CHECKS
-            current_size = self.size()
-            if current_size < 0:
-                return {
-                    "status": "critical",
-                    "component": "async_cache",
-                    "error": f"Invalid cache size: {current_size}",
-                    "correlation_id": correlation_id.id,
-                    "production_ready": False,
-                }
-
-            # Check bounds compliance
-            bounds_ok = self._check_cache_bounds()
-            if not bounds_ok:
-                return {
-                    "status": "warning",
-                    "component": "async_cache",
-                    "error": "Cache bounds exceeded",
-                    "current_size": current_size,
-                    "correlation_id": correlation_id.id,
-                    "production_ready": is_production,  # Only critical in production
-                }
-
-            # 3. SHARD INTEGRITY CHECKS
-            shard_sizes = [len(shard) for shard in self.shards]
-            total_from_shards = sum(shard_sizes)
-
-            if total_from_shards != current_size:
-                return {
-                    "status": "critical",
-                    "component": "async_cache",
-                    "error": "Shard size inconsistency",
-                    "total_size": current_size,
-                    "shard_total": total_from_shards,
-                    "shard_sizes": shard_sizes,
-                    "correlation_id": correlation_id.id,
-                    "production_ready": False,
-                }
-
-            # Check for shard size imbalances (should be roughly equal)
-            if self.num_shards > 1:
-                avg_shard_size = current_size / self.num_shards
-                max_shard_size = max(shard_sizes)
-                if max_shard_size > avg_shard_size * 3:  # Allow 3x imbalance
-                    return {
-                        "status": "warning",
-                        "component": "async_cache",
-                        "error": "Shard size imbalance detected",
-                        "avg_shard_size": avg_shard_size,
-                        "max_shard_size": max_shard_size,
-                        "shard_sizes": shard_sizes,
-                        "correlation_id": correlation_id.id,
-                        "production_ready": True,  # Not critical but worth monitoring
-                    }
+            integrity_result = await self._health_check_integrity(is_production, correlation_id)
+            if integrity_result["status"] != "ok":
+                return integrity_result
+            current_size = integrity_result["current_size"]
+            shard_sizes = integrity_result["shard_sizes"]
+            bounds_ok = integrity_result["bounds_ok"]
 
             # 4. BACKGROUND TASK HEALTH
-            cleanup_status = (
-                "running"
-                if self.cleanup_task and not self.cleanup_task.done()
-                else "stopped"
-            )
-            if is_production and cleanup_status != "running":
-                return {
-                    "status": "error",
-                    "component": "async_cache",
-                    "error": "Background cleanup task not running in production",
-                    "cleanup_status": cleanup_status,
-                    "correlation_id": correlation_id.id,
-                    "production_ready": False,
-                }
+            bg_task_result = await self._health_check_background_tasks(is_production, correlation_id)
+            if bg_task_result["status"] != "ok":
+                return bg_task_result
+            cleanup_status = bg_task_result["cleanup_status"]
 
             # 5. PERFORMANCE METRICS VALIDATION
-            metrics = self.get_detailed_metrics()
-            hit_rate = metrics.get("hit_rate", 0)
-            if hit_rate < 0 or hit_rate > 1:
-                return {
-                    "status": "error",
-                    "component": "async_cache",
-                    "error": "Invalid hit rate metrics",
-                    "hit_rate": hit_rate,
-                    "correlation_id": correlation_id.id,
-                    "production_ready": False,
-                }
+            perf_result = await self._health_check_performance(correlation_id)
+            if perf_result["status"] != "ok":
+                return perf_result
+            hit_rate = perf_result["hit_rate"]
 
-            # 6. PRODUCTION READINESS VALIDATION
-            production_issues = []
-
-            # Check configuration validity
-            if self.ttl_seconds <= 0 or self.ttl_seconds > 86400:
-                production_issues.append(
-                    f"Invalid TTL configuration: {self.ttl_seconds}"
-                )
-
-            if self.num_shards <= 0 or self.num_shards > 256:
-                production_issues.append(f"Invalid shard count: {self.num_shards}")
-
-            if len(production_issues) > 0:
-                return {
-                    "status": "error",
-                    "component": "async_cache",
-                    "error": "Production configuration issues",
-                    "issues": production_issues,
-                    "correlation_id": correlation_id.id,
-                    "production_ready": False,
-                }
+            # 6. CONFIGURATION VALIDATION
+            config_result = await self._health_check_config(correlation_id)
+            if config_result["status"] != "ok":
+                return config_result
 
             # SUCCESS - All checks passed
             result = {

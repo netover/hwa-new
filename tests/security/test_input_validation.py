@@ -5,8 +5,6 @@ This module tests input validation and security measures implemented
 across the application endpoints.
 """
 
-import json
-import logging
 import sys
 from unittest.mock import AsyncMock, patch
 

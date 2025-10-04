@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import logging
-import time
-from typing import List, Optional, Set, Union
+from typing import List, Union
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from resync.api.middleware.cors_config import cors_config, CORSPolicy, Environment
+from resync.api.middleware.cors_config import CORSPolicy, Environment, cors_config
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +16,14 @@ logger = logging.getLogger(__name__)
 class LoggingCORSMiddleware(BaseHTTPMiddleware):
     """
     Custom CORS middleware with enhanced logging and security monitoring.
-    
+
     This middleware extends the standard FastAPI CORS middleware to provide:
     - Detailed logging of CORS violations for security monitoring
     - Dynamic origin validation with regex patterns
     - Environment-specific CORS policies
     - Performance metrics for CORS operations
     """
-    
+
     def __init__(
         self,
         app: ASGIApp,
@@ -39,7 +38,7 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
     ):
         """
         Initialize the logging CORS middleware.
-        
+
         Args:
             app: ASGI application
             policy: CORS policy configuration
@@ -58,7 +57,7 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
         self.allow_credentials = allow_credentials
         self.max_age = max_age
         self.allow_origin_regex = allow_origin_regex
-        
+
         # Initialize internal CORS middleware for actual CORS handling
         self._cors_middleware = CORSMiddleware(
             app=self.app,
@@ -68,62 +67,61 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
             allow_credentials=self.allow_credentials,
             max_age=self.max_age,
         )
-        
+
         # Statistics for monitoring
         self._cors_violations = 0
         self._cors_requests = 0
         self._preflight_requests = 0
-    
+
     async def dispatch(self, request: Request, call_next):
         """
         Process incoming requests with CORS validation and logging.
-        
+
         Args:
             request: Incoming request
             call_next: Next middleware in chain
-            
+
         Returns:
             Response with CORS headers applied
         """
         origin = request.headers.get("origin")
         method = request.method
-        request_path = request.url.path
-        
+
         # Increment total CORS requests counter
         self._cors_requests += 1
-        
+
         # Check if this is a preflight request
         is_preflight = method == "OPTIONS" and (
             request.headers.get("access-control-request-method") or
             request.headers.get("access-control-request-headers")
         )
-        
+
         if is_preflight:
             self._preflight_requests += 1
-        
+
         # If no origin header, proceed normally (same-origin request)
         if not origin:
             response = await call_next(request)
             return response
-        
+
         # Validate origin against policy
         is_allowed = self.policy.is_origin_allowed(origin)
-        
+
         if not is_allowed and self.policy.log_violations:
             self._log_cors_violation(request, origin, method, is_preflight)
             self._cors_violations += 1
-        
+
         # Apply CORS headers using the internal CORS middleware
         # Note: We let the standard CORS middleware handle the actual header setting
         # but we log violations for security monitoring
         response = await call_next(request)
-        
+
         # Add CORS headers if origin is allowed
         if is_allowed:
             response = self._add_cors_headers(response, origin, method, is_preflight)
-        
+
         return response
-    
+
     def _log_cors_violation(
         self,
         request: Request,
@@ -133,7 +131,7 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
     ) -> None:
         """
         Log CORS violations for security monitoring.
-        
+
         Args:
             request: Incoming request
             origin: Origin that was rejected
@@ -143,13 +141,13 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
         user_agent = request.headers.get("user-agent", "Unknown")
         referrer = request.headers.get("referer", "None")
         remote_ip = request.client.host if request.client else "Unknown"
-        
+
         logger.warning(
             f"CORS violation detected: origin='{origin}' method='{method}' "
             f"path='{request.url.path}' preflight={is_preflight} "
             f"remote_ip='{remote_ip}' user_agent='{user_agent}' referrer='{referrer}'"
         )
-    
+
     def _add_cors_headers(
         self,
         response: Response,
@@ -159,34 +157,34 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         """
         Add appropriate CORS headers to the response.
-        
+
         Args:
             response: Response to modify
             origin: Allowed origin
             method: HTTP method
             is_preflight: Whether this is a preflight request
-            
+
         Returns:
             Modified response with CORS headers
         """
         # Add basic CORS headers
         response.headers["Access-Control-Allow-Origin"] = origin
-        
+
         if self.allow_credentials:
             response.headers["Access-Control-Allow-Credentials"] = "true"
-        
+
         # Add preflight-specific headers if needed
         if is_preflight:
             response.headers["Access-Control-Allow-Methods"] = ", ".join(self.allow_methods)
             response.headers["Access-Control-Allow-Headers"] = ", ".join(self.allow_headers)
             response.headers["Access-Control-Max-Age"] = str(self.max_age)
-        
+
         return response
-    
+
     def get_stats(self) -> dict:
         """
         Get CORS middleware statistics for monitoring.
-        
+
         Returns:
             Dictionary with CORS statistics
         """
@@ -235,14 +233,14 @@ def create_cors_middleware(
         policy = custom_policy
     else:
         policy = cors_config.get_policy(environment)
-    
+
     logger.info(
         f"Initializing CORS middleware for environment: {policy.environment} "
         f"(allow_all_origins={policy.allow_all_origins}, "
         f"allowed_origins={len(policy.allowed_origins)}, "
         f"allow_credentials={policy.allow_credentials})"
     )
-    
+
     # Create and return the middleware
     return LoggingCORSMiddleware(
         app=app,
@@ -289,14 +287,14 @@ def add_cors_middleware(
         policy = custom_policy
     else:
         policy = cors_config.get_policy(environment)
-    
+
     logger.info(
         f"Adding CORS middleware for environment: {policy.environment} "
         f"(allow_all_origins={policy.allow_all_origins}, "
         f"allowed_origins={len(policy.allowed_origins)}, "
         f"allow_credentials={policy.allow_credentials})"
     )
-    
+
     # Add the middleware to the app with proper parameters
     app.add_middleware(
         LoggingCORSMiddleware,
@@ -327,17 +325,17 @@ def get_production_cors_config(
 ) -> CORSPolicy:
     """
     Get CORS configuration for production environment.
-    
+
     Args:
         allowed_origins: List of specific allowed origins
         allow_credentials: Whether to allow credentials
-        
+
     Returns:
         Production CORS policy
     """
     if allowed_origins is None:
         allowed_origins = []
-    
+
     return CORSPolicy(
         environment=Environment.PRODUCTION,
         allowed_origins=allowed_origins,

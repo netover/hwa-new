@@ -1,6 +1,7 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from openai import OpenAIError, APIConnectionError
+
+import pytest
+from openai import APIConnectionError, OpenAIError
 
 from resync.core.exceptions import LLMError
 from resync.core.utils.llm import call_llm

@@ -2,10 +2,11 @@
 Encryption service for Resync core.
 """
 
-import logging
 import base64
+import logging
 import os
 from typing import Optional
+
 from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)

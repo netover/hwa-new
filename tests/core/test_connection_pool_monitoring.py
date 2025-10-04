@@ -562,4 +562,5 @@ class TestWebSocketPoolMonitoring:
         await asyncio.gather(*tasks)
         
         # Analyze metrics
-        connect_events = [m for m in connection_metrics if
+        connect_events = [m for m in connection_metrics if m['event'] == 'connected']
+        disconnect_events = [m for m in connection_metrics if m['event'] == 'disconnected']

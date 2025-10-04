@@ -8,7 +8,7 @@ that resolve services from the container.
 import inspect
 import logging
 from functools import wraps
-from typing import Any, Callable, Dict, Type, get_type_hints, TypeVar, Optional
+from typing import Any, Callable, Dict, Optional, Type, TypeVar, get_type_hints
 
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -83,46 +83,51 @@ def configure_container(app_container: DIContainer = container) -> DIContainer:
     Returns:
         The configured container.
     """
-    # Register interfaces and implementations
-    app_container.register(IAgentManager, AgentManager, ServiceScope.SINGLETON)
-    app_container.register(
-        IConnectionManager, ConnectionManager, ServiceScope.SINGLETON
-    )
-    app_container.register(IKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON)
-    app_container.register(IAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
+    try:
+        # Register interfaces and implementations
+        app_container.register(IAgentManager, AgentManager, ServiceScope.SINGLETON)
+        app_container.register(
+            IConnectionManager, ConnectionManager, ServiceScope.SINGLETON
+        )
+        app_container.register(IKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON)
+        app_container.register(IAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
 
-    # Register TWS client with factory
-    app_container.register_factory(
-        ITWSClient, get_tws_client_factory, ServiceScope.SINGLETON
-    )
-    
-    # Register Teams integration with factory
-    app_container.register_factory(
-        TeamsIntegration, get_teams_integration_factory, ServiceScope.SINGLETON
-    )
+        # Register TWS client with factory
+        app_container.register_factory(
+            ITWSClient, get_tws_client_factory, ServiceScope.SINGLETON
+        )
 
-    # Register FileIngestor - depends on KnowledgeGraph
-    # Using a factory function to ensure dependencies are properly resolved
-    def file_ingestor_factory():
-        knowledge_graph = app_container.get(IKnowledgeGraph)
-        return create_file_ingestor(knowledge_graph)
+        # Register Teams integration with factory
+        app_container.register_factory(
+            TeamsIntegration, get_teams_integration_factory, ServiceScope.SINGLETON
+        )
 
-    app_container.register_factory(
-        IFileIngestor, file_ingestor_factory, ServiceScope.SINGLETON
-    )
+        # Register FileIngestor - depends on KnowledgeGraph
+        # Using a factory function to ensure dependencies are properly resolved
+        def file_ingestor_factory():
+            knowledge_graph = app_container.get(IKnowledgeGraph)
+            return create_file_ingestor(knowledge_graph)
 
-    # Register concrete types (for when the concrete type is requested directly)
-    app_container.register(AgentManager, AgentManager, ServiceScope.SINGLETON)
-    app_container.register(ConnectionManager, ConnectionManager, ServiceScope.SINGLETON)
-    app_container.register(
-        AsyncKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON
-    )
-    app_container.register(AsyncAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
-    app_container.register_factory(
-        OptimizedTWSClient, get_tws_client_factory, ServiceScope.SINGLETON
-    )
+        app_container.register_factory(
+            IFileIngestor, file_ingestor_factory, ServiceScope.SINGLETON
+        )
 
-    logger.info("DI container configured with all service registrations")
+        # Register concrete types (for when the concrete type is requested directly)
+        app_container.register(AgentManager, AgentManager, ServiceScope.SINGLETON)
+        app_container.register(ConnectionManager, ConnectionManager, ServiceScope.SINGLETON)
+        app_container.register(
+            AsyncKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON
+        )
+        app_container.register(AsyncAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
+        app_container.register_factory(
+            OptimizedTWSClient, get_tws_client_factory, ServiceScope.SINGLETON
+        )
+
+        logger.info("DI container configured with all service registrations")
+    except Exception as e:
+        logger.error(f"Error configuring DI container: {e}")
+        raise
+
     return app_container
 
 
@@ -138,7 +143,14 @@ def get_service(service_type: Type[T]) -> Callable[[], T]:
     """
 
     def _get_service() -> T:
-        return container.get(service_type)
+        try:
+            return container.get(service_type)
+        except KeyError:
+            logger.error(f"Service {service_type.__name__} not registered in container")
+            raise RuntimeError(f"Required service {service_type.__name__} is not available in the DI container")
+        except Exception as e:
+            logger.error(f"Error resolving service {service_type.__name__}: {e}")
+            raise RuntimeError(f"Error resolving service {service_type.__name__}: {str(e)}")
 
     # Set the return annotation for FastAPI to use
     _get_service.__annotations__ = {"return": service_type}
@@ -184,12 +196,17 @@ class DIMiddleware(BaseHTTPMiddleware):
         Returns:
             The response from the next handler.
         """
-        # Attach the container to the request state
-        request.state.container = self.container
+        try:
+            # Attach the container to the request state
+            request.state.container = self.container
 
-        # Continue processing the request
-        response = await call_next(request)
-        return response
+            # Continue processing the request
+            response = await call_next(request)
+            return response
+        except Exception as e:
+            logger.error(f"Error in DIMiddleware dispatch: {e}")
+            # Re-raise the exception to be handled by other error handlers
+            raise
 
 
 def inject_container(

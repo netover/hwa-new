@@ -1,12 +1,13 @@
 """Tests for health service memory bounds functionality."""
 
 import asyncio
-import pytest
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from resync.core.health_models import HealthCheckConfig, HealthCheckResult, HealthStatus
 from resync.core.health_service import HealthCheckService
-from resync.core.health_models import HealthCheckConfig, HealthStatus, HealthCheckResult
 
 
 class TestHealthServiceMemoryBounds:
@@ -47,10 +48,10 @@ class TestHealthServiceMemoryBounds:
                 timestamp=datetime.now() - timedelta(minutes=i)
             )
             service._update_health_history(result)
-        
+
         # Wait for cleanup
         await asyncio.sleep(0.1)
-        
+
         # Should have cleaned up
         assert len(service.health_history) <= 50
 
@@ -58,7 +59,7 @@ class TestHealthServiceMemoryBounds:
     async def test_cleanup_by_age(self, service):
         """Test cleanup based on age retention."""
         from resync.core.health_models import HealthStatusHistory
-        
+
         # Add old entries
         old_time = datetime.now() - timedelta(days=2)  # Beyond 1 day retention
         for i in range(10):
@@ -68,7 +69,7 @@ class TestHealthServiceMemoryBounds:
                     overall_status=HealthStatus.HEALTHY
                 )
             )
-        
+
         # Add recent entries
         for i in range(5):
             service.health_history.append(
@@ -77,10 +78,10 @@ class TestHealthServiceMemoryBounds:
                     overall_status=HealthStatus.HEALTHY
                 )
             )
-        
+
         # Force cleanup
         cleanup_result = await service.force_cleanup()
-        
+
         # Should have removed old entries
         assert cleanup_result["cleaned_entries"] >= 10
         assert all(
@@ -98,10 +99,10 @@ class TestHealthServiceMemoryBounds:
                 timestamp=datetime.now() - timedelta(minutes=i)
             )
             service._update_health_history(result)
-        
+
         # Wait for memory update
         await asyncio.sleep(0.1)
-        
+
         # Check memory usage
         memory_stats = service.get_memory_usage()
         assert "history_entries" in memory_stats
@@ -111,7 +112,7 @@ class TestHealthServiceMemoryBounds:
     def test_get_health_history_with_limits(self, service):
         """Test getting health history with entry limits."""
         from resync.core.health_models import HealthStatusHistory
-        
+
         # Add test entries
         for i in range(30):
             service.health_history.append(
@@ -120,11 +121,11 @@ class TestHealthServiceMemoryBounds:
                     overall_status=HealthStatus.HEALTHY
                 )
             )
-        
+
         # Test with limit
         limited_history = service.get_health_history(hours=12, max_entries=5)
         assert len(limited_history) <= 5
-        
+
         # Test without limit
         full_history = service.get_health_history(hours=48)
         assert len(full_history) <= 30
@@ -133,7 +134,7 @@ class TestHealthServiceMemoryBounds:
     async def test_force_cleanup(self, service):
         """Test force cleanup functionality."""
         from resync.core.health_models import HealthStatusHistory
-        
+
         # Add many entries
         for i in range(100):
             service.health_history.append(
@@ -142,10 +143,10 @@ class TestHealthServiceMemoryBounds:
                     overall_status=HealthStatus.HEALTHY
                 )
             )
-        
+
         # Force cleanup
         cleanup_result = await service.force_cleanup()
-        
+
         assert "original_entries" in cleanup_result
         assert "cleaned_entries" in cleanup_result
         assert "current_entries" in cleanup_result
@@ -155,7 +156,7 @@ class TestHealthServiceMemoryBounds:
     def test_memory_bounds_configuration_from_settings(self):
         """Test loading memory bounds from settings."""
         from resync.settings import settings
-        
+
         # Check if new settings are available
         assert hasattr(settings, 'HEALTH_CHECK_MAX_HISTORY_ENTRIES')
         assert hasattr(settings, 'HEALTH_CHECK_HISTORY_CLEANUP_THRESHOLD')
@@ -171,11 +172,11 @@ class TestHealthServiceMemoryBounds:
                 timestamp=datetime.now() - timedelta(minutes=i)
             )
             service._update_health_history(result)
-        
+
         # Run multiple cleanups concurrently
         tasks = [service.force_cleanup() for _ in range(5)]
         results = await asyncio.gather(*tasks)
-        
+
         # All should complete successfully
         assert len(results) == 5
         assert len(service.health_history) <= 50
@@ -187,19 +188,19 @@ class TestHealthServiceMemoryBounds:
             "database": MagicMock(status=HealthStatus.HEALTHY),
             "redis": MagicMock(status=HealthStatus.HEALTHY)
         }
-        
+
         # Create result with changed status
         components = {
             "database": MagicMock(status=HealthStatus.UNHEALTHY),
             "redis": MagicMock(status=HealthStatus.HEALTHY)
         }
-        
-        result = HealthCheckResult(
+
+        HealthCheckResult(
             overall_status=HealthStatus.DEGRADED,
             timestamp=datetime.now(),
             components=components
         )
-        
+
         changes = service._get_component_changes(components)
         assert "database" in changes
         assert changes["database"] == HealthStatus.UNHEALTHY
@@ -208,7 +209,7 @@ class TestHealthServiceMemoryBounds:
     def test_minimum_history_retention(self, service):
         """Test that minimum history is retained."""
         from resync.core.health_models import HealthStatusHistory
-        
+
         # Add just a few entries
         for i in range(5):
             service.health_history.append(
@@ -217,10 +218,10 @@ class TestHealthServiceMemoryBounds:
                     overall_status=HealthStatus.HEALTHY
                 )
             )
-        
+
         # Force cleanup
         asyncio.run(service.force_cleanup())
-        
+
         # Should retain all entries since below minimum
         assert len(service.health_history) >= 5
 
@@ -239,7 +240,7 @@ class TestHealthServiceMemoryBounds:
         with patch.object(service, '_memory_usage_mb', 10.0):
             # Should trigger warning
             await service._update_memory_usage()
-            
+
             # Check that warning was logged (would need log capture in real test)
             assert service._memory_usage_mb > service.config.memory_usage_threshold_mb
 
@@ -248,11 +249,11 @@ class TestHealthServiceMemoryBounds:
         # Empty history
         empty_history = service.get_health_history(hours=1)
         assert empty_history == []
-        
+
         # Very large hours parameter
         large_history = service.get_health_history(hours=999999)
         assert isinstance(large_history, list)
-        
+
         # Zero max_entries
         zero_history = service.get_health_history(max_entries=0)
         assert zero_history == []

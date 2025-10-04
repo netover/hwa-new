@@ -3,7 +3,6 @@
 from jinja2 import Environment
 from jinja2.ext import Extension
 
-
 class CSPNonceExtension(Extension):
     """
     Jinja2 extension that provides access to CSP nonce in templates.
@@ -34,10 +33,25 @@ class CSPNonceExtension(Extension):
         """
         # This will be populated by the CSP middleware
         # The actual nonce is stored in request.state.csp_nonce
-        # Since we can't access the request directly here, we'll return a placeholder
-        # The actual implementation will be handled by the middleware
-        return "{{ csp_nonce_placeholder }}"
-
+        # We need to access the request context
+        from fastapi import Request
+        from fastapi.types import Scope
+        
+        # Try to get the request from the current context
+        try:
+            # This is a simplified approach - in a real implementation,
+            # we would need to access the request from the current context
+            # For now, we'll return an empty string if we can't access the request
+            request: Optional[Request] = None
+            if hasattr(self, 'environment') and hasattr(self.environment, 'handler'):
+                request = self.environment.handler.get('request', None)
+            
+            if request and hasattr(request, 'state') and hasattr(request.state, 'csp_nonce'):
+                return str(request.state.csp_nonce)
+        except Exception:
+            pass
+        
+        return ""
 
 def setup_csp_jinja_extension(templates):
     """

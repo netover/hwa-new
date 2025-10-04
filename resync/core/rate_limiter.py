@@ -9,14 +9,13 @@ rate limit exceeded responses.
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
 from datetime import datetime, timedelta
+from typing import Callable, Optional
 
 from fastapi import Request, Response
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import RateLimitMiddleware
+from slowapi.util import get_remote_address
 
 from resync.settings import settings
 
@@ -25,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 class RateLimitConfig:
     """Configuration for different rate limiting tiers."""
-    
+
     # Rate limit tiers (requests per minute)
     PUBLIC_ENDPOINTS = f"{settings.RATE_LIMIT_PUBLIC_PER_MINUTE}/minute"
     AUTHENTICATED_ENDPOINTS = f"{settings.RATE_LIMIT_AUTHENTICATED_PER_MINUTE}/minute"
@@ -43,7 +42,7 @@ def get_user_identifier(request: Request) -> str:
     # Try to get user from request state (if authentication is implemented)
     if hasattr(request.state, 'user') and request.state.user:
         return f"user:{request.state.user}"
-    
+
     # Fall back to IP address
     return get_remote_address(request)
 
@@ -55,7 +54,7 @@ def get_authenticated_user_identifier(request: Request) -> str:
     """
     if hasattr(request.state, 'user') and request.state.user:
         return f"auth_user:{request.state.user}"
-    
+
     # For unauthenticated requests, still use IP but with different prefix
     return f"ip:{get_remote_address(request)}"
 
@@ -77,20 +76,20 @@ def create_rate_limit_exceeded_response(
 ) -> Response:
     """
     Create a custom response for rate limit exceeded errors.
-    
+
     Args:
         request: The incoming request
         exc: The rate limit exceeded exception
         retry_after: Optional retry after time in seconds
-        
+
     Returns:
         Custom JSON response with rate limit information
     """
     if retry_after is None:
         retry_after = exc.retry_after or 60  # Default to 60 seconds
-    
+
     reset_time = datetime.utcnow() + timedelta(seconds=retry_after)
-    
+
     response = Response(
         content={
             "error": "Rate limit exceeded",
@@ -103,20 +102,20 @@ def create_rate_limit_exceeded_response(
         status_code=429,
         media_type="application/json"
     )
-    
+
     # Add rate limit headers
     response.headers["X-RateLimit-Limit"] = str(exc.limit)
     response.headers["X-RateLimit-Remaining"] = "0"
     response.headers["X-RateLimit-Reset"] = str(int(reset_time.timestamp()))
     response.headers["X-RateLimit-Window"] = str(exc.window)
     response.headers["Retry-After"] = str(retry_after)
-    
+
     logger.warning(
         f"Rate limit exceeded for {request.client.host} on {request.url.path}. "
         f"Limit: {exc.limit} requests per {exc.window} seconds. "
         f"Retry after: {retry_after} seconds."
     )
-    
+
     return response
 
 
@@ -158,44 +157,46 @@ def dashboard_rate_limit(func: Callable) -> Callable:
 
 
 # Custom rate limit middleware for adding headers to all responses
-class CustomRateLimitMiddleware(RateLimitMiddleware):
+class CustomRateLimitMiddleware:
     """Custom rate limit middleware that adds headers to all responses."""
-    
-    async def dispatch(self, request: Request, call_next):
+
+    def __init__(self, limiter):
+        self.limiter = limiter
+
+    async def __call__(self, request: Request, call_next):
         """Process request and add rate limit headers to response."""
         response = await call_next(request)
-        
+
         # Add rate limit headers if available
         if hasattr(request.state, 'rate_limit'):
             rate_limit_info = request.state.rate_limit
-            
+
             response.headers["X-RateLimit-Limit"] = str(rate_limit_info.get('limit', ''))
             response.headers["X-RateLimit-Remaining"] = str(rate_limit_info.get('remaining', ''))
             response.headers["X-RateLimit-Reset"] = str(rate_limit_info.get('reset', ''))
-            
+
             # Add custom headers for better client visibility
             response.headers["X-RateLimit-Policy"] = rate_limit_info.get('policy', 'default')
-        
+
         return response
 
 
 def init_rate_limiter(app):
     """
     Initialize rate limiting for the FastAPI application.
-    
+
     Args:
         app: FastAPI application instance
     """
     # Add the limiter to app state
     app.state.limiter = limiter
-    
+
     # Add custom exception handler for rate limit exceeded
-    from fastapi import FastAPI
     app.add_exception_handler(RateLimitExceeded, create_rate_limit_exceeded_response)
-    
+
     # Add custom middleware for rate limit headers
     app.add_middleware(CustomRateLimitMiddleware, limiter=limiter)
-    
+
     logger.info("Rate limiting initialized with Redis backend")
     logger.info(f"Public endpoints: {RateLimitConfig.PUBLIC_ENDPOINTS}")
     logger.info(f"Authenticated endpoints: {RateLimitConfig.AUTHENTICATED_ENDPOINTS}")

@@ -22,11 +22,15 @@ IA_AUDITOR_STARTUP_ENABLED = false
 
 # Production LLM Endpoint (uncomment if needed)
 # LLM_ENDPOINT = "https://api.openai.com/v1"
-# LLM_API_KEY = "your_prod_openai_key"
+# LLM_API_KEY = ""  # Must be set via environment variable
 
 # Mem0 Settings for Production
 # MEM0_STORAGE_HOST = "your_prod_qdrant_host"
 # MEM0_STORAGE_PORT = 6333
+
+# CORS Configuration for Production (strict security)
+CORS_ALLOWED_ORIGINS = []  # Must be explicitly set for production deployment
+CORS_ALLOW_CREDENTIALS = false  # More secure default for production
 
 # CSP Configuration for Production (strict enforcement)
 CSP_REPORT_ONLY = false

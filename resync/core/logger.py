@@ -1,20 +1,66 @@
 from __future__ import annotations
 
+import json
 import logging
 import sys
+from datetime import datetime
+from pathlib import Path
+
+import structlog
 
 
 def setup_logging():
     """
-    Configures basic logging for the application.
-    In a real-world scenario, this would be more complex, handling different
-    environments, formats, and handlers (e.g., JSON logs for production).
+    Configures structured logging for the application with JSON format.
     """
-    logging.basicConfig(
-        level=logging.INFO,
-        stream=sys.stdout,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    from logging.handlers import RotatingFileHandler
+    import os
+    
+    # Get log level from environment or settings
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level, logging.INFO)
+    
+    # Configure structlog
+    structlog.configure(
+        processors=[
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            structlog.processors.JSONRenderer()
+        ],
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
     )
+    
+    # Create logs directory if it doesn't exist
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    # Remove default handlers to avoid duplicates
+    root_logger.handlers.clear()
+    
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(log_level)
+    root_logger.addHandler(console_handler)
+    
+    # File handler with rotation (10MB max size, 5 backups)
+    file_handler = RotatingFileHandler(
+        log_dir / "resync.log",
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5
+    )
+    file_handler.setLevel(log_level)
+    root_logger.addHandler(file_handler)
 
 
 def log_with_correlation(
@@ -38,23 +84,109 @@ def log_with_correlation(
         error: Exception object for error logging
         extra_fields: Additional structured fields
     """
-    # Use the component name to get a specific logger instance
-    logger = logging.getLogger(component)
-
-    extra = {
-        "correlation_id": correlation_id or "system",
+    # Use structlog for structured logging
+    logger = structlog.get_logger()
+    
+    # Prepare structured log entry
+    log_entry = {
+        "message": message,
         "component": component,
         "operation": operation,
-        **extra_fields,
+        "correlation_id": correlation_id,
+        **extra_fields
     }
-
-    # The actual logging call doesn't pass 'extra' directly in basicConfig,
-    # but this structure is essential for handlers that use it (like JSON formatters).
-    # For basic logging, we'll format the message to include the context.
-    log_message = f"[{correlation_id}] [{component}] [{operation}] {message}"
-
+    
     if error:
-        log_message += f" | error: {type(error).__name__}: {error}"
-        logger.log(level, log_message, exc_info=error)
-    else:
-        logger.log(level, log_message)
+        log_entry["error"] = {
+            "type": type(error).__name__,
+            "message": str(error),
+        }
+        
+    # Log based on level
+    if level == logging.DEBUG:
+        logger.debug("LOG_EVENT", **log_entry)
+    elif level == logging.INFO:
+        logger.info("LOG_EVENT", **log_entry)
+    elif level == logging.WARNING:
+        logger.warning("LOG_EVENT", **log_entry)
+    elif level == logging.ERROR:
+        logger.error("LOG_EVENT", **log_entry)
+    elif level == logging.CRITICAL:
+        logger.critical("LOG_EVENT", **log_entry)
+
+
+def log_audit_event(action: str, user_id: str, details: dict, correlation_id: str = None, severity: str = "INFO"):
+    """
+    Structured logging function for audit events.
+    
+    Args:
+        action: The audited action
+        user_id: The ID of the user performing the action
+        details: Additional details about the action
+        correlation_id: Optional correlation ID for distributed tracing
+        severity: Severity level (INFO, WARNING, ERROR, CRITICAL)
+    """
+    # Redact sensitive data from details
+    sanitized_details = _sanitize_audit_details(details)
+    
+    logger = structlog.get_logger()
+    logger.info(
+        "AUDIT_EVENT",
+        action=action,
+        user_id=user_id,
+        details=sanitized_details,
+        event_type="audit",
+        correlation_id=correlation_id,
+        severity=severity,
+        timestamp=datetime.utcnow().isoformat()
+    )
+    
+    # Also persist the audit event to the database for long-term storage
+    try:
+        from resync.core.audit_log import get_audit_log_manager
+        audit_manager = get_audit_log_manager()
+        audit_manager.log_audit_event(
+            action=action,
+            user_id=user_id,
+            details=sanitized_details,
+            correlation_id=correlation_id,
+            source_component="main",
+            severity=severity
+        )
+    except Exception as e:
+        logger.error(f"Failed to persist audit event to database: {e}", exc_info=True)
+
+
+def _sanitize_audit_details(details: dict) -> dict:
+    """
+    Sanitize audit details by redacting sensitive information.
+    
+    Args:
+        details: The details dictionary to sanitize
+        
+    Returns:
+        A sanitized dictionary with sensitive data redacted
+    """
+    if not isinstance(details, dict):
+        return details
+        
+    sanitized = {}
+    # Fields that should be redacted
+    sensitive_fields = {
+        'password', 'secret', 'key', 'token', 'api_key', 'auth', 
+        'credentials', 'credit_card', 'ssn', 'social_security', 
+        'cvv', 'card_number', 'pin', 'cvv2'
+    }
+    
+    for key, value in details.items():
+        if isinstance(key, str) and any(sensitive in key.lower() for sensitive in sensitive_fields):
+            sanitized[key] = "REDACTED"
+        elif isinstance(value, dict):
+            # Recursively sanitize nested dictionaries
+            sanitized[key] = _sanitize_audit_details(value)
+        elif isinstance(key, str) and key.lower() in sensitive_fields:
+            sanitized[key] = "REDACTED"
+        else:
+            sanitized[key] = value
+            
+    return sanitized

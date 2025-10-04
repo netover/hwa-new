@@ -12,6 +12,7 @@ This test file addresses the following issues from the code review:
 
 import os
 import sys
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -24,8 +25,10 @@ def test_environment_parameter_handling():
     """Test that environment parameters are properly handled (string vs enum)."""
     print("[TEST] Testing Environment Parameter Handling...")
 
-    from resync.api.middleware.cors_config import Environment, CORSPolicy
-    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, create_cors_middleware
+    from resync.api.middleware.cors_config import CORSPolicy, Environment
+    from resync.api.middleware.cors_middleware import (
+        LoggingCORSMiddleware,
+    )
 
     app = FastAPI()
 
@@ -61,7 +64,7 @@ def test_production_regex_security():
     """Test that regex patterns are not allowed in production environment."""
     print("[TEST] Testing Production Regex Security...")
 
-    from resync.api.middleware.cors_config import Environment, CORSPolicy
+    from resync.api.middleware.cors_config import CORSPolicy, Environment
 
     # Test 1: Regex patterns should not be allowed in production
     try:
@@ -69,7 +72,7 @@ def test_production_regex_security():
             environment=Environment.PRODUCTION,
             origin_regex_patterns=[r"https://.*\.example\.com$"]
         )
-        assert False, "Should have raised ValueError for regex in production"
+        raise AssertionError("Should have raised ValueError for regex in production")
     except ValueError as e:
         assert "Regex patterns are not allowed in production" in str(e)
 
@@ -92,8 +95,10 @@ def test_cors_header_validation():
     """Test detailed CORS header validation in preflight responses."""
     print("[TEST] Testing CORS Header Validation...")
 
-    from resync.api.middleware.cors_config import Environment, CORSPolicy
-    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, get_development_cors_config
+    from resync.api.middleware.cors_middleware import (
+        LoggingCORSMiddleware,
+        get_development_cors_config,
+    )
 
     app = FastAPI()
 
@@ -169,8 +174,10 @@ def test_cors_test_environment():
     os.environ['APP_ENV'] = 'test'
     os.environ['CORS_ENVIRONMENT'] = 'test'
 
-    from resync.api.middleware.cors_config import Environment, CORSPolicy
-    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, create_cors_middleware, get_test_cors_config
+    from resync.api.middleware.cors_middleware import (
+        LoggingCORSMiddleware,
+        get_test_cors_config,
+    )
 
     app = FastAPI()
 
@@ -221,8 +228,11 @@ def test_cors_edge_cases():
     """Test CORS edge cases including DNS rebinding and credentials."""
     print("[TEST] Testing CORS Edge Cases...")
 
-    from resync.api.middleware.cors_config import Environment, CORSPolicy
-    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, get_production_cors_config, get_development_cors_config
+    from resync.api.middleware.cors_middleware import (
+        LoggingCORSMiddleware,
+        get_development_cors_config,
+        get_production_cors_config,
+    )
 
     # Test 1: DNS rebinding protection
     app = FastAPI()
@@ -302,8 +312,10 @@ def test_configurable_origins():
     """Test that origins can be configured via environment variables."""
     print("[TEST] Testing Configurable Origins...")
 
-    from resync.api.middleware.cors_config import Environment, CORSPolicy
-    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, create_cors_middleware
+    from resync.api.middleware.cors_config import CORSPolicy, Environment
+    from resync.api.middleware.cors_middleware import (
+        LoggingCORSMiddleware,
+    )
 
     # Test 1: Custom origins via environment variables
     app = FastAPI()
@@ -355,9 +367,10 @@ def test_cors_violation_logging():
     """Test CORS violation detection and logging."""
     print("[TEST] Testing CORS Violation Logging...")
 
-    import logging
-    from resync.api.middleware.cors_config import Environment, CORSPolicy
-    from resync.api.middleware.cors_middleware import LoggingCORSMiddleware, create_cors_middleware, get_production_cors_config
+    from resync.api.middleware.cors_middleware import (
+        LoggingCORSMiddleware,
+        get_production_cors_config,
+    )
 
     app = FastAPI()
 

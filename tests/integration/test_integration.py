@@ -10,12 +10,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from resync.core.exceptions import DatabaseError
 from resync.core.fastapi_di import (
     get_agent_manager,
-    get_audit_queue,
     get_connection_manager,
     get_knowledge_graph,
-    get_tws_client,
 )
 from resync.core.ia_auditor import analyze_and_flag_memories
 from resync.core.interfaces import (
@@ -23,11 +22,8 @@ from resync.core.interfaces import (
     IAuditQueue,
     IConnectionManager,
     IKnowledgeGraph,
-    ITWSClient,
 )
-from resync.core.exceptions import DatabaseError
 from tests.async_iterator_mock import create_text_stream
-
 
 # Note: The old module-scoped client fixture has been removed.
 # Tests should now use the 'client' fixture from conftest.py, which uses the App Factory pattern.

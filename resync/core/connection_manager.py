@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -36,7 +36,7 @@ class ConnectionManager:
         """
         pool_manager = await self._get_pool_manager()
         await pool_manager.connect(websocket, client_id)
-        
+
         # Maintain backward compatibility with existing dictionary
         self.active_connections[client_id] = websocket
         logger.info("New WebSocket connection accepted: %s", client_id)
@@ -66,7 +66,7 @@ class ConnectionManager:
             success = await self._pool_manager.send_personal_message(message, client_id)
             if success:
                 return
-                
+
         # Fallback to direct WebSocket delivery for backward compatibility
         websocket = self.active_connections.get(client_id)
         if websocket:
@@ -82,7 +82,7 @@ class ConnectionManager:
             successful_sends = await self._pool_manager.broadcast(message)
             logger.info(f"Broadcast completed: {successful_sends} clients received the message")
             return
-            
+
         # Fallback to legacy broadcasting for backward compatibility
         if not self.active_connections:
             logger.info("Broadcast requested, but no active connections.")
@@ -122,7 +122,7 @@ class ConnectionManager:
             successful_sends = await self._pool_manager.broadcast_json(data)
             logger.info(f"JSON broadcast completed: {successful_sends} clients received the data")
             return
-            
+
         # Fallback to legacy JSON broadcasting for backward compatibility
         if not self.active_connections:
             logger.info("JSON broadcast requested, but no active connections.")
@@ -160,7 +160,7 @@ class ConnectionManager:
     def get_connection_stats(self) -> Dict[str, Any]:
         """
         Get WebSocket connection statistics from the pool manager.
-        
+
         Returns:
             Dictionary containing connection statistics
         """

@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import aiofiles
 from pathlib import Path
 from time import time
 from typing import Any, Dict, List, Optional
+
+import aiofiles
 
 try:
     from agno.agent import Agent
@@ -35,6 +36,7 @@ except ImportError:
 
 from pydantic import BaseModel
 
+from resync.core import get_environment_tags, get_global_correlation_id
 from resync.core.exceptions import (
     AgentError,  # Renamed from AgentExecutionError for broader scope
     ConfigurationError,
@@ -43,8 +45,7 @@ from resync.core.exceptions import (
     NetworkError,
     ParsingError,
 )
-from resync.core.metrics import runtime_metrics, log_with_correlation
-from resync.core import get_global_correlation_id, get_environment_tags
+from resync.core.metrics import log_with_correlation, runtime_metrics
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
@@ -320,7 +321,7 @@ class AgentManager:
 
     async def _create_agents(self, agent_configs: List[AgentConfig]) -> Dict[str, Any]:
         """
-        Creates agent instances based on the provided configurations.
+        Creates agent instances based on the provided configurations using parallel execution.
         """
         correlation_id = runtime_metrics.create_correlation_id(
             {
@@ -330,119 +331,125 @@ class AgentManager:
             }
         )
 
-        agents = {}
-        # Ensure the TWS client is ready before creating agents that might need it
-        await self._get_tws_client()
+        try:
+            # Ensure the TWS client is ready before creating agents that might need it
+            await self._get_tws_client()
 
-        for config in agent_configs:
-            agent_correlation = runtime_metrics.create_correlation_id(
-                {
-                    "component": "agent_manager",
-                    "operation": "create_single_agent",
-                    "agent_id": config.id,
-                    "parent_correlation": correlation_id,
-                }
-            )
+            # Use a semaphore to limit concurrent agent creation (e.g., max 5 at a time)
+            # This prevents overwhelming system resources
+            semaphore = asyncio.Semaphore(self.settings.MAX_CONCURRENT_AGENT_CREATIONS or 5)
 
-            try:
-                runtime_metrics.agent_initializations.increment()
+            async def create_with_semaphore(config):
+                async with semaphore:
+                    return await self._create_single_agent_with_semaphore(config, correlation_id)
 
-                agent_tools = [
-                    self.tools[tool_name]
-                    for tool_name in config.tools
-                    if tool_name in self.tools
-                ]
+            # Create tasks with bounded concurrency
+            creation_tasks = [create_with_semaphore(config) for config in agent_configs]
+            results = await asyncio.gather(*creation_tasks, return_exceptions=True)
 
-                missing_tools = [
-                    tool_name
-                    for tool_name in config.tools
-                    if tool_name not in self.tools
-                ]
-                if missing_tools:
+            # Process results and build agents dictionary
+            agents = {}
+            failed_agents = 0
+            
+            for i, result in enumerate(results):
+                config = agent_configs[i]
+                if isinstance(result, Exception):
+                    # Handle exceptions from the task execution itself
+                    runtime_metrics.agent_creation_failures.increment()
                     log_with_correlation(
-                        logging.WARNING,
-                        f"Tools not found for agent '{config.id}': {missing_tools}. Agent will be created without them.",
-                        agent_correlation,
+                        logging.ERROR,
+                        f"Failed to create agent '{config.id}': {result}",
+                        correlation_id,
+                        exc_info=True,
                     )
+                    failed_agents += 1
+                elif result is None:
+                    # Agent creation returned None due to error
+                    failed_agents += 1
+                else:
+                    # Handle the (id, agent) tuple result
+                    if isinstance(result, tuple) and len(result) == 2:
+                        agent_id, agent_instance = result
+                        if agent_instance is not None:
+                            agents[agent_id] = agent_instance
+                    else:
+                        # This should not happen with our implementation, but just in case:
+                        agents[config.id] = result
+                    runtime_metrics.agent_active_count.set(len(agents))
 
-                # Using agno.Agent to create the agent instance
-                agent = Agent(
-                    tools=agent_tools,
-                    model=config.model_name,
-                    instructions=(
-                        f"You are {config.name}, a specialized AI agent. "
-                        f"Your role is: {config.role}. "
-                        f"Your primary goal is: {config.goal}. "
-                        f"Your backstory: {config.backstory}"
-                    ),
-                )
+            log_with_correlation(
+                logging.INFO, 
+                f"Created {len(agents)} agents successfully, {failed_agents} failed", 
+                correlation_id
+            )
+            return agents
 
-                agents[config.id] = agent
-                runtime_metrics.agent_active_count.set(len(agents))
+        finally:
+            runtime_metrics.close_correlation_id(correlation_id)
 
-                log_with_correlation(
-                    logging.DEBUG,
-                    f"Successfully created agent: {config.id}",
-                    agent_correlation,
-                )
+    async def _create_single_agent_with_semaphore(
+        self, config: AgentConfig, parent_correlation_id: str
+    ) -> tuple[str, Any] | None:
+        """Creates a single agent instance with semaphore control and error handling."""
+        agent_correlation = runtime_metrics.create_correlation_id(
+            {
+                "component": "agent_manager",
+                "operation": "create_single_agent",
+                "agent_id": config.id,
+                "parent_correlation": parent_correlation_id,
+            }
+        )
 
-            except KeyError as e:
-                runtime_metrics.agent_creation_failures.increment()
+        try:
+            runtime_metrics.agent_initializations.increment()
+
+            # Resolve tools for this agent
+            agent_tools = [
+                self.tools[tool_name]
+                for tool_name in config.tools
+                if tool_name in self.tools
+            ]
+
+            missing_tools = [
+                tool_name for tool_name in config.tools if tool_name not in self.tools
+            ]
+            if missing_tools:
                 log_with_correlation(
                     logging.WARNING,
-                    f"Tool '{e.args[0]}' not found for agent '{config.id}'. Agent will be created without it.",
+                    f"Tools not found for agent '{config.id}': {missing_tools}. Agent will be created without them.",
                     agent_correlation,
                 )
-            except ImportError as e:
-                runtime_metrics.agent_creation_failures.increment()
-                log_with_correlation(
-                    logging.ERROR,
-                    f"Failed to import dependency for agent '{config.id}': {e}",
-                    agent_correlation,
-                    exc_info=True,
-                )
-                raise AgentError(
-                    f"Failed to import dependency for agent '{config.id}': {e}"
-                ) from e
-            except ValueError as e:
-                runtime_metrics.agent_creation_failures.increment()
-                log_with_correlation(
-                    logging.ERROR,
-                    f"Invalid configuration for agent '{config.id}': {e}",
-                    agent_correlation,
-                    exc_info=True,
-                )
-                raise AgentError(
-                    f"Invalid configuration for agent '{config.id}': {e}"
-                ) from e
-            except TypeError as e:
-                runtime_metrics.agent_creation_failures.increment()
-                log_with_correlation(
-                    logging.ERROR,
-                    f"Type error creating agent '{config.id}': {e}",
-                    agent_correlation,
-                    exc_info=True,
-                )
-                raise AgentError(f"Type error creating agent '{config.id}': {e}") from e
-            except NetworkError as e:
-                runtime_metrics.agent_creation_failures.increment()
-                log_with_correlation(
-                    logging.ERROR,
-                    f"Network error initializing agent '{config.id}': {e}",
-                    agent_correlation,
-                    exc_info=True,
-                )
-                raise AgentError(
-                    f"Network error initializing agent '{config.id}': {e}"
-                ) from e
-            finally:
-                runtime_metrics.close_correlation_id(agent_correlation)
 
-        log_with_correlation(
-            logging.INFO, f"Created {len(agents)} agents successfully", correlation_id
-        )
-        runtime_metrics.close_correlation_id(correlation_id)
-        return agents
+            # Create the agent instance
+            agent = Agent(
+                tools=agent_tools,
+                model=config.model_name,
+                instructions=(
+                    f"You are {config.name}, a specialized AI agent. "
+                    f"Your role is: {config.role}. "
+                    f"Your primary goal is: {config.goal}. "
+                    f"Your backstory: {config.backstory}"
+                ),
+            )
+
+            log_with_correlation(
+                logging.DEBUG,
+                f"Successfully created agent: {config.id}",
+                agent_correlation,
+            )
+            return config.id, agent
+
+        except (KeyError, ImportError, ValueError, TypeError, NetworkError) as e:
+            runtime_metrics.agent_creation_failures.increment()
+            log_with_correlation(
+                logging.ERROR,
+                f"Failed to create agent '{config.id}' due to an error: {e}",
+                agent_correlation,
+                exc_info=True,
+            )
+            return None
+        finally:
+            runtime_metrics.close_correlation_id(agent_correlation)
 
     async def _create_single_agent(
         self, config: AgentConfig, parent_correlation_id: str
@@ -670,7 +677,6 @@ class AgentManager:
             self.agent_configs.clear()
 
             # Restore from backup
-            from pydantic import parse_obj_as
 
             restored_configs = [
                 AgentConfig.parse_obj(config) for config in backup["agent_configs"]

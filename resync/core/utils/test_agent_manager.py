@@ -1,12 +1,13 @@
 import json
-import pytest
 from pathlib import Path
+
+import pytest
 
 from resync.core.agent_manager import AgentManager
 from resync.core.exceptions import (
+    InvalidConfigError,
     MissingConfigError,
     ParsingError,
-    InvalidConfigError,
 )
 
 # Marks all tests in this file as async

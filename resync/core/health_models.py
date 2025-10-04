@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+
 class HealthStatus(enum.Enum):
     """Health status indicators with color coding."""
     HEALTHY = "healthy"      # Green - All components operational
@@ -59,7 +60,7 @@ class HealthCheckConfig:
     timeout_seconds: int = 30
     max_retries: int = 3
     retry_delay_seconds: int = 5
-    
+
     # Component-specific thresholds
     database_timeout_seconds: int = 10
     database_connection_threshold_percent: float = 90.0  # Active connections warning threshold (percentage of total)
@@ -68,20 +69,20 @@ class HealthCheckConfig:
     file_system_threshold_percent: float = 90.0  # Disk usage warning threshold
     memory_threshold_percent: float = 85.0       # Memory usage warning threshold
     cpu_threshold_percent: float = 80.0          # CPU usage warning threshold
-    
+
     # Alert settings
     alert_enabled: bool = True
     alert_threshold_degraded: int = 1            # Number of degraded components to trigger alert
     alert_threshold_unhealthy: int = 1           # Number of unhealthy components to trigger alert
     alert_cooldown_seconds: int = 300            # Minimum time between alerts
-    
+
     # Performance monitoring
     track_response_times: bool = True
     track_error_rates: bool = True
     history_retention_hours: int = 24
     error_threshold_count: int = 10  # Number of errors to trigger alert
     response_time_threshold_ms: int = 1000  # Response time threshold in milliseconds
-    
+
     # Memory bounds configuration
     max_history_entries: int = 1000  # Maximum number of health history entries
     history_cleanup_threshold: float = 0.8  # Cleanup when 80% of max entries reached

@@ -1,16 +1,20 @@
 import asyncio
-import sys
 import os
+import sys
 
 # Add the project root to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
-from resync.core.teams_integration import TeamsIntegration, TeamsConfig, TeamsNotification
+from resync.core.teams_integration import (
+    TeamsConfig,
+    TeamsIntegration,
+    TeamsNotification,
+)
 
 
 async def test_teams_integration():
     print("Testing Teams integration...")
-    
+
     # Create Teams integration with test configuration
     config = TeamsConfig(
         enabled=False,
@@ -18,10 +22,10 @@ async def test_teams_integration():
         channel_name="Test Channel",
         bot_name="Test Bot"
     )
-    
+
     teams_integration = TeamsIntegration(config)
     print("TeamsIntegration created successfully")
-    
+
     # Test notification formatting
     notification = TeamsNotification(
         title="Test Notification",
@@ -31,23 +35,23 @@ async def test_teams_integration():
         job_status="ABEND",
         instance_name="TWS_TEST"
     )
-    
+
     # Test formatting
     try:
-        formatted_message = teams_integration._format_teams_message(notification)
+        teams_integration._format_teams_message(notification)
         print("Teams message formatting works")
     except Exception as e:
         print(f"Teams message formatting failed: {e}")
         return False
-    
+
     # Test health check
     try:
-        health_status = await teams_integration.health_check()
+        await teams_integration.health_check()
         print("Health check works")
     except Exception as e:
         print(f"Health check failed: {e}")
         return False
-    
+
     print("All Teams integration tests passed!")
     return True
 

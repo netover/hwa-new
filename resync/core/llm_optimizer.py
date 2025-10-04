@@ -9,10 +9,18 @@ import logging
 import time
 from typing import Any
 
+import pybreaker
 from resync.core.async_cache import AsyncTTLCache
 from resync.core.llm_monitor import llm_cost_monitor
 from resync.core.utils.llm import call_llm
 from resync.settings import settings
+
+# Define the circuit breaker for LLM API calls
+llm_api_breaker = pybreaker.CircuitBreaker(
+    fail_max=5,
+    reset_timeout=60,
+    exclude=(ValueError,)  # Don't count validation errors
+)
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +142,7 @@ class TWS_LLMOptimizer:
 
         # Generate cache key
         context_str = str(sorted(context.items()))
-        cache_key = hashlib.md5(f"{query}:{context_str}".encode()).hexdigest()
+        cache_key = hashlib.sha256(f"{query}:{context_str}".encode()).hexdigest()
 
         # Check response cache first
         if use_cache:
@@ -170,7 +178,7 @@ class TWS_LLMOptimizer:
         try:
             if stream and "troubleshoot" in template_key:
                 # Use streaming for troubleshooting
-                response = await self._stream_response(prompt, model, context)
+                response = await self.stream_llm_response(prompt, model)
             else:
                 async with llm_api_breaker:
                     response = await call_llm(
@@ -212,30 +220,29 @@ class TWS_LLMOptimizer:
     async def stream_llm_response(self, prompt: str, model: str = "gpt-4") -> str:
         """
         Streams response from LLM with caching.
-        
+
         Args:
             prompt: The input prompt
             model: The LLM model to use
-            
+
         Returns:
             Streamed response
         """
         # Check cache first
         cache_key = f"stream_{hash(prompt)}_{model}"
         cached = await self.response_cache.get(cache_key)
-        
+
         if cached:
             logger.info(f"LLM stream cache hit for key: {cache_key}")
             return cached
-        
+
         # Use litellm for streaming capability
         try:
-            import litellm
             from litellm import acompletion
-            
+
             # Prepare the message in the required format
             messages = [{"content": prompt, "role": "user"}]
-            
+
             # Create async generator for streaming
             response = await acompletion(
                 model=model,
@@ -244,19 +251,19 @@ class TWS_LLMOptimizer:
                 max_tokens=1000,
                 temperature=0.7
             )
-            
+
             full_response = ""
             async for chunk in response:
                 if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
                     content = chunk.choices[0].get('delta', {}).get('content', '')
                     if content:
                         full_response += content
-            
+
             # Cache the result
             await self.response_cache.set(cache_key, full_response)
-            
+
             return full_response
-            
+
         except ImportError:
             # Fallback to non-streaming if litellm not available
             logger.warning("litellm not available, using fallback LLM call")

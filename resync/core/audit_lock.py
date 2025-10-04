@@ -8,7 +8,7 @@ to prevent race conditions during concurrent memory processing.
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Optional, Type, cast
+from typing import Any, AsyncIterator, Optional, cast
 
 from redis.asyncio import Redis as AsyncRedis
 from redis.exceptions import RedisError

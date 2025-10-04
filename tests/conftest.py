@@ -1,7 +1,8 @@
 import asyncio
 import os
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 

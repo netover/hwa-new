@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from time import time as time_func
 from typing import Any, Dict, List, Optional, Tuple
 
+from cachetools import LRUCache
 from prometheus_client import Counter, Histogram
 
 from resync.core.async_cache import AsyncTTLCache
@@ -60,7 +61,7 @@ class CacheMetrics:
 
 class L1Cache:
     """
-    In-memory L1 cache with LRU eviction and sharded asyncio.Lock protection.
+    In-memory L1 cache with LRU eviction using cachetools and sharded asyncio.Lock protection.
     """
 
     def __init__(self, max_size: int = 1000, num_shards: int = 16):
@@ -74,17 +75,16 @@ class L1Cache:
 
         self.max_size = max_size
         self.num_shards = num_shards
-        self.shards: List[OrderedDict[str, Tuple[Any, float]]] = [
-            OrderedDict() for _ in range(num_shards)
+        # Use cachetools LRUCache for better performance and built-in LRU functionality
+        self.shards: List[LRUCache] = [
+            LRUCache(maxsize=max_size // num_shards if num_shards > 0 else max_size) 
+            for _ in range(num_shards)
         ]
         self.shard_locks = [asyncio.Lock() for _ in range(num_shards)]
-        self.shard_max_size = max_size // num_shards if num_shards > 0 else max_size
-        if self.max_size > 0 and self.shard_max_size == 0:
-            self.shard_max_size = 1
 
     def _get_shard(
         self, key: str
-    ) -> Tuple[OrderedDict[str, Tuple[Any, float]], asyncio.Lock]:
+    ) -> Tuple[LRUCache, asyncio.Lock]:
         """Get the shard and lock for a given key."""
         shard_index = hash(key) % self.num_shards
         return self.shards[shard_index], self.shard_locks[shard_index]
@@ -95,13 +95,13 @@ class L1Cache:
         """
         shard, lock = self._get_shard(key)
         async with lock:
-            if key in shard:
-                value, _ = shard[key]
-                shard.move_to_end(key)
+            try:
+                value = shard[key]
                 logger.debug("L1 cache HIT for key: %s", key)
                 return value
-            logger.debug("L1 cache MISS for key: %s", key)
-            return None
+            except KeyError:
+                logger.debug("L1 cache MISS for key: %s", key)
+                return None
 
     async def set(self, key: str, value: Any) -> None:
         """
@@ -109,11 +109,8 @@ class L1Cache:
         """
         shard, lock = self._get_shard(key)
         async with lock:
-            if self.shard_max_size > 0 and len(shard) >= self.shard_max_size and key not in shard:
-                evicted_key, _ = shard.popitem(last=False)
-                logger.debug("L1 cache EVICTION for key: %s", evicted_key)
-            shard[key] = (value, time_func())
-            shard.move_to_end(key)
+            # cachetools.LRUCache automatically handles eviction when maxsize is reached
+            shard[key] = value
 
     async def delete(self, key: str) -> bool:
         """
@@ -121,11 +118,12 @@ class L1Cache:
         """
         shard, lock = self._get_shard(key)
         async with lock:
-            if key in shard:
+            try:
                 del shard[key]
                 logger.debug("L1 cache DELETE for key: %s", key)
                 return True
-            return False
+            except KeyError:
+                return False
 
     async def clear(self) -> None:
         """Clear all entries from L1 cache."""
@@ -275,8 +273,8 @@ def get_cache_hierarchy() -> CacheHierarchy:
     global cache_hierarchy
     if cache_hierarchy is None:
         cache_hierarchy = CacheHierarchy(
-            l1_max_size=settings.CACHE_HIERARCHY_L1_MAX_SIZE,
-            l2_ttl_seconds=settings.CACHE_HIERARCHY_L2_TTL,
-            l2_cleanup_interval=settings.CACHE_HIERARCHY_L2_CLEANUP_INTERVAL,
+            l1_max_size=settings.CACHE_HIERARCHY.L1_MAX_SIZE,
+            l2_ttl_seconds=settings.CACHE_HIERARCHY.L2_TTL_SECONDS,
+            l2_cleanup_interval=settings.CACHE_HIERARCHY.L2_CLEANUP_INTERVAL,
         )
     return cache_hierarchy

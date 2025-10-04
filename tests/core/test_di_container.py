@@ -3,6 +3,7 @@ Tests for hardened DI container functionality.
 """
 
 import pytest
+
 from resync.core.di_container import DIContainer, ServiceScope
 
 

@@ -2,14 +2,19 @@
 WebSocket tests using TestClient properly to avoid event loop conflicts.
 This file demonstrates the proper way to test WebSocket endpoints with dependency injection.
 """
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, MagicMock
 from starlette.websockets import WebSocketDisconnect
 
+from resync.core.fastapi_di import (
+    get_agent_manager,
+    get_connection_manager,
+    get_knowledge_graph,
+)
 from resync.core.interfaces import IAgentManager, IConnectionManager, IKnowledgeGraph
-from resync.core.fastapi_di import get_agent_manager, get_connection_manager, get_knowledge_graph
 from tests.async_iterator_mock import create_text_stream
 
 
@@ -93,7 +98,7 @@ class TestWebSocketAsync:
         # A valid agent must be returned for the connection to be fully established
         mock_agent_manager.get_agent.return_value = AsyncMock()
 
-        with client.websocket_connect("/ws/test-agent") as websocket:
+        with client.websocket_connect("/ws/test-agent"):
             # Connection is established and then immediately closed by the 'with' block
             pass
 

@@ -14,24 +14,22 @@ import asyncio
 import gc
 import logging
 import random
-import psutil
-import threading
 import time
 import tracemalloc
-from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Callable
-from unittest.mock import patch
+from typing import Any, Dict, List
 
-from resync.core.async_cache import AsyncTTLCache
+import psutil
+
+from resync.core import get_environment_tags, get_global_correlation_id
 from resync.core.agent_manager import AgentManager
+from resync.core.async_cache import AsyncTTLCache
 from resync.core.audit_db import (
     add_audit_records_batch,
-    get_audit_metrics,
     auto_sweep_pending_audits,
+    get_audit_metrics,
 )
-from resync.core.metrics import runtime_metrics, log_with_correlation
-from resync.core import get_global_correlation_id, get_environment_tags
+from resync.core.metrics import log_with_correlation, runtime_metrics
 
 logger = logging.getLogger(__name__)
 

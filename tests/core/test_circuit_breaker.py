@@ -2,8 +2,9 @@
 Tests for Adaptive Circuit Breaker functionality.
 """
 
+
 import pytest
-import asyncio
+
 from resync.core.resilience import CircuitBreakerManager
 
 
@@ -87,8 +88,8 @@ class TestAdaptiveCircuitBreaker:
         manager = CircuitBreakerManager()
 
         # Create multiple breakers
-        breaker1 = manager.get_breaker("op1")
-        breaker2 = manager.get_breaker("op2")
+        manager.get_breaker("op1")
+        manager.get_breaker("op2")
 
         # Get all metrics
         all_metrics = manager.get_all_metrics()

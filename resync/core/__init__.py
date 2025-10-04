@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 from .async_cache import AsyncTTLCache
 from .config_watcher import handle_config_change
-from .connection_manager import ConnectionManager
+
 from .metrics import runtime_metrics
 
 
@@ -394,28 +394,31 @@ def register_core_components():
     boot_manager.register_component("runtime_metrics", runtime_metrics)
 
     # Safe import for agent_manager
-    agent_mgr = boot_manager.safe_import("resync.core.agent_manager", "agent_manager")
-    if agent_mgr:
+    try:
+        from .agent_manager import AgentManager
+        agent_mgr = AgentManager
         boot_manager.register_component("agent_manager", agent_mgr)
-    else:
+    except ImportError:
         logger.warning(
             "Agent manager not available - system will operate in limited mode",
             extra={"correlation_id": boot_manager._correlation_id},
         )
 
     # Safe import for knowledge_graph
-    kg = boot_manager.safe_import("resync.core.knowledge_graph", "AsyncKnowledgeGraph")
-    if kg:
+    try:
+        from .knowledge_graph import AsyncKnowledgeGraph
+        kg = AsyncKnowledgeGraph
         # Create singleton instance
         kg_instance = kg()
         boot_manager.register_component("knowledge_graph", kg_instance)
-    else:
+    except ImportError:
         logger.warning(
             "Knowledge graph not available - RAG features disabled",
             extra={"correlation_id": boot_manager._correlation_id},
         )
 
     # Connection manager (always available)
+    from .connection_manager import ConnectionManager
     connection_mgr = ConnectionManager()
     boot_manager.register_component("connection_manager", connection_mgr)
 
@@ -512,7 +515,7 @@ class SensitiveDataMasker:
         total_masks = 0
 
         # PARANOID: Apply all patterns with multi-pass detection
-        for pattern, pattern_str in self._patterns:
+        for pattern, _pattern_str in self._patterns:
             # Find all matches in current message
             matches = pattern.findall(masked_msg)
             if matches:
@@ -624,6 +627,7 @@ except KeyError:
 try:
     connection_manager = get_component("connection_manager")
 except KeyError:
+    from .connection_manager import ConnectionManager
     connection_manager = ConnectionManager()  # Fallback
     logger.warning(
         "Using fallback connection manager",

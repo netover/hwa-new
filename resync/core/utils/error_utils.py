@@ -3,8 +3,7 @@
 import logging
 import traceback
 import uuid
-from typing import Any, Dict, List, Optional, Type, Union
-from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
@@ -12,17 +11,16 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from resync.models.error_models import (
-    BaseErrorResponse,
-    ValidationErrorResponse,
     AuthenticationErrorResponse,
     AuthorizationErrorResponse,
+    BaseErrorResponse,
     BusinessLogicErrorResponse,
-    SystemErrorResponse,
-    ExternalServiceErrorResponse,
-    RateLimitErrorResponse,
     ErrorCategory,
     ErrorSeverity,
-    ErrorResponse
+    ExternalServiceErrorResponse,
+    RateLimitErrorResponse,
+    SystemErrorResponse,
+    ValidationErrorResponse,
 )
 from resync.settings import settings
 
@@ -31,29 +29,29 @@ logger = logging.getLogger(__name__)
 
 class ErrorResponseBuilder:
     """Builder class for creating standardized error responses."""
-    
+
     def __init__(self):
         self._correlation_id: Optional[str] = None
         self._path: Optional[str] = None
         self._method: Optional[str] = None
         self._include_stack_trace: bool = False
-        
+
     def with_correlation_id(self, correlation_id: str) -> "ErrorResponseBuilder":
         """Set the correlation ID for error tracking."""
         self._correlation_id = correlation_id
         return self
-        
+
     def with_request_context(self, request: Request) -> "ErrorResponseBuilder":
         """Set request context information."""
         self._path = request.url.path
         self._method = request.method
         return self
-        
+
     def with_stack_trace(self, include: bool = True) -> "ErrorResponseBuilder":
         """Set whether to include stack traces in error responses."""
         self._include_stack_trace = include
         return self
-        
+
     def build_validation_error(self, validation_errors: List[Dict[str, Any]], message: Optional[str] = None) -> ValidationErrorResponse:
         """Build validation error response."""
         response = ValidationErrorResponse.from_pydantic_errors(
@@ -65,7 +63,7 @@ class ErrorResponseBuilder:
         if message:
             response.message = message
         return response
-        
+
     def build_authentication_error(self, error_type: str, **kwargs) -> AuthenticationErrorResponse:
         """Build authentication error response."""
         if error_type == "unauthorized":
@@ -99,7 +97,7 @@ class ErrorResponseBuilder:
                 method=self._method,
                 **kwargs
             )
-            
+
     def build_authorization_error(self, error_type: str, **kwargs) -> AuthorizationErrorResponse:
         """Build authorization error response."""
         if error_type == "forbidden":
@@ -117,7 +115,7 @@ class ErrorResponseBuilder:
                 method=self._method,
                 **kwargs
             )
-            
+
     def build_business_logic_error(self, error_type: str, **kwargs) -> BusinessLogicErrorResponse:
         """Build business logic error response."""
         if error_type == "resource_not_found":
@@ -157,13 +155,13 @@ class ErrorResponseBuilder:
                 method=self._method,
                 **kwargs
             )
-            
+
     def build_system_error(self, error_type: str, exception: Optional[Exception] = None, **kwargs) -> SystemErrorResponse:
         """Build system error response."""
         if self._include_stack_trace and exception:
             kwargs["details"] = kwargs.get("details", {})
             kwargs["details"]["stack_trace"] = traceback.format_exc()
-            
+
         if error_type == "internal_server_error":
             return SystemErrorResponse.internal_server_error(
                 correlation_id=self._correlation_id,
@@ -195,7 +193,7 @@ class ErrorResponseBuilder:
                 method=self._method,
                 **kwargs
             )
-            
+
     def build_external_service_error(self, service: str, error_type: str = "service_error", **kwargs) -> ExternalServiceErrorResponse:
         """Build external service error response."""
         if error_type == "timeout":
@@ -214,7 +212,7 @@ class ErrorResponseBuilder:
                 method=self._method,
                 **kwargs
             )
-            
+
     def build_rate_limit_error(self, limit: int, window: Optional[str] = None, **kwargs) -> RateLimitErrorResponse:
         """Build rate limit error response."""
         return RateLimitErrorResponse.rate_limit_exceeded(
@@ -235,7 +233,7 @@ def generate_correlation_id() -> str:
 def extract_validation_errors(validation_error: Union[RequestValidationError, ValidationError]) -> List[Dict[str, Any]]:
     """Extract validation error details from FastAPI or Pydantic validation errors."""
     errors = []
-    
+
     if isinstance(validation_error, RequestValidationError):
         for error in validation_error.errors():
             errors.append({
@@ -252,7 +250,7 @@ def extract_validation_errors(validation_error: Union[RequestValidationError, Va
                 "type": error["type"],
                 "input": error.get("input")
             })
-            
+
     return errors
 
 
@@ -261,11 +259,11 @@ def should_include_stack_trace() -> bool:
     # In development environment, include stack traces for debugging
     if hasattr(settings, 'APP_ENV') and settings.APP_ENV == 'development':
         return True
-    
+
     # Check specific error detail level setting
     if hasattr(settings, 'ERROR_DETAIL_LEVEL'):
         return settings.ERROR_DETAIL_LEVEL == 'detailed'
-        
+
     # Default to not including stack traces in production
     return False
 
@@ -295,10 +293,10 @@ def log_error_response(error_response: BaseErrorResponse, original_exception: Op
         "path": error_response.path,
         "method": error_response.method,
     }
-    
+
     if original_exception:
         log_data["exception_type"] = type(original_exception).__name__
-        
+
     # Log based on severity
     if error_response.severity == ErrorSeverity.CRITICAL:
         logger.critical(f"Critical error occurred: {log_data}", exc_info=original_exception if should_include_stack_trace() else None)
@@ -316,41 +314,106 @@ def create_error_response_from_exception(
     correlation_id: Optional[str] = None
 ) -> BaseErrorResponse:
     """Create standardized error response from any exception."""
-    from resync.core.exceptions import (
-        ResyncException,
-        NotFoundError,
-        InvalidConfigError,
-        ParsingError,
-        TWSConnectionError,
-        LLMError,
-        DatabaseError
+    from resync.core.exceptions_enhanced import (
+        ResyncException as EnhancedResyncException,
+        DatabaseError as EnhancedDatabaseError,
+        InvalidConfigError as EnhancedInvalidConfigError,
+        LLMError as EnhancedLLMError,
+        NotFoundError as EnhancedNotFoundError,
+        ParsingError as EnhancedParsingError,
+        TWSConnectionError as EnhancedTWSConnectionError,
     )
     
+    from resync.core.exceptions import (
+        DatabaseError,
+        InvalidConfigError,
+        LLMError,
+        NotFoundError,
+        ParsingError,
+        ResyncException as BaseResyncException,
+        TWSConnectionError,
+    )
+
     builder = ErrorResponseBuilder()
-    
+
     if correlation_id:
         builder.with_correlation_id(correlation_id)
     else:
         builder.with_correlation_id(generate_correlation_id())
-        
+
     if request:
         builder.with_request_context(request)
-        
+
     builder.with_stack_trace(should_include_stack_trace())
-    
-    # Handle specific exception types
-    if isinstance(exception, NotFoundError):
-        return builder.build_business_logic_error("resource_not_found", resource="Resource")
-    elif isinstance(exception, (InvalidConfigError, ParsingError)):
-        return builder.build_validation_error([{"loc": ["config"], "msg": str(exception), "type": "value_error"}], str(exception))
-    elif isinstance(exception, TWSConnectionError):
+
+    # Handle enhanced Resync exceptions with richer information
+    if isinstance(exception, EnhancedResyncException):
+        # Use the enhanced exception's information to create a more detailed response
+        error_code = exception.error_code
+        message = exception.message
+        user_friendly_message = exception.user_friendly_message
+        details = exception.details
+        severity = exception.severity
+        category = exception.error_category
+        
+        # Map the enhanced exception to the appropriate response type based on category
+        if exception.error_category == "VALIDATION":
+            return builder.build_validation_error(
+                [{"loc": ["validation"], "msg": message, "type": "value_error"}], 
+                user_friendly_message
+            )
+        elif exception.error_category == "BUSINESS_LOGIC":
+            if isinstance(exception, EnhancedNotFoundError):
+                return builder.build_business_logic_error(
+                    "resource_not_found", 
+                    resource="Resource",
+                    user_friendly_message=user_friendly_message,
+                    details=details
+                )
+            else:
+                return builder.build_business_logic_error(
+                    "invalid_operation",
+                    user_friendly_message=user_friendly_message,
+                    details=details
+                )
+        elif exception.error_category == "EXTERNAL_SERVICE":
+            service_name = details.get("service", "External Service") if details else "External Service"
+            return builder.build_external_service_error(
+                service_name,
+                user_friendly_message=user_friendly_message,
+                details=details
+            )
+        elif exception.error_category == "SYSTEM":
+            return builder.build_system_error(
+                "internal_server_error", 
+                user_friendly_message=user_friendly_message,
+                details=details,
+                exception=exception
+            )
+        else:
+            # For other enhanced exceptions
+            return builder.build_system_error(
+                "internal_server_error", 
+                exception=exception,
+                user_friendly_message=user_friendly_message,
+                details=details
+            )
+    # Handle base Resync exceptions for backward compatibility
+    elif isinstance(exception, (InvalidConfigError, EnhancedInvalidConfigError, ParsingError, EnhancedParsingError)):
+        return builder.build_validation_error(
+            [{"loc": ["config"], "msg": str(exception), "type": "value_error"}], 
+            str(exception)
+        )
+    elif isinstance(exception, (TWSConnectionError, EnhancedTWSConnectionError)):
         return builder.build_external_service_error("TWS", "service_error")
-    elif isinstance(exception, LLMError):
+    elif isinstance(exception, (LLMError, EnhancedLLMError)):
         return builder.build_external_service_error("LLM", "service_error")
-    elif isinstance(exception, DatabaseError):
+    elif isinstance(exception, (DatabaseError, EnhancedDatabaseError)):
         return builder.build_system_error("database_error")
-    elif isinstance(exception, ResyncException):
-        # Generic ResyncException - create system error
+    elif isinstance(exception, (NotFoundError, EnhancedNotFoundError)):
+        return builder.build_business_logic_error("resource_not_found", resource="Resource")
+    elif isinstance(exception, BaseResyncException):
+        # Generic base ResyncException - create system error
         return builder.build_system_error("internal_server_error", exception=exception)
     else:
         # Unknown exception - create system error
@@ -361,8 +424,82 @@ def create_json_response_from_error(error_response: BaseErrorResponse) -> JSONRe
     """Create FastAPI JSONResponse from standardized error response."""
     status_code = get_error_status_code(error_response.category)
     content = error_response.dict(exclude_none=True)
-    
+
     return JSONResponse(
         status_code=status_code,
         content=content
     )
+
+
+def register_exception_handlers(app):
+    """Register standardized exception handlers for the FastAPI application."""
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    from resync.core.exceptions import ResyncException as BaseResyncException
+    from resync.core.exceptions_enhanced import ResyncException as EnhancedResyncException
+
+    # Register handler for validation errors
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        correlation_id = generate_correlation_id()
+        error_response = ErrorResponseBuilder() \
+            .with_correlation_id(correlation_id) \
+            .with_request_context(request) \
+            .build_validation_error(extract_validation_errors(exc))
+
+        log_error_response(error_response, exc)
+
+        return create_json_response_from_error(error_response)
+
+    # Register handler for standard HTTP exceptions
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        correlation_id = generate_correlation_id()
+        builder = ErrorResponseBuilder().with_correlation_id(correlation_id).with_request_context(request)
+
+        # Map HTTP status codes to appropriate error types
+        if exc.status_code == 404:
+            error_response = builder.build_business_logic_error(
+                "resource_not_found", 
+                resource="Resource"
+            )
+        elif exc.status_code == 401:
+            error_response = builder.build_authentication_error("unauthorized")
+        elif exc.status_code == 403:
+            error_response = builder.build_authorization_error("forbidden")
+        elif exc.status_code == 429:
+            error_response = builder.build_rate_limit_error(
+                limit=getattr(request.state, 'rate_limit', {}).get('limit', 0)
+            )
+        else:
+            error_response = builder.build_system_error("internal_server_error")
+
+        error_response.error_code = f"HTTP_{exc.status_code}"
+        error_response.message = exc.detail if exc.detail else f"HTTP Error {exc.status_code}"
+
+        log_error_response(error_response)
+
+        return create_json_response_from_error(error_response)
+
+    # Register handler for enhanced Resync custom exceptions first
+    @app.exception_handler(EnhancedResyncException)
+    async def enhanced_resync_exception_handler(request: Request, exc: EnhancedResyncException):
+        correlation_id = generate_correlation_id()
+        error_response = create_error_response_from_exception(exc, request, correlation_id)
+
+        log_error_response(error_response, exc)
+
+        return create_json_response_from_error(error_response)
+
+    # Register handler for base Resync custom exceptions
+    @app.exception_handler(BaseResyncException)
+    async def base_resync_exception_handler(request: Request, exc: BaseResyncException):
+        correlation_id = generate_correlation_id()
+        error_response = create_error_response_from_exception(exc, request, correlation_id)
+
+        log_error_response(error_response, exc)
+
+        return create_json_response_from_error(error_response)
+
+    return app

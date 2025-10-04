@@ -1,11 +1,12 @@
 # resync/core/ia_auditor.py
 import asyncio
 import logging
-import httpx
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from resync.core.audit_queue import AsyncAuditQueue
+import httpx
+
 from resync.core.audit_lock import DistributedAuditLock
+from resync.core.audit_queue import AsyncAuditQueue
 from resync.core.exceptions import (
     AuditError,
     DatabaseError,
@@ -176,7 +177,7 @@ async def analyze_memory(
 
             return await _perform_action_on_memory(mem, analysis)
 
-    except LLMError as e:
+    except LLMError:
         # Error already logged in _get_llm_analysis, just bubble it up if needed
         logger.warning("IA Auditor: Skipping memory %s due to LLM failure.", memory_id)
         return None

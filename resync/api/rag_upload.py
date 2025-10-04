@@ -9,52 +9,48 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from resync.core.exceptions import FileProcessingError
 from resync.core.fastapi_di import get_file_ingestor
 from resync.core.interfaces import IFileIngestor
+from resync.core.llm_wrapper import optimized_llm
+from resync.models.validation import DocumentUpload
 
 logger = logging.getLogger(__name__)
+
+# Module-level dependencies to avoid B008 errors
+file_dependency = File(...)
+file_ingestor_dependency = Depends(get_file_ingestor)
+
 router = APIRouter(prefix="/api/rag", tags=["rag"])
 
 
 @router.post("/upload", summary="Upload a document for RAG ingestion")
 async def upload_document(
-    file: UploadFile = File(...),
-    file_ingestor: IFileIngestor = Depends(get_file_ingestor),
+    file: UploadFile = file_dependency,
+    file_ingestor: IFileIngestor = file_ingestor_dependency,
 ):
     """
     Accepts a file upload and saves it to the RAG directory for processing.
     """
     try:
-        # Validate file type and size
-        if not file.filename:
-            raise HTTPException(status_code=400, detail="Filename is required")
-        
-        # Check file extension (only allow specific file types)
-        allowed_extensions = {'.pdf', '.docx', '.xlsx', '.txt', '.csv', '.json'}
-        file_extension = '.' + file.filename.lower().split('.')[-1] if '.' in file.filename else ''
-        if file_extension not in allowed_extensions:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"File type not allowed. Allowed types: {', '.join(allowed_extensions)}"
-            )
-        
-        # Check file size (limit to 10MB)
-        # FastAPI doesn't provide file size directly for UploadFile, so we'll check after reading
-        # But we can at least validate that the content type is appropriate
-        if file.content_type and not any(allowed_type in file.content_type.lower() 
-                                         for allowed_type in ['application/pdf', 'application/vnd.openxmlformats', 
-                                                              'application/msword', 'text/plain', 'text/csv', 'application/json']):
-            logger.warning(f"Potentially unsafe content type: {file.content_type}")
-        
         # Check file size by reading and limiting
         contents = await file.read()
         if len(contents) > 10 * 1024 * 1024:  # 10MB limit
             raise HTTPException(status_code=400, detail="File too large. Maximum size is 10MB.")
-        
+
         # Reset file pointer for saving
         await file.seek(0)
-        
+
+        # Validate the document using our validation model
+        try:
+            document_upload = DocumentUpload(
+                filename=file.filename or "",
+                content_type=file.content_type or "application/octet-stream",
+                size=len(contents)
+            )
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
+
         # Save the uploaded file
         destination = await file_ingestor.save_uploaded_file(
-            file_name=file.filename,
+            file_name=document_upload.filename,
             file_content=file.file,
         )
 
@@ -67,8 +63,8 @@ async def upload_document(
 
         return {
             "filename": safe_filename,
-            "content_type": file.content_type,
-            "size": len(contents),
+            "content_type": document_upload.content_type,
+            "size": document_upload.size,
             "message": "File uploaded successfully and queued for ingestion.",
         }
     except HTTPException:

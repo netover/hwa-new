@@ -2,10 +2,13 @@
 Tests for InputSanitizer class and related functionality.
 """
 
-import pytest
 from pathlib import Path
-from resync.core.security import InputSanitizer
+
+import pytest
+
 from resync.core import env_detector
+from resync.core.security import InputSanitizer
+
 
 @pytest.fixture
 def set_test_env(monkeypatch):

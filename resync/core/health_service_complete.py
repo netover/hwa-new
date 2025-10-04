@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import asyncio
@@ -118,7 +117,7 @@ class HealthCheckService:
                     name=component_name,
                     component_type=self._get_component_type(component_name),
                     status=HealthStatus.UNKNOWN,
-                    message=f"Check failed: {str(check_result)}",
+                    message=f"Check failed: {str(check_result.__class__.__name__)} - {str(check_result)}",
                     last_check=datetime.now()
                 )
             else:
@@ -519,4 +518,200 @@ class HealthCheckService:
             if metrics["circuit_breaker_state"] == "open":
                 status = HealthStatus.UNHEALTHY
                 message = "TWS circuit breaker is open"
-            elif metrics
+            elif metrics["connection_status"] == "down":
+                status = HealthStatus.UNHEALTHY
+                message = "TWS connection is down"
+            else:
+                status = HealthStatus.HEALTHY
+                message = "TWS monitor operational"
+                
+            return ComponentHealth(
+                name="tws_monitor",
+                component_type=ComponentType.TWS,
+                status=status,
+                message=message,
+                response_time_ms=response_time,
+                last_check=datetime.now(),
+                metadata={
+                    "connection_status": metrics["connection_status"],
+                    "circuit_breaker_state": metrics["circuit_breaker_state"],
+                    "active_connections": metrics["active_connections"],
+                    "connection_errors": metrics["connection_errors"]
+                }
+            )
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            return ComponentHealth(
+                name="tws_monitor",
+                component_type=ComponentType.TWS,
+                status=HealthStatus.UNHEALTHY,
+                message=f"TWS monitor health check failed: {str(e)}",
+                response_time_ms=response_time,
+                last_check=datetime.now(),
+                error_count=1
+            )
+            
+    async def _check_connection_pools_health(self) -> ComponentHealth:
+        """Check connection pools health."""
+        start_time = time.time()
+        
+        try:
+            # Get connection pool manager
+            pool_manager = await get_connection_pool_manager()
+            pools = pool_manager.get_all_pools()
+            
+            # Check each pool
+            pool_statuses = {}
+            for pool_name, pool in pools.items():
+                is_healthy = await pool.health_check()
+                stats = pool.get_stats()
+                pool_statuses[pool_name] = {
+                    "healthy": is_healthy,
+                    "active_connections": stats.active_connections,
+                    "idle_connections": stats.idle_connections,
+                    "total_connections": stats.total_connections,
+                    "connection_errors": stats.connection_errors,
+                    "pool_hits": stats.pool_hits,
+                    "pool_misses": stats.pool_misses
+                }
+            
+            # Determine overall status
+            all_healthy = all(status["healthy"] for status in pool_statuses.values())
+            if all_healthy:
+                status = HealthStatus.HEALTHY
+                message = "All connection pools healthy"
+            else:
+                status = HealthStatus.UNHEALTHY
+                message = "Some connection pools unhealthy"
+                
+            response_time = (time.time() - start_time) * 1000
+            
+            return ComponentHealth(
+                name="connection_pools",
+                component_type=ComponentType.CONNECTION_POOL,
+                status=status,
+                message=message,
+                response_time_ms=response_time,
+                last_check=datetime.now(),
+                metadata={
+                    "pools": pool_statuses
+                }
+            )
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            return ComponentHealth(
+                name="connection_pools",
+                component_type=ComponentType.CONNECTION_POOL,
+                status=HealthStatus.UNHEALTHY,
+                message=f"Connection pools health check failed: {str(e)}",
+                response_time_ms=response_time,
+                last_check=datetime.now(),
+                error_count=1
+            )
+            
+    async def _check_websocket_pool_health(self) -> ComponentHealth:
+        """Check WebSocket pool health."""
+        start_time = time.time()
+        
+        try:
+            # Get WebSocket pool manager
+            pool_manager = websocket_pool_manager
+            stats = pool_manager.get_stats()
+            
+            # Determine status
+            if stats.active_connections > 0:
+                status = HealthStatus.HEALTHY
+                message = f"WebSocket pool healthy ({stats.active_connections} active connections)"
+            else:
+                status = HealthStatus.DEGRADED
+                message = "WebSocket pool has no active connections"
+                
+            response_time = (time.time() - start_time) * 1000
+            
+            return ComponentHealth(
+                name="websocket_pool",
+                component_type=ComponentType.WEBSOCKET_POOL,
+                status=status,
+                message=message,
+                response_time_ms=response_time,
+                last_check=datetime.now(),
+                metadata={
+                    "active_connections": stats.active_connections,
+                    "idle_connections": stats.idle_connections,
+                    "total_connections": stats.total_connections,
+                    "connection_errors": stats.connection_errors,
+                    "last_health_check": stats.last_health_check.isoformat() if stats.last_health_check else None
+                }
+            )
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            return ComponentHealth(
+                name="websocket_pool",
+                component_type=ComponentType.WEBSOCKET_POOL,
+                status=HealthStatus.UNHEALTHY,
+                message=f"WebSocket pool health check failed: {str(e)}",
+                response_time_ms=response_time,
+                last_check=datetime.now(),
+                error_count=1
+            )
+            
+    def _get_component_type(self, component_name: str) -> ComponentType:
+        """Map component name to component type."""
+        component_type_map = {
+            "database": ComponentType.DATABASE,
+            "redis": ComponentType.REDIS,
+            "cache_hierarchy": ComponentType.CACHE,
+            "file_system": ComponentType.FILE_SYSTEM,
+            "memory": ComponentType.MEMORY,
+            "cpu": ComponentType.CPU,
+            "tws_monitor": ComponentType.TWS,
+            "connection_pools": ComponentType.CONNECTION_POOL,
+            "websocket_pool": ComponentType.WEBSOCKET_POOL,
+        }
+        return component_type_map.get(component_name, ComponentType.OTHER)
+        
+    def _calculate_overall_status(self, components: Dict[str, ComponentHealth]) -> HealthStatus:
+        """Calculate overall health status based on component statuses."""
+        if not components:
+            return HealthStatus.UNKNOWN
+            
+        # If any critical component is unhealthy, overall is unhealthy
+        critical_components = ["database", "redis", "tws_monitor"]
+        for comp_name in critical_components:
+            if comp_name in components and components[comp_name].status == HealthStatus.UNHEALTHY:
+                return HealthStatus.UNHEALTHY
+                
+        # If any component is degraded, overall is degraded
+        for comp in components.values():
+            if comp.status == HealthStatus.DEGRADED:
+                return HealthStatus.DEGRADED
+                
+        return HealthStatus.HEALTHY
+        
+    def _generate_summary(self, components: Dict[str, ComponentHealth]) -> Dict[str, str]:
+        """Generate health summary."""
+        summary = {}
+        for comp_name, comp in components.items():
+            summary[comp_name] = f"{comp.status.name}: {comp.message}"
+        return summary
+        
+    def _check_alerts(self, components: Dict[str, ComponentHealth]) -> List[str]:
+        """Check for health alerts based on component statuses."""
+        alerts = []
+        for comp_name, comp in components.items():
+            if comp.status == HealthStatus.DEGRADED:
+                alerts.append(f"{comp_name} is degraded: {comp.message}")
+            elif comp.status == HealthStatus.UNHEALTHY:
+                alerts.append(f"{comp_name} is unhealthy: {comp.message}")
+        return alerts
+        
+    def _update_health_history(self, result: HealthCheckResult) -> None:
+        """Update health check history."""
+        self.health_history.append(HealthStatusHistory(
+            timestamp=result.timestamp,
+            overall_status=result.overall_status,
+            components={name: comp.status for name, comp in result.components.items()}
+        ))

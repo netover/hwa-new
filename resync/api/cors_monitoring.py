@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime
+from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel
 
-from resync.api.middleware.cors_middleware import LoggingCORSMiddleware
 from resync.core.rate_limiter import authenticated_rate_limit
 
 logger = logging.getLogger(__name__)
+
+# Module-level dependency to avoid B008 error for Query
+origins_query_dependency = Query(..., description="List of origins to validate")
 
 cors_monitor_router = APIRouter()
 
@@ -51,10 +53,10 @@ class CORSConfigResponse(BaseModel):
 
 @cors_monitor_router.get("/cors/stats", response_model=CORSStats)
 @authenticated_rate_limit
-async def get_cors_stats() -> CORSStats:
+async def get_cors_stats(request: Request) -> CORSStats:
     """
     Get CORS middleware statistics for monitoring.
-    
+
     Returns:
         CORS statistics including request counts and violation rates
     """
@@ -72,16 +74,17 @@ async def get_cors_stats() -> CORSStats:
 @cors_monitor_router.get("/cors/violations")
 @authenticated_rate_limit
 async def get_cors_violations(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=500, description="Maximum number of violations to return"),
     hours: int = Query(default=24, ge=1, le=168, description="Number of hours to look back")
 ) -> List[CORSViolation]:
     """
     Get recent CORS violations for security analysis.
-    
+
     Args:
         limit: Maximum number of violations to return
         hours: Number of hours to look back for violations
-        
+
     Returns:
         List of CORS violations with details
     """
@@ -92,20 +95,20 @@ async def get_cors_violations(
 
 @cors_monitor_router.get("/cors/config", response_model=CORSConfigResponse)
 @authenticated_rate_limit
-async def get_cors_config() -> CORSConfigResponse:
+async def get_cors_config(request: Request) -> CORSConfigResponse:
     """
     Get current CORS configuration for verification.
-    
+
     Returns:
         Current CORS configuration settings
     """
-    from resync.settings import settings
     from resync.api.middleware.cors_config import cors_config
-    
+    from resync.settings import settings
+
     # Get current environment
     environment = getattr(settings, "CORS_ENVIRONMENT", "development")
     policy = cors_config.get_policy(environment)
-    
+
     return CORSConfigResponse(
         environment=environment,
         enabled=getattr(settings, "CORS_ENABLED", True),
@@ -122,34 +125,35 @@ async def get_cors_config() -> CORSConfigResponse:
 @cors_monitor_router.post("/cors/test")
 @authenticated_rate_limit
 async def test_cors_policy(
+    request: Request,
     origin: str = Query(..., description="Origin to test"),
     method: str = Query(default="GET", description="HTTP method to test"),
     path: str = Query(default="/api/test", description="Path to test")
 ) -> Dict[str, Any]:
     """
     Test CORS policy for a specific origin and method.
-    
+
     Args:
         origin: Origin to test
         method: HTTP method to test
         path: Path to test
-        
+
     Returns:
         Test results including whether the origin would be allowed
     """
-    from resync.settings import settings
     from resync.api.middleware.cors_config import cors_config
-    
+    from resync.settings import settings
+
     # Get current environment and policy
     environment = getattr(settings, "CORS_ENVIRONMENT", "development")
     policy = cors_config.get_policy(environment)
-    
+
     # Test if origin would be allowed
     is_allowed = policy.is_origin_allowed(origin)
-    
+
     # Check if method is allowed
     is_method_allowed = method.upper() in [m.upper() for m in policy.allowed_methods]
-    
+
     return {
         "origin": origin,
         "method": method,
@@ -171,39 +175,40 @@ async def test_cors_policy(
 @cors_monitor_router.post("/cors/validate-origins")
 @authenticated_rate_limit
 async def validate_origins(
-    origins: List[str] = Query(..., description="List of origins to validate")
+    request: Request,
+    origins: List[str] = origins_query_dependency
 ) -> Dict[str, Any]:
     """
     Validate a list of origins against the current CORS policy.
-    
+
     Args:
         origins: List of origins to validate
-        
+
     Returns:
         Validation results for each origin
     """
-    from resync.settings import settings
     from resync.api.middleware.cors_config import cors_config
-    
+    from resync.settings import settings
+
     # Get current environment and policy
     environment = getattr(settings, "CORS_ENVIRONMENT", "development")
     policy = cors_config.get_policy(environment)
-    
+
     results = {}
     for origin in origins:
         is_allowed = policy.is_origin_allowed(origin)
         validation_errors = []
-        
+
         # Perform additional validation
         if environment == "production" and "*" in origin:
             validation_errors.append("Wildcard origins not allowed in production")
-        
+
         results[origin] = {
             "allowed": is_allowed,
             "validation_errors": validation_errors,
             "policy_match": origin in policy.allowed_origins or policy.allow_all_origins
         }
-    
+
     return {
         "environment": environment,
         "total_origins": len(origins),

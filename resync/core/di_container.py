@@ -15,7 +15,6 @@ import logging
 from enum import Enum, auto
 from typing import (
     Any,
-    Awaitable,
     Callable,
     Dict,
     Generic,
@@ -425,7 +424,7 @@ class DIContainer:
             Health check result dictionary.
         """
         if hasattr(instance, "health_check") and callable(
-            getattr(instance, "health_check")
+            instance.health_check
         ):
             # Instance has its own health check method
             if inspect.iscoroutinefunction(instance.health_check):
@@ -515,10 +514,19 @@ class DIContainer:
 # It can be replaced with a custom container if needed.
 container = DIContainer()
 
-# Register AsyncAuditQueue as the implementation for IAuditQueue
-from resync.core.audit_queue import AsyncAuditQueue, IAuditQueue
 
-container.register(IAuditQueue, AsyncAuditQueue, scope=ServiceScope.SINGLETON, health_required=False)  # type: ignore[type-abstract]
+def register_default_services():
+    """Register default services with the container."""
+    from resync.core.audit_queue import AsyncAuditQueue, IAuditQueue
+    container.register(IAuditQueue, AsyncAuditQueue, scope=ServiceScope.SINGLETON, health_required=False)  # type: ignore[type-abstract]
+
+
+def get_container() -> DIContainer:
+    """Get the global DI container instance."""
+    return container
+
+# Register AsyncAuditQueue as the implementation for IAuditQueue
+
 
 
 def get_container() -> DIContainer:

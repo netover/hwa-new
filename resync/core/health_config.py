@@ -6,7 +6,7 @@ in health checks across different environments.
 """
 
 from enum import Enum
-from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -19,35 +19,35 @@ class ErrorDetailLevel(str, Enum):
 
 class HealthCheckSecurityConfig(BaseModel):
     """Security configuration for health checks."""
-    
+
     error_detail_level: ErrorDetailLevel = ErrorDetailLevel.SECURE
     """Level of detail to include in error messages."""
-    
+
     include_stack_traces: bool = False
     """Whether to include stack traces in error responses."""
-    
+
     log_full_errors: bool = True
     """Whether to log full error details for debugging."""
-    
+
     sanitize_file_paths: bool = True
     """Whether to sanitize file paths in error messages."""
-    
+
     sanitize_connection_strings: bool = True
     """Whether to sanitize database connection strings."""
-    
+
     sanitize_sql_queries: bool = True
     """Whether to sanitize SQL queries in error messages."""
-    
+
     error_id_length: int = 8
     """Length of error IDs for correlation."""
-    
+
     @classmethod
     def from_environment(cls) -> "HealthCheckSecurityConfig":
         """Create configuration from environment variables."""
         import os
-        
+
         detail_level = os.getenv("HEALTH_ERROR_DETAIL_LEVEL", "secure").lower()
-        
+
         mapping = {
             "dev": ErrorDetailLevel.DEVELOPMENT,
             "development": ErrorDetailLevel.DEVELOPMENT,
@@ -55,7 +55,7 @@ class HealthCheckSecurityConfig(BaseModel):
             "production": ErrorDetailLevel.PRODUCTION,
             "secure": ErrorDetailLevel.SECURE,
         }
-        
+
         return cls(
             error_detail_level=mapping.get(detail_level, ErrorDetailLevel.SECURE),
             include_stack_traces=os.getenv("HEALTH_INCLUDE_STACK_TRACES", "false").lower() == "true",

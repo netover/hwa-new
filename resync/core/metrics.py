@@ -5,12 +5,10 @@ Provides comprehensive monitoring, correlation IDs, and audit trails.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import threading
 import time
 import uuid
-from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -101,6 +99,10 @@ class RuntimeMetrics:
         self.correlation_ids_active = MetricGauge()
         self.async_operations_active = MetricGauge()
         self.error_rate = MetricHistogram()
+        
+        # Error metrics
+        self.error_counts = {}  # Dictionary to track counts by error type
+        self.error_lock = threading.Lock()  # Lock for error tracking
 
         # TWS-specific metrics
         self.tws_status_requests_success = MetricCounter()
@@ -176,8 +178,24 @@ class RuntimeMetrics:
         with self._health_lock:
             return dict(self._health_checks)
 
+    def record_error(self, error_type: str, processing_time: float) -> None:
+        """Record error metrics for monitoring and alerting."""
+        with self.error_lock:
+            if error_type not in self.error_counts:
+                self.error_counts[error_type] = MetricCounter()
+            self.error_counts[error_type].increment()
+        
+        # Also record in histogram for processing time analysis
+        self.error_rate.observe(processing_time)
+
     def get_snapshot(self) -> Dict[str, Any]:
         """Get a snapshot of all current metrics."""
+        # Build error metrics
+        error_metrics = {}
+        with self.error_lock:
+            for error_type, counter in self.error_counts.items():
+                error_metrics[error_type] = counter.value
+        
         return {
             "agent": {
                 "initializations": self.agent_initializations.value,
@@ -211,6 +229,7 @@ class RuntimeMetrics:
                 "correlation_ids_active": self.correlation_ids_active.get(),
                 "async_operations_active": self.async_operations_active.get(),
             },
+            "errors": error_metrics,
             "health": self.get_health_status(),
         }
 

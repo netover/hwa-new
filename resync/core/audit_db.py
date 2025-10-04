@@ -1,10 +1,10 @@
 import logging
 import sqlite3
-from typing import Any, Dict, List, Optional
 from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
 
-from resync.settings import settings
 from resync.core.connection_pool_manager import get_connection_pool_manager
+from resync.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +30,14 @@ async def get_db_connection_pool():
     """
     Get a database connection from the connection pool.
     Falls back to direct connection if pool is not available.
-    
+
     Yields:
         Database connection (SQLAlchemy Engine)
     """
     try:
         pool_manager = await get_connection_pool_manager()
         db_pool = pool_manager.get_pool("database")
-        
+
         if db_pool:
             # Use connection from pool
             async with db_pool.get_connection() as engine:
@@ -46,7 +46,7 @@ async def get_db_connection_pool():
             # Fallback to direct SQLite connection
             logger.warning("Database connection pool not available, using direct connection")
             yield get_db_connection()
-            
+
     except Exception as e:
         logger.error(f"Failed to get database connection from pool: {e}")
         # Fallback to direct connection on any error

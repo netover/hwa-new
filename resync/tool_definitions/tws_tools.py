@@ -6,11 +6,10 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from resync.core.exceptions import (
-    TWSConnectionError,
     ToolConnectionError,
-    ToolProcessingError,
-    ToolTimeoutError,
     ToolExecutionError,
+    ToolProcessingError,
+    TWSConnectionError,
 )
 from resync.services.tws_service import OptimizedTWSClient
 

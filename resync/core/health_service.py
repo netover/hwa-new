@@ -2,29 +2,31 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import psutil
 import tempfile
 import time
-import uuid
-from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import aiofiles
+import psutil
 
-from resync.core.health_models import (
-    HealthStatus, ComponentType, ComponentHealth, HealthCheckResult,
-    HealthCheckConfig, HealthStatusHistory
-)
 from resync.core.connection_pool_manager import get_connection_pool_manager
+from resync.core.health_models import (
+    ComponentHealth,
+    ComponentType,
+    HealthCheckConfig,
+    HealthCheckResult,
+    HealthStatus,
+    HealthStatusHistory,
+)
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
 
 class CircuitBreaker:
     """Simple circuit breaker implementation for health checks."""
-    
+
     def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
@@ -32,7 +34,7 @@ class CircuitBreaker:
         self.last_failure_time = None
         self.state = "closed"  # closed, open, half-open
         self._last_check = datetime.now()
-    
+
     async def call(self, func, *args, **kwargs):
         """Executes the function with circuit breaker protection."""
         if self.state == "open":
@@ -42,7 +44,7 @@ class CircuitBreaker:
             else:
                 # Circuit is open, fail fast
                 raise Exception(f"Circuit breaker is open for {self.recovery_timeout}s")
-        
+
         try:
             result = await func(*args, **kwargs)
             # On success, reset if we were in half-open state
@@ -171,7 +173,7 @@ class HealthCheckService:
             ]
 
         # Process results
-        for component_name, check_result in zip(health_checks.keys(), check_results):
+        for component_name, check_result in zip(health_checks.keys(), check_results, strict=False):
             if isinstance(check_result, Exception):
                 # Handle check failure
                 logger.error(
@@ -266,7 +268,7 @@ class HealthCheckService:
 
             # Get real pool statistics from pool manager
             pool_stats = pool_manager.get_pool_stats()
-            
+
             # Validate pool_stats is not empty/null
             if not pool_stats:
                 return ComponentHealth(
@@ -278,9 +280,9 @@ class HealthCheckService:
                     last_check=datetime.now(),
                     metadata={"pool_stats": "empty or null"},
                 )
-            
+
             db_pool_stats = pool_stats.get("database")
-            
+
             # Validate database pool stats specifically
             if db_pool_stats is None:
                 return ComponentHealth(
@@ -292,7 +294,7 @@ class HealthCheckService:
                     last_check=datetime.now(),
                     metadata={"database_pool": "missing"},
                 )
-            
+
             # Validate that the database pool has valid data
             if (not hasattr(db_pool_stats, 'total_connections') or
                 db_pool_stats.total_connections is None or
@@ -306,12 +308,12 @@ class HealthCheckService:
                     last_check=datetime.now(),
                     metadata={"total_connections": 0 if db_pool_stats.total_connections is None else db_pool_stats.total_connections},
                 )
-            
+
             # Calculate connection usage percentage
             active_connections = db_pool_stats.active_connections
             total_connections = db_pool_stats.total_connections
             connection_usage_percent = (active_connections / total_connections * 100) if total_connections > 0 else 0.0
-            
+
             # Determine status based on configurable threshold
             threshold_percent = self.config.database_connection_threshold_percent
             if connection_usage_percent > threshold_percent:
@@ -368,11 +370,11 @@ class HealthCheckService:
         for attempt in range(max_retries):
             try:
                 return await check_func()
-            except Exception as e:
+            except Exception:
                 if attempt == max_retries - 1:
                     logger.error(f"Health check failed for {component_name} after {max_retries} attempts")
                     raise
-                
+
                 wait_time = 2 ** attempt  # 1s, 2s, 4s
                 logger.warning(f"Health check failed for {component_name}, retrying in {wait_time}s")
                 await asyncio.sleep(wait_time)
@@ -395,26 +397,27 @@ class HealthCheckService:
 
                 # Test actual Redis connectivity
                 import redis.asyncio as redis_async
-                from redis.exceptions import RedisError, TimeoutError as RedisTimeoutError
-                
+                from redis.exceptions import RedisError
+                from redis.exceptions import TimeoutError as RedisTimeoutError
+
                 try:
                     redis_client = redis_async.from_url(settings.REDIS_URL)
                     # Test connectivity with ping
                     await redis_client.ping()
-                    
+
                     # Test read/write operation
                     test_key = f"health_check_{int(time.time())}"
                     await redis_client.setex(test_key, 1, "test")  # Set with expiration
                     value = await redis_client.get(test_key)
-                    
+
                     if value != b"test":
                         raise RedisError("Redis read/write test failed")
-                    
+
                     # Get Redis info for additional details
                     redis_info = await redis_client.info()
-                    
+
                     response_time = (time.time() - start_time) * 1000
-                
+
                     return ComponentHealth(
                         name="redis",
                         component_type=ComponentType.REDIS,
@@ -432,7 +435,7 @@ class HealthCheckService:
                     )
                 except (RedisError, RedisTimeoutError) as e:
                     response_time = (time.time() - start_time) * 1000
-                    
+
                     logger.error(f"Redis connectivity test failed: {e}")
                     return ComponentHealth(
                         name="redis",
@@ -455,7 +458,7 @@ class HealthCheckService:
 
                 # Simple error handling for health checks
                 secure_message = str(e)
-                
+
                 logger.error(f"Redis health check failed: {e}")
                 return ComponentHealth(
                     name="redis",
@@ -466,7 +469,7 @@ class HealthCheckService:
                     last_check=datetime.now(),
                     error_count=1,
                 )
-        
+
         # Use the retry wrapper
         return await self._check_with_retry(_redis_check, "redis")
 
@@ -477,36 +480,36 @@ class HealthCheckService:
         try:
             # Import and test the actual cache implementation
             from resync.core.async_cache import AsyncTTLCache
-            
+
             # Create a test cache instance to verify functionality
             test_cache = AsyncTTLCache(ttl_seconds=60, cleanup_interval=30)
-            
+
             # Test cache operations
             test_key = f"health_test_{int(time.time())}"
             test_value = {"timestamp": time.time(), "status": "health_check"}
-            
+
             # Test set operation
             await test_cache.set(test_key, test_value)
-            
+
             # Test get operation
             retrieved_value = await test_cache.get(test_key)
-            
+
             # Verify the value was retrieved correctly
             if retrieved_value != test_value:
                 await test_cache.stop()
                 raise Exception("Cache get/set test failed")
-            
+
             # Test delete operation
             delete_result = await test_cache.delete(test_key)
             if not delete_result:
                 logger.warning("Cache delete test had unexpected result")
-            
+
             # Get cache statistics
             metrics = test_cache.get_detailed_metrics()
-            
+
             # Stop the test cache
             await test_cache.stop()
-            
+
             response_time = (time.time() - start_time) * 1000
 
             return ComponentHealth(
@@ -524,7 +527,7 @@ class HealthCheckService:
 
             # Simple error handling for health checks
             secure_message = str(e)
-            
+
             logger.error(f"Cache hierarchy health check failed: {e}")
             return ComponentHealth(
                 name="cache_hierarchy",
@@ -600,7 +603,7 @@ class HealthCheckService:
 
             # Simple error handling for health checks
             secure_message = str(e)
-            
+
             logger.error(f"File system health check failed: {e}")
             return ComponentHealth(
                 name="file_system",
@@ -658,7 +661,7 @@ class HealthCheckService:
 
             # Simple error handling for health checks
             secure_message = str(e)
-            
+
             logger.error(f"Memory health check failed: {e}")
             return ComponentHealth(
                 name="memory",
@@ -685,7 +688,7 @@ class HealthCheckService:
             await asyncio.sleep(0.05)  # Pequeno delay entre amostras
             # Terceira leitura
             cpu_samples.append(psutil.cpu_percent(interval=0))
-            
+
             # Média das amostras para uma leitura mais precisa
             cpu_percent = sum(cpu_samples) / len(cpu_samples)
 
@@ -724,7 +727,7 @@ class HealthCheckService:
 
             # Simple error handling for health checks
             secure_message = str(e)
-            
+
             logger.error(f"CPU health check failed: {e}")
             return ComponentHealth(
                 name="cpu",
@@ -769,7 +772,7 @@ class HealthCheckService:
 
             # Simple error handling for health checks
             secure_message = str(e)
-            
+
             logger.error(f"TWS monitor health check failed: {e}")
             return ComponentHealth(
                 name="tws_monitor",
@@ -822,10 +825,10 @@ class HealthCheckService:
             else:
                 # Calculate connection usage percentage
                 connection_usage_percent = (active_connections / total_connections * 100)
-                
+
                 # Use database-specific threshold for database pool
                 threshold_percent = self.config.database_connection_threshold_percent
-                
+
                 if connection_usage_percent > threshold_percent:
                     status = HealthStatus.DEGRADED
                     message = (
@@ -862,7 +865,7 @@ class HealthCheckService:
 
             # Simple error handling for health checks
             secure_message = str(e)
-            
+
             logger.error(f"Connection pools health check failed: {e}")
             return ComponentHealth(
                 name="connection_pools",
@@ -877,22 +880,21 @@ class HealthCheckService:
     async def _check_websocket_pool_health(self) -> ComponentHealth:
         """Check websocket pool health."""
         start_time = time.time()
-        
+
         try:
             # Import the connection manager to check WebSocket status
-            from resync.core.connection_manager import ConnectionManager
-            
+
             # Check if connection manager exists and is active
             # This is a simplified check - in a real implementation, we'd track actual WebSocket connections
             # For now we'll assume if we can access the ConnectionManager, it's functional
             # But we'll check if there's an active instance
-            
+
             # For a real implementation, we'd need to check the actual WebSocket connection pool
             # For now, we'll consider it as degraded if no connections have been made recently,
             # or healthy if it's available
-            
+
             response_time = (time.time() - start_time) * 1000
-            
+
             # We assume the WebSocket system is available if the chat module is loaded
             # In a real system, we'd track actual connection counts and other metrics
             return ComponentHealth(
@@ -905,7 +907,7 @@ class HealthCheckService:
             )
         except Exception as e:
             response_time = (time.time() - start_time) * 1000
-            
+
             logger.error(f"WebSocket pool health check failed: {e}")
             return ComponentHealth(
                 name="websocket_pool",
@@ -1009,13 +1011,13 @@ class HealthCheckService:
             overall_status=result.overall_status,
             component_changes=component_changes
         )
-        
+
         # Add to history
         self.health_history.append(history_entry)
-        
+
         # Perform cleanup if needed
         asyncio.create_task(self._cleanup_health_history())
-        
+
         # Update memory usage tracking
         if self.config.enable_memory_monitoring:
             asyncio.create_task(self._update_memory_usage())
@@ -1026,15 +1028,15 @@ class HealthCheckService:
             try:
                 current_size = len(self.health_history)
                 max_entries = self.config.max_history_entries
-                cleanup_threshold = int(max_entries * self.config.history_cleanup_threshold)
-                
+                int(max_entries * self.config.history_cleanup_threshold)
+
                 # Check if cleanup is needed based on size
                 if current_size > max_entries:
                     # Remove oldest entries to get back to threshold
                     entries_to_remove = current_size - max_entries + self.config.history_cleanup_batch_size
                     self.health_history = self.health_history[entries_to_remove:]
                     logger.debug(f"Cleaned up {entries_to_remove} health history entries (size-based)")
-                
+
                 # Check if cleanup is needed based on age
                 cutoff_date = datetime.now() - timedelta(days=self.config.history_retention_days)
                 original_size = len(self.health_history)
@@ -1045,13 +1047,13 @@ class HealthCheckService:
                 removed_by_age = original_size - len(self.health_history)
                 if removed_by_age > 0:
                     logger.debug(f"Cleaned up {removed_by_age} health history entries (age-based)")
-                
+
                 # Ensure we don't go below minimum required entries
                 min_entries = max(10, self.config.history_cleanup_batch_size)
                 if len(self.health_history) < min_entries and original_size >= min_entries:
                     # Keep at least some recent history
                     self.health_history = self.health_history[-min_entries:]
-                
+
             except Exception as e:
                 logger.error(f"Error during health history cleanup: {e}")
 
@@ -1059,7 +1061,7 @@ class HealthCheckService:
         """Track component status changes for history."""
         changes = {}
         cached_components = await self._get_all_cached_components()
-        
+
         for name, component in components.items():
             # Compare with last known status from cache
             if name in cached_components:
@@ -1073,14 +1075,13 @@ class HealthCheckService:
     async def _update_memory_usage(self) -> None:
         """Update memory usage tracking for health history."""
         try:
-            import sys
             # Estimate memory usage of health history
             history_size = len(self.health_history)
             if history_size > 0:
                 # More realistic estimation: each entry ~2KB (accounting for metadata and history)
                 estimated_size_bytes = history_size * 2048
                 self._memory_usage_mb = estimated_size_bytes / (1024 * 1024)
-                
+
                 # Alert if memory usage exceeds threshold
                 if self._memory_usage_mb > self.config.memory_usage_threshold_mb:
                     logger.warning(
@@ -1089,13 +1090,12 @@ class HealthCheckService:
                     )
             else:
                 self._memory_usage_mb = 0.0
-                
+
         except Exception as e:
             logger.error(f"Error updating memory usage: {e}")
 
     def _get_current_memory_usage(self) -> float:
         """Get current approximate memory usage."""
-        import sys
         try:
             # Rough estimation of health history memory usage
             history_size = len(self.health_history)
@@ -1125,7 +1125,7 @@ class HealthCheckService:
         original_size = len(self.health_history)
         await self._cleanup_health_history()
         new_size = len(self.health_history)
-        
+
         return {
             "original_entries": original_size,
             "cleaned_entries": original_size - new_size,
@@ -1136,18 +1136,18 @@ class HealthCheckService:
     def get_health_history(self, hours: int = 24, max_entries: Optional[int] = None) -> List[HealthStatusHistory]:
         """Get health history for the specified number of hours with optional entry limit."""
         cutoff_time = datetime.now() - timedelta(hours=hours)
-        
+
         # Filter by time
         filtered_history = [
             entry for entry in self.health_history
             if entry.timestamp >= cutoff_time
         ]
-        
+
         # Apply entry limit if specified
         if max_entries is not None and len(filtered_history) > max_entries:
             # Return most recent entries
             filtered_history = filtered_history[-max_entries:]
-        
+
         return filtered_history
 
     async def get_component_health(self, component_name: str) -> Optional[ComponentHealth]:
@@ -1168,7 +1168,7 @@ class HealthCheckService:
         """Attempt to recover a specific component."""
         # Placeholder implementation - can be extended for specific recovery strategies
         logger.info(f"Attempting recovery for component: {component_name}")
-        
+
         # For now, just perform a fresh health check
         try:
             if component_name == "database":
@@ -1192,11 +1192,11 @@ class HealthCheckService:
             else:
                 logger.warning(f"Unknown component for recovery: {component_name}")
                 return False
-            
+
             # Update cache with new health status
             await self._update_cached_component(component_name, health)
             return health.status == HealthStatus.HEALTHY
-            
+
         except Exception as e:
             logger.error(f"Recovery attempt failed for {component_name}: {e}")
             return False
@@ -1206,19 +1206,19 @@ class HealthCheckService:
 async def get_health_check_service() -> HealthCheckService:
     """
     Get the global health check service instance with thread-safe singleton initialization.
-    
+
     This function implements the async double-checked locking pattern to prevent
     race conditions during singleton initialization.
-    
+
     Returns:
         HealthCheckService: The global health check service instance
     """
     global _health_check_service
-    
+
     # First check (without lock) for performance
     if _health_check_service is not None:
         return _health_check_service
-    
+
     # Acquire lock for thread-safe initialization
     async with _health_service_lock:
         # Second check (with lock) to prevent race condition
@@ -1227,19 +1227,19 @@ async def get_health_check_service() -> HealthCheckService:
             _health_check_service = HealthCheckService()
             await _health_check_service.start_monitoring()
             logger.info("Global health check service initialized and monitoring started")
-    
+
     return _health_check_service
 
 
 async def shutdown_health_check_service() -> None:
     """
     Shutdown the global health check service gracefully.
-    
+
     This function ensures proper cleanup of the health check service,
     including stopping monitoring and releasing resources.
     """
     global _health_check_service
-    
+
     if _health_check_service is not None:
         try:
             logger.info("Shutting down global health check service")

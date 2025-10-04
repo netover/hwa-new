@@ -4,10 +4,12 @@ import logging
 from typing import Any, Dict, List
 
 from resync.core.exceptions import ParsingError
+from resync.core.utils.common_error_handlers import handle_parsing_errors
 
 logger = logging.getLogger(__name__)
 
 
+@handle_parsing_errors("Failed to parse LLM JSON response")
 def parse_llm_json_response(
     text: str, required_keys: List[str]
 ) -> Dict[str, Any]:
@@ -26,28 +28,19 @@ def parse_llm_json_response(
     Returns:
         The parsed and validated JSON data as a dictionary.
     """
-    try:
-        # Basic cleanup: find the first '{' and last '}'
-        start_index = text.find("{")
-        end_index = text.rfind("}")
-        if start_index == -1 or end_index == -1 or start_index > end_index:
-            raise ParsingError("No valid JSON object found in the text.")
+    # Basic cleanup: find the first '{' and last '}'
+    start_index = text.find("{")
+    end_index = text.rfind("}")
+    if start_index == -1 or end_index == -1 or start_index > end_index:
+        raise ParsingError("No valid JSON object found in the text.")
 
-        json_str = text[start_index : end_index + 1]
-        data = json.loads(json_str)
+    json_str = text[start_index : end_index + 1]
+    data = json.loads(json_str)
 
-        missing_keys = [key for key in required_keys if key not in data]
-        if missing_keys:
-            raise ParsingError(
-                f"JSON is missing required keys: {', '.join(missing_keys)}"
-            )
+    missing_keys = [key for key in required_keys if key not in data]
+    if missing_keys:
+        raise ParsingError(
+            f"JSON is missing required keys: {', '.join(missing_keys)}"
+        )
 
-        return data
-
-    except json.JSONDecodeError as e:
-        logger.debug("Failed to decode JSON: %s. Original text: %s", e, text)
-        raise ParsingError(f"Invalid JSON format in the response: {e}") from e
-    except Exception as e:
-        # Catch any other unexpected error during parsing and wrap it
-        logger.error("Unexpected error during JSON parsing: %s", e, exc_info=True)
-        raise ParsingError("An unexpected error occurred while parsing the JSON.") from e
+    return data

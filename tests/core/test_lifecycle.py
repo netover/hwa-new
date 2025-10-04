@@ -1,10 +1,11 @@
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 from fastapi.testclient import TestClient
 
-from resync.main import app
 from resync.core.container import app_container
-from resync.core.interfaces import ITWSClient, IKnowledgeGraph, IAgentManager
+from resync.core.interfaces import IAgentManager, IKnowledgeGraph, ITWSClient
+from resync.main import app
 
 
 @pytest.fixture

@@ -1,43 +1,51 @@
 from __future__ import annotations
 
 import logging
-import redis.asyncio as redis
-from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from resync.api.agents import agents_router
 from resync.api.admin import admin_router
+from resync.api.agents import agents_router
 from resync.api.audit import router as audit_router
 from resync.api.chat import chat_router
+from resync.api.cors_monitoring import cors_monitor_router
 from resync.api.endpoints import api_router
 from resync.api.health import config_router, health_router
+from resync.api.middleware.cors_middleware import (
+    create_cors_middleware,
+)
 from resync.api.rag_upload import router as rag_upload_router
-from resync.api.cors_monitoring import cors_monitor_router
-from resync.core.fastapi_di import inject_container
 from resync.core.exceptions_enhanced import (
     ResyncException,
-    ConfigurationError,
-    NotFoundError,
-    ParsingError,
-    TWSConnectionError,
-    LLMError,
-    InvalidConfigError,
 )
-from fastapi.responses import JSONResponse
+from resync.core.fastapi_di import inject_container
 from resync.core.lifecycle import lifespan
 from resync.core.logger import setup_logging
-from resync.api.middleware.csp_middleware import create_csp_middleware
-from resync.api.middleware.cors_middleware import create_cors_middleware, add_cors_middleware
+from resync.core.utils.error_utils import (
+    create_error_response_from_exception,
+    create_json_response_from_error,
+    register_exception_handlers,
+)
 from resync.settings import settings
+
+# Import CQRS and API Gateway components
+from resync.cqrs.dispatcher import initialize_dispatcher
+from resync.api_gateway.container import setup_dependencies
 
 logger = logging.getLogger(__name__)
 
 # --- Rate Limiter Initialization ---
-from resync.core.rate_limiter import init_rate_limiter, error_handler_rate_limit, dashboard_rate_limit
+from resync.core.rate_limiter import (
+    dashboard_rate_limit,
+    error_handler_rate_limit,
+    init_rate_limiter,
+)
+from resync.core.audit_queue import migrate_from_sqlite
+
 # --- FastAPI App Initialization ---
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -46,59 +54,60 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+# Update the lifespan function to initialize CQRS and dependency injection
+from contextlib import asynccontextmanager
+from resync.core.container import app_container
+from resync.core.interfaces import ITWSClient, IAgentManager, IKnowledgeGraph
+from resync.core.tws_monitor import tws_monitor, get_tws_monitor
+
+
+@asynccontextmanager
+async def lifespan_with_cqrs_and_di(app: FastAPI):
+    # Startup
+    # Get the required services from the DI container
+    tws_client = await app_container.get(ITWSClient)
+    agent_manager = await app_container.get(IAgentManager)
+    knowledge_graph = await app_container.get(IKnowledgeGraph)
+    
+    # Initialize TWS monitor with the TWS client
+    global tws_monitor
+    from resync.core.tws_monitor import get_tws_monitor
+    tws_monitor_instance = await get_tws_monitor(tws_client)
+    
+    # Setup dependency injection
+    setup_dependencies(tws_client, agent_manager, knowledge_graph)
+    
+    # Initialize CQRS dispatcher
+    initialize_dispatcher(tws_client, tws_monitor_instance)
+    
+    yield  # Application runs here
+    
+    # Shutdown
+    # Cleanup happens in the lifecycle manager
+    from resync.core.tws_monitor import shutdown_tws_monitor
+    await shutdown_tws_monitor()
+
+
+# Use the updated lifespan
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.PROJECT_VERSION,
+    description=settings.DESCRIPTION,
+    lifespan=lifespan_with_cqrs_and_di,
+)
+
 # Configure logging after settings are loaded
 setup_logging()
 
-# --- Add CORS Middleware ---
-cors_enabled = getattr(settings, "CORS_ENABLED", True)
-if cors_enabled:
-    cors_environment = getattr(settings, "CORS_ENVIRONMENT", "development")
-    
-    # Parse allowed origins from settings
-    cors_origins_str = getattr(settings, "CORS_ALLOWED_ORIGINS", "")
-    allowed_origins = []
-    if cors_origins_str:
-        allowed_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
-    
-    # Create CORS middleware with environment-specific configuration
-    try:
-        cors_middleware = create_cors_middleware(
-            app=app,
-            environment=cors_environment,
-        )
-        
-        # Override with custom origins if provided
-        if allowed_origins:
-            from resync.api.middleware.cors_config import CORSPolicy, Environment
-            custom_policy = CORSPolicy(
-                environment=Environment(cors_environment),
-                allowed_origins=allowed_origins,
-                allow_all_origins=False,
-                allow_credentials=getattr(settings, "CORS_ALLOW_CREDENTIALS", False),
-                log_violations=getattr(settings, "CORS_LOG_VIOLATIONS", True),
-            )
-            cors_middleware = create_cors_middleware(
-                app=app,
-                environment=cors_environment,
-                custom_policy=custom_policy
-            )
-        
-        app.add_middleware(type(cors_middleware), **cors_middleware.__dict__)
-        logger.info(f"CORS middleware added for environment: {cors_environment}")
-    except Exception as e:
-        logger.error(f"Failed to add CORS middleware: {e}")
-        logger.info("Continuing without CORS middleware")
-else:
-    logger.info("CORS middleware disabled")
+# --- Configure CORS and Security Middleware ---
+from resync.config.cors import configure_cors
+from resync.config.csp import configure_csp
+from resync.config.security import add_additional_security_headers
 
-# --- Add CSP Middleware ---
-# Create and add CSP middleware
-from resync.api.middleware.csp_middleware import CSPMiddleware
-csp_enabled = getattr(settings, "CSP_ENABLED", True)
-if csp_enabled:
-    report_only = getattr(settings, "CSP_REPORT_ONLY", False)
-    app.add_middleware(CSPMiddleware, report_only=report_only)
-    logger.info(f"CSP middleware added (report_only={report_only})")
+configure_cors(app, settings)
+configure_csp(app, settings)
+add_additional_security_headers(app)
 
 # Initialize comprehensive rate limiting
 init_rate_limiter(app)
@@ -111,29 +120,28 @@ register_exception_handlers(app)
 # This should be done before including routers that might use DI
 inject_container(app)
 
-# --- Global Exception Handler (Legacy - kept for backward compatibility) ---
-@app.exception_handler(ResyncException)
-@error_handler_rate_limit
-async def resync_exception_handler(request: Request, exc: ResyncException):
-    """
-    Legacy global exception handler for backward compatibility.
-    New code should use the standardized error response system.
-    """
-    # Use the new standardized error response system
-    from resync.core.utils.error_utils import generate_correlation_id
-    correlation_id = getattr(request.state, 'correlation_id', generate_correlation_id())
-    
-    error_response = create_error_response_from_exception(exc, request, correlation_id)
-    
-    logger.error(
-        f"HTTP Error {error_response.error_code} [{type(exc).__name__}]: {exc} for request {request.method} {request.url.path}",
-        exc_info=settings.DEBUG,
-    )
-    
-    return create_json_response_from_error(error_response)
+# Initialize audit queue if needed
+from resync.core.audit_queue import AsyncAuditQueue
+import asyncio
 
-# --- Template Engine ---
-templates = Jinja2Templates(directory=settings.BASE_DIR / "templates")
+
+
+
+
+# --- Template Engine with Caching ---
+from jinja2 import Environment, FileSystemLoader
+
+# Create Jinja2 environment with caching
+jinja2_env = Environment(
+    loader=FileSystemLoader(str(settings.BASE_DIR / "templates")),
+    auto_reload=getattr(settings, "DEBUG", False),  # Disable for production
+    cache_size=getattr(settings, "JINJA2_TEMPLATE_CACHE_SIZE", 400 if not getattr(settings, "DEBUG", False) else 0),
+    enable_async=True
+)
+
+# Create templates and assign the environment
+templates = Jinja2Templates(directory=str(settings.BASE_DIR / "templates"))
+templates.env = jinja2_env
 
 # --- Mount Routers and Static Files ---
 app.include_router(api_router, prefix="/api")
@@ -153,9 +161,35 @@ app.include_router(
 # Mount static files if directory exists
 static_dir = settings.BASE_DIR / "static"
 if static_dir.exists() and static_dir.is_dir():
+    from fastapi.staticfiles import StaticFiles
+    from starlette.staticfiles import StaticFiles as StarletteStaticFiles
+    
+    import hashlib
+    import os
+
+    class CachedStaticFiles(StarletteStaticFiles):
+        async def get_response(self, path: str, full_path: str):
+            response = await super().get_response(path, full_path)
+            if response.status_code == 200:
+                # Add cache headers for static files using configurable max-age
+                cache_max_age = getattr(settings, "STATIC_CACHE_MAX_AGE", 3600)
+                response.headers["Cache-Control"] = f"public, max-age={cache_max_age}"
+                # Generate ETag based on file metadata (size and modification time) for better performance
+                try:
+                    import os
+                    stat_result = os.stat(full_path)
+                    # Create ETag from file size and modification time
+                    file_metadata = f"{stat_result.st_size}-{int(stat_result.st_mtime)}"
+                    etag_value = f'"{hashlib.md5(file_metadata.encode()).hexdigest()[:16]}"'
+                    response.headers["ETag"] = etag_value
+                except Exception:
+                    # Fallback to path-based hash if file operations fail
+                    response.headers["ETag"] = f'"{hash(full_path)}"'
+            return response
+    
     app.mount(
         "/static",
-        StaticFiles(directory=static_dir),
+        CachedStaticFiles(directory=static_dir),
         name="static",
     )
     logger.info(f"Mounted static directory at: {static_dir}")
@@ -194,6 +228,26 @@ async def csp_violation_report(request: Request):
 async def root():
     """Redirects the root URL to the login page."""
     return RedirectResponse(url="/login", status_code=302)
+
+
+def validate_settings():
+    """Validate critical settings at startup."""
+    if not hasattr(settings, 'WS_MAX_CONNECTION_DURATION'):
+        logger.warning("WS_MAX_CONNECTION_DURATION not set in settings, using default")
+    
+    if not hasattr(settings, 'JINJA2_TEMPLATE_CACHE_SIZE'):
+        logger.warning("JINJA2_TEMPLATE_CACHE_SIZE not set in settings, using default")
+    
+    # Validate Redis pool settings
+    redis_max_size = getattr(settings, "REDIS_POOL_MAX_SIZE", 20)
+    redis_min_size = getattr(settings, "REDIS_POOL_MIN_SIZE", 5)
+    
+    if redis_min_size > redis_max_size:
+        logger.error(f"REDIS_POOL_MIN_SIZE ({redis_min_size}) cannot be greater than REDIS_POOL_MAX_SIZE ({redis_max_size})")
+        raise ValueError("Invalid Redis pool configuration")
+
+# Call validation after settings are loaded
+validate_settings()
 
 # --- Application Entry Point (for direct execution) ---
 if __name__ == "__main__":

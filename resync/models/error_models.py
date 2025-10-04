@@ -47,7 +47,7 @@ class BaseErrorResponse(BaseModel):
     user_friendly_message: Optional[str] = Field(None, description="User-friendly error message")
     troubleshooting_hints: List[str] = Field(default_factory=list, description="Helpful hints for resolving the error")
     request_context: Optional[Dict[str, Any]] = Field(None, description="Request context information")
-    
+
     class Config:
         """Pydantic model configuration."""
         json_encoders = {
@@ -60,7 +60,7 @@ class ValidationErrorResponse(BaseErrorResponse):
     """Error response model for validation errors with detailed field information."""
     category: ErrorCategory = ErrorCategory.VALIDATION
     details: List[ValidationErrorDetail] = Field(..., description="List of validation error details")
-    
+
     @classmethod
     def from_pydantic_errors(cls, errors: List[Dict[str, Any]], correlation_id: Optional[str] = None) -> "ValidationErrorResponse":
         """Create validation error response from Pydantic validation errors."""
@@ -73,7 +73,7 @@ class ValidationErrorResponse(BaseErrorResponse):
                 value=error.get("input"),
                 location="body"  # Default location for most validation errors
             ))
-        
+
         return cls(
             error_code="VALIDATION_ERROR",
             message="Validation failed",
@@ -87,7 +87,7 @@ class ValidationErrorResponse(BaseErrorResponse):
 class AuthenticationErrorResponse(BaseErrorResponse):
     """Error response model for authentication errors."""
     category: ErrorCategory = ErrorCategory.AUTHENTICATION
-    
+
     @classmethod
     def unauthorized(cls, correlation_id: Optional[str] = None) -> "AuthenticationErrorResponse":
         """Create unauthorized error response."""
@@ -99,7 +99,7 @@ class AuthenticationErrorResponse(BaseErrorResponse):
             user_friendly_message="Please authenticate to access this resource.",
             troubleshooting_hints=["Check your credentials", "Ensure your session hasn't expired"]
         )
-    
+
     @classmethod
     def invalid_credentials(cls, correlation_id: Optional[str] = None) -> "AuthenticationErrorResponse":
         """Create invalid credentials error response."""
@@ -118,7 +118,7 @@ class AuthorizationErrorResponse(BaseErrorResponse):
     category: ErrorCategory = ErrorCategory.AUTHORIZATION
     required_permissions: Optional[List[str]] = Field(None, description="Required permissions")
     user_permissions: Optional[List[str]] = Field(None, description="User's current permissions")
-    
+
     @classmethod
     def forbidden(cls, resource: str, correlation_id: Optional[str] = None) -> "AuthorizationErrorResponse":
         """Create forbidden error response."""
@@ -130,7 +130,7 @@ class AuthorizationErrorResponse(BaseErrorResponse):
             user_friendly_message="You don't have permission to access this resource.",
             troubleshooting_hints=["Contact your administrator for access", "Check if you have the required permissions"]
         )
-    
+
     @classmethod
     def insufficient_permissions(cls, required: List[str], user: List[str], correlation_id: Optional[str] = None) -> "AuthorizationErrorResponse":
         """Create insufficient permissions error response."""
@@ -152,7 +152,7 @@ class BusinessLogicErrorResponse(BaseErrorResponse):
     business_rule: Optional[str] = Field(None, description="Business rule that was violated")
     entity_type: Optional[str] = Field(None, description="Entity type involved in the error")
     entity_id: Optional[str] = Field(None, description="Entity identifier")
-    
+
     @classmethod
     def resource_not_found(cls, resource_type: str, resource_id: str, correlation_id: Optional[str] = None) -> "BusinessLogicErrorResponse":
         """Create resource not found error response."""
@@ -166,7 +166,7 @@ class BusinessLogicErrorResponse(BaseErrorResponse):
             entity_type=resource_type,
             entity_id=resource_id
         )
-    
+
     @classmethod
     def invalid_state(cls, entity_type: str, entity_id: str, current_state: str, correlation_id: Optional[str] = None) -> "BusinessLogicErrorResponse":
         """Create invalid state error response."""
@@ -187,7 +187,7 @@ class SystemErrorResponse(BaseErrorResponse):
     category: ErrorCategory = ErrorCategory.SYSTEM
     component: Optional[str] = Field(None, description="System component that failed")
     stack_trace: Optional[str] = Field(None, description="Stack trace (development only)")
-    
+
     @classmethod
     def internal_error(cls, component: str, correlation_id: Optional[str] = None) -> "SystemErrorResponse":
         """Create internal error response."""
@@ -200,7 +200,7 @@ class SystemErrorResponse(BaseErrorResponse):
             troubleshooting_hints=["Please try again in a few moments", "If the problem persists, contact support"],
             component=component
         )
-    
+
     @classmethod
     def configuration_error(cls, component: str, setting: str, correlation_id: Optional[str] = None) -> "SystemErrorResponse":
         """Create configuration error response."""
@@ -221,7 +221,7 @@ class ExternalServiceErrorResponse(BaseErrorResponse):
     service_name: Optional[str] = Field(None, description="Name of the external service")
     service_error_code: Optional[str] = Field(None, description="Error code from the external service")
     service_error_message: Optional[str] = Field(None, description="Error message from the external service")
-    
+
     @classmethod
     def service_unavailable(cls, service_name: str, correlation_id: Optional[str] = None) -> "ExternalServiceErrorResponse":
         """Create service unavailable error response."""
@@ -234,7 +234,7 @@ class ExternalServiceErrorResponse(BaseErrorResponse):
             troubleshooting_hints=["Please try again in a few moments", "Check if the service is under maintenance"],
             service_name=service_name
         )
-    
+
     @classmethod
     def service_error(cls, service_name: str, service_code: str, service_message: str, correlation_id: Optional[str] = None) -> "ExternalServiceErrorResponse":
         """Create external service error response."""
@@ -257,7 +257,7 @@ class RateLimitErrorResponse(BaseErrorResponse):
     limit: Optional[int] = Field(None, description="Rate limit value")
     window: Optional[str] = Field(None, description="Rate limit window")
     retry_after: Optional[int] = Field(None, description="Seconds until retry")
-    
+
     @classmethod
     def rate_limit_exceeded(cls, limit: int, window: str, retry_after: int, correlation_id: Optional[str] = None) -> "RateLimitErrorResponse":
         """Create rate limit exceeded error response."""

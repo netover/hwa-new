@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import cast
 
 from resync.core.di_container import container
 from resync.core.interfaces import IAgentManager, IConnectionManager

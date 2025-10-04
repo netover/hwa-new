@@ -4,17 +4,20 @@ from fastapi import APIRouter, Depends, Request
 
 from resync.core.agent_manager import AgentConfig
 from resync.core.exceptions import NotFoundError
-from resync.core.security import SafeAgentID
 from resync.core.fastapi_di import get_agent_manager
 from resync.core.interfaces import IAgentManager
 from resync.core.rate_limiter import critical_rate_limit
+from resync.core.security import SafeAgentID
+
+# Module-level dependency for agent manager to avoid B008 error
+agent_manager_dependency = Depends(get_agent_manager)
 
 agents_router = APIRouter()
 
 
 @agents_router.get("/", response_model=List[AgentConfig])
 @critical_rate_limit
-async def list_all_agents(request: Request, agent_manager: IAgentManager = Depends(get_agent_manager)):
+async def list_all_agents(request: Request, agent_manager: IAgentManager = agent_manager_dependency):
     """
     Lists the configuration of all available agents.
     """
@@ -26,7 +29,7 @@ async def list_all_agents(request: Request, agent_manager: IAgentManager = Depen
 async def get_agent_details(
     agent_id: SafeAgentID,
     request: Request,
-    agent_manager: IAgentManager = Depends(get_agent_manager),
+    agent_manager: IAgentManager = agent_manager_dependency,
 ):
     """
     Retrieves the detailed configuration of a specific agent by its ID.

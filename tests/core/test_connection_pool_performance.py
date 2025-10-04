@@ -545,4 +545,4 @@ class TestWebSocketConnectionPoolPerformance:
         concurrent_sessions = 10
         
         for batch in range(0, num_sessions, concurrent_sessions):
-            batch_size = min(concurrent
+            batch_size = min(concurrent_sessions, num_sessions - batch)

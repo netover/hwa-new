@@ -18,10 +18,10 @@ Como usar:
 
 import asyncio
 import logging
-from pathlib import Path
 
 # Adiciona o diretório raiz ao sys.path para permitir importações relativas
 import sys
+from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 

@@ -4,13 +4,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from resync.core.exceptions import ToolProcessingError
 from resync.models.tws import SystemStatus
 from resync.services.tws_service import OptimizedTWSClient
 from resync.tool_definitions.tws_tools import (
     TWSStatusTool,
     TWSTroubleshootingTool,
 )
-from resync.core.exceptions import ToolProcessingError
 
 
 @pytest.fixture

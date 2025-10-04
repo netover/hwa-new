@@ -7,94 +7,118 @@ from fastapi import Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 
+from resync.core.exceptions import ResyncException
 from resync.core.utils.error_utils import (
     ErrorResponseBuilder,
-    generate_correlation_id,
-    extract_validation_errors,
     create_error_response_from_exception,
     create_json_response_from_error,
+    extract_validation_errors,
+    generate_correlation_id,
     log_error_response,
-    should_include_stack_trace
 )
-from resync.core.exceptions import ResyncException
-from resync.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
+import time
+
 class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
     """Middleware for handling all exceptions and returning standardized error responses."""
-    
+
     async def dispatch(self, request: Request, call_next: Callable[[Request], Any]) -> Response:
         """Process the request and handle any exceptions that occur."""
         correlation_id = generate_correlation_id()
-        
+        start_time = time.time()
+
         try:
             # Store correlation ID in request state for use in other parts of the application
             request.state.correlation_id = correlation_id
             response = await call_next(request)
-            return response
             
+            # Log request processing time for performance monitoring
+            processing_time = time.time() - start_time
+            if processing_time > 1.0:  # Log slow requests (>1 second)
+                logger.warning(
+                    f"Slow request detected: {request.method} {request.url.path} took {processing_time:.2f}s",
+                    extra={"correlation_id": correlation_id}
+                )
+            
+            return response
+
         except RequestValidationError as exc:
             # Handle FastAPI validation errors
-            return await self._handle_validation_error(request, exc, correlation_id)
-            
+            response = await self._handle_validation_error(request, exc, correlation_id)
+            self._log_error_metrics(request, exc.__class__.__name__, time.time() - start_time)
+            return response
+
         except ResyncException as exc:
             # Handle custom Resync exceptions
-            return await self._handle_resync_exception(request, exc, correlation_id)
-            
+            response = await self._handle_resync_exception(request, exc, correlation_id)
+            self._log_error_metrics(request, exc.__class__.__name__, time.time() - start_time)
+            return response
+
         except Exception as exc:
             # Handle all other exceptions
-            return await self._handle_generic_exception(request, exc, correlation_id)
+            response = await self._handle_generic_exception(request, exc, correlation_id)
+            self._log_error_metrics(request, exc.__class__.__name__, time.time() - start_time)
+            return response
     
+    def _log_error_metrics(self, request: Request, error_type: str, processing_time: float) -> None:
+        """Log error metrics for monitoring and alerting."""
+        try:
+            from resync.core.metrics import runtime_metrics
+            runtime_metrics.record_error(error_type, processing_time)
+        except ImportError:
+            # If metrics module is not available, just log
+            logger.debug(f"Could not record error metrics for {error_type}")
+
     async def _handle_validation_error(
-        self, 
-        request: Request, 
-        exc: RequestValidationError, 
+        self,
+        request: Request,
+        exc: RequestValidationError,
         correlation_id: str
     ) -> JSONResponse:
         """Handle FastAPI validation errors."""
         logger.info(f"Validation error for {request.method} {request.url.path}: {exc}")
-        
+
         builder = ErrorResponseBuilder()
         builder.with_correlation_id(correlation_id)
         builder.with_request_context(request)
-        
+
         validation_errors = extract_validation_errors(exc)
         error_response = builder.build_validation_error(validation_errors)
-        
+
         log_error_response(error_response, exc)
-        
+
         return create_json_response_from_error(error_response)
-    
+
     async def _handle_resync_exception(
-        self, 
-        request: Request, 
-        exc: ResyncException, 
+        self,
+        request: Request,
+        exc: ResyncException,
         correlation_id: str
     ) -> JSONResponse:
         """Handle custom Resync exceptions."""
         logger.error(f"Resync exception for {request.method} {request.url.path}: {exc}")
-        
+
         error_response = create_error_response_from_exception(exc, request, correlation_id)
         log_error_response(error_response, exc)
-        
+
         return create_json_response_from_error(error_response)
-    
+
     async def _handle_generic_exception(
-        self, 
-        request: Request, 
-        exc: Exception, 
+        self,
+        request: Request,
+        exc: Exception,
         correlation_id: str
     ) -> JSONResponse:
         """Handle generic exceptions."""
         logger.error(f"Unhandled exception for {request.method} {request.url.path}: {exc}", exc_info=True)
-        
+
         error_response = create_error_response_from_exception(exc, request, correlation_id)
         log_error_response(error_response, exc)
-        
+
         return create_json_response_from_error(error_response)
 
 
@@ -109,39 +133,39 @@ def add_global_exception_handler(app: Any) -> None:
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Specific handler for validation errors."""
     correlation_id = getattr(request.state, 'correlation_id', generate_correlation_id())
-    
+
     logger.info(f"Validation error for {request.method} {request.url.path}: {exc}")
-    
+
     builder = ErrorResponseBuilder()
     builder.with_correlation_id(correlation_id)
     builder.with_request_context(request)
-    
+
     validation_errors = extract_validation_errors(exc)
     error_response = builder.build_validation_error(validation_errors)
-    
+
     log_error_response(error_response, exc)
-    
+
     return create_json_response_from_error(error_response)
 
 
 async def http_exception_handler(request: Request, exc: Any) -> JSONResponse:
     """Handler for HTTP exceptions from FastAPI."""
     from fastapi import HTTPException
-    
+
     if not isinstance(exc, HTTPException):
         # Not an HTTPException, should not happen but handle gracefully
         correlation_id = getattr(request.state, 'correlation_id', generate_correlation_id())
         error_response = create_error_response_from_exception(exc, request, correlation_id)
         return create_json_response_from_error(error_response)
-    
+
     correlation_id = getattr(request.state, 'correlation_id', generate_correlation_id())
-    
+
     logger.info(f"HTTP exception {exc.status_code} for {request.method} {request.url.path}: {exc.detail}")
-    
+
     builder = ErrorResponseBuilder()
     builder.with_correlation_id(correlation_id)
     builder.with_request_context(request)
-    
+
     # Map HTTP status codes to appropriate error responses
     if exc.status_code == 401:
         error_response = builder.build_authentication_error("unauthorized", details={"detail": exc.detail})
@@ -154,9 +178,9 @@ async def http_exception_handler(request: Request, exc: Any) -> JSONResponse:
     else:
         # Generic error response for other status codes
         error_response = builder.build_system_error("internal_server_error", details={"detail": exc.detail})
-    
+
     log_error_response(error_response, exc)
-    
+
     return create_json_response_from_error(error_response)
 
 
@@ -164,25 +188,25 @@ async def http_exception_handler(request: Request, exc: Any) -> JSONResponse:
 def register_exception_handlers(app: Any) -> None:
     """Register all exception handlers with the FastAPI application."""
     from fastapi import HTTPException
-    
+
     # Add the global exception handler middleware
     add_global_exception_handler(app)
-    
+
     # Register specific exception handlers
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(HTTPException, http_exception_handler)
-    
+
     logger.info("All exception handlers registered")
 
 
 # Context manager for request correlation ID
 class ErrorContext:
     """Context manager for managing error context including correlation IDs."""
-    
+
     def __init__(self, request: Optional[Request] = None):
         self.request = request
         self.correlation_id = None
-        
+
     def __enter__(self):
         """Enter the context and set up correlation ID."""
         if self.request:
@@ -190,7 +214,7 @@ class ErrorContext:
         else:
             self.correlation_id = generate_correlation_id()
         return self
-        
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit the context and handle any exceptions."""
         if exc_val:

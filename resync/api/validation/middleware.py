@@ -2,22 +2,21 @@
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Type, Union, Callable
 from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional, Type
 
-from fastapi import Request, Response, HTTPException
+from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
 from .common import ValidationErrorResponse, ValidationSeverity
-
 
 logger = logging.getLogger(__name__)
 
 
 class ValidationMiddleware:
     """Middleware for automatic request validation using Pydantic models."""
-    
+
     def __init__(
         self,
         validation_models: Optional[Dict[str, Type[BaseModel]]] = None,
@@ -29,7 +28,7 @@ class ValidationMiddleware:
     ):
         """
         Initialize validation middleware.
-        
+
         Args:
             validation_models: Mapping of endpoint paths to validation models
             strict_mode: Whether to enforce strict validation (reject unknown fields)
@@ -44,15 +43,15 @@ class ValidationMiddleware:
         self.enable_logging = enable_logging
         self.custom_validators = custom_validators or {}
         self.error_handler = error_handler
-    
+
     async def __call__(self, request: Request, call_next: Callable) -> Response:
         """
         Process request through validation middleware.
-        
+
         Args:
             request: FastAPI request object
             call_next: Next middleware/handler in chain
-            
+
         Returns:
             Response object
         """
@@ -60,27 +59,27 @@ class ValidationMiddleware:
             # Skip validation for certain paths
             if self._should_skip_validation(request):
                 return await call_next(request)
-            
+
             # Get validation model for this endpoint
             validation_model = self._get_validation_model(request)
             if not validation_model:
                 return await call_next(request)
-            
+
             # Extract and validate request data
             validated_data = await self._validate_request(request, validation_model)
             if validated_data is not None:
                 # Store validated data in request state for later use
                 request.state.validated_data = validated_data
-            
+
             # Process request
             response = await call_next(request)
-            
+
             # Log validation success if enabled
             if self.enable_logging:
                 self._log_validation_success(request, validated_data)
-            
+
             return response
-            
+
         except ValidationError as e:
             return await self._handle_validation_error(request, e)
         except HTTPException:
@@ -89,42 +88,42 @@ class ValidationMiddleware:
         except Exception as e:
             logger.error(f"Validation middleware error: {str(e)}", exc_info=True)
             return await self._handle_internal_error(request, e)
-    
+
     def _should_skip_validation(self, request: Request) -> bool:
         """
         Determine if validation should be skipped for this request.
-        
+
         Args:
             request: FastAPI request object
-            
+
         Returns:
             True if validation should be skipped
         """
         # Skip for health check endpoints
         if request.url.path in ["/health", "/health/"]:
             return True
-        
+
         # Skip for static files
         if request.url.path.startswith(("/static", "/assets", "/favicon.ico")):
             return True
-        
+
         # Skip for documentation endpoints
         if request.url.path.startswith(("/docs", "/redoc", "/openapi.json")):
             return True
-        
+
         # Skip for OPTIONS requests (CORS preflight)
         if request.method == "OPTIONS":
             return True
-        
+
         return False
-    
+
     def _get_validation_model(self, request: Request) -> Optional[Type[BaseModel]]:
         """
         Get validation model for the request endpoint.
-        
+
         Args:
             request: FastAPI request object
-            
+
         Returns:
             Validation model class or None
         """
@@ -132,78 +131,78 @@ class ValidationMiddleware:
         direct_match = self.validation_models.get(request.url.path)
         if direct_match:
             return direct_match
-        
+
         # Pattern matching for parameterized paths
         path = request.url.path
         for pattern, model in self.validation_models.items():
             if self._path_matches_pattern(path, pattern):
                 return model
-        
+
         return None
-    
+
     def _path_matches_pattern(self, path: str, pattern: str) -> bool:
         """
         Check if path matches a parameterized pattern.
-        
+
         Args:
             path: Actual request path
             pattern: Pattern with parameters (e.g., /agents/{agent_id})
-            
+
         Returns:
             True if path matches pattern
         """
         # Simple pattern matching - can be enhanced with regex
         pattern_parts = pattern.split("/")
         path_parts = path.split("/")
-        
+
         if len(pattern_parts) != len(path_parts):
             return False
-        
-        for pattern_part, path_part in zip(pattern_parts, path_parts):
+
+        for pattern_part, path_part in zip(pattern_parts, path_parts, strict=False):
             if pattern_part.startswith("{") and pattern_part.endswith("}"):
                 continue  # Parameter placeholder
             if pattern_part != path_part:
                 return False
-        
+
         return True
-    
+
     async def _validate_request(
-        self, 
-        request: Request, 
+        self,
+        request: Request,
         validation_model: Type[BaseModel]
     ) -> Optional[Dict[str, Any]]:
         """
         Validate request data against the validation model.
-        
+
         Args:
             request: FastAPI request object
             validation_model: Pydantic model class
-            
+
         Returns:
             Validated data or None if no data to validate
         """
         # Determine validation approach based on request method and content type
-        content_type = request.headers.get("content-type", "")
-        
+        request.headers.get("content-type", "")
+
         if request.method in ["POST", "PUT", "PATCH"]:
             return await self._validate_body_data(request, validation_model)
         elif request.method in ["GET", "DELETE"]:
             return self._validate_query_params(request, validation_model)
         else:
             return None
-    
+
     async def _validate_body_data(
-        self, 
-        request: Request, 
+        self,
+        request: Request,
         validation_model: Type[BaseModel]
     ) -> Optional[Dict[str, Any]]:
         """
         Validate request body data.
-        
+
         Args:
             request: FastAPI request object
             validation_model: Pydantic model class
-            
+
         Returns:
             Validated data
         """
@@ -212,10 +211,10 @@ class ValidationMiddleware:
             body = await request.body()
             if not body:
                 return None
-            
+
             # Parse based on content type
             content_type = request.headers.get("content-type", "")
-            
+
             if "application/json" in content_type:
                 data = json.loads(body.decode("utf-8"))
             elif "application/x-www-form-urlencoded" in content_type:
@@ -231,15 +230,15 @@ class ValidationMiddleware:
                     data = json.loads(body.decode("utf-8"))
                 except json.JSONDecodeError:
                     return None
-            
+
             # Apply custom validators if any
             data = self._apply_custom_validators(data, request)
-            
+
             # Validate with Pydantic model
             validated_model = validation_model(**data)
-            
+
             return validated_model.model_dump()
-            
+
         except json.JSONDecodeError as e:
             raise ValidationError.from_exception_data("body", [str(e)])
         except ValidationError:
@@ -247,29 +246,29 @@ class ValidationMiddleware:
         except Exception as e:
             logger.error(f"Body validation error: {str(e)}", exc_info=True)
             raise ValidationError.from_exception_data("body", [str(e)])
-    
+
     def _validate_query_params(
-        self, 
-        request: Request, 
+        self,
+        request: Request,
         validation_model: Type[BaseModel]
     ) -> Optional[Dict[str, Any]]:
         """
         Validate query parameters.
-        
+
         Args:
             request: FastAPI request object
             validation_model: Pydantic model class
-            
+
         Returns:
             Validated data
         """
         try:
             # Extract query parameters
             query_params = dict(request.query_params)
-            
+
             if not query_params:
                 return None
-            
+
             # Convert parameter values
             converted_params = {}
             for key, value in query_params.items():
@@ -281,33 +280,33 @@ class ValidationMiddleware:
                     converted_params[key].append(value)
                 else:
                     converted_params[key] = value
-            
+
             # Apply custom validators if any
             converted_params = self._apply_custom_validators(converted_params, request)
-            
+
             # Validate with Pydantic model
             validated_model = validation_model(**converted_params)
-            
+
             return validated_model.model_dump()
-            
+
         except ValidationError:
             raise
         except Exception as e:
             logger.error(f"Query parameter validation error: {str(e)}", exc_info=True)
             raise ValidationError.from_exception_data("query_params", [str(e)])
-    
+
     def _apply_custom_validators(
-        self, 
-        data: Dict[str, Any], 
+        self,
+        data: Dict[str, Any],
         request: Request
     ) -> Dict[str, Any]:
         """
         Apply custom validators to the data.
-        
+
         Args:
             data: Request data
             request: FastAPI request object
-            
+
         Returns:
             Processed data
         """
@@ -317,13 +316,13 @@ class ValidationMiddleware:
                 data = validator_func(data, request)
             except Exception as e:
                 logger.warning(f"Custom validator '{validator_name}' failed: {str(e)}")
-        
+
         return data
-    
+
     def _log_validation_success(self, request: Request, validated_data: Optional[Dict[str, Any]]) -> None:
         """
         Log successful validation.
-        
+
         Args:
             request: FastAPI request object
             validated_data: Validated request data
@@ -332,19 +331,19 @@ class ValidationMiddleware:
             f"Validation successful - {request.method} {request.url.path} - "
             f"Data validated: {validated_data is not None}"
         )
-    
+
     async def _handle_validation_error(
-        self, 
-        request: Request, 
+        self,
+        request: Request,
         validation_error: ValidationError
     ) -> JSONResponse:
         """
         Handle validation errors.
-        
+
         Args:
             request: FastAPI request object
             validation_error: Pydantic validation error
-            
+
         Returns:
             JSON response with validation error details
         """
@@ -358,7 +357,7 @@ class ValidationMiddleware:
                 "severity": ValidationSeverity.ERROR.value
             }
             error_details.append(error_detail)
-        
+
         # Create error response
         error_response = ValidationErrorResponse(
             error="Validation failed",
@@ -369,44 +368,44 @@ class ValidationMiddleware:
             path=request.url.path,
             method=request.method
         )
-        
+
         # Log validation failure
         if self.enable_logging:
             logger.warning(
                 f"Validation failed - {request.method} {request.url.path} - "
                 f"Errors: {len(error_details)}"
             )
-        
+
         # Use custom error handler if provided
         if self.error_handler:
             try:
                 return await self.error_handler(request, error_response)
             except Exception as e:
                 logger.error(f"Custom error handler failed: {str(e)}", exc_info=True)
-        
+
         # Return standard error response
         return JSONResponse(
             status_code=422,
             content=error_response.dict()
         )
-    
+
     async def _handle_internal_error(
-        self, 
-        request: Request, 
+        self,
+        request: Request,
         error: Exception
     ) -> JSONResponse:
         """
         Handle internal validation errors.
-        
+
         Args:
             request: FastAPI request object
             error: Internal error
-            
+
         Returns:
             JSON response with error details
         """
         logger.error(f"Internal validation error: {str(error)}", exc_info=True)
-        
+
         error_response = ValidationErrorResponse(
             error="Internal validation error",
             message="An internal error occurred during validation.",
@@ -416,7 +415,7 @@ class ValidationMiddleware:
             path=request.url.path,
             method=request.method
         )
-        
+
         return JSONResponse(
             status_code=500,
             content=error_response.dict()
@@ -425,7 +424,7 @@ class ValidationMiddleware:
 
 class ValidationConfig:
     """Configuration for validation middleware."""
-    
+
     def __init__(
         self,
         validation_models: Optional[Dict[str, Type[BaseModel]]] = None,
@@ -440,7 +439,7 @@ class ValidationConfig:
     ):
         """
         Initialize validation configuration.
-        
+
         Args:
             validation_models: Mapping of endpoint paths to validation models
             strict_mode: Whether to enforce strict validation
@@ -468,10 +467,10 @@ def create_validation_middleware(
 ) -> ValidationMiddleware:
     """
     Create validation middleware from configuration.
-    
+
     Args:
         config: Validation configuration
-        
+
     Returns:
         ValidationMiddleware instance
     """
@@ -489,14 +488,14 @@ def create_validation_middleware(
 def validate_json_body(request: Request, model: Type[BaseModel]) -> Dict[str, Any]:
     """
     Validate JSON request body against a Pydantic model.
-    
+
     Args:
         request: FastAPI request object
         model: Pydantic model class
-        
+
     Returns:
         Validated data
-        
+
     Raises:
         ValidationError: If validation fails
     """
@@ -506,7 +505,7 @@ def validate_json_body(request: Request, model: Type[BaseModel]) -> Dict[str, An
             data = json.loads(body.decode("utf-8"))
         else:
             data = json.loads(body)
-        
+
         validated_model = model(**data)
         return validated_model.model_dump()
     except json.JSONDecodeError as e:
@@ -518,19 +517,19 @@ def validate_json_body(request: Request, model: Type[BaseModel]) -> Dict[str, An
 def validate_query_params(request: Request, model: Type[BaseModel]) -> Dict[str, Any]:
     """
     Validate query parameters against a Pydantic model.
-    
+
     Args:
         request: FastAPI request object
         model: Pydantic model class
-        
+
     Returns:
         Validated data
-        
+
     Raises:
         ValidationError: If validation fails
     """
     query_params = dict(request.query_params)
-    
+
     # Convert parameter values
     converted_params = {}
     for key, value in query_params.items():
@@ -541,7 +540,7 @@ def validate_query_params(request: Request, model: Type[BaseModel]) -> Dict[str,
             converted_params[key].append(value)
         else:
             converted_params[key] = value
-    
+
     validated_model = model(**converted_params)
     return validated_model.model_dump()
 
