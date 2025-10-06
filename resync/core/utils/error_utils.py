@@ -313,23 +313,19 @@ def create_error_response_from_exception(
     request: Optional[Request] = None,
     correlation_id: Optional[str] = None
 ) -> BaseErrorResponse:
-    """Create standardized error response from any exception."""
+    """Create standardized error response from any exception with security considerations."""
     from resync.core.exceptions_enhanced import (
         ResyncException as EnhancedResyncException,
         DatabaseError as EnhancedDatabaseError,
-        InvalidConfigError as EnhancedInvalidConfigError,
         LLMError as EnhancedLLMError,
         NotFoundError as EnhancedNotFoundError,
-        ParsingError as EnhancedParsingError,
         TWSConnectionError as EnhancedTWSConnectionError,
     )
     
     from resync.core.exceptions import (
         DatabaseError,
-        InvalidConfigError,
         LLMError,
         NotFoundError,
-        ParsingError,
         ResyncException as BaseResyncException,
         TWSConnectionError,
     )
@@ -344,66 +340,22 @@ def create_error_response_from_exception(
     if request:
         builder.with_request_context(request)
 
-    builder.with_stack_trace(should_include_stack_trace())
+    # Enhanced security: only include stack traces in non-production environments
+    is_production = getattr(settings, 'APP_ENV', 'development') == 'production'
+    include_stack_trace = should_include_stack_trace() and not is_production
+    
+    # In production, sanitize error messages to prevent information disclosure
+    if is_production:
+        # Don't include raw exception details in production
+        builder.with_stack_trace(include_stack_trace and is_production is False)
+    else:
+        builder.with_stack_trace(include_stack_trace)
 
     # Handle enhanced Resync exceptions with richer information
     if isinstance(exception, EnhancedResyncException):
-        # Use the enhanced exception's information to create a more detailed response
-        error_code = exception.error_code
-        message = exception.message
-        user_friendly_message = exception.user_friendly_message
-        details = exception.details
-        severity = exception.severity
-        category = exception.error_category
-        
-        # Map the enhanced exception to the appropriate response type based on category
-        if exception.error_category == "VALIDATION":
-            return builder.build_validation_error(
-                [{"loc": ["validation"], "msg": message, "type": "value_error"}], 
-                user_friendly_message
-            )
-        elif exception.error_category == "BUSINESS_LOGIC":
-            if isinstance(exception, EnhancedNotFoundError):
-                return builder.build_business_logic_error(
-                    "resource_not_found", 
-                    resource="Resource",
-                    user_friendly_message=user_friendly_message,
-                    details=details
-                )
-            else:
-                return builder.build_business_logic_error(
-                    "invalid_operation",
-                    user_friendly_message=user_friendly_message,
-                    details=details
-                )
-        elif exception.error_category == "EXTERNAL_SERVICE":
-            service_name = details.get("service", "External Service") if details else "External Service"
-            return builder.build_external_service_error(
-                service_name,
-                user_friendly_message=user_friendly_message,
-                details=details
-            )
-        elif exception.error_category == "SYSTEM":
-            return builder.build_system_error(
-                "internal_server_error", 
-                user_friendly_message=user_friendly_message,
-                details=details,
-                exception=exception
-            )
-        else:
-            # For other enhanced exceptions
-            return builder.build_system_error(
-                "internal_server_error", 
-                exception=exception,
-                user_friendly_message=user_friendly_message,
-                details=details
-            )
+        return _handle_enhanced_resync_exception(builder, exception, is_production)
+    
     # Handle base Resync exceptions for backward compatibility
-    elif isinstance(exception, (InvalidConfigError, EnhancedInvalidConfigError, ParsingError, EnhancedParsingError)):
-        return builder.build_validation_error(
-            [{"loc": ["config"], "msg": str(exception), "type": "value_error"}], 
-            str(exception)
-        )
     elif isinstance(exception, (TWSConnectionError, EnhancedTWSConnectionError)):
         return builder.build_external_service_error("TWS", "service_error")
     elif isinstance(exception, (LLMError, EnhancedLLMError)):
@@ -414,10 +366,104 @@ def create_error_response_from_exception(
         return builder.build_business_logic_error("resource_not_found", resource="Resource")
     elif isinstance(exception, BaseResyncException):
         # Generic base ResyncException - create system error
-        return builder.build_system_error("internal_server_error", exception=exception)
+        return builder.build_system_error("internal_server_error", exception=exception if not is_production else None)
     else:
         # Unknown exception - create system error
-        return builder.build_system_error("internal_server_error", exception=exception)
+        return builder.build_system_error("internal_server_error", exception=exception if not is_production else None)
+
+
+def _handle_enhanced_resync_exception(builder: ErrorResponseBuilder, exception: Exception, is_production: bool) -> BaseErrorResponse:
+    """Handle enhanced Resync exceptions with rich information."""
+    # Use the enhanced exception's information to create a more detailed response
+    message = exception.message
+    user_friendly_message = exception.user_friendly_message
+    details = exception.details.copy()  # Copy to avoid modifying original
+    
+    # Sanitize details in production to prevent sensitive data leakage
+    if is_production:
+        # Remove potentially sensitive information
+        details.pop('original_exception', None)
+        if 'details' in details:
+            # Further sanitize nested details
+            if isinstance(details['details'], dict):
+                details['details'] = {k: v for k, v in details['details'].items() 
+                                    if k not in ['password', 'token', 'credentials', 'key']}
+    
+    # Map the enhanced exception to the appropriate response type based on category
+    if exception.error_category == "VALIDATION":
+        return builder.build_validation_error(
+            [{"loc": ["validation"], "msg": sanitize_error_message(message), "type": "value_error"}], 
+            sanitize_error_message(user_friendly_message)
+        )
+    elif exception.error_category == "BUSINESS_LOGIC":
+        return _handle_business_logic_exception(builder, exception, message, user_friendly_message, details, is_production)
+    elif exception.error_category == "EXTERNAL_SERVICE":
+        service_name = details.get("service", "External Service") if details else "External Service"
+        return builder.build_external_service_error(
+            service_name,
+            user_friendly_message=sanitize_error_message(user_friendly_message),
+            details=details
+        )
+    elif exception.error_category == "SYSTEM":
+        return builder.build_system_error(
+            "internal_server_error", 
+            user_friendly_message=sanitize_error_message(user_friendly_message),
+            details=details,
+            exception=exception if not is_production else None
+        )
+    else:
+        # For other enhanced exceptions
+        return builder.build_system_error(
+            "internal_server_error", 
+            exception=exception if not is_production else None,
+            user_friendly_message=sanitize_error_message(user_friendly_message),
+            details=details
+        )
+
+
+def _handle_business_logic_exception(builder: ErrorResponseBuilder, exception: Exception, message: str, 
+                                   user_friendly_message: str, details: dict, is_production: bool) -> BaseErrorResponse:
+    """Handle business logic exceptions."""
+    from resync.core.exceptions_enhanced import NotFoundError as EnhancedNotFoundError
+    
+    if isinstance(exception, EnhancedNotFoundError):
+        return builder.build_business_logic_error(
+            "resource_not_found", 
+            resource="Resource",
+            user_friendly_message=sanitize_error_message(user_friendly_message),
+            details=details
+        )
+    else:
+        return builder.build_business_logic_error(
+            "invalid_operation",
+            user_friendly_message=sanitize_error_message(user_friendly_message),
+            details=details
+        )
+
+
+def sanitize_error_message(message: str) -> str:
+    """
+    Sanitize error messages to prevent sensitive information disclosure.
+    """
+    if not message:
+        return "An error occurred"
+    
+    # Replace potentially sensitive information
+    sanitized = message
+    sensitive_patterns = [
+        r'password\s*[:=]\s*[\w\d!@#$%^&*()]+',
+        r'token\s*[:=]\s*[A-Za-z0-9_\-\.]+',
+        r'key\s*[:=]\s*[A-Za-z0-9_\-]+',
+        r'api_key\s*[:=]\s*[A-Za-z0-9_\-]+',
+        r'credential\s*[:=]\s*[^\s,;]+',
+        r'connection_string[:=]\s*[^\s,;]+'
+    ]
+    
+    import re
+    for pattern in sensitive_patterns:
+        sanitized = re.sub(pattern, '[REDACTED]', sanitized, flags=re.IGNORECASE)
+    
+    return sanitized
 
 
 def create_json_response_from_error(error_response: BaseErrorResponse) -> JSONResponse:
@@ -434,7 +480,6 @@ def create_json_response_from_error(error_response: BaseErrorResponse) -> JSONRe
 def register_exception_handlers(app):
     """Register standardized exception handlers for the FastAPI application."""
     from fastapi.exceptions import RequestValidationError
-    from fastapi.responses import JSONResponse
     from starlette.exceptions import HTTPException as StarletteHTTPException
     from resync.core.exceptions import ResyncException as BaseResyncException
     from resync.core.exceptions_enhanced import ResyncException as EnhancedResyncException

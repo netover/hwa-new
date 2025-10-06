@@ -1,0 +1,70 @@
+# LiteLLM Configuration for Resync TWS Application
+# This configuration defines model routing rules and provider settings
+# for both local (Ollama) and remote (OpenAI, etc.) LLM usage
+
+model_list:
+  # Ollama models (for local usage)
+  - model_name: "ollama/mistral"
+    litellm_params:
+      model: "ollama/mistral"
+      api_base: "http://localhost:11434"
+      temperature: 0.7
+  - model_name: "ollama/llama3"
+    litellm_params:
+      model: "ollama/llama3"
+      api_base: "http://localhost:11434"
+      temperature: 0.7
+
+  # OpenAI models (for remote usage)
+  - model_name: "gpt-4o"
+    litellm_params:
+      model: "gpt-4o"
+      api_key: "{APP_LLM_API_KEY}"  # Will be replaced by environment variable
+      temperature: 0.3
+  - model_name: "gpt-4o-mini"
+    litellm_params:
+      model: "gpt-4o-mini"
+      api_key: "{APP_LLM_API_KEY}"
+      temperature: 0.3
+
+  # Default fallback model
+  - model_name: "fallback-model"
+    litellm_params:
+      model: "gpt-4o-mini"
+      api_key: "{APP_LLM_API_KEY}"
+      temperature: 0.5
+
+# Model aliases for easier referencing in code
+model_aliases:
+  "tws-troubleshooting": "gpt-4o"
+  "tws-basic-query": "gpt-4o-mini"
+  "tws-local-model": "ollama/mistral"
+
+# Router settings for model selection
+router_settings:
+  # Model group aliases for different use cases
+  model_group_alias:
+    - {group_name: "tws-general", list_of_model_names: ["gpt-4o-mini", "ollama/mistral"]}
+    - {group_name: "tws-troubleshooting", list_of_model_names: ["gpt-4o", "gpt-4o-mini"]}
+    - {group_name: "tws-local", list_of_model_names: ["ollama/mistral", "ollama/llama3"]}
+
+  # Default fallback settings
+  fallbacks:
+    - {type: "model", fallbacks: ["gpt-4o-mini", "gpt-4o"]}
+  
+  # Timeout settings
+  timeout: 600  # 10 minutes for complex TWS operations
+
+# Custom settings for TWS-specific usage
+general_settings:
+  # Enable caching for faster repeated queries
+  cache:
+    type: "redis"  # Use Redis for distributed caching
+    host: "{APP_REDIS_URL}"
+    enabled: true
+  
+  # Enable detailed logging for debugging
+  master_key: "{APP_LITELLM_MASTER_KEY}"  # Optional security measure
+  
+  # Cost tracking
+  database_url: "{APP_DATABASE_URL}"  # For storing usage analytics

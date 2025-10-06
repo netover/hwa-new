@@ -14,6 +14,7 @@ from resync.core.async_cache import AsyncTTLCache
 from resync.core.llm_monitor import llm_cost_monitor
 from resync.core.utils.llm import call_llm
 from resync.settings import settings
+from resync.core.litellm_init import get_litellm_router
 
 # Define the circuit breaker for LLM API calls
 llm_api_breaker = pybreaker.CircuitBreaker(
@@ -88,7 +89,7 @@ class TWS_LLMOptimizer:
 
     def _select_model(self, query: str, context: dict) -> str:
         """
-        Select appropriate model based on query complexity.
+        Select appropriate model based on query complexity and availability.
 
         Args:
             query: User query
@@ -112,6 +113,35 @@ class TWS_LLMOptimizer:
         is_complex = any(
             indicator in query_lower for indicator in complexity_indicators
         )
+        
+        # Check if we have a LiteLLM router available for advanced model selection
+        router = get_litellm_router()
+        if router:
+            # Use LiteLLM's model group feature if available
+            if is_complex:
+                # Try to use a TWS troubleshooting model group if defined
+                try:
+                    from litellm import get_available_models
+                    available_models = get_available_models()
+                    if any("gpt-4" in model for model in available_models):
+                        return self.model_routing["troubleshooting"]
+                    elif any("gpt-4" in model for model in self.model_routing.values()):
+                        return self.model_routing["complex"]
+                except:
+                    pass  # Fall back to normal selection
+            
+            # Check for local model preference
+            if not is_complex and "local" in settings.ENVIRONMENT.lower():
+                # Prioritize local Ollama models for non-complex queries in local environments
+                try:
+                    # Check if Ollama is available
+                    import httpx
+                    with httpx.Client(timeout=5.0) as client:
+                        response = client.get(f"{settings.LLM_ENDPOINT}/api/tags")  # Assuming Ollama endpoint
+                        if response.status_code == 200:
+                            return "ollama/mistral"  # Use local model for simple queries
+                except:
+                    pass  # Ollama not available, continue with normal selection
 
         if is_complex:
             return self.model_routing["complex"]
@@ -126,7 +156,7 @@ class TWS_LLMOptimizer:
         stream: bool = False,
     ) -> Any:
         """
-        Get optimized LLM response with caching and model routing.
+        Get optimized LLM response with LiteLLM integration, caching and model routing.
 
         Args:
             query: User query
@@ -185,15 +215,22 @@ class TWS_LLMOptimizer:
                         prompt,
                         model=model,
                         max_tokens=500 if template_key != "troubleshooting" else 1000,
+                        # Pass settings-based configuration to take advantage of LiteLLM features
+                        api_base=getattr(settings, "LLM_ENDPOINT", None),
+                        api_key=settings.LLM_API_KEY if settings.LLM_API_KEY != "your_default_api_key_here" else None
                     )
 
             response_time = time.time() - start_time
 
             # Track costs and performance
+            # Try to get actual token counts from LiteLLM if available
+            input_tokens = len(prompt.split()) * 1.3  # Fallback estimate
+            output_tokens = len(str(response).split()) * 1.3  # Fallback estimate
+
             await llm_cost_monitor.track_request(
                 model=model,
-                input_tokens=len(prompt.split()) * 1.3,  # Rough estimate
-                output_tokens=len(str(response).split()) * 1.3,
+                input_tokens=int(input_tokens),
+                output_tokens=int(output_tokens),
                 response_time=response_time,
                 success=True,
             )
@@ -249,7 +286,9 @@ class TWS_LLMOptimizer:
                 messages=messages,
                 stream=True,
                 max_tokens=1000,
-                temperature=0.7
+                temperature=0.7,
+                api_base=getattr(settings, "LLM_ENDPOINT", None),
+                api_key=settings.LLM_API_KEY if settings.LLM_API_KEY != "your_default_api_key_here" else None
             )
 
             full_response = ""
@@ -264,15 +303,9 @@ class TWS_LLMOptimizer:
 
             return full_response
 
-        except ImportError:
-            # Fallback to non-streaming if litellm not available
-            logger.warning("litellm not available, using fallback LLM call")
-            result = await call_llm(prompt, model=model, max_tokens=1000)
-            await self.response_cache.set(cache_key, result)
-            return result
         except Exception as e:
             logger.error(f"Error in LLM streaming: {e}")
-            # Fallback to original method
+            # Fallback to original method (which now also uses LiteLLM)
             result = await call_llm(prompt, model=model, max_tokens=1000)
             await self.response_cache.set(cache_key, result)
             return result

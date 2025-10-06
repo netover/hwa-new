@@ -2,24 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
-import platform
 import psutil
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import aiofiles
-import httpx
-import redis.asyncio as redis
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
-
 from resync.core.health_models import (
     HealthStatus, ComponentType, ComponentHealth, HealthCheckResult,
-    HealthCheckConfig, HealthStatusHistory, HealthCheckError,
-    get_status_color, get_status_description
+    HealthCheckConfig, HealthStatusHistory
 )
 from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.core.cache_hierarchy import get_cache_hierarchy
@@ -511,7 +503,7 @@ class HealthCheckService:
         try:
             # Get current metrics from TWS monitor
             metrics = tws_monitor.get_current_metrics()
-            alerts = tws_monitor.get_alerts(limit=5)
+            # alerts = tws_monitor.get_alerts(limit=5)  # Removed unused variable
             response_time = (time.time() - start_time) * 1000
             
             # Determine status based on metrics

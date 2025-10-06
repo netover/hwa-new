@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from contextlib import asynccontextmanager
@@ -183,9 +184,13 @@ class OptimizedTWSClient:
             TWSConnectionError: If the server is unreachable, unresponsive, or times out.
         """
         try:
+            # Get client from connection pool or use direct client
+            client = await self._get_http_client()
+            if client is None:
+                raise TWSConnectionError("No HTTP client available for ping")
+
             # Use a simple HEAD request to the base URL to test connectivity
-            # The client already has the base_url configured with protocol
-            response = await self.client.head("", timeout=5.0)
+            response = await client.head("", timeout=5.0)
             response.raise_for_status()
         except httpx.TimeoutException as e:
             logger.warning("TWS server ping timed out")
@@ -193,7 +198,7 @@ class OptimizedTWSClient:
         except httpx.RequestError as e:
             logger.error(f"TWS server ping failed: {e}")
             raise TWSConnectionError(
-                f"TWS server unreachable: {e.request.url}", original_exception=e
+                f"TWS server unreachable", original_exception=e
             )
         except Exception as e:
             logger.error(f"Unexpected error during TWS ping: {e}")
@@ -357,6 +362,91 @@ class OptimizedTWSClient:
                     results[job_id] = job_status
 
         return results
+
+    async def validate_connection(
+        self, 
+        host: str = None, 
+        port: int = None, 
+        user: str = None, 
+        password: str = None
+    ) -> dict[str, Any]:
+        """
+        Validates TWS connection parameters without changing the current connection.
+        
+        Args:
+            host: TWS server hostname (optional, uses current if not provided)
+            port: TWS server port (optional, uses current if not provided)
+            user: TWS username (optional, uses current if not provided)
+            password: TWS password (optional, uses current if not provided)
+            
+        Returns:
+            Dictionary with validation result
+        """
+        # Use current values if not provided
+        test_host = host or self.hostname
+        test_port = port or self.port
+        test_user = user or self.username
+        test_password = password or self.password
+        
+        try:
+            # Create a temporary client with the test parameters
+            test_base_url = f"http://{test_host}:{test_port}/twsd"
+            test_client = httpx.AsyncClient(
+                base_url=test_base_url,
+                auth=(test_user, test_password),
+                verify=True,
+                timeout=httpx.Timeout(
+                    connect=getattr(settings, 'TWS_CONNECT_TIMEOUT', 10),
+                    read=getattr(settings, 'TWS_READ_TIMEOUT', 30),
+                    write=getattr(settings, 'TWS_WRITE_TIMEOUT', 30),
+                    pool=getattr(settings, 'TWS_POOL_TIMEOUT', 30),
+                ),
+            )
+            
+            # Try to establish a connection
+            response = await test_client.head("", timeout=5.0)
+            response.raise_for_status()
+            
+            await test_client.aclose()
+            
+            logger.info(f"TWS connection validation successful for {test_host}:{test_port}")
+            return {
+                "valid": True,
+                "message": f"Successfully validated connection to {test_host}:{test_port}",
+                "host": test_host,
+                "port": test_port
+            }
+            
+        except httpx.TimeoutException as e:
+            logger.warning(f"TWS connection validation timed out for {test_host}:{test_port}")
+            return {
+                "valid": False,
+                "message": f"TWS connection validation timed out: {e}",
+                "host": test_host,
+                "port": test_port
+            }
+        except httpx.RequestError as e:
+            logger.error(f"TWS connection validation failed for {test_host}:{test_port} - {e}")
+            await test_client.aclose()  # Make sure client is closed in case of error
+            return {
+                "valid": False,
+                "message": f"TWS connection validation failed: {e}",
+                "host": test_host,
+                "port": test_port
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error during TWS connection validation: {e}")
+            if 'test_client' in locals():
+                try:
+                    await test_client.aclose()
+                except:
+                    pass  # Ignore errors during cleanup
+            return {
+                "valid": False,
+                "message": f"Unexpected error during TWS connection validation: {e}",
+                "host": test_host,
+                "port": test_port
+            }
 
     async def close(self) -> None:
         """Closes the underlying HTTPX client and its connections."""

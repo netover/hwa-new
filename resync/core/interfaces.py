@@ -183,6 +183,16 @@ class ITWSClient(Protocol):
         """Checks if the TWS client is currently connected."""
         ...
 
+    async def validate_connection(
+        self, 
+        host: str = None, 
+        port: int = None, 
+        user: str = None, 
+        password: str = None
+    ) -> dict[str, bool]:
+        """Validates TWS connection parameters."""
+        ...
+
     async def close(self) -> None:
         """Closes the TWS client connection."""
         ...

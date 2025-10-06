@@ -290,11 +290,18 @@ class AuditLockContext:
                 )  # type: ignore[misc]
 
             if result == 1:
-                logger.debug(f"Released audit lock: {self.lock_key}")
+                logger.debug(f"Successfully released audit lock: {self.lock_key}")
             else:
-                logger.warning(
-                    f"Failed to release audit lock: {self.lock_key} (may have expired)"
-                )
+                # Check current lock value to determine if it was already expired or not owned
+                current_value = await self.client.get(self.lock_key)
+                if current_value is not None:
+                    logger.warning(
+                        f"Failed to release audit lock: {self.lock_key} (not owned by this instance)"
+                    )
+                else:
+                    logger.debug(
+                        f"Audit lock {self.lock_key} was already expired/removed"
+                    )
 
         except RedisError as e:
             logger.error("Redis error during lock release: %s", e)
@@ -304,6 +311,7 @@ class AuditLockContext:
             raise AuditError(f"Value error during lock release: {e}") from e
         except Exception as e:
             logger.error("Unexpected error during lock release: %s", e)
+            logger.error(f"Lock details - Key: {self.lock_key}, Value: {self.lock_value[:8] if self.lock_value else None}")
             raise AuditError(f"Unexpected error during lock release: {e}") from e
 
     async def release(self) -> None:
@@ -332,5 +340,12 @@ async def distributed_audit_lock(
         yield
 
 
-# Global instance for easy access
-audit_lock = DistributedAuditLock()
+# For backward compatibility, provide a shared instance if needed
+# This should be initialized during application startup and injected
+# as a dependency rather than using global state
+def get_audit_lock() -> DistributedAuditLock:
+    """
+    Factory function to get an audit lock instance.
+    This helps with dependency injection and testing.
+    """
+    return DistributedAuditLock()

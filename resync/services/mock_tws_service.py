@@ -338,6 +338,47 @@ class MockTWSClient:
 
         return jobs
 
+    async def validate_connection(
+        self, 
+        host: str = None, 
+        port: int = None, 
+        user: str = None, 
+        password: str = None
+    ) -> dict[str, bool]:
+        """
+        Mocks validating TWS connection parameters.
+        
+        Args:
+            host: TWS server hostname (optional)
+            port: TWS server port (optional)
+            user: TWS username (optional)
+            password: TWS password (optional)
+            
+        Returns:
+            Dictionary with validation result
+        """
+        # Simulate validation process
+        await asyncio.sleep(0.05)  # Simulate short network delay for validation
+        
+        # Get validation config from mock data or default to success
+        validation_config = self.mock_data.get("validation_config", {})
+        validation_success = validation_config.get("connection_valid", True)
+        
+        if validation_success:
+            return {
+                "valid": True,
+                "message": f"Successfully validated connection to mock TWS server",
+                "host": host or "mock-tws-server",
+                "port": port or 31111
+            }
+        else:
+            return {
+                "valid": False,
+                "message": "Mock TWS connection validation failed as configured",
+                "host": host or "mock-tws-server",
+                "port": port or 31111
+            }
+
     async def close(self) -> None:
         """
         Mocks closing the client connection.

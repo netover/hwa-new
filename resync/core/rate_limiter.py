@@ -22,16 +22,7 @@ from resync.settings import settings
 logger = logging.getLogger(__name__)
 
 
-class RateLimitConfig:
-    """Configuration for different rate limiting tiers."""
 
-    # Rate limit tiers (requests per minute)
-    PUBLIC_ENDPOINTS = f"{settings.RATE_LIMIT_PUBLIC_PER_MINUTE}/minute"
-    AUTHENTICATED_ENDPOINTS = f"{settings.RATE_LIMIT_AUTHENTICATED_PER_MINUTE}/minute"
-    CRITICAL_ENDPOINTS = f"{settings.RATE_LIMIT_CRITICAL_PER_MINUTE}/minute"
-    ERROR_HANDLER = f"{settings.RATE_LIMIT_ERROR_HANDLER_PER_MINUTE}/minute"
-    WEBSOCKET = f"{settings.RATE_LIMIT_WEBSOCKET_PER_MINUTE}/minute"
-    DASHBOARD = f"{settings.RATE_LIMIT_DASHBOARD_PER_MINUTE}/minute"
 
 
 def get_user_identifier(request: Request) -> str:
@@ -122,13 +113,13 @@ def create_rate_limit_exceeded_response(
 # Decorator functions for different endpoint categories
 def public_rate_limit(func: Callable) -> Callable:
     """Decorator for public endpoints with standard rate limiting."""
-    return limiter.limit(RateLimitConfig.PUBLIC_ENDPOINTS)(func)
+    return limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_PER_MINUTE}/minute")(func)
 
 
 def authenticated_rate_limit(func: Callable) -> Callable:
     """Decorator for authenticated endpoints with higher rate limiting."""
     return limiter.limit(
-        RateLimitConfig.AUTHENTICATED_ENDPOINTS,
+        f"{settings.RATE_LIMIT_AUTHENTICATED_PER_MINUTE}/minute",
         key_func=get_authenticated_user_identifier
     )(func)
 
@@ -143,17 +134,17 @@ def critical_rate_limit(func: Callable) -> Callable:
 
 def error_handler_rate_limit(func: Callable) -> Callable:
     """Decorator for error handler endpoints."""
-    return limiter.limit(RateLimitConfig.ERROR_HANDLER)(func)
+    return limiter.limit(f"{settings.RATE_LIMIT_ERROR_HANDLER_PER_MINUTE}/minute")(func)
 
 
 def websocket_rate_limit(func: Callable) -> Callable:
     """Decorator for WebSocket endpoints."""
-    return limiter.limit(RateLimitConfig.WEBSOCKET)(func)
+    return limiter.limit(f"{settings.RATE_LIMIT_WEBSOCKET_PER_MINUTE}/minute")(func)
 
 
 def dashboard_rate_limit(func: Callable) -> Callable:
     """Decorator for dashboard endpoints."""
-    return limiter.limit(RateLimitConfig.DASHBOARD)(func)
+    return limiter.limit(f"{settings.RATE_LIMIT_DASHBOARD_PER_MINUTE}/minute")(func)
 
 
 # Custom rate limit middleware for adding headers to all responses
@@ -198,6 +189,6 @@ def init_rate_limiter(app):
     app.add_middleware(CustomRateLimitMiddleware, limiter=limiter)
 
     logger.info("Rate limiting initialized with Redis backend")
-    logger.info(f"Public endpoints: {RateLimitConfig.PUBLIC_ENDPOINTS}")
-    logger.info(f"Authenticated endpoints: {RateLimitConfig.AUTHENTICATED_ENDPOINTS}")
-    logger.info(f"Critical endpoints: {RateLimitConfig.CRITICAL_ENDPOINTS}")
+    logger.info(f"Public endpoints: {settings.RATE_LIMIT_PUBLIC_PER_MINUTE}/minute")
+    logger.info(f"Authenticated endpoints: {settings.RATE_LIMIT_AUTHENTICATED_PER_MINUTE}/minute")
+    logger.info(f"Critical endpoints: {settings.RATE_LIMIT_CRITICAL_PER_MINUTE}/minute")

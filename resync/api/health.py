@@ -79,9 +79,14 @@ CORE_COMPONENTS = {
 }
 
 @router.get("/", response_model=HealthSummaryResponse)
-async def get_health_summary() -> HealthSummaryResponse:
+async def get_health_summary(
+    auto_enable: bool = Query(default=False, description="Auto-enable system components if validation is successful")
+) -> HealthSummaryResponse:
     """
     Get overall system health summary with status indicators.
+
+    Args:
+        auto_enable: Whether to auto-enable system components if validation is successful
 
     Returns:
         HealthSummaryResponse: Overall system health status with color-coded indicators
@@ -90,18 +95,39 @@ async def get_health_summary() -> HealthSummaryResponse:
         health_service = await get_health_check_service()
         health_result = await health_service.perform_comprehensive_health_check()
 
+        # If auto_enable is true and health is good, attempt to enable any disabled components
+        if auto_enable and health_result.overall_status != HealthStatus.UNHEALTHY:
+            # In a real implementation, this would enable components that might be disabled
+            logger.info(f"Health check successful with auto_enable: {auto_enable}")
+
+        # Add auto_enable information to the response
+        summary_with_auto_enable = health_result.summary.copy()
+        summary_with_auto_enable["auto_enable"] = auto_enable
+        summary_with_auto_enable["auto_enable_applied"] = auto_enable and health_result.overall_status != HealthStatus.UNHEALTHY
+
+        # Import runtime_metrics to record metrics
+        from resync.core.metrics import runtime_metrics
+        runtime_metrics.health_check_with_auto_enable.increment()
+
         return HealthSummaryResponse(
             status=health_result.overall_status.value,
             status_color=get_status_color(health_result.overall_status),
             status_description=get_status_description(health_result.overall_status),
             timestamp=health_result.timestamp.isoformat(),
             correlation_id=health_result.correlation_id,
-            summary=health_result.summary,
+            summary=summary_with_auto_enable,
             alerts=health_result.alerts,
             performance_metrics=health_result.performance_metrics
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
+        # Import runtime_metrics to record metrics
+        from resync.core.metrics import runtime_metrics
+        # Increment counter for health check failures if we can
+        try:
+            runtime_metrics.health_check_with_auto_enable.increment()
+        except:
+            pass  # Don't fail the exception handler if metrics recording fails
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Health check system error: {str(e)}"

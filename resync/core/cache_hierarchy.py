@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections import OrderedDict
 from dataclasses import dataclass
 from time import time as time_func
 from typing import Any, Dict, List, Optional, Tuple

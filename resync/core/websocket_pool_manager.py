@@ -9,16 +9,27 @@ from typing import Any, Dict, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 
 from resync.core.metrics import runtime_metrics
-from resync.settings import settings
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
+
+
+def _get_settings():
+    """Lazy import of settings to avoid circular imports."""
+    from resync.settings import settings
+    return settings
 
 @dataclass
 class WebSocketConnectionInfo:
     """Information about a WebSocket connection."""
     client_id: str
     websocket: WebSocket
+    connected_at: datetime
+    last_activity: datetime
+    message_count: int = 0
+    bytes_sent: int = 0
+    bytes_received: int = 0
+    is_healthy: bool = True
     connected_at: datetime
     last_activity: datetime
     message_count: int = 0
@@ -112,11 +123,12 @@ class WebSocketPoolManager:
         """Periodic cleanup loop for WebSocket connections."""
         while not self._shutdown:
             try:
-                await asyncio.sleep(settings.WS_POOL_CLEANUP_INTERVAL)
+                await asyncio.sleep(_get_settings().WS_POOL_CLEANUP_INTERVAL)
                 await self._cleanup_connections()
             except asyncio.CancelledError:
                 break
             except Exception as e:
+                logger.error(f"Error in WebSocket cleanup loop: {e}")
                 logger.error(f"Error in WebSocket cleanup loop: {e}")
 
     async def _cleanup_connections(self) -> None:
@@ -128,7 +140,7 @@ class WebSocketPoolManager:
             for client_id, conn_info in self.connections.items():
                 # Check for stale connections (no activity for timeout period)
                 time_since_activity = (current_time - conn_info.last_activity).total_seconds()
-                if time_since_activity > settings.WS_CONNECTION_TIMEOUT:
+                if time_since_activity > _get_settings().WS_CONNECTION_TIMEOUT:
                     connections_to_remove.append(client_id)
                     logger.warning(f"Removing stale WebSocket connection: {client_id}")
 
@@ -186,7 +198,7 @@ class WebSocketPoolManager:
             raise RuntimeError("WebSocket pool manager is shutdown")
 
         # Check pool size limit
-        if len(self.connections) >= settings.WS_POOL_MAX_SIZE:
+        if len(self.connections) >= _get_settings().WS_POOL_MAX_SIZE:
             logger.warning(f"WebSocket pool at capacity. Rejecting connection for {client_id}")
             await websocket.close(code=1013, reason="Server at capacity")
             self.stats.connection_errors += 1
@@ -477,7 +489,7 @@ class WebSocketPoolManager:
 
             for _client_id, conn_info in self.connections.items():
                 time_since_activity = (current_time - conn_info.last_activity).total_seconds()
-                if time_since_activity > settings.WS_CONNECTION_TIMEOUT * 2:
+                if time_since_activity > _get_settings().WS_CONNECTION_TIMEOUT * 2:
                     stale_connections += 1
 
             if stale_connections > 0:

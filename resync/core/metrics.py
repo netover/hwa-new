@@ -109,6 +109,19 @@ class RuntimeMetrics:
         self.tws_status_requests_failed = MetricCounter()
         self.tws_workstations_total = MetricGauge()
         self.tws_jobs_total = MetricGauge()
+        
+        # Connection validation metrics
+        self.connection_validations_total = MetricCounter()
+        self.connection_validation_success = MetricCounter()
+        self.connection_validation_failure = MetricCounter()
+        self.health_check_with_auto_enable = MetricCounter()
+        
+        # SLO-related metrics
+        self.api_response_time = MetricHistogram()  # Track response times for SLO
+        self.api_error_rate = MetricGauge()  # Track error rate percentage
+        self.system_availability = MetricGauge()  # Track system availability percentage
+        self.tws_connection_success_rate = MetricGauge()  # Track TWS connection success rate
+        self.ai_agent_response_time = MetricHistogram()  # Track AI agent response times
 
         # Correlation tracking
         self._correlation_context: Dict[str, Dict[str, Any]] = {}
@@ -229,9 +242,37 @@ class RuntimeMetrics:
                 "correlation_ids_active": self.correlation_ids_active.get(),
                 "async_operations_active": self.async_operations_active.get(),
             },
+            "slo": {
+                "api_error_rate": self._calculate_error_rate(),  # Calculated based on system metrics
+                "api_response_time": self.api_response_time.samples[-1] if self.api_response_time.samples else 0,  # Most recent response time
+                "availability": self.system_availability.get(),  # Should be updated by health checks
+                "cache_hit_ratio": self._calculate_cache_hit_ratio(),  # Same as cache hit_rate
+                "tws_connection_success_rate": self.tws_connection_success_rate.get(),  # Should be updated by TWS connection monitoring
+            },
             "errors": error_metrics,
             "health": self.get_health_status(),
         }
+
+    def _calculate_error_rate(self) -> float:
+        """Calculate the overall error rate as a percentage."""
+        total_requests = self.agent_initializations.value + self.tws_status_requests_success.value + self.tws_status_requests_failed.value
+        if total_requests > 0:
+            return (self.agent_creation_failures.value + self.tws_status_requests_failed.value) / total_requests
+        return 0.0
+
+    def _calculate_cache_hit_ratio(self) -> float:
+        """Calculate the cache hit ratio."""
+        total_cache_ops = self.cache_hits.value + self.cache_misses.value
+        if total_cache_ops > 0:
+            return self.cache_hits.value / total_cache_ops
+        return 0.0
+
+    def update_slo_metrics(self, availability: Optional[float] = None, tws_connection_success_rate: Optional[float] = None):
+        """Update SLO-related metrics that are calculated externally."""
+        if availability is not None:
+            self.system_availability.set(availability)
+        if tws_connection_success_rate is not None:
+            self.tws_connection_success_rate.set(tws_connection_success_rate)
 
     def generate_prometheus_metrics(self) -> str:
         """Generate metrics in Prometheus text exposition format."""

@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import logging
-from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from resync.api.admin import admin_router
@@ -15,36 +13,31 @@ from resync.api.chat import chat_router
 from resync.api.cors_monitoring import cors_monitor_router
 from resync.api.endpoints import api_router
 from resync.api.health import config_router, health_router
-from resync.api.middleware.cors_middleware import (
-    create_cors_middleware,
-)
 from resync.api.rag_upload import router as rag_upload_router
-from resync.core.exceptions_enhanced import (
-    ResyncException,
-)
+from resync.api.operations import router as operations_router
+from resync.api.rfc_examples import router as rfc_examples_router
 from resync.core.fastapi_di import inject_container
 from resync.core.lifecycle import lifespan
 from resync.core.logger import setup_logging
-from resync.core.utils.error_utils import (
-    create_error_response_from_exception,
-    create_json_response_from_error,
-    register_exception_handlers,
-)
 from resync.settings import settings
 
 # Import CQRS and API Gateway components
 from resync.cqrs.dispatcher import initialize_dispatcher
 from resync.api_gateway.container import setup_dependencies
 
+# Import new monitoring and observability components
+from resync.core.distributed_tracing import tracer
+from resync.core.alerting import alerting_system
+from resync.core.runbooks import runbook_registry
+from resync.core.benchmarking import SystemBenchmarkRunner, create_benchmark_runner
+
 logger = logging.getLogger(__name__)
 
 # --- Rate Limiter Initialization ---
 from resync.core.rate_limiter import (
     dashboard_rate_limit,
-    error_handler_rate_limit,
     init_rate_limiter,
 )
-from resync.core.audit_queue import migrate_from_sqlite
 
 # --- FastAPI App Initialization ---
 app = FastAPI(
@@ -59,7 +52,6 @@ app = FastAPI(
 from contextlib import asynccontextmanager
 from resync.core.container import app_container
 from resync.core.interfaces import ITWSClient, IAgentManager, IKnowledgeGraph
-from resync.core.tws_monitor import tws_monitor, get_tws_monitor
 
 
 @asynccontextmanager
@@ -71,7 +63,6 @@ async def lifespan_with_cqrs_and_di(app: FastAPI):
     knowledge_graph = await app_container.get(IKnowledgeGraph)
     
     # Initialize TWS monitor with the TWS client
-    global tws_monitor
     from resync.core.tws_monitor import get_tws_monitor
     tws_monitor_instance = await get_tws_monitor(tws_client)
     
@@ -80,6 +71,31 @@ async def lifespan_with_cqrs_and_di(app: FastAPI):
     
     # Initialize CQRS dispatcher
     initialize_dispatcher(tws_client, tws_monitor_instance)
+    
+    # Initialize Idempotency Manager
+    from resync.api.dependencies import initialize_idempotency_manager
+    try:
+        # Try to get Redis client from container
+        from resync.core.async_cache import get_redis_client
+        redis_client = await get_redis_client()
+        await initialize_idempotency_manager(redis_client)
+        logger.info("Idempotency manager initialized with Redis")
+    except Exception as e:
+        # Fallback to in-memory storage
+        logger.warning(f"Failed to initialize Redis for idempotency: {e}. Using in-memory storage.")
+        await initialize_idempotency_manager(None)
+    
+    # Initialize distributed tracing
+    logger.info("Distributed tracing initialized")
+    
+    # Initialize alerting system
+    logger.info("Alerting system initialized")
+    
+    # Initialize runbook registry
+    logger.info("Runbook registry initialized")
+    
+    # Initialize benchmarking system
+    logger.info("Benchmarking system initialized")
     
     yield  # Application runs here
     
@@ -114,6 +130,7 @@ init_rate_limiter(app)
 
 # --- Register Exception Handlers ---
 # Register the new standardized exception handlers
+from resync.core.utils.error_utils import register_exception_handlers
 register_exception_handlers(app)
 
 # --- Dependency Injection Setup ---
@@ -121,11 +138,8 @@ register_exception_handlers(app)
 inject_container(app)
 
 # Initialize audit queue if needed
-from resync.core.audit_queue import AsyncAuditQueue
-import asyncio
-
-
-
+# from resync.core.audit_queue import AsyncAuditQueue
+# import asyncio
 
 
 # --- Template Engine with Caching ---
@@ -157,15 +171,23 @@ app.include_router(
     prefix="/api/v1/agents",
     tags=["Agents"],
 )
+app.include_router(
+    operations_router,
+    tags=["Critical Operations"]
+)
+app.include_router(
+    rfc_examples_router,
+    tags=["RFC Examples"]
+)
 
 # Mount static files if directory exists
 static_dir = settings.BASE_DIR / "static"
 if static_dir.exists() and static_dir.is_dir():
-    from fastapi.staticfiles import StaticFiles
+    # from fastapi.staticfiles import StaticFiles
     from starlette.staticfiles import StaticFiles as StarletteStaticFiles
     
     import hashlib
-    import os
+    # import os
 
     class CachedStaticFiles(StarletteStaticFiles):
         async def get_response(self, path: str, full_path: str):
@@ -176,6 +198,7 @@ if static_dir.exists() and static_dir.is_dir():
                 response.headers["Cache-Control"] = f"public, max-age={cache_max_age}"
                 # Generate ETag based on file metadata (size and modification time) for better performance
                 try:
+                    # import os
                     import os
                     stat_result = os.stat(full_path)
                     # Create ETag from file size and modification time

@@ -8,10 +8,8 @@ in addition to the existing Redis-based audit queue functionality.
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from contextlib import contextmanager
 
-import sqlite3
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, Text
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool

@@ -1,5 +1,6 @@
 """Jinja2 extension for CSP nonce support."""
 
+from typing import Optional
 from jinja2 import Environment
 from jinja2.ext import Extension
 
@@ -35,7 +36,6 @@ class CSPNonceExtension(Extension):
         # The actual nonce is stored in request.state.csp_nonce
         # We need to access the request context
         from fastapi import Request
-        from fastapi.types import Scope
         
         # Try to get the request from the current context
         try:

@@ -27,6 +27,7 @@ orjson>=3.9.10  # For fast JSON serialization
 psutil>=5.9.6  # For system monitoring
 python-dotenv>=1.0.0  # For environment variable loading
 openai>=1.3.5  # For OpenAI API integration
+litellm>=1.40.0  # For LLM provider abstraction and management
 authlib>=1.3.0  # For JWS/JWT compliance testing
 mutmut>=2.4.3  # For mutation testing
 aiohttp>=3.8.0  # For async HTTP requests

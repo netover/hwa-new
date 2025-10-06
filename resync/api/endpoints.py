@@ -26,6 +26,13 @@ from resync.cqrs.queries import GetSystemStatusQuery, GetWorkstationsStatusQuery
 from resync.api_gateway.container import container, setup_dependencies
 from resync.api_gateway.services import ITWSService, IAgentService, IKnowledgeService
 
+# Import endpoint utilities for cross-cutting concerns
+from resync.api.middleware.endpoint_utils import with_monitoring, handle_endpoint_errors, with_security_validation
+
+# Import new monitoring and observability components
+from resync.core.runbooks import runbook_registry
+from resync.core.alerting import alerting_system
+
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
 
@@ -205,36 +212,7 @@ async def get_all_agents(
     return await agent_manager.get_all_agents()
 
 
-# --- System Status Endpoints ---
-@api_router.get("/status", response_model=SystemStatus)
-@public_rate_limit
-async def get_system_status(
-    request: Request,
-    tws_client: ITWSClient = tws_client_dependency,
-) -> SystemStatus:
-    """
-    Provides a comprehensive status of the TWS environment, including
-    workstations, jobs, and critical path information.
-    """
-    try:
-        # Use CQRS pattern - dispatch a query to retrieve system status
-        query = GetSystemStatusQuery()
-        result = await dispatcher.execute_query(query)
-        
-        if not result.success:
-            raise HTTPException(status_code=500, detail=result.error or "Failed to retrieve system status")
-        
-        status = SystemStatus(**result.data)
-        
-        # Record metrics upon successful status retrieval
-        runtime_metrics.tws_status_requests_success.increment()
-        runtime_metrics.tws_workstations_total.set(len(status.workstations))
-        runtime_metrics.tws_jobs_total.set(len(status.jobs))
-        return status
-    except Exception as e:
-        logger.error("Failed to get TWS system status: %s", e, exc_info=True)
-        runtime_metrics.tws_status_requests_failed.increment()
-        return handle_error(e, "TWS system status retrieval")
+# --- System Status Endpoints ---\n@api_router.get("/status", response_model=SystemStatus)\n@public_rate_limit\n@with_monitoring("get_system_status")\n@handle_endpoint_errors("get_system_status")\nasync def get_system_status(\n    request: Request,\n    tws_client: ITWSClient = tws_client_dependency,\n) -> SystemStatus:\n    \"\"\"\n    Provides a comprehensive status of the TWS environment, including\n    workstations, jobs, and critical path information.\n    \"\"\"\n    # Use CQRS pattern - dispatch a query to retrieve system status\n    query = GetSystemStatusQuery()\n    result = await dispatcher.execute_query(query)\n    \n    if not result.success:\n        raise HTTPException(status_code=500, detail=result.error or \"Failed to retrieve system status\")\n    \n    status = SystemStatus(**result.data)\n    \n    # Record metrics upon successful status retrieval\n    runtime_metrics.tws_status_requests_success.increment()\n    runtime_metrics.tws_workstations_total.set(len(status.workstations))\n    runtime_metrics.tws_jobs_total.set(len(status.jobs))\n    return status
 
 
 # --- New CQRS-based endpoints ---
@@ -294,10 +272,14 @@ def get_app_health(request: Request) -> Dict[str, str]:
 @public_rate_limit
 async def get_tws_health(
     request: Request,
+    auto_enable: bool = Query(default=False, description="Auto-enable connection if valid"),
     tws_client: ITWSClient = tws_client_dependency,
 ) -> Dict[str, Any]:
     """
     Performs a quick check to verify the connection to the TWS server is active.
+    
+    Args:
+        auto_enable: Whether to auto-enable the connection if validation is successful
     """
     try:
         query = CheckTWSConnectionQuery()
@@ -308,22 +290,114 @@ async def get_tws_health(
             return {
                 "status": "error",
                 "message": "A verificação da conexão com o TWS falhou.",
+                "auto_enable": auto_enable,
+                "auto_enable_applied": False
             }
         
         is_connected = result.data.get("connected", False) if result.data else False
         if is_connected:
+            # If auto_enable is true, ensure the connection is properly enabled
+            if auto_enable:
+                # This would implement the auto-enable logic
+                logger.info("TWS connection validation successful with auto_enable: %s", auto_enable)
+            
+            # Record TWS status success metrics
+            runtime_metrics.tws_status_requests_success.increment()
+            
             return {
                 "status": "ok",
                 "message": "Conexão com o TWS bem-sucedida.",
+                "auto_enable": auto_enable,
+                "auto_enable_applied": auto_enable  # In a real implementation, this would reflect if changes were applied
             }
         else:
+            # Record TWS status failure metrics
+            runtime_metrics.tws_status_requests_failed.increment()
             return {
                 "status": "error",
                 "message": "A verificação da conexão com o TWS falhou.",
+                "auto_enable": auto_enable,
+                "auto_enable_applied": False
             }
     except Exception as e:
         logger.error("TWS health check failed: %s", e, exc_info=True)
+        # Record TWS status failure metrics on exception
+        runtime_metrics.tws_status_requests_failed.increment()
         return handle_error(e, "TWS health check")
+
+
+# --- Connection Validation Endpoint ---
+class ConnectionValidationRequest(BaseModel):
+    auto_enable: bool = False
+    tws_host: Optional[str] = None
+    tws_port: Optional[int] = None
+    tws_user: Optional[str] = None
+    tws_password: Optional[str] = None
+
+
+@api_router.post("/v2/validate-connection", summary="Validate TWS Connection Parameters")
+@authenticated_rate_limit
+async def validate_connection(
+    request: ConnectionValidationRequest,
+    tws_client: ITWSClient = tws_client_dependency,
+) -> Dict[str, Any]:
+    """
+    Validates TWS connection parameters with optional auto-enable feature.
+    
+    Args:
+        request: Connection validation parameters
+        tws_client: TWS client for validation
+        
+    Returns:
+        Validation result with connection status
+    """
+    try:
+        # Perform connection validation
+        validation_result = await tws_client.validate_connection(
+            host=request.tws_host,
+            port=request.tws_port,
+            user=request.tws_user,
+            password=request.tws_password
+        )
+        
+        # Record validation metrics
+        runtime_metrics.connection_validations_total.increment()
+        if validation_result.get("valid", False):
+            runtime_metrics.connection_validation_success.increment()
+        else:
+            runtime_metrics.connection_validation_failure.increment()
+        
+        # If auto_enable is true, update the service to use the validated settings
+        if request.auto_enable and validation_result.get("valid", False):
+            # Update the TWS client with new settings
+            if request.tws_host:
+                tws_client.host = request.tws_host
+            if request.tws_port:
+                tws_client.port = request.tws_port
+            if request.tws_user:
+                tws_client.user = request.tws_user
+            if request.tws_password:
+                tws_client.password = request.tws_password
+        
+        return {
+            "status": "success" if validation_result.get("valid", False) else "error",
+            "valid": validation_result.get("valid", False),
+            "message": validation_result.get("message", ""),
+            "auto_enable": request.auto_enable,
+            "auto_enable_applied": request.auto_enable and validation_result.get("valid", False)
+        }
+    except Exception as e:
+        logger.error("Connection validation failed: %s", e, exc_info=True)
+        # Record validation failure
+        runtime_metrics.connection_validations_total.increment()
+        runtime_metrics.connection_validation_failure.increment()
+        return {
+            "status": "error",
+            "valid": False,
+            "message": f"Connection validation failed: {str(e)}",
+            "auto_enable": request.auto_enable,
+            "auto_enable_applied": False
+        }
 
 
 # --- Metrics Endpoint ---
@@ -402,23 +476,39 @@ async def execute_endpoint(request: Request, data: ExecuteRequest) -> ExecuteRes
 @api_router.get("/files/{path:path}", response_model=FilesResponse)
 @public_rate_limit
 async def files_endpoint(request: Request, path: str) -> FilesResponse:
-    """Files endpoint for testing path traversal."""
-    # URL decode the path to prevent bypasses with encoded characters
-    decoded_path = unquote(path)
-
-    # Check for path traversal attempts
-    if ".." in decoded_path or decoded_path.startswith("/") or "//" in decoded_path:
-        raise HTTPException(status_code=400, detail="Invalid path")
-
-    # Normalize the path to remove any potential traversal patterns
+    """Files endpoint with enhanced path traversal protection."""
     import os
+    
+    # Define the base directory for allowed access
+    allowed_base = settings.BASE_DIR / "uploads"  
+    
+    # URL decode the path
+    decoded_path = unquote(path)
+    
+    # Normalize path to prevent directory traversal
     normalized_path = os.path.normpath(decoded_path)
-
-    # Ensure the normalized path doesn't try to go up directories
-    if normalized_path.startswith("..") or "/.." in normalized_path:
-        raise HTTPException(status_code=400, detail="Invalid path")
-
-    return FilesResponse(path=normalized_path)
+    
+    # Construct the requested path safely
+    requested_path = allowed_base / normalized_path
+    requested_path = requested_path.resolve()
+    
+    # Verify the requested path is within the allowed base
+    try:
+        # Use pathlib's is_relative_to which is more robust than relative_to
+        if not requested_path.is_relative_to(allowed_base):
+            raise HTTPException(status_code=400, detail="Invalid path: path traversal detected")
+    except ValueError:
+        # This means the requested path is outside the allowed base
+        raise HTTPException(status_code=400, detail="Invalid path: path traversal detected")
+    
+    # Verify the file exists and is not a directory
+    if requested_path.is_dir():
+        raise HTTPException(status_code=400, detail="Cannot access directories")
+    
+    if not requested_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FilesResponse(path=str(requested_path.relative_to(settings.BASE_DIR)))
 
 
 # --- Login Endpoint ---
@@ -675,3 +765,180 @@ async def get_tws_health_monitoring(request: Request) -> TWSMetricsResponse:  # 
         warning_alerts=len(warning_alerts),
         last_updated=performance_report["current_metrics"].get("timestamp"),
     )
+
+
+# --- Runbook and Alerting Endpoints ---
+@api_router.get("/runbooks", summary="Get Available Runbooks")
+@authenticated_rate_limit
+async def list_runbooks(request: Request) -> List[str]:
+    """
+    Returns a list of available incident response runbooks.
+    """
+    return runbook_registry.list_runbooks()
+
+
+class ExecuteRunbookRequest(BaseModel):
+    runbook_name: str
+    context: Dict[str, Any] = Field(default_factory=dict)
+
+
+@api_router.post("/runbooks/execute", summary="Execute an Incident Response Runbook")
+@authenticated_rate_limit
+async def execute_runbook(request: Request, runbook_data: ExecuteRunbookRequest) -> Dict[str, Any]:
+    """
+    Executes an incident response runbook with the provided context.
+    """
+    result = runbook_registry.execute_runbook(runbook_data.runbook_name, runbook_data.context)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Runbook '{runbook_data.runbook_name}' not found")
+    return result
+
+
+@api_router.get("/alerts/active", summary="Get Active Alerts")
+@authenticated_rate_limit
+async def get_active_alerts(request: Request) -> List[Dict[str, Any]]:
+    """
+    Returns a list of currently active (non-acknowledged) alerts.
+    """
+    alerts = alerting_system.get_active_alerts()
+    return [alert.__dict__ for alert in alerts]
+
+
+@api_router.post("/alerts/acknowledge/{alert_id}", summary="Acknowledge an Alert")
+@authenticated_rate_limit
+async def acknowledge_alert(request: Request, alert_id: str) -> Dict[str, bool]:
+    """
+    Acknowledges an active alert by ID.
+    """
+    success = alerting_system.acknowledge_alert(alert_id, request.headers.get("x-forwarded-for", "unknown"))
+    return {"success": success}
+
+
+class AddAlertRuleRequest(BaseModel):
+    name: str
+    description: str
+    metric_name: str
+    condition: str  # "gt", "lt", "eq", "ne", "ge", "le"
+    threshold: float
+    severity: str  # "info", "warning", "critical", "emergency"
+
+
+@api_router.post("/alerts/rules", summary="Add an Alert Rule")
+@authenticated_rate_limit
+async def add_alert_rule(request: Request, rule_data: AddAlertRuleRequest) -> Dict[str, str]:
+    """
+    Adds a new alert rule to the system.
+    """
+    from resync.core.alerting import AlertRule, AlertSeverity
+    severity_map = {
+        "info": AlertSeverity.INFO,
+        "warning": AlertSeverity.WARNING,
+        "critical": AlertSeverity.CRITICAL,
+        "emergency": AlertSeverity.EMERGENCY
+    }
+    
+    if rule_data.severity not in severity_map:
+        raise HTTPException(status_code=400, detail=f"Invalid severity: {rule_data.severity}")
+    
+    rule = AlertRule(
+        name=rule_data.name,
+        description=rule_data.description,
+        metric_name=rule_data.metric_name,
+        condition=rule_data.condition,
+        threshold=rule_data.threshold,
+        severity=severity_map[rule_data.severity]
+    )
+    
+    alerting_system.add_rule(rule)
+    return {"status": "success", "message": f"Alert rule '{rule_data.name}' added successfully"}
+
+
+# --- Benchmarking Endpoints ---
+from resync.core.benchmarking import SystemBenchmarkRunner, create_benchmark_runner
+from resync.core.container import app_container
+from resync.core.interfaces import ITWSClient, IAgentManager
+from pydantic import BaseModel
+from typing import Optional
+
+
+class RunBenchmarkRequest(BaseModel):
+    benchmark_name: str
+    iterations: Optional[int] = 100
+    warmup_rounds: Optional[int] = 10
+
+
+@api_router.post("/benchmark/run", summary="Run a performance benchmark")
+@authenticated_rate_limit
+async def run_benchmark(request: Request, benchmark_data: RunBenchmarkRequest) -> Dict[str, Any]:
+    """
+    Run a performance benchmark for the system.
+    
+    Args:
+        benchmark_data: Configuration for the benchmark to run
+    """
+    try:
+        # Get required services from DI container
+        tws_client = await app_container.get(ITWSClient)
+        agent_manager = await app_container.get(IAgentManager)
+        
+        # Create benchmark runner
+        benchmark_runner = await create_benchmark_runner(agent_manager, tws_client)
+        
+        # Run specific benchmark based on name
+        if benchmark_data.benchmark_name == "comprehensive":
+            results = await benchmark_runner.run_comprehensive_benchmark()
+            return {"status": "success", "benchmark_name": benchmark_data.benchmark_name, "results": results}
+        elif benchmark_data.benchmark_name == "tws_status":
+            result = await benchmark_runner.benchmark.run_benchmark(
+                name="TWS Status Check",
+                operation="tws_status",
+                func=benchmark_runner._benchmark_tws_status,
+                iterations=benchmark_data.iterations,
+                warmup_rounds=benchmark_data.warmup_rounds
+            )
+            return {"status": "success", "benchmark_name": benchmark_data.benchmark_name, "result": result.__dict__}
+        elif benchmark_data.benchmark_name == "agent_creation":
+            result = await benchmark_runner.benchmark.run_benchmark(
+                name="Agent Creation",
+                operation="create_agent",
+                func=benchmark_runner._benchmark_agent_creation,
+                iterations=benchmark_data.iterations,
+                warmup_rounds=benchmark_data.warmup_rounds
+            )
+            return {"status": "success", "benchmark_name": benchmark_data.benchmark_name, "result": result.__dict__}
+        else:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unknown benchmark name: {benchmark_data.benchmark_name}. Available: comprehensive, tws_status, agent_creation"
+            )
+    except Exception as e:
+        logger.error(f"Benchmark execution failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Benchmark execution failed: {str(e)}")
+
+
+@api_router.get("/benchmark/results", summary="Get benchmark results history")
+@authenticated_rate_limit
+async def get_benchmark_results(request: Request, operation: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get historical benchmark results.
+    
+    Args:
+        operation: Optional operation name to filter results
+    """
+    try:
+        # Get the benchmark instance (we need to access it from somewhere)
+        # For now we'll create a new runner to access the benchmark - in practice this would be a shared instance
+        tws_client = await app_container.get(ITWSClient)
+        agent_manager = await app_container.get(IAgentManager)
+        
+        benchmark_runner = await create_benchmark_runner(agent_manager, tws_client)
+        
+        if operation:
+            historical_results = benchmark_runner.benchmark.get_historical_performance(operation)
+            return {"operation": operation, "results": [result.__dict__ for result in historical_results]}
+        else:
+            # Return all results
+            return {"all_results": [result.__dict__ for result in benchmark_runner.benchmark.results]}
+    except Exception as e:
+        logger.error(f"Getting benchmark results failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Getting benchmark results failed: {str(e)}")

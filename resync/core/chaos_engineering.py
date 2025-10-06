@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import secrets
+import random
 import threading
 import time
 from dataclasses import dataclass, field
@@ -537,7 +537,7 @@ class ChaosEngineer:
                             try:
                                 await cache.set("test_key", "test_value")
                                 anomalies.append("Cache set should have failed")
-                            except Exception as e:
+                            except Exception:
                                 pass  # Expected
 
                         await cache.stop()
@@ -853,7 +853,7 @@ class FuzzingEngine:
                         else:
                             results["failed"] += 1
                             results["errors"].append(f"Value {i}: mismatch")
-                    except Exception as e:
+                    except Exception:
                         # For objects that can't be compared, just check if retrieval worked
                         if retrieved is not None:
                             results["passed"] += 1

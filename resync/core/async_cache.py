@@ -23,13 +23,23 @@ class CacheEntry:
 
 class AsyncTTLCache:
     """
-    A truly asynchronous TTL cache that eliminates blocking I/O.
+    A truly asynchronous TTL cache that eliminates blocking I/O with comprehensive monitoring.
 
     Features:
     - Async get() and set() methods for non-blocking operations
     - Thread-safe concurrent access using sharded asyncio.Lock
     - Background cleanup task for expired entries
     - Time-based eviction using asyncio.sleep()
+    - Memory bounds checking with intelligent sampling
+    - Comprehensive metrics collection and health monitoring
+    - Transaction support with rollback capability
+    - Snapshot and restore functionality for persistence
+    - LRU eviction when cache bounds are exceeded
+    - Production-grade error handling and logging
+    
+    The cache uses sharding to distribute entries across multiple locked segments,
+    reducing contention under high concurrency. Each shard has its own asyncio.Lock
+    to ensure thread-safe access while maximizing parallelism.
     """
 
     def __init__(
@@ -118,36 +128,24 @@ class AsyncTTLCache:
         # BOUNDS CHECKING - Prevent hash overflow/underflow
         try:
             key_hash = hash(key)
-            # Ensure hash is within reasonable bounds to prevent integer overflow
+            # Handle special case for hash collision more deterministically
             if key_hash == 0:
-                # Special case for hash collision - use a deterministic alternative
                 key_hash = sum(ord(c) for c in str(key)) + len(str(key))
-
+            
+            # Use modulo to ensure consistent distribution
             shard_index = abs(key_hash) % self.num_shards
-
-            # Double-check bounds (defense in depth)
+            
+            # Double-check bounds (defense in depth) with deterministic fallback
             if not (0 <= shard_index < self.num_shards):
-                # Fallback to a safe index if bounds check fails
-                shard_index = 0
-                logger.warning(
-                    f"Shard index bounds check failed for key hash {key_hash}, using fallback shard 0",
-                    extra={
-                        "correlation_id": runtime_metrics.create_correlation_id(
-                            {
-                                "component": "async_cache",
-                                "operation": "shard_bounds_check",
-                                "key_hash": key_hash,
-                                "num_shards": self.num_shards,
-                            }
-                        )
-                    },
-                )
+                # Use a deterministic fallback based on key content
+                # rather than always index 0 to ensure consistency
+                shard_index = (len(key) + (ord(key[0]) if key else 0)) % self.num_shards
 
         except (OverflowError, ValueError) as e:
             # Hash computation failed - use deterministic fallback
-            shard_index = (
-                sum(ord(c) for c in str(key)[:10]) % self.num_shards
-            )  # Use first 10 chars
+            # Use a more robust approach that considers more of the key content
+            key_sum = sum(ord(c) for c in str(key)[:20])  # Use first 20 chars for better distribution
+            shard_index = key_sum % self.num_shards
             logger.warning(
                 f"Hash computation failed for key {repr(key)}: {e}, using fallback shard {shard_index}"
             )
@@ -241,7 +239,12 @@ class AsyncTTLCache:
         runtime_metrics.close_correlation_id(correlation_id)
 
     async def _remove_expired_entries(self) -> None:
-        """Remove expired entries from cache using parallel processing."""
+        """Remove expired entries from cache using parallel processing.
+        
+        This method efficiently removes all expired cache entries across all shards
+        by processing each shard concurrently. It maintains thread safety by
+        acquiring each shard's lock before modifying its contents.
+        """
         correlation_id = runtime_metrics.create_correlation_id(
             {"component": "async_cache", "operation": "remove_expired"}
         )
@@ -251,6 +254,14 @@ class AsyncTTLCache:
         
         # Function to process a single shard
         async def process_shard(i):
+            """Process a single shard to remove expired entries.
+            
+            Args:
+                i: Index of the shard to process
+                
+            Returns:
+                Number of entries removed from this shard
+            """
             shard = self.shards[i]
             lock = self.shard_locks[i]
             async with lock:
@@ -289,8 +300,13 @@ class AsyncTTLCache:
         """
         Asynchronously retrieve an item from the cache with input validation.
 
+        This method performs comprehensive validation of the input key, checks
+        for cache entry expiration, and appropriately updates cache metrics
+        including hit/miss rates and performance indicators.
+
         Args:
             key: Cache key to retrieve (will be validated/normalized)
+            
         Returns:
             Cached value if exists and not expired, None otherwise
 
@@ -796,7 +812,15 @@ class AsyncTTLCache:
         logger.debug("Cache CLEARED")
 
     def size(self) -> int:
-        """Get the current number of items in cache (non-async for performance)."""
+        """Get the current number of items in cache.
+        
+        Note: This method provides an approximate count as it doesn't acquire locks
+        for each shard to avoid blocking. In high-concurrency scenarios, the count 
+        may be slightly inaccurate but sufficient for bounds checking purposes.
+        """
+        # Return approximate size without blocking on locks for performance
+        # This is acceptable for bounds checking but may be slightly inaccurate
+        # under heavy concurrent modifications
         total_size = sum(len(shard) for shard in self.shards)
         return total_size
 
@@ -810,6 +834,14 @@ class AsyncTTLCache:
         current_size = self.size()
         
         # Check item count bounds
+        if not self._check_item_count_bounds(current_size):
+            return False
+
+        # Check memory usage bounds
+        return self._check_memory_usage_bounds(current_size)
+        
+    def _check_item_count_bounds(self, current_size: int) -> bool:
+        """Check if item count is within safe bounds."""
         max_safe_size = 100000  # Max 100K entries per cache instance
         if current_size > max_safe_size:
             logger.warning(
@@ -826,7 +858,10 @@ class AsyncTTLCache:
                 },
             )
             return False
-
+        return True
+        
+    def _check_memory_usage_bounds(self, current_size: int) -> bool:
+        """Check if memory usage is within safe bounds."""
         # More accurate memory usage estimation
         try:
             import sys
@@ -891,6 +926,7 @@ class AsyncTTLCache:
                 }
             )
             # If we can't estimate memory, just check the size limit
+            max_safe_size = 100000  # Max 100K entries per cache instance
             if current_size > max_safe_size:
                 return False
 
@@ -991,11 +1027,11 @@ class AsyncTTLCache:
 
         try:
             # BOUNDS CHECKING - Validate snapshot structure
-            if not isinstance(snapshot, dict):
-                raise TypeError(f"Snapshot must be a dict, got {type(snapshot)}")
-
             if snapshot is None:
                 raise ValueError("Snapshot cannot be None")
+
+            if not isinstance(snapshot, dict):
+                raise TypeError(f"Snapshot must be a dict, got {type(snapshot)}")
 
             if "_metadata" not in snapshot:
                 log_with_correlation(
@@ -1165,6 +1201,12 @@ class AsyncTTLCache:
         """
         Perform cache bounds and integrity checks.
         
+        This method validates multiple aspects of cache integrity:
+        1. Checks that cache size is valid
+        2. Verifies that bounds checks pass
+        3. Ensures shard sizes add up correctly
+        4. Checks for shard size balance
+
         Args:
             is_production: Whether the environment is production
             correlation_id: Correlation ID for logging
@@ -1174,43 +1216,75 @@ class AsyncTTLCache:
         """
         current_size = self.size()
         if current_size < 0:
-            return {
-                "status": "critical",
-                "component": "async_cache",
-                "error": f"Invalid cache size: {current_size}",
-                "correlation_id": correlation_id.id,
-                "production_ready": False,
-            }
+            return self._create_integrity_error_response(
+                "Invalid cache size", 
+                {"current_size": current_size}, 
+                correlation_id, 
+                False
+            )
 
         # Check bounds compliance
         bounds_ok = self._check_cache_bounds()
         if not bounds_ok:
-            return {
-                "status": "warning",
-                "component": "async_cache",
-                "error": "Cache bounds exceeded",
-                "current_size": current_size,
-                "correlation_id": correlation_id.id,
-                "production_ready": is_production,  # Only critical in production
-            }
+            return self._create_integrity_warning_response(
+                "Cache bounds exceeded", 
+                {"current_size": current_size}, 
+                correlation_id, 
+                is_production
+            )
 
         # 3. SHARD INTEGRITY CHECKS
         shard_sizes = [len(shard) for shard in self.shards]
         total_from_shards = sum(shard_sizes)
 
         if total_from_shards != current_size:
-            return {
-                "status": "critical",
-                "component": "async_cache",
-                "error": "Shard size inconsistency",
-                "total_size": current_size,
-                "shard_total": total_from_shards,
-                "shard_sizes": shard_sizes,
-                "correlation_id": correlation_id.id,
-                "production_ready": False,
-            }
+            return self._create_integrity_error_response(
+                "Shard size inconsistency", 
+                {
+                    "total_size": current_size,
+                    "shard_total": total_from_shards,
+                    "shard_sizes": shard_sizes
+                }, 
+                correlation_id, 
+                False
+            )
 
         # Check for shard size imbalances (should be roughly equal)
+        imbalance_check = self._check_shard_balance(shard_sizes, current_size)
+        if imbalance_check:
+            return imbalance_check
+            
+        return {
+            "status": "ok", 
+            "current_size": current_size, 
+            "shard_sizes": shard_sizes, 
+            "bounds_ok": bounds_ok
+        }
+        
+    def _create_integrity_error_response(self, error_msg: str, details: Dict, correlation_id, production_ready: bool) -> Dict[str, Any]:
+        """Create a standardized error response for integrity checks."""
+        return {
+            "status": "critical",
+            "component": "async_cache",
+            "error": error_msg,
+            "correlation_id": correlation_id.id,
+            "production_ready": production_ready,
+            **details
+        }
+        
+    def _create_integrity_warning_response(self, error_msg: str, details: Dict, correlation_id, is_production: bool) -> Dict[str, Any]:
+        """Create a standardized warning response for integrity checks."""
+        return {
+            "status": "warning",
+            "component": "async_cache",
+            "error": error_msg,
+            "correlation_id": correlation_id.id,
+            "production_ready": is_production,  # Only critical in production
+            **details
+        }
+        
+    def _check_shard_balance(self, shard_sizes: List[int], current_size: int) -> Optional[Dict[str, Any]]:
+        """Check if shards are balanced."""
         if self.num_shards > 1:
             avg_shard_size = current_size / self.num_shards
             max_shard_size = max(shard_sizes)
@@ -1222,11 +1296,9 @@ class AsyncTTLCache:
                     "avg_shard_size": avg_shard_size,
                     "max_shard_size": max_shard_size,
                     "shard_sizes": shard_sizes,
-                    "correlation_id": correlation_id.id,
                     "production_ready": True,  # Not critical but worth monitoring
                 }
-        
-        return {"status": "ok", "current_size": current_size, "shard_sizes": shard_sizes, "bounds_ok": bounds_ok}
+        return None
     
     async def _health_check_background_tasks(self, is_production: bool, correlation_id) -> Dict[str, str]:
         """

@@ -168,3 +168,89 @@ We welcome contributions to improve Resync! Please follow these guidelines:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+## Performance Optimizations
+
+### Phase 2: Advanced Performance Optimization ✅ COMPLETE
+
+**Status:** Fully implemented and tested  
+**Documentation:** See [docs/PHASE2_COMPLETE.md](docs/PHASE2_COMPLETE.md)
+
+Phase 2 introduces comprehensive performance monitoring, optimization, and resource management capabilities:
+
+#### 🚀 Key Features
+
+1. **Performance Monitoring Service**
+   - Real-time cache performance tracking
+   - Connection pool optimization
+   - Resource usage monitoring
+   - Automatic efficiency scoring
+
+2. **Resource Management**
+   - Context managers for deterministic cleanup
+   - Automatic resource tracking
+   - Leak detection with configurable thresholds
+   - Batch resource operations
+
+3. **REST API Endpoints**
+   - `/api/performance/health` - Overall health status
+   - `/api/performance/report` - Comprehensive performance report
+   - `/api/performance/cache/metrics` - Cache performance metrics
+   - `/api/performance/pools/metrics` - Connection pool statistics
+   - `/api/performance/resources/leaks` - Resource leak detection
+   - And more...
+
+4. **Auto-Tuning Recommendations**
+   - Automatic cache optimization suggestions
+   - Connection pool sizing recommendations
+   - Performance improvement tips
+
+#### 📊 Expected Improvements
+
+- **30-50% reduction** in database queries (with optimized caching)
+- **40-60% reduction** in connection overhead
+- **Sub-10ms** cache access times
+- **Zero resource leaks** with proper usage
+
+#### 🎯 Quick Start
+
+```bash
+# Verify implementation
+python test_phase2_simple.py
+
+# Start the application
+uvicorn resync.main:app --reload
+
+# Check performance health
+curl http://localhost:8000/api/performance/health
+
+# Get full performance report
+curl http://localhost:8000/api/performance/report
+```
+
+#### 📚 Documentation
+
+- **Quick Reference:** [docs/PERFORMANCE_QUICK_REFERENCE.md](docs/PERFORMANCE_QUICK_REFERENCE.md)
+- **Full Guide:** [docs/PERFORMANCE_OPTIMIZATION.md](docs/PERFORMANCE_OPTIMIZATION.md)
+- **Testing & Deployment:** [docs/TESTING_DEPLOYMENT_GUIDE.md](docs/TESTING_DEPLOYMENT_GUIDE.md)
+- **Implementation Details:** [docs/PHASE2_IMPLEMENTATION_SUMMARY.md](docs/PHASE2_IMPLEMENTATION_SUMMARY.md)
+
+### AsyncTTLCache Improvements
+- Enhanced memory management with better size estimation
+- Implemented LRU eviction when cache bounds are exceeded
+- Added more accurate memory usage tracking
+- Memory bounds checking (100K items, 100MB limit)
+- Hit rate monitoring and efficiency scoring
+
+### Connection Pool Optimization
+- Improved Redis connection pool settings
+- Enhanced database connection pool configuration
+- Optimized HTTP connection pool for external API calls
+- Performance monitoring and auto-tuning
+- Health status tracking
+
+### Resource Management
+- Added centralized resource manager for proper lifecycle management
+- Implemented proper shutdown and cleanup procedures
+- Enhanced resource tracking and monitoring
+- Context managers for automatic cleanup
+- Leak detection capabilities

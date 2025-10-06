@@ -9,9 +9,9 @@
 6. [Model-Related Problems](#model-related-problems)
 7. [Deployment Issues](#deployment-issues)
 8. [Security Alerts](#security-alerts)
+9. [Monitoring Configuration](#monitoring-configuration)
 
 ## Common Issues and Solutions
-
 | Issue | Symptoms | Solution |
 |-------|---------|----------|
 | TWS Connection Failure | HTTP 503 errors | Verify credentials in `.env` |
@@ -20,8 +20,113 @@
 | API Not Accessible | Connection refused | Verify Docker containers are running |
 | High Memory Usage | System swap/memory warnings | Adjust Redis eviction policy |
 
-## Diagnostic Tools
+## Log Analysis
+### Log Structure
+```
+logs/
+├── YYYYMMDD/
+│   ├── app.log
+│   ├── error.log
+│   └── access.log
+```
 
+### Log Rotation Configuration
+```ini
+# config/log_rotator.ini
+[log_rotator]
+log_dir = logs
+max_size = 10MB
+backup_count = 14
+```
+
+To implement log rotation in your application:
+
+```python
+# In your application's logging configuration
+import logging
+from logging.handlers import RotatingFileHandler
+
+def setup_rotating_logger():
+    logger = logging.getLogger('resync_logger')
+    logger.setLevel(logging.INFO)
+    
+    handler = RotatingFileHandler(
+        'logs/app.log',
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=14
+    )
+    
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+```
+
+### Log Rotation Script
+```bash
+# scripts/rotate_logs.py
+import logging
+from logging.handlers import RotatingFileHandler
+
+def setup_rotating_logger():
+    logger = logging.getLogger('resync_logger')
+    logger.setLevel(logging.INFO)
+    
+    handler = RotatingFileHandler(
+        'logs/app.log',
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=14
+    )
+    
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+```
+
+## Monitoring Configuration
+### Prometheus Exporter
+```python
+# health_monitor.py
+PROMETHEUS_EXPORTER=1
+
+# In main.py or your application startup
+from prometheus_client import start_http_server
+start_http_server(8000)  # or another available port
+```
+
+### Grafana Dashboard Integration
+```json
+// grafana_dashboard.json
+{
+  "title": "Resync Monitoring",
+  "variables": [
+    {
+      "name": "host",
+      "type": "query",
+      "datasource": "Prometheus",
+      "query": "instance"
+    }
+  ],
+  "panels": [
+    {
+      "title": "TWS Connection Status",
+      "targets": [
+        {
+          "expr": "tws_connection_status{host=\"$host\"}",
+          "legendFormat": "{{host}}"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Diagnostic Tools
 - **Health Endpoints**:
   - Application: `GET /health/app`
   - TWS Connection: `GET /health/tws`
@@ -35,26 +140,7 @@
   - Application logs: `docker logs resync-worker`
   - TWS API logs: Enable debug logging in `settings.py`
 
-## Log Analysis
-
-### Log Levels
-- `DEBUG`: Detailed debug information
-- `INFO`: Normal operation events
-- `WARNING`: Potential issues
-- `ERROR`: Critical errors affecting functionality
-- `CRITICAL`: System-level failures
-
-### Useful Log Filters
-```bash
-# Filter error logs
-docker logs resync-worker | grep "ERROR"
-
-# Monitor model interactions
-docker logs resync-worker | grep "LLM"
-```
-
 ## Connection Problems
-
 ### TWS Connection Issues
 1. Verify `.env` credentials
 2. Check network connectivity to TWS server
@@ -73,7 +159,6 @@ docker logs resync-worker | grep "LLM"
    ```
 
 ## Performance Issues
-
 ### Slow Responses
 1. Check Redis connection status
 2. Monitor system metrics
@@ -90,7 +175,6 @@ docker logs resync-worker | grep "LLM"
    ```
 
 ## Model-Related Problems
-
 ### Incorrect Responses
 1. Verify knowledge graph entries
 2. Check for outdated context
@@ -103,7 +187,6 @@ docker logs resync-worker | grep "LLM"
 3. Switch to a faster model
 
 ## Deployment Issues
-
 ### Container Failures
 1. Check Docker logs: `docker logs <container_name>`
 2. Verify image builds
@@ -116,7 +199,6 @@ docker logs resync-worker | grep "LLM"
 3. Verify file paths in configuration
 
 ## Security Alerts
-
 ### Unauthorized Access
 1. Implement JWT authentication
 2. Review access logs

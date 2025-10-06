@@ -32,6 +32,8 @@ LLM_TEMPERATURE = 0.1
 
 # --- Admin Credentials ---
 # These must be explicitly set for security - no insecure defaults in production
+# NOTE: For MVP purposes, passwords are stored in plaintext. 
+# For production, implement proper password hashing (bcrypt) and use ADMIN_PASSWORD_HASHED instead.
 ADMIN_USERNAME = ""
 ADMIN_PASSWORD = ""
 
@@ -49,10 +51,10 @@ RATE_LIMIT_SLIDING_WINDOW = true
 # --- TWS Environment Configuration ---
 # TWS credentials are only required if not in mock mode
 TWS_MOCK_MODE = false
-TWS_HOST = "localhost"
+TWS_HOST = ""
 TWS_PORT = 31111
-TWS_USER = "twsuser"
-TWS_PASSWORD = "twspassword"
+TWS_USER = ""
+TWS_PASSWORD = ""
 TWS_ENGINE_NAME = "tws-engine"
 TWS_ENGINE_OWNER = "tws-owner"
 
@@ -74,6 +76,7 @@ notification_types = ["job_status", "alerts", "performance"]
 L1_MAX_SIZE = 5000
 L2_TTL_SECONDS = 600
 L2_CLEANUP_INTERVAL = 60
+USE_NEW_CACHING_LAYER = true
 
 # --- Async Cache Configuration ---
 [default.ASYNC_CACHE]
@@ -230,3 +233,56 @@ LOGGING.LEVEL = "INFO"
 DEBUG = true
 TWS_MOCK_MODE = true
 LOGGING.LEVEL = "DEBUG"
+# --- Connection Pool Configuration ---
+[default.CONNECTION_POOL]
+# Database Connection Pool Settings - Optimized for high volume
+DB_POOL_MIN_SIZE = 20
+DB_POOL_MAX_SIZE = 100
+DB_POOL_CONNECT_TIMEOUT = 60
+DB_POOL_TIMEOUT = 60
+DB_POOL_RETRY_ATTEMPTS = 3
+DB_POOL_RETRY_DELAY = 1
+DB_POOL_HEALTH_CHECK_INTERVAL = 60
+DB_POOL_IDLE_TIMEOUT = 1200
+DB_POOL_MAX_LIFETIME = 1800  # 30 minutes
+
+# Redis Connection Pool Settings
+REDIS_POOL_MIN_SIZE = 5
+REDIS_POOL_MAX_SIZE = 20
+REDIS_POOL_CONNECT_TIMEOUT = 30
+REDIS_POOL_TIMEOUT = 30
+REDIS_POOL_RETRY_ATTEMPTS = 3
+REDIS_POOL_RETRY_DELAY = 1
+REDIS_POOL_HEALTH_CHECK_INTERVAL = 60
+REDIS_POOL_IDLE_TIMEOUT = 300
+REDIS_POOL_MAX_LIFETIME = 1800  # 30 minutes
+
+# HTTP/TWS Connection Pool Settings
+HTTP_POOL_MIN_SIZE = 10
+HTTP_POOL_MAX_SIZE = 100
+HTTP_POOL_CONNECT_TIMEOUT = 10
+HTTP_POOL_IDLE_TIMEOUT = 300
+HTTP_POOL_HEALTH_CHECK_INTERVAL = 60
+HTTP_POOL_MAX_LIFETIME = 1800  # 30 minutes
+TWS_CONNECT_TIMEOUT = 10
+TWS_READ_TIMEOUT = 30
+TWS_WRITE_TIMEOUT = 30
+TWS_POOL_TIMEOUT = 30
+TWS_MAX_CONNECTIONS = 100
+TWS_MAX_KEEPALIVE = 20
+TWS_POOL_RETRY_ATTEMPTS = 3
+TWS_POOL_RETRY_DELAY = 1
+TWS_MAX_CONCURRENT_REQUESTS = 20
+TWS_BASE_URL = "http://localhost:31111"  # Default TWS base URL
+
+# Agent Management Settings
+MAX_CONCURRENT_AGENT_CREATIONS = 5
+
+# WebSocket Connection Pool Settings
+WS_POOL_MAX_SIZE = 1000
+WS_POOL_CLEANUP_INTERVAL = 60
+WS_CONNECTION_TIMEOUT = 30
+WS_MAX_CONNECTION_DURATION = 3600  # 1 hour max connection duration
+
+# Database URL (constructed from Neo4j settings or can be overridden)
+DATABASE_URL = ""  # Will be constructed from NEO4J settings if empty

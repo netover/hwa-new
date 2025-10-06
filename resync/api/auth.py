@@ -19,6 +19,8 @@ security = HTTPBearer()
 SECRET_KEY = getattr(settings, "SECRET_KEY", "fallback_secret_key_for_development")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 
 def verify_admin_credentials(credentials=Depends(security)):
@@ -71,14 +73,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 def authenticate_admin(username: str, password: str):
     """
-    Authenticate admin user credentials.
+    Authenticate admin user credentials with plaintext password comparison.
+    NOTE: This is for MVP purposes only. For production, use proper password hashing.
     """
     # Verify the username matches the admin username from settings
     if username != settings.admin_username:
         return False
     
-    # For now, we use a simple check against the password in settings
-    # In a production environment, passwords should be hashed
+    # For MVP, we use a simple check against the plaintext password in settings
+    # In a production environment, passwords should be properly hashed
     if password != settings.admin_password:
         return False
     
