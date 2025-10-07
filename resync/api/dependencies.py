@@ -5,7 +5,7 @@ incluindo gerenciamento de idempotência, autenticação, e obtenção de IDs de
 """
 
 from typing import Optional
-from fastapi import Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from resync.core.container import app_container

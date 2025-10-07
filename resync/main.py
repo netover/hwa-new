@@ -1,5 +1,19 @@
 from __future__ import annotations
 
+# --- Structured Logging Initialization (CRITICAL: Must be first) ---
+import structlog
+from resync.core.structured_logger import configure_structured_logging, get_logger
+from resync.settings import settings
+
+# Configure logging before any other imports that might use it
+configure_structured_logging(
+    log_level=getattr(settings, 'LOG_LEVEL', 'INFO'),
+    json_logs=getattr(settings, 'environment', 'development') == "production",
+    development_mode=getattr(settings, 'environment', 'development') == "development"
+)
+
+logger = get_logger(__name__)
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -14,19 +28,7 @@ from resync.api.health import config_router, health_router
 from resync.api.rag_upload import router as rag_upload_router
 from resync.api.operations import router as operations_router
 from resync.api.rfc_examples import router as rfc_examples_router
-from resync.settings import settings
-
-# --- Structured Logging Initialization (CRITICAL: Must be first) ---
-from resync.core.structured_logger import configure_structured_logging, get_logger
-
-# Configure logging before any other imports that might use it
-configure_structured_logging(
-    log_level=getattr(settings, 'LOG_LEVEL', 'INFO'),
-    json_logs=getattr(settings, 'ENVIRONMENT', 'development') == "production",
-    development_mode=getattr(settings, 'ENVIRONMENT', 'development') == "development"
-)
-
-logger = get_logger(__name__)
+from resync.api.performance import performance_router
 
 # Import CQRS and API Gateway components
 from resync.cqrs.dispatcher import initialize_dispatcher
@@ -242,6 +244,27 @@ init_rate_limiter(app)
 from resync.core.utils.error_utils import register_exception_handlers
 register_exception_handlers(app)
 
+# Register handler for AuthenticationError to return 401
+from resync.core.exceptions import AuthenticationError
+from fastapi.responses import JSONResponse
+from fastapi import status
+
+@app.exception_handler(AuthenticationError)
+async def authentication_error_handler(request, exc: AuthenticationError):
+    """Handler global para AuthenticationError que retorna 401."""
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={
+            "error_code": exc.error_code.value,
+            "message": exc.message,
+            "status_code": exc.status_code,
+            "details": exc.details,
+            "correlation_id": exc.correlation_id,
+            "severity": exc.severity.value,
+            "timestamp": exc.timestamp.isoformat(),
+        }
+    )
+
 from resync.core.fastapi_di import inject_container
 # --- Dependency Injection Setup ---
 # This should be done before including routers that might use DI
@@ -292,6 +315,7 @@ app.include_router(
     rfc_examples_router,
     tags=["RFC Examples"]
 )
+app.include_router(performance_router, prefix="/api/performance", tags=["Performance Monitoring"])
 
 # Mount static files if directory exists
 static_dir = settings.BASE_DIR / "static"
@@ -429,7 +453,7 @@ if __name__ == "__main__":
             "resync.main:app", # Use string to support reloading
             host=host,
             port=port,
-            reload=getattr(settings, 'ENVIRONMENT', 'development') == 'development'
+            reload=getattr(settings, 'environment', 'development') == 'development'
         )
     except Exception as e:
         logger.critical("server_startup_failed", error=str(e), exc_info=True)

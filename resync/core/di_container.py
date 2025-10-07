@@ -28,7 +28,9 @@ from typing import (
 )
 
 # --- Logging Setup ---
-logger = logging.getLogger(__name__)
+from resync.core.structured_logger import get_logger
+
+logger = get_logger(__name__)
 
 # --- Type Variables ---
 T = TypeVar("T")

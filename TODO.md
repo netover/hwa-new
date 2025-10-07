@@ -1,48 +1,53 @@
-# MyPy Error Fixing Progress Tracker
+# Lista de Tarefas - Correções Identificadas
 
-## Overall Status
-- Total errors identified: ~200+ (based on mypy output)
-- Errors fixed: 0
-- Remaining errors: ~200+
+## Problemas Corrigidos ✅
 
-## Categories of Errors to Fix
+### 1. Falta de importação do `Depends` 
+- **Arquivo**: `resync/api/dependencies.py`
+- **Correção**: Adicionada importação do `Depends` do FastAPI
+- **Status**: ✅ Concluído
 
-### 1. Configuration and Setup Issues [ ]
-- [ ] Fix locustfile.py import errors (locust module)
-- [ ] Fix config/development.py import and name errors
-- [ ] Fix config/base import issues
-- [ ] Add missing library stubs configuration
+### 2. Tratamento incorreto de `AuthenticationError`
+- **Arquivo**: `resync/main.py`
+- **Correção**: Adicionado handler global para `AuthenticationError` que retorna status 401
+- **Status**: ✅ Concluído
 
-### 2. Core Interface Issues [ ]
-- [ ] Fix resync/core/interfaces.py - Function missing type annotation
-- [ ] Fix resync/core/metrics.py - Incompatible types in assignment
-- [ ] Fix resync/core/agent_manager.py - Multiple type issues
-- [ ] Fix resync/core/fastapi_di.py - Abstract type and callable issues
-- [ ] Fix resync/core/dependencies.py - Module attribute errors
+### 3. Tarefa de limpeza do cache não inicia
+- **Arquivo**: `resync/core/async_cache.py`
+- **Correção**: Alterado `self.is_running = True` para `self.is_running = False` no `__init__` para permitir que `_start_cleanup_task` funcione corretamente
+- **Status**: ✅ Concluído
 
-### 3. API Security Issues [ ]
-- [ ] Fix resync/api/security/validations.py - Field overload and type errors
-- [ ] Fix passlib.context import issues
+### 4. Chamadas de logging com argumentos nomeados
+- **Arquivo**: `resync/core/di_container.py`
+- **Correção**: Adicionada configuração do `structlog` no topo do arquivo antes de qualquer importação que possa usá-lo
+- **Status**: ✅ Concluído
 
-### 4. API Endpoint Issues [ ]
-- [ ] Fix resync/api/endpoints.py - Attribute and return type errors
-- [ ] Fix resync/api/chat.py - Attribute and callable errors
-- [ ] Fix resync/api/rag_upload.py - Type compatibility issues
+### 5. Remoção de `initialize_idempotency_manager` sem substituição
+- **Arquivo**: `README.md`
+- **Correção**: Atualizado exemplo no README para usar o container DI para obter o `IdempotencyManager`
+- **Status**: ✅ Concluído
 
-### 5. Test Files Issues [ ]
-- [ ] Fix tests/test_interfaces.py - Missing return type annotations
-- [ ] Fix tests/test_settings.py - Missing return type annotations
-- [ ] Fix tests/test_agent_manager*.py - Attribute and type errors
-- [ ] Fix tests/test_dependency*.py - Missing type annotations
-- [ ] Fix test_async_lock.py - Type and attribute errors
+## Verificações Adicionais
 
-### 6. Scripts and Utilities [ ]
-- [ ] Fix scripts/mutation_test.py - Type and path errors
-- [ ] Fix resync/core/utils/*.py - Missing type annotations
+### Validar funcionamento do sistema de logging estruturado
+- **Status**: ✅ Concluído
 
-### 7. Settings and Configuration [ ]
-- [ ] Fix resync/settings.py - dynaconf import issues
-- [ ] Fix config/development.py - Missing imports and undefined names
+### Validar funcionamento do sistema de idempotência
+- **Status**: ✅ Concluído
 
-## Progress Tracking
-Each category should be addressed in separate tasks to maintain context isolation as requested.
+### Validar funcionamento do cache com tarefa de limpeza
+- **Status**: ✅ Concluído
+
+### Validar tratamento correto de erros de autenticação
+- **Status**: ✅ Concluído
+
+## Testes Pendentes
+
+### Testar integração completa após correções
+- **Status**: ⏳ Pendente
+
+### Testar cenários de erro e recuperação
+- **Status**: ⏳ Pendente
+
+### Validar performance após correções
+- **Status**: ⏳ Pendente

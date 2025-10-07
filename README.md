@@ -57,7 +57,10 @@ for attempt in range(max_retries):
         # Test connection before initializing
         await redis_client.ping()
 
-        await initialize_idempotency_manager(redis_client)
+        # Initialize idempotency manager through DI container
+        from resync.core.container import app_container
+        from resync.core.idempotency import IdempotencyManager
+        idempotency_manager = await app_container.get(IdempotencyManager)
         logger.info("Idempotency manager initialized with Redis")
         break
 

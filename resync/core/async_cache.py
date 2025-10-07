@@ -123,8 +123,8 @@ class AsyncTTLCache:
             self.shards: List[Dict[str, CacheEntry]] = [{} for _ in range(self.num_shards)]
             self.shard_locks = [asyncio.Lock() for _ in range(self.num_shards)]
             self.cleanup_task: Optional[asyncio.Task[None]] = None
-            # Start with is_running=True to match test expectations, but task will only start when event loop is available
-            self.is_running = True
+            # Start with is_running=False so _start_cleanup_task can properly start the task
+            self.is_running = False
 
             # Initialize WAL if enabled
             self.wal: Optional[WriteAheadLog] = None

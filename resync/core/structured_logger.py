@@ -107,7 +107,7 @@ def add_service_context(
     from resync.settings import settings
     
     event_dict['service_name'] = settings.PROJECT_NAME
-    event_dict['environment'] = settings.ENVIRONMENT
+    event_dict['environment'] = settings.environment
     event_dict['version'] = settings.PROJECT_VERSION
     
     return event_dict
