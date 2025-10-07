@@ -198,10 +198,16 @@ class CORSPolicy(BaseModel):
         if '..' in netloc or '//' in netloc[1:]:  # Prevent directory traversal and duplicate slashes
             return False
 
-        # IPv4/IPv6 validation
+        # Extract host and port
         host = parsed.hostname
+        port = parsed.port
         
         if host:
+            # Special case: localhost is always valid
+            if host.lower() == 'localhost':
+                return True
+                
+            # IPv4/IPv6 validation
             # Check if it's a valid domain name or IP address
             # For domain validation, check basic pattern
             if ':' in host:  # Could be IPv6

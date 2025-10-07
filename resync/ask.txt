@@ -1,0 +1,102 @@
+STEP - 1
+
+2. INJEÇÃO DE DEPENDÊNCIAS INSEGURA (di_container.py)
+Validação:
+
+Descrição está correta: o container realmente permite registro de instâncias (registerinstance) e factories (registerfactory) sem uma checagem explícita e obrigatória do tipo — especialmente para casos de factory, onde “object” é aceito como tipo.
+
+O método validateimplementation tenta forçar conformidade via issubclass se possível, mas contorna erros de Protocols e acaba aceitando qualquer coisa silente se a checagem falhar.
+
+Risco: services podem ser registrados sem garantir aplicação rigorosa do contrato ou interface — especialmente se usar factories customizadas/instâncias “manuais”.
+
+Correções sugeridas:
+
+Modifique validateimplementation para SEMPRE lançar exceção em caso de falha/ambiguidade, mesmo para Protocols obscuros.
+
+Adicione type hints explícitos obrigatórios para todo registro de serviço (exemplo: generic bound).
+
+Adicione flag de “strict mode”: rejeite qualquer factory/instância se não bater 100% com interface esperada.
+
+Auditoria retroativa: trace todas as registrations em LOG crítico; falhas/violação de contrato devem gerar alarme.
+
+3. CACHE SEM CONTROLE DE BOUNDS (async_cache.py)
+Descrição:
+
+INCORRETO → O código TEM LIMITE de tamanho!
+
+O método checkcachebounds e checkitemcountbounds enforce limite de 100K entries por instância, e alertas de WARNING em LOG se excedido.
+
+Ao dar SET, o cache executa “while not self.checkcachebounds”, aplicando LRU eviction automática.
+
+Existe também verificação de memória: se ultrapassar 100MB estimado, dispara warning crítico ou aborta snapshot.
+
+As funções de rollback, clear e restore auditam limites de tamanho/memória — não permitem “crescimento indefinido” em produção.
+
+Correções/mitigações:
+
+Não é vulnerabilidade crítica no momento.
+
+Para postura paranoica: abaixe ainda mais o limite via config, ex: 10K-50K, e force “bounds check” na inicialização via settings para garantir em todos ambientes.
+
+Implemente “graceful degrade” caso o bounds seja atingido: cota de cache ou auto-tuning.
+
+Faça métricas push para sistema externo (Prometheus) caso thresholds sejam excedidos — evite confiar só em logs locais.
+
+MÉTRICAS DE QUALIDADE DE CÓDIGO – Complexidade Ciclomática (Estimativa)
+main.py: 15 (Alto — Recomendado <10)
+Confirmação plausível: Centraliza inicialização de FastAPI, routers e validações (startup Redis, settings).
+Mitigação: Quebre inicialização de dependências (lifespan) em arquivos/module helpers; decomponha endpoints críticos.
+
+async_cache.py: 12 (Médio-Alto)
+Confirmação: Métodos de cache, rollback, bounds-check, limpeza, snapshots, todos concorrentes.
+Mitigação: Separe rotinas de cleanup, bounds-check e rollback em módulos/funções dedicadas para reduzir acoplamento.
+
+circuit_breaker.py: 8 (Aceitável)
+Confirmação: Padrão simples, bem delimitado, sem bifurcações exageradas.
+
+agent_manager.py: 18 (Muito Alto)
+Confirmação: Altíssimo acoplamento entre loading de configs, criação de agentes, fallback, atualização/rollback simultâneos.
+Mitigação: Separe discovery, criação e rollback em classes/funções distintas. Use DI rigoroso ao invés de singleton para gestão.
+
+Resumo Cru (Estilo Playbook):
+Evidências:
+
+Falha real de contrato nos DI (não estrito!)
+
+Limite de cache presente (100K/100MB, auto-evict)
+
+Altíssima complexidade no agent_manager/main, risco de bugs e manutenção.
+
+Ações Hardcore:
+
+DI Container: patch para modo estrito; audite e logue registros/sujeira.
+
+Cache: monitore bounds; abaixe limites por paranoia operacional.
+
+Código: decomponha agent_manager/main em submódulos, adote métricas e revisão code review por função.
+
+Rollback:
+
+Em caso de falha na mitigação, restaure config antiga e rode healthcheck retroativo (já suportado no async_cache.py).
+
+Autocrítica Crítica:
+“Média” de gravidade na DI está subestimada: se contrato for quebrado, pode gerar bugs silenciosos catastróficos — aumente priorização.
+
+“Alta” no cache pode ser reconsiderada: limites já mitigam impacto em RAM/disco na maioria dos cenários.
+
+Complexidade esquecida: refatorar e modularizar é obrigatório antes de aceitar PR ou rodar em prod.
+
+Sugestão brutal:
+Crie CI que rejeite push se complexidade >12 por função ou falta de estrito no DI/falha de bounds no cache.
+É o único jeito de garantir sanidade em escala nonlinear.
+
+
+Step - 2
+
+
+
+ ### 🔧 Correções Pendentes:
+
+  - *Middleware_old.py*: Deve ser removido do guia e renomeado em `manifest.yml`.
+  - *auto_enable* no health endpoint: Atualizar o exemplo em `API_DOCUMENTATION.md`.
+  - *logs/YYYYMMDD*: Adicionar config de rotating do Python (`config/log_rotator.ini`).

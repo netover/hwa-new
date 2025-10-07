@@ -183,12 +183,14 @@ inject_container(app)
 # ============================================================================
 # TEMPLATE ENGINE
 # ============================================================================
+from jinja2 import select_autoescape
 
 jinja2_env = Environment(
     loader=FileSystemLoader(str(settings.BASE_DIR / "templates")),
     auto_reload=settings.ENVIRONMENT == "development",
     cache_size=400 if settings.ENVIRONMENT == "production" else 0,
-    enable_async=True
+    enable_async=True,
+    autoescape=select_autoescape(enabled_extensions=('html', 'xml'), disabled_extensions=())
 )
 
 templates = Jinja2Templates(directory=str(settings.BASE_DIR / "templates"))
@@ -240,7 +242,7 @@ if static_dir.exists() and static_dir.is_dir():
                 try:
                     stat_result = os.stat(full_path)
                     file_metadata = f"{stat_result.st_size}-{int(stat_result.st_mtime)}"
-                    etag_value = f'"{hashlib.md5(file_metadata.encode()).hexdigest()[:16]}"'
+                    etag_value = f'"{hashlib.sha256(file_metadata.encode()).hexdigest()[:16]}"'
                     response.headers["ETag"] = etag_value
                 except Exception:
                     response.headers["ETag"] = f'"{hash(full_path)}"'
@@ -345,7 +347,7 @@ if __name__ == "__main__":
     
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=8000,
+        host=getattr(settings, 'server_host', '127.0.0.1'),
+        port=getattr(settings, 'server_port', 8000),
         log_config=None  # Usar nosso logging estruturado
     )

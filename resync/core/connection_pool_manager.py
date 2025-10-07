@@ -10,14 +10,22 @@ from resync.core.pools.redis_pool import RedisConnectionPool
 from resync.core.pools.http_pool import HTTPConnectionPool
 from resync.core.pools.pool_manager import ConnectionPoolManager, get_connection_pool_manager
 
+
+async def shutdown_connection_pool_manager() -> None:
+    """Shutdown the connection pool manager."""
+    manager = await get_connection_pool_manager()
+    await manager.close_all()
+
+
 # Re-export the main classes and functions for backward compatibility
 __all__ = [
     "ConnectionPool",
-    "ConnectionPoolConfig", 
+    "ConnectionPoolConfig",
     "ConnectionPoolStats",
     "DatabaseConnectionPool",
-    "RedisConnectionPool", 
+    "RedisConnectionPool",
     "HTTPConnectionPool",
     "ConnectionPoolManager",
-    "get_connection_pool_manager"
+    "get_connection_pool_manager",
+    "shutdown_connection_pool_manager"
 ]

@@ -10,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from resync.core.logger import log_with_correlation
 from resync.models.error_models import (
     AuthenticationErrorResponse,
     AuthorizationErrorResponse,

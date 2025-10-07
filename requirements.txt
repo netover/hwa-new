@@ -1,33 +1,45 @@
+# ⚠️  DEPRECATED: Use requirements/dev.txt for development or requirements/prod.txt for production
+# This file is kept for backward compatibility but will be removed in future versions.
+#
+# For development: pip install -r requirements/dev.txt
+# For production: pip install -r requirements/prod.txt
+#
+# Legacy requirements (use structured files above instead)
+
+# Core dependencies
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.0.0
 httpx>=0.25.2
+redis>=5.0.1
+dynaconf>=3.2.4
+tenacity>=8.2.3
+prometheus-client>=0.20.0
+apscheduler>=3.10.4
+pybreaker>=1.1.0
+jinja2>=3.1.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+cryptography>=42.0.0  # Updated to latest secure version
+orjson>=3.9.10
+psutil>=5.9.6
+aiofiles>=23.2.1
+watchfiles>=0.21.0
+neo4j>=5.14.0
+openai>=1.50.0  # Updated to latest stable version
+litellm>=1.40.0
 pypdf>=3.17.4
-aiofiles>=23.2.1 # For async file operations
 python-docx>=1.1.0
 openpyxl>=3.1.2
-neo4j>=5.14.0
-pydantic>=2.5.0  # For data validation and serialization
-pydantic-settings>=2.0.0  # For Pydantic settings management
-dynaconf>=3.2.4  # For dynamic configuration management
-pytest-asyncio>=0.21.1  # For async testing support
-pytest-cov>=4.0.0  # For test coverage reporting
-redis>=5.0.1  # For Redis operations in tests
-fastapi>=0.104.1  # For API testing
-uvicorn>=0.24.0  # For running the server
-python-multipart>=0.0.6  # For file uploads
-tenacity>=8.2.3  # For retry mechanisms
-agno>=0.1.0  # For AI agent functionality
-prometheus-client>=0.20.0  # For metrics collection
-apscheduler>=3.10.4  # For async job scheduling
-pybreaker>=1.1.0  # For circuit breaker pattern
-watchfiles>=0.21.0  # For file system monitoring
-jinja2>=3.1.0  # For HTML templating
-python-jose[cryptography]>=3.3.0  # For JWT token handling
-passlib[bcrypt]>=1.7.4  # For password hashing
-cryptography>=41.0.8  # For cryptographic operations
-orjson>=3.9.10  # For fast JSON serialization
-psutil>=5.9.6  # For system monitoring
-python-dotenv>=1.0.0  # For environment variable loading
-openai>=1.3.5  # For OpenAI API integration
-litellm>=1.40.0  # For LLM provider abstraction and management
-authlib>=1.3.0  # For JWS/JWT compliance testing
-mutmut>=2.4.3  # For mutation testing
-aiohttp>=3.8.0  # For async HTTP requests
+python-multipart>=0.0.6
+aiohttp>=3.8.0
+python-dotenv>=1.0.0
+agno>=0.1.0
+
+# Development/Testing dependencies (should be separate)
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+pytest-cov>=4.0.0
+mutmut>=2.4.3
+authlib>=1.3.0

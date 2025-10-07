@@ -440,6 +440,70 @@ async def recover_component(component_name: str) -> Dict[str, Any]:
             }
         ) from e
 
+@router.get("/redis")
+async def get_redis_health() -> Dict[str, Any]:
+    """
+    Get detailed Redis health check with connection validation.
+
+    This endpoint performs explicit Redis connectivity testing and returns
+    critical status information for idempotency guarantee validation.
+
+    Returns:
+        Dict[str, Any]: Redis health status with connection details
+    """
+    try:
+        health_service = await get_health_check_service()
+        health_result = await health_service.perform_comprehensive_health_check()
+
+        redis_component = health_result.components.get("redis")
+
+        if not redis_component:
+            return {
+                "status": "critical",
+                "message": "Redis component not found in health check",
+                "idempotency_safe": False,
+                "timestamp": datetime.now().isoformat()
+            }
+
+        # Additional Redis-specific validation
+        redis_details = {
+            "status": redis_component.status.value,
+            "status_color": get_status_color(redis_component.status),
+            "message": redis_component.message,
+            "last_check": redis_component.last_check.isoformat() if redis_component.last_check else None,
+            "response_time": redis_component.response_time,
+            "details": redis_component.details or {}
+        }
+
+        # Determine if system can guarantee idempotency
+        idempotency_safe = redis_component.status == HealthStatus.HEALTHY
+
+        if not idempotency_safe:
+            logger.warning(
+                "Redis health check failed - idempotency may be compromised",
+                extra={"redis_status": redis_component.status.value}
+            )
+
+        return {
+            "status": "healthy" if idempotency_safe else "critical",
+            "idempotency_safe": idempotency_safe,
+            "redis": redis_details,
+            "timestamp": datetime.now().isoformat(),
+            "correlation_id": health_result.correlation_id,
+            "warning": "Redis unavailable - idempotency guarantees compromised" if not idempotency_safe else None
+        }
+
+    except Exception as e:
+        logger.error(f"Error checking Redis health: {e}", exc_info=True)
+        return {
+            "status": "critical",
+            "idempotency_safe": False,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+            "warning": "Redis health check failed - system cannot guarantee idempotency"
+        }
+
+
 @router.get("/components")
 async def list_components() -> Dict[str, List[Dict[str, str]]]:
     """

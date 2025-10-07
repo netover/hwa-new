@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, asdict
 from enum import Enum
 
-from resync.core.teams_integration import teams_notification
+from resync.core.teams_integration import get_teams_integration, TeamsNotification
 from resync.core.metrics import runtime_metrics
 from resync.config.slo import KPI_DEFINITIONS, validate_slo_compliance
 
@@ -322,7 +322,13 @@ class AlertingSystem:
                 }]
             }
             
-            await teams_notification("Alerting System", json.dumps(teams_message))
+            teams_integration = await get_teams_integration()
+            notification = TeamsNotification(
+                title="Alerting System",
+                message=json.dumps(teams_message),
+                severity="warning"
+            )
+            await teams_integration.send_notification(notification)
         except Exception as e:
             print(f"Failed to send Teams notification for alert {alert.id}: {e}")
     

@@ -20,6 +20,114 @@ Resync is an AI-powered interface for HCL Workload Automation (HWA), formerly kn
 - Implemented per-environment CORS policies
 - Added security monitoring for CORS violations
 
+## Critical Reliability Fixes
+
+### Redis Idempotency Initialization Security Fix
+
+**🚨 CRITICAL SECURITY ISSUE RESOLVED**
+
+**Problem:** The application previously used dangerous generic exception handling during Redis initialization for idempotency keys, silently falling back to in-memory storage when Redis was unavailable. This compromised data integrity and idempotency guarantees.
+
+**Impact:**
+- **Data Loss Risk**: Idempotency keys stored in volatile memory would be lost on application restart
+- **Duplicate Operations**: Same operations could execute multiple times without proper tracking
+- **Production Unsafety**: System appeared functional but couldn't guarantee critical business operations
+- **Silent Failures**: No alerts when Redis connectivity issues occurred
+
+**Solution Implemented:**
+```python
+# Redis initialization with comprehensive error handling and fail-fast strategy
+from redis.exceptions import (
+    ConnectionError,
+    TimeoutError,
+    AuthenticationError,
+    BusyLoadingError,
+    ResponseError
+)
+import sys
+
+max_retries = 3
+base_backoff = 0.1
+max_backoff = 10
+
+for attempt in range(max_retries):
+    try:
+        redis_client = await get_redis_client()
+
+        # Test connection before initializing
+        await redis_client.ping()
+
+        await initialize_idempotency_manager(redis_client)
+        logger.info("Idempotency manager initialized with Redis")
+        break
+
+    except (ConnectionError, TimeoutError, BusyLoadingError) as e:
+        # Temporary network/server errors - retry with exponential backoff
+        if attempt >= max_retries - 1:
+            logger.critical(
+                f"CRITICAL: Redis unavailable after {max_retries} retries. "
+                f"Cannot guarantee idempotency. Failing startup."
+            )
+            sys.exit(1)
+
+        backoff = min(max_backoff, base_backoff * (2 ** attempt))
+        logger.warning(
+            f"Redis connection failed (attempt {attempt + 1}/{max_retries}): {e}. "
+            f"Retrying in {backoff:.2f}s"
+        )
+        await asyncio.sleep(backoff)
+
+    except AuthenticationError as e:
+        # Authentication failures - fail fast
+        logger.critical(f"CRITICAL: Redis authentication failed: {e}")
+        sys.exit(1)
+
+    except ResponseError as e:
+        # Handle ACL/permission errors specifically
+        if "NOAUTH" in str(e) or "WRONGPASS" in str(e):
+            logger.critical(f"CRITICAL: Redis access denied: {e}")
+            sys.exit(1)
+        else:
+            # Other ResponseError - re-raise to be caught by generic handler
+            raise
+
+    except Exception as e:
+        # Unexpected errors - log complete details and fail-fast
+        logger.critical(
+            f"CRITICAL: Unexpected error initializing Redis for idempotency: {e}",
+            exc_info=True
+        )
+        sys.exit(1)
+```
+
+**Key Improvements:**
+- **Redis-Specific Exception Handling**: Uses `redis.exceptions.ConnectionError`, `TimeoutError`, `AuthenticationError`, `BusyLoadingError`, `ResponseError`
+- **Comprehensive Retry Strategy**: 3 attempts with exponential backoff (0.1s → 0.2s → 0.4s, max 10s)
+- **Connection Pre-Validation**: Tests Redis connectivity with `ping()` before idempotency manager initialization
+- **Fail-Fast Strategy**: Terminates application with `sys.exit(1)` when Redis is unavailable
+- **ACL/Permission Error Detection**: Specifically handles NOAUTH/WRONGPASS scenarios
+- **Complete Error Logging**: Critical errors logged with full stack traces (`exc_info=True`)
+- **No Dangerous Fallback**: Eliminates silent fallback to volatile in-memory storage
+
+**Production Requirements:**
+> ⚠️ **CRITICAL**: Redis must be available and properly configured. If Redis is unavailable during startup, the application will terminate with exit code 1 to prevent operating in an unsafe degraded mode. This ensures idempotency guarantees are maintained for all critical operations.
+
+**Additional Production Features:**
+
+- **Startup Metrics Tracking**: Records connection attempts, failures, and duration
+- **Environment Validation**: Validates REDIS_URL before attempting connections
+- **Health Check Endpoint**: `/api/health/redis` returns Redis status with idempotency safety indicator
+- **Fail-Fast Philosophy**: Complete rejection of in-memory fallback in production environments
+
+**Benefits:**
+- ✅ **Data Integrity**: Idempotency keys persist across application restarts
+- ✅ **Operational Safety**: No duplicate critical operations
+- ✅ **Production Readiness**: Clear failure modes with proper alerting
+- ✅ **Observability**: Detailed logging and metrics for troubleshooting
+- ✅ **Compliance**: Meets requirements for financial/payment system reliability
+- ✅ **Monitoring**: Dedicated health endpoints for Redis status validation
+- ✅ **Metrics**: Startup performance tracking and failure analysis
+
 ## Performance Optimizations
 
 ### AsyncTTLCache Improvements

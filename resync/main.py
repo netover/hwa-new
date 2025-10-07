@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -16,22 +14,24 @@ from resync.api.health import config_router, health_router
 from resync.api.rag_upload import router as rag_upload_router
 from resync.api.operations import router as operations_router
 from resync.api.rfc_examples import router as rfc_examples_router
-from resync.core.fastapi_di import inject_container
-from resync.core.lifecycle import lifespan
-from resync.core.logger import setup_logging
 from resync.settings import settings
+
+# --- Structured Logging Initialization (CRITICAL: Must be first) ---
+from resync.core.structured_logger import configure_structured_logging, get_logger
+
+# Configure logging before any other imports that might use it
+configure_structured_logging(
+    log_level=getattr(settings, 'LOG_LEVEL', 'INFO'),
+    json_logs=getattr(settings, 'ENVIRONMENT', 'development') == "production",
+    development_mode=getattr(settings, 'ENVIRONMENT', 'development') == "development"
+)
+
+logger = get_logger(__name__)
 
 # Import CQRS and API Gateway components
 from resync.cqrs.dispatcher import initialize_dispatcher
 from resync.api_gateway.container import setup_dependencies
 
-# Import new monitoring and observability components
-from resync.core.distributed_tracing import tracer
-from resync.core.alerting import alerting_system
-from resync.core.runbooks import runbook_registry
-from resync.core.benchmarking import SystemBenchmarkRunner, create_benchmark_runner
-
-logger = logging.getLogger(__name__)
 
 # --- Rate Limiter Initialization ---
 from resync.core.rate_limiter import (
@@ -39,19 +39,12 @@ from resync.core.rate_limiter import (
     init_rate_limiter,
 )
 
-# --- FastAPI App Initialization ---
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.PROJECT_VERSION,
-    description=settings.DESCRIPTION,
-    lifespan=lifespan,
-)
-
 
 # Update the lifespan function to initialize CQRS and dependency injection
 from contextlib import asynccontextmanager
 from resync.core.container import app_container
 from resync.core.interfaces import ITWSClient, IAgentManager, IKnowledgeGraph
+import asyncio
 
 
 @asynccontextmanager
@@ -74,28 +67,106 @@ async def lifespan_with_cqrs_and_di(app: FastAPI):
     
     # Initialize Idempotency Manager
     from resync.api.dependencies import initialize_idempotency_manager
-    try:
-        # Try to get Redis client from container
-        from resync.core.async_cache import get_redis_client
-        redis_client = await get_redis_client()
-        await initialize_idempotency_manager(redis_client)
-        logger.info("Idempotency manager initialized with Redis")
-    except Exception as e:
-        # Fallback to in-memory storage
-        logger.warning(f"Failed to initialize Redis for idempotency: {e}. Using in-memory storage.")
-        await initialize_idempotency_manager(None)
+    from redis.exceptions import (
+        ConnectionError,
+        TimeoutError,
+        AuthenticationError,
+        BusyLoadingError,
+        ResponseError
+    )
+    import sys
+
+    max_retries = 3
+    base_backoff = 0.1
+    max_backoff = 10
+
+    # Validate Redis environment variables before attempting connection
+    redis_url = getattr(settings, 'REDIS_URL', None)
+    if not redis_url:
+        logger.critical("CRITICAL: REDIS_URL environment variable not set")
+        sys.exit(1) # Fail fast
+
+    # Track startup metrics
+    startup_metrics = {
+        "redis_connection_attempts": 0,
+        "redis_connection_failures": 0,
+        "redis_authentication_failures": 0,
+        "startup_duration_seconds": 0
+    }
+    startup_start_time = asyncio.get_event_loop().time()
+
+    for attempt in range(max_retries):
+        startup_metrics["redis_connection_attempts"] += 1
+
+        try:
+            # Try to get Redis client from container
+            from resync.core.async_cache import get_redis_client
+            redis_client = await get_redis_client()
+
+            # Test connection before initializing
+            await redis_client.ping()
+
+            await initialize_idempotency_manager(redis_client)
+            logger.info("idempotency_manager_initialized", storage="redis")
+
+            # Record successful startup metrics
+            startup_metrics["startup_duration_seconds"] = asyncio.get_event_loop().time() - startup_start_time
+            logger.info(f"Redis startup completed in {startup_metrics['startup_duration_seconds']:.2f}s")
+            break
+
+        except (ConnectionError, TimeoutError, BusyLoadingError) as e:
+            startup_metrics["redis_connection_failures"] += 1
+
+            if attempt >= max_retries - 1:
+                logger.critical(
+                    "redis_unavailable",
+                    reason="Max retries reached",
+                    retries=max_retries,
+                    metrics=startup_metrics,
+                    error=str(e)
+                )
+                sys.exit(1)
+
+            backoff = min(max_backoff, base_backoff * (2 ** attempt))
+            logger.warning(
+                f"Redis connection failed (attempt {attempt + 1}/{max_retries}): {e}. "
+                f"Retrying in {backoff:.2f}s"
+            )
+            await asyncio.sleep(backoff)
+
+        except AuthenticationError as e:
+            startup_metrics["redis_authentication_failures"] += 1
+            logger.critical("redis_authentication_failed", error=str(e))
+            sys.exit(1)
+
+        except ResponseError as e:
+            # Handle ACL/permission errors
+            if "NOAUTH" in str(e) or "WRONGPASS" in str(e):
+                startup_metrics["redis_authentication_failures"] += 1
+                logger.critical("redis_access_denied", error=str(e))
+                sys.exit(1)
+            else:
+                # Other ResponseError - re-raise to be caught by generic handler
+                raise
+
+        except Exception as e:
+            # Unexpected error - log complete details and fail-fast
+            logger.critical(
+                "redis_initialization_failed",
+                reason="Unexpected error",
+                error=str(e),
+                exc_info=True
+            )
+            sys.exit(1)
     
     # Initialize distributed tracing
-    logger.info("Distributed tracing initialized")
-    
+    logger.info("distributed_tracing_initialized")
     # Initialize alerting system
-    logger.info("Alerting system initialized")
-    
+    logger.info("alerting_system_initialized")
     # Initialize runbook registry
-    logger.info("Runbook registry initialized")
-    
+    logger.info("runbook_registry_initialized")
     # Initialize benchmarking system
-    logger.info("Benchmarking system initialized")
+    logger.info("benchmarking_system_initialized")
     
     yield  # Application runs here
     
@@ -105,6 +176,47 @@ async def lifespan_with_cqrs_and_di(app: FastAPI):
     await shutdown_tws_monitor()
 
 
+def validate_critical_settings():
+    """Valida configurações críticas no startup."""
+    # Configurações básicas obrigatórias
+    required_settings = [
+        'PROJECT_NAME', 'PROJECT_VERSION', 'DESCRIPTION'
+    ]
+
+    missing = [setting for setting in required_settings
+               if not getattr(settings, setting, None)]
+
+    if missing:
+        logger.critical(
+            "missing_critical_settings", missing_settings=missing
+        )
+        raise ValueError(f"Missing critical settings: {', '.join(missing)}")
+
+    # Validação específica para pools Redis
+    redis_min = getattr(settings, "REDIS_POOL_MIN_SIZE", 5)
+    redis_max = getattr(settings, "REDIS_POOL_MAX_SIZE", 20)
+
+    if redis_min > redis_max:
+        raise ValueError(
+            f"Invalid Redis pool config: REDIS_POOL_MIN_SIZE ({redis_min}) > REDIS_POOL_MAX_SIZE ({redis_max})"
+        )
+
+    # Validação de configurações de segurança
+    if getattr(settings, 'environment', 'development') == 'production':
+        # Em produção, verificar se credenciais não são valores padrão
+        admin_password = getattr(settings, 'ADMIN_PASSWORD', '')
+        insecure_passwords = {'', 'change_me_immediately', 'PRODUCTION_PASSWORD_REQUIRED'}
+        if admin_password in insecure_passwords:
+            logger.critical(
+                "insecure_admin_password",
+                reason="Default or empty password used in production",
+                environment="production"
+            )
+            raise ValueError("Production requires secure ADMIN_PASSWORD configuration")
+
+# Validação no startup
+validate_critical_settings()
+
 # Use the updated lifespan
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -112,9 +224,6 @@ app = FastAPI(
     description=settings.DESCRIPTION,
     lifespan=lifespan_with_cqrs_and_di,
 )
-
-# Configure logging after settings are loaded
-setup_logging()
 
 # --- Configure CORS and Security Middleware ---
 from resync.config.cors import configure_cors
@@ -133,6 +242,7 @@ init_rate_limiter(app)
 from resync.core.utils.error_utils import register_exception_handlers
 register_exception_handlers(app)
 
+from resync.core.fastapi_di import inject_container
 # --- Dependency Injection Setup ---
 # This should be done before including routers that might use DI
 inject_container(app)
@@ -145,12 +255,15 @@ inject_container(app)
 # --- Template Engine with Caching ---
 from jinja2 import Environment, FileSystemLoader
 
-# Create Jinja2 environment with caching
+# Create Jinja2 environment with caching and security
+from jinja2 import select_autoescape
+
 jinja2_env = Environment(
     loader=FileSystemLoader(str(settings.BASE_DIR / "templates")),
     auto_reload=getattr(settings, "DEBUG", False),  # Disable for production
     cache_size=getattr(settings, "JINJA2_TEMPLATE_CACHE_SIZE", 400 if not getattr(settings, "DEBUG", False) else 0),
-    enable_async=True
+    enable_async=True,
+    autoescape=select_autoescape(enabled_extensions=('html', 'xml'), disabled_extensions=())
 )
 
 # Create templates and assign the environment
@@ -189,35 +302,37 @@ if static_dir.exists() and static_dir.is_dir():
     import hashlib
     # import os
 
-    class CachedStaticFiles(StarletteStaticFiles):
+    class SecureCachedStaticFiles(StarletteStaticFiles):
+        """Arquivos estáticos com cache seguro e ETags SHA-256."""
+
         async def get_response(self, path: str, full_path: str):
             response = await super().get_response(path, full_path)
             if response.status_code == 200:
                 # Add cache headers for static files using configurable max-age
                 cache_max_age = getattr(settings, "STATIC_CACHE_MAX_AGE", 3600)
                 response.headers["Cache-Control"] = f"public, max-age={cache_max_age}"
-                # Generate ETag based on file metadata (size and modification time) for better performance
+
                 try:
-                    # import os
                     import os
                     stat_result = os.stat(full_path)
-                    # Create ETag from file size and modification time
+                    # SHA-256 ao invés de MD5 para segurança
                     file_metadata = f"{stat_result.st_size}-{int(stat_result.st_mtime)}"
-                    etag_value = f'"{hashlib.md5(file_metadata.encode()).hexdigest()[:16]}"'
+                    etag_value = f'"{hashlib.sha256(file_metadata.encode()).hexdigest()[:16]}"'
                     response.headers["ETag"] = etag_value
-                except Exception:
-                    # Fallback to path-based hash if file operations fail
-                    response.headers["ETag"] = f'"{hash(full_path)}"'
+                except (OSError, ImportError) as e:
+                    logger.warning("etag_generation_failed", path=path, error=str(e))
+                    # Fallback seguro
+                    response.headers["ETag"] = f'W/"{hash(full_path)}"' # Weak ETag
             return response
     
     app.mount(
         "/static",
-        CachedStaticFiles(directory=static_dir),
+        SecureCachedStaticFiles(directory=static_dir),
         name="static",
     )
-    logger.info(f"Mounted static directory at: {static_dir}")
+    logger.info("static_files_mounted", directory=str(static_dir))
 else:
-    logger.warning(f"Static directory not found, skipping mount: {static_dir}")
+    logger.warning("static_directory_not_found", path=str(static_dir))
 
 
 # --- Frontend Page Endpoints ---
@@ -234,17 +349,63 @@ async def get_review_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("revisao.html", {"request": request})
 
 
+def validate_csp_report(body: bytes) -> bool:
+    """Validate CSP violation report format and content."""
+    try:
+        import json
+        report_data = json.loads(body.decode('utf-8'))
+
+        # Verificar estrutura básica do relatório
+        if not isinstance(report_data, dict):
+            return False
+
+        # Verificar campos obrigatórios do CSP report
+        required_fields = ['document-uri', 'violated-directive', 'original-policy']
+        for field in required_fields:
+            if field not in report_data and f'csp-report.{field}' not in report_data:
+                # Verificar formato alternativo com csp-report prefixo
+                if not any(key.startswith('csp-report.') for key in report_data.keys()):
+                    return False
+
+        # Verificar tamanho razoável (prevenir spam)
+        if len(body) > 10000:  # 10KB limite
+            return False
+
+        return True
+    except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+        return False
+
 # --- CSP Violation Report Endpoint ---
 @app.post("/csp-violation-report", include_in_schema=False)
 async def csp_violation_report(request: Request):
-    """Handle CSP violation reports."""
+    """Handle CSP violation reports with validation and rate limiting."""
     try:
         body = await request.body()
-        logger.warning(f"CSP violation reported: {body.decode('utf-8', errors='ignore')}")
+
+        # Validação do relatório CSP
+        if not validate_csp_report(body):
+            logger.warning("invalid_csp_report_received", client_host=request.client.host)
+            raise HTTPException(status_code=400, detail="Invalid CSP report format")
+
+        # Log limitado para prevenir vazamento de informações sensíveis
+        report_preview = body.decode('utf-8', errors='ignore')[:500]
+        logger.warning(
+            "csp_violation_reported",
+            client_host=request.client.host,
+            report_preview=f"{report_preview}..."
+        )
+
         return JSONResponse(content={"status": "received"}, status_code=200)
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error processing CSP violation report: {e}")
-        return JSONResponse(content={"error": "processing failed"}, status_code=500)
+        # Log específico sem exposição de detalhes do erro
+        logger.error("csp_report_processing_error", error_type=type(e).__name__)
+        return JSONResponse(
+            content={"error": "processing failed"},
+            status_code=500
+        )
 
 
 @app.get("/", include_in_schema=False)
@@ -253,27 +414,23 @@ async def root():
     return RedirectResponse(url="/login", status_code=302)
 
 
-def validate_settings():
-    """Validate critical settings at startup."""
-    if not hasattr(settings, 'WS_MAX_CONNECTION_DURATION'):
-        logger.warning("WS_MAX_CONNECTION_DURATION not set in settings, using default")
-    
-    if not hasattr(settings, 'JINJA2_TEMPLATE_CACHE_SIZE'):
-        logger.warning("JINJA2_TEMPLATE_CACHE_SIZE not set in settings, using default")
-    
-    # Validate Redis pool settings
-    redis_max_size = getattr(settings, "REDIS_POOL_MAX_SIZE", 20)
-    redis_min_size = getattr(settings, "REDIS_POOL_MIN_SIZE", 5)
-    
-    if redis_min_size > redis_max_size:
-        logger.error(f"REDIS_POOL_MIN_SIZE ({redis_min_size}) cannot be greater than REDIS_POOL_MAX_SIZE ({redis_max_size})")
-        raise ValueError("Invalid Redis pool configuration")
-
-# Call validation after settings are loaded
-validate_settings()
+# Critical settings validation is handled by validate_critical_settings() above
 
 # --- Application Entry Point (for direct execution) ---
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    try:
+        host = getattr(settings, 'server_host', '127.0.0.1')
+        port = getattr(settings, 'server_port', 8000)
+        logger.info("server_starting", host=host, port=port)
+        # Use secure host binding from settings (defaults to 127.0.0.1 for security)
+        uvicorn.run(
+            "resync.main:app", # Use string to support reloading
+            host=host,
+            port=port,
+            reload=getattr(settings, 'ENVIRONMENT', 'development') == 'development'
+        )
+    except Exception as e:
+        logger.critical("server_startup_failed", error=str(e), exc_info=True)
+        sys.exit(1)

@@ -54,7 +54,7 @@ class ConsistentHash:
 
     def _hash(self, key: str) -> int:
         """Create a hash for a key."""
-        return int(hashlib.md5(key.encode()).hexdigest(), 16)
+        return int(hashlib.sha256(key.encode()).hexdigest(), 16)
 
     def get_shard(self, key: str) -> int:
         """

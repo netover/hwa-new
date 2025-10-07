@@ -43,28 +43,38 @@ class BaseSettings(PydanticBaseSettings):
 
 class ApplicationSettings(BaseSettings):
     """Pydantic model for application settings with validation."""
-    
+
     # Database settings
-    neo4j_uri: str = Field(..., env="NEO4J_URI")
-    neo4j_user: str = Field(..., env="NEO4J_USER")
-    neo4j_password: str = Field(..., env="NEO4J_PASSWORD")
+    neo4j_uri: str = Field(default="bolt://localhost:7687", env="NEO4J_URI")
+    neo4j_user: str = Field(default="neo4j", env="NEO4J_USER")
+    neo4j_password: str = Field(default="password", env="NEO4J_PASSWORD")
     
+    # Cache settings
+    async_cache_ttl: int = Field(default=60, env="ASYNC_CACHE_TTL", description="Time-to-live for cache entries in seconds")
+    async_cache_cleanup_interval: int = Field(default=30, env="ASYNC_CACHE_CLEANUP_INTERVAL", description="How often to run background cleanup in seconds")
+    async_cache_num_shards: int = Field(default=16, env="ASYNC_CACHE_NUM_SHARDS", description="Number of shards for the lock")
+    async_cache_enable_wal: bool = Field(default=False, env="ASYNC_CACHE_ENABLE_WAL", description="Whether to enable Write-Ahead Logging for persistence")
+    async_cache_wal_path: Optional[str] = Field(default=None, env="ASYNC_CACHE_WAL_PATH", description="Path for WAL files")
+    async_cache_max_entries: int = Field(default=100000, env="ASYNC_CACHE_MAX_ENTRIES", description="Maximum number of entries in cache")
+    async_cache_max_memory_mb: int = Field(default=100, env="ASYNC_CACHE_MAX_MEMORY_MB", description="Maximum memory usage in MB")
+    async_cache_paranoia_mode: bool = Field(default=False, env="ASYNC_CACHE_PARANOIA_MODE", description="Enable paranoid operational mode with lower bounds")
+
     # Redis settings
-    redis_url: str = Field(..., env="REDIS_URL")
+    redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
     redis_min_connections: int = Field(default=1, env="REDIS_MIN_CONNECTIONS")
     redis_max_connections: int = Field(default=10, env="REDIS_MAX_CONNECTIONS")
     redis_timeout: float = Field(default=30.0, env="REDIS_TIMEOUT")
-    
+
     # LLM settings
-    llm_endpoint: str = Field(..., env="LLM_ENDPOINT")
-    llm_api_key: str = Field(..., env="LLM_API_KEY")
-    
+    llm_endpoint: str = Field(default="http://localhost:11434/v1", env="LLM_ENDPOINT")
+    llm_api_key: str = Field(default="dummy_key_for_development", env="LLM_API_KEY")
+
     # Admin credentials
-    admin_username: str = Field(..., env="ADMIN_USERNAME")
-    admin_password: str = Field(..., env="ADMIN_PASSWORD")
+    admin_username: str = Field(default="admin", env="ADMIN_USERNAME")
+    admin_password: str = Field(default="change_me_please", env="ADMIN_PASSWORD")
     
     # TWS settings
-    tws_mock_mode: bool = Field(default=False, env="TWS_MOCK_MODE")
+    tws_mock_mode: bool = Field(default=True, env="TWS_MOCK_MODE")
     tws_host: Optional[str] = Field(default=None, env="TWS_HOST")
     tws_port: Optional[int] = Field(default=None, env="TWS_PORT")
     tws_user: Optional[str] = Field(default=None, env="TWS_USER")
@@ -75,10 +85,175 @@ class ApplicationSettings(BaseSettings):
     cors_allow_credentials: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")
     cors_allow_methods: list[str] = Field(default=["*"], env="CORS_ALLOW_METHODS")
     cors_allow_headers: list[str] = Field(default=["*"], env="CORS_ALLOW_HEADERS")
+
+    # Server settings
+    server_host: str = Field(default="127.0.0.1", env="SERVER_HOST")  # Secure default: localhost only
+    server_port: int = Field(default=8000, env="SERVER_PORT")
     
     # Base directory
     base_dir: Path = Field(default=Path.cwd(), env="BASE_DIR")
-    
+
+    # Additional settings from dynaconf
+    project_name: str = Field(default="Resync", env="PROJECT_NAME")
+    project_version: str = Field(default="1.0.0", env="PROJECT_VERSION")
+    description: str = Field(default="Real-time monitoring dashboard for HCL Workload Automation", env="DESCRIPTION")
+
+    # Model names
+    auditor_model_name: str = Field(default="gpt-3.5-turbo", env="AUDITOR_MODEL_NAME")
+    agent_model_name: str = Field(default="gpt-4o", env="AGENT_MODEL_NAME")
+
+    # Connection pool settings
+    db_pool_min_size: int = Field(default=20, env="DB_POOL_MIN_SIZE")
+    db_pool_max_size: int = Field(default=100, env="DB_POOL_MAX_SIZE")
+    db_pool_idle_timeout: int = Field(default=1200, env="DB_POOL_IDLE_TIMEOUT")
+    db_pool_connect_timeout: int = Field(default=60, env="DB_POOL_CONNECT_TIMEOUT")
+    db_pool_health_check_interval: int = Field(default=60, env="DB_POOL_HEALTH_CHECK_INTERVAL")
+    db_pool_max_lifetime: int = Field(default=1800, env="DB_POOL_MAX_LIFETIME")
+
+    redis_pool_min_size: int = Field(default=5, env="REDIS_POOL_MIN_SIZE")
+    redis_pool_max_size: int = Field(default=20, env="REDIS_POOL_MAX_SIZE")
+    redis_pool_idle_timeout: int = Field(default=300, env="REDIS_POOL_IDLE_TIMEOUT")
+    redis_pool_connect_timeout: int = Field(default=30, env="REDIS_POOL_CONNECT_TIMEOUT")
+    redis_pool_health_check_interval: int = Field(default=60, env="REDIS_POOL_HEALTH_CHECK_INTERVAL")
+    redis_pool_max_lifetime: int = Field(default=1800, env="REDIS_POOL_MAX_LIFETIME")
+
+    http_pool_min_size: int = Field(default=10, env="HTTP_POOL_MIN_SIZE")
+    http_pool_max_size: int = Field(default=100, env="HTTP_POOL_MAX_SIZE")
+    http_pool_idle_timeout: int = Field(default=300, env="HTTP_POOL_IDLE_TIMEOUT")
+    http_pool_connect_timeout: int = Field(default=10, env="HTTP_POOL_CONNECT_TIMEOUT")
+    http_pool_health_check_interval: int = Field(default=60, env="HTTP_POOL_HEALTH_CHECK_INTERVAL")
+    http_pool_max_lifetime: int = Field(default=1800, env="HTTP_POOL_MAX_LIFETIME")
+
+    tws_base_url: str = Field(default="http://localhost:31111", env="TWS_BASE_URL")
+    database_url: str = Field(default="sqlite:///./test.db", env="DATABASE_URL")
+
+    # Rate limiting settings
+    rate_limit_public_per_minute: int = Field(default=100, env="RATE_LIMIT_PUBLIC_PER_MINUTE")
+    rate_limit_authenticated_per_minute: int = Field(default=1000, env="RATE_LIMIT_AUTHENTICATED_PER_MINUTE")
+    rate_limit_critical_per_minute: int = Field(default=50, env="RATE_LIMIT_CRITICAL_PER_MINUTE")
+    rate_limit_error_handler_per_minute: int = Field(default=15, env="RATE_LIMIT_ERROR_HANDLER_PER_MINUTE")
+    rate_limit_websocket_per_minute: int = Field(default=30, env="RATE_LIMIT_WEBSOCKET_PER_MINUTE")
+    rate_limit_dashboard_per_minute: int = Field(default=10, env="RATE_LIMIT_DASHBOARD_PER_MINUTE")
+    rate_limit_storage_uri: str = Field(default="redis://localhost:6379", env="RATE_LIMIT_STORAGE_URI")
+    rate_limit_key_prefix: str = Field(default="resync:ratelimit:", env="RATE_LIMIT_KEY_PREFIX")
+    rate_limit_sliding_window: bool = Field(default=True, env="RATE_LIMIT_SLIDING_WINDOW")
+
+    @property
+    def BASE_DIR(self):
+        """Backward compatibility property for dynaconf-style access."""
+        return self.base_dir
+
+    @property
+    def PROJECT_NAME(self):
+        """Backward compatibility property for dynaconf-style access."""
+        return self.project_name
+
+    @property
+    def PROJECT_VERSION(self):
+        """Backward compatibility property for dynaconf-style access."""
+        return self.project_version
+
+    @property
+    def DESCRIPTION(self):
+        """Backward compatibility property for dynaconf-style access."""
+        return self.description
+
+    # Model name properties
+    @property
+    def AUDITOR_MODEL_NAME(self):
+        return self.auditor_model_name
+
+    @property
+    def AGENT_MODEL_NAME(self):
+        return self.agent_model_name
+
+    # Connection pool properties
+    @property
+    def DB_POOL_MIN_SIZE(self):
+        return self.db_pool_min_size
+
+    @property
+    def DB_POOL_MAX_SIZE(self):
+        return self.db_pool_max_size
+
+    @property
+    def DB_POOL_IDLE_TIMEOUT(self):
+        return self.db_pool_idle_timeout
+
+    @property
+    def DB_POOL_CONNECT_TIMEOUT(self):
+        return self.db_pool_connect_timeout
+
+    @property
+    def DB_POOL_HEALTH_CHECK_INTERVAL(self):
+        return self.db_pool_health_check_interval
+
+    @property
+    def DB_POOL_MAX_LIFETIME(self):
+        return self.db_pool_max_lifetime
+
+    @property
+    def REDIS_POOL_MIN_SIZE(self):
+        return self.redis_pool_min_size
+
+    @property
+    def REDIS_POOL_MAX_SIZE(self):
+        return self.redis_pool_max_size
+
+    @property
+    def REDIS_POOL_IDLE_TIMEOUT(self):
+        return self.redis_pool_idle_timeout
+
+    @property
+    def REDIS_POOL_CONNECT_TIMEOUT(self):
+        return self.redis_pool_connect_timeout
+
+    @property
+    def REDIS_POOL_HEALTH_CHECK_INTERVAL(self):
+        return self.redis_pool_health_check_interval
+
+    @property
+    def REDIS_POOL_MAX_LIFETIME(self):
+        return self.redis_pool_max_lifetime
+
+    @property
+    def HTTP_POOL_MIN_SIZE(self):
+        return self.http_pool_min_size
+
+    @property
+    def HTTP_POOL_MAX_SIZE(self):
+        return self.http_pool_max_size
+
+    @property
+    def HTTP_POOL_IDLE_TIMEOUT(self):
+        return self.http_pool_idle_timeout
+
+    @property
+    def HTTP_POOL_CONNECT_TIMEOUT(self):
+        return self.http_pool_connect_timeout
+
+    @property
+    def HTTP_POOL_HEALTH_CHECK_INTERVAL(self):
+        return self.http_pool_health_check_interval
+
+    @property
+    def HTTP_POOL_MAX_LIFETIME(self):
+        return self.http_pool_max_lifetime
+
+    @property
+    def TWS_BASE_URL(self):
+        return self.tws_base_url
+
+    def __getattr__(self, name: str):
+        """Automatically convert uppercase attribute access to lowercase field access for backward compatibility."""
+        # Convert UPPER_CASE to lower_case
+        if name.isupper() and '_' in name:
+            lower_name = name.lower()
+            if hasattr(self, lower_name):
+                return getattr(self, lower_name)
+        # If not found, raise AttributeError
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
     @field_validator('tws_port')
     @classmethod
     def validate_tws_port(cls, v):
@@ -104,6 +279,7 @@ class ApplicationSettings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "allow"
 
 
 def load_config() -> ApplicationSettings:
@@ -205,11 +381,15 @@ def validate_settings(config) -> None:
         )
 
     # Validate that sensitive values are not default/placeholder values
+    # For development environment, allow some default values
+    environment = get_value("APP_ENV") or "development"
+    is_production = environment == "production"
+
     validations = [
         ("LLM_API_KEY", lambda x: x and x != "your_default_api_key_here", "LLM_API_KEY must be set to a valid API key"),
-        ("ADMIN_USERNAME", lambda x: x and x != "admin", "ADMIN_USERNAME must be changed from default"),
-        ("ADMIN_PASSWORD", lambda x: x and x != "admin", "ADMIN_PASSWORD must be changed from default"),
-        ("NEO4J_PASSWORD", lambda x: x and x != "password", "NEO4J_PASSWORD must be changed from default"),
+        ("ADMIN_USERNAME", lambda x: x and (not is_production or x != "admin"), "ADMIN_USERNAME must be changed from default in production"),
+        ("ADMIN_PASSWORD", lambda x: x and (not is_production or x != "admin"), "ADMIN_PASSWORD must be changed from default in production"),
+        ("NEO4J_PASSWORD", lambda x: x and (not is_production or x != "password"), "NEO4J_PASSWORD must be changed from default in production"),
     ]
 
     for field_name, validation_func, error_msg in validations:

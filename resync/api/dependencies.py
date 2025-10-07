@@ -1,13 +1,14 @@
 """Dependências compartilhadas para endpoints FastAPI.
 
 Este módulo fornece funções de dependência para injeção em endpoints,
-incluindo gerenciamento de idempotência, autenticação, rate limiting, etc.
+incluindo gerenciamento de idempotência, autenticação, e obtenção de IDs de contexto.
 """
 
 from typing import Optional
 from fastapi import Header, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from resync.core.container import app_container
 from resync.core.idempotency import (
     IdempotencyManager,
     RedisIdempotencyStorage,
@@ -15,7 +16,10 @@ from resync.core.idempotency import (
 )
 from resync.core.exceptions import ValidationError
 from resync.core.structured_logger import get_logger
-from resync.settings import settings
+from resync.core.exceptions import (
+    AuthenticationError,
+    ServiceUnavailableError,
+)
 
 logger = get_logger(__name__)
 
@@ -23,54 +27,22 @@ logger = get_logger(__name__)
 # IDEMPOTENCY DEPENDENCIES
 # ============================================================================
 
-# Instância global do manager (será inicializada no startup)
-_idempotency_manager: Optional[IdempotencyManager] = None
-
 
 async def get_idempotency_manager() -> IdempotencyManager:
-    """Obtém instância do IdempotencyManager.
+    """Obtém a instância do IdempotencyManager a partir do container de DI.
     
     Returns:
         IdempotencyManager configurado
         
     Raises:
-        HTTPException: Se manager não foi inicializado
+        ServiceUnavailableError: Se o serviço de idempotência não estiver disponível.
     """
-    global _idempotency_manager
-    
-    if _idempotency_manager is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Idempotency service not initialized"
-        )
-    
-    return _idempotency_manager
-
-
-async def initialize_idempotency_manager(redis_client=None) -> None:
-    """Inicializa o IdempotencyManager global.
-    
-    Deve ser chamado no startup da aplicação.
-    
-    Args:
-        redis_client: Cliente Redis (opcional, usa in-memory se não fornecido)
-    """
-    global _idempotency_manager
-    
-    if redis_client:
-        storage = RedisIdempotencyStorage(redis_client)
-        logger.info("Idempotency manager initialized with Redis storage")
-    else:
-        storage = InMemoryIdempotencyStorage()
-        logger.warning(
-            "Idempotency manager initialized with in-memory storage. "
-            "Not recommended for production!"
-        )
-    
-    _idempotency_manager = IdempotencyManager(
-        storage=storage,
-        default_ttl_seconds=getattr(settings, 'IDEMPOTENCY_TTL_SECONDS', 86400)
-    )
+    try:
+        manager = await app_container.get(IdempotencyManager)
+        return manager
+    except Exception as e:
+        logger.error("idempotency_manager_unavailable", error=str(e), exc_info=True)
+        raise ServiceUnavailableError("Idempotency service is not available.")
 
 
 async def get_idempotency_key(
@@ -169,15 +141,15 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = None
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> Optional[dict]:
     """Obtém usuário atual (placeholder).
     
     Args:
-        credentials: Credenciais de autenticação
+        credentials: Credenciais de autenticação injetadas pelo FastAPI.
         
     Returns:
-        Dados do usuário ou None
+        Um dicionário representando o usuário ou None se não autenticado.
     """
     # TODO: Implementar autenticação real
     if credentials:
@@ -188,24 +160,21 @@ async def get_current_user(
 
 
 async def require_authentication(
-    credentials: HTTPAuthorizationCredentials = None
+    user: Optional[dict] = Depends(get_current_user)
 ) -> dict:
-    """Requer autenticação (placeholder).
+    """Garante que um usuário esteja autenticado.
     
     Args:
-        credentials: Credenciais de autenticação
+        user: O usuário obtido da dependência `get_current_user`.
         
     Returns:
         Dados do usuário
         
     Raises:
-        HTTPException: Se não autenticado
+        AuthenticationError: Se o usuário não estiver autenticado.
     """
-    user = await get_current_user(credentials)
-    
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        raise AuthenticationError(
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"}
         )
@@ -224,7 +193,7 @@ async def check_rate_limit(request: Request) -> None:
         request: Request object
         
     Raises:
-        HTTPException: Se rate limit excedido
+        RateLimitError: Se o limite de taxa for excedido.
     """
     # TODO: Implementar verificação de rate limit
     pass

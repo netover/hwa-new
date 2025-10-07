@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi import status
 from pydantic import BaseModel, Field

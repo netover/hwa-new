@@ -1,0 +1,239 @@
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+CSP middleware added (report_only=True, environment=development)
+Additional security headers middleware added
+Security headers middleware added
+Additional security headers middleware added
+Public endpoints: 100/minute
+Rate limiting initialized with Redis backend
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'
+Adding CORS middleware for environment: development (allow_all_origins=False, allowed_origins=1, allow_credentials=True)
+CORS middleware added for environment: development
+CSP middleware added (report_only=True, environment=development)
+Security headers middleware added
+Additional security headers middleware added
+Rate limiting initialized with Redis backend
+Public endpoints: 100/minute
+Authenticated endpoints: 1000/minute
+Critical endpoints: 50/minute
+Registered IAgentManager -> AgentManager with scope SINGLETON, health_required=True
+Error configuring DI container: Logger._log() got an unexpected keyword argument 'action'

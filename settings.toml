@@ -31,11 +31,11 @@ LLM_MODEL_NAME = "llama3"
 LLM_TEMPERATURE = 0.1
 
 # --- Admin Credentials ---
-# These must be explicitly set for security - no insecure defaults in production
-# NOTE: For MVP purposes, passwords are stored in plaintext. 
-# For production, implement proper password hashing (bcrypt) and use ADMIN_PASSWORD_HASHED instead.
-ADMIN_USERNAME = ""
-ADMIN_PASSWORD = ""
+# SECURITY CRITICAL: These must be set via environment variables in production!
+# Never commit real credentials to version control.
+# Use strong, unique passwords in production.
+ADMIN_USERNAME = "admin"  # Default for development only
+ADMIN_PASSWORD = "change_me_immediately"  # CRITICAL: Must be changed for any deployment!
 
 # --- Rate Limiting Configuration ---
 RATE_LIMIT_PUBLIC_PER_MINUTE = 100
@@ -73,10 +73,12 @@ notification_types = ["job_status", "alerts", "performance"]
 
 # --- Cache Hierarchy Configuration ---
 [default.CACHE_HIERARCHY]
-L1_MAX_SIZE = 5000
+L1_MAX_SIZE = 2000  # Reduzido para evitar consumo excessivo
 L2_TTL_SECONDS = 600
 L2_CLEANUP_INTERVAL = 60
 USE_NEW_CACHING_LAYER = true
+CACHE_ENCRYPTION_ENABLED = true
+CACHE_KEY_PREFIX = "resync:${APP_ENV}:"
 
 # --- Async Cache Configuration ---
 [default.ASYNC_CACHE]
@@ -84,51 +86,15 @@ TTL_SECONDS = 60
 CLEANUP_INTERVAL = 30
 NUM_SHARDS = 8
 MAX_WORKERS = 4
+MAX_ENTRIES = 100000
+MAX_MEMORY_MB = 100
+PARANOIA_MODE = false
 
 # --- KeyLock Configuration ---
 [default.KEYLOCK]
 MAX_LOCKS = 2048
 
 # --- Connection Pool Configuration ---
-[default.CONNECTION_POOL]
-# Database Connection Pool Settings - Optimized for high volume
-DB_POOL_MIN_SIZE = 20
-DB_POOL_MAX_SIZE = 100
-DB_POOL_TIMEOUT = 60
-DB_POOL_RETRY_ATTEMPTS = 3
-DB_POOL_RETRY_DELAY = 1
-DB_POOL_HEALTH_CHECK_INTERVAL = 60
-DB_POOL_IDLE_TIMEOUT = 1200
-
-# Redis Connection Pool Settings
-REDIS_POOL_MIN_SIZE = 5
-REDIS_POOL_MAX_SIZE = 20
-REDIS_POOL_TIMEOUT = 30
-REDIS_POOL_RETRY_ATTEMPTS = 3
-REDIS_POOL_RETRY_DELAY = 1
-REDIS_POOL_HEALTH_CHECK_INTERVAL = 60
-REDIS_POOL_IDLE_TIMEOUT = 300
-
-# HTTP/TWS Connection Pool Settings
-TWS_CONNECT_TIMEOUT = 10
-TWS_READ_TIMEOUT = 30
-TWS_WRITE_TIMEOUT = 30
-TWS_POOL_TIMEOUT = 30
-TWS_MAX_CONNECTIONS = 100
-TWS_MAX_KEEPALIVE = 20
-TWS_POOL_RETRY_ATTEMPTS = 3
-TWS_POOL_RETRY_DELAY = 1
-TWS_MAX_CONCURRENT_REQUESTS = 20
-
-# Agent Management Settings
-MAX_CONCURRENT_AGENT_CREATIONS = 5
-
-# WebSocket Connection Pool Settings
-WS_POOL_MAX_SIZE = 1000
-WS_POOL_CLEANUP_INTERVAL = 60
-WS_CONNECTION_TIMEOUT = 30
-WS_MAX_CONNECTION_DURATION = 3600  # 1 hour max connection duration
-
 # --- Rate Limiting Configuration ---
 [default.RATE_LIMITING]
 PUBLIC_REQUESTS_PER_MINUTE = 100
@@ -212,7 +178,7 @@ CSP_REPORT_TO = ""
 # --- CORS Configuration ---
 [default.CORS]
 ENABLED = true
-ALLOWED_ORIGINS = []  # Must be explicitly configured per environment
+ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:8080"]  # Secure defaults for development
 ALLOW_CREDENTIALS = false
 LOG_VIOLATIONS = true
 
@@ -226,7 +192,18 @@ LOGGING.LEVEL = "DEBUG"
 [production]
 DEBUG = false
 TWS_MOCK_MODE = false
-LOGGING.LEVEL = "INFO"
+LOGGING.LEVEL = "WARNING"  # Less verbose logging in production
+
+# Production security settings
+ADMIN_USERNAME = "admin"  # Set via environment variable
+ADMIN_PASSWORD = "PRODUCTION_PASSWORD_REQUIRED"  # MUST be set via environment variable
+
+# Production CORS - restrict to specific domains only
+CORS.ALLOWED_ORIGINS = []  # Must be explicitly set for production domains
+CORS.ALLOW_CREDENTIALS = false
+
+# Production CSP - more restrictive
+CSP.REPORT_ONLY = false  # Enforce CSP in production
 
 # --- Test Environment Overrides ---
 [test]

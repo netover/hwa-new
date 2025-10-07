@@ -15,7 +15,8 @@ from resync.core.interfaces import (
     ITWSClient,
 )
 from resync.core.knowledge_graph import AsyncKnowledgeGraph
-from resync.services.tws_service import OptimizedTWSClient, MockTWSClient
+from resync.services.tws_service import OptimizedTWSClient
+from resync.services.mock_tws_service import MockTWSClient
 from resync.settings import settings
 
 

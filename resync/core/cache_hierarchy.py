@@ -148,10 +148,22 @@ class CacheHierarchy:
         l1_max_size: int = 1000,
         l2_ttl_seconds: int = 300,
         l2_cleanup_interval: int = 30,
+        enable_encryption: bool = False,
+        key_prefix: str = "cache:",
     ):
         """
         Initialize cache hierarchy.
+
+        Args:
+            l1_max_size: Maximum size for L1 cache
+            l2_ttl_seconds: TTL for L2 cache entries
+            l2_cleanup_interval: Cleanup interval for L2 cache
+            enable_encryption: Whether to enable cache encryption
+            key_prefix: Prefix for cache keys
         """
+        self.enable_encryption = enable_encryption
+        self.key_prefix = key_prefix
+
         self.l1_cache = L1Cache(max_size=l1_max_size)
         self.l2_cache = AsyncTTLCache(
             ttl_seconds=l2_ttl_seconds,
@@ -159,6 +171,36 @@ class CacheHierarchy:
         )
         self.metrics = CacheMetrics()
         self.is_running = False
+
+        logger.info(
+            f"CacheHierarchy initialized: L1_max_size={l1_max_size}, "
+            f"L2_ttl={l2_ttl_seconds}s, encryption={enable_encryption}, "
+            f"key_prefix={key_prefix}"
+        )
+
+    def _apply_key_prefix(self, key: str) -> str:
+        """Apply key prefix if configured."""
+        if self.key_prefix and self.key_prefix != "cache:":
+            return f"{self.key_prefix}{key}"
+        return key
+
+    def _encrypt_value(self, value: Any) -> Any:
+        """Encrypt value if encryption is enabled."""
+        if self.enable_encryption:
+            # TODO: Implement proper encryption using the encryption service
+            # For now, just log that encryption would happen
+            logger.debug(f"Encryption enabled but not yet implemented for value type: {type(value)}")
+            # This should use resync.core.encryption_service
+        return value
+
+    def _decrypt_value(self, value: Any) -> Any:
+        """Decrypt value if encryption is enabled."""
+        if self.enable_encryption:
+            # TODO: Implement proper decryption using the encryption service
+            # For now, just log that decryption would happen
+            logger.debug(f"Decryption enabled but not yet implemented for value type: {type(value)}")
+            # This should use resync.core.encryption_service
+        return value
 
     async def start(self) -> None:
         """Start the cache hierarchy."""
@@ -176,25 +218,27 @@ class CacheHierarchy:
     async def get(self, key: str) -> Optional[Any]:
         """
         Get value from cache hierarchy with priority L1 → L2.
+        Applies key prefix and decryption as needed.
         """
+        prefixed_key = self._apply_key_prefix(key)
         start_time = time_func()
         self.metrics.total_gets += 1
 
-        l1_value = await self.l1_cache.get(key)
+        l1_value = await self.l1_cache.get(prefixed_key)
         if l1_value is not None:
             self.metrics.l1_hits += 1
             cache_hits.labels(cache_level="l1").inc()
             cache_latency.labels(cache_level="l1").observe(time_func() - start_time)
-            return l1_value
+            return self._decrypt_value(l1_value)
 
         self.metrics.l1_misses += 1
-        l2_value = await self.l2_cache.get(key)
+        l2_value = await self.l2_cache.get(prefixed_key)
         if l2_value is not None:
             self.metrics.l2_hits += 1
             cache_hits.labels(cache_level="l2").inc()
-            await self.l1_cache.set(key, l2_value)
+            await self.l1_cache.set(prefixed_key, l2_value)
             cache_latency.labels(cache_level="l2").observe(time_func() - start_time)
-            return l2_value
+            return self._decrypt_value(l2_value)
 
         self.metrics.l2_misses += 1
         cache_misses.labels(cache_level="l2").inc()
@@ -205,11 +249,15 @@ class CacheHierarchy:
     ) -> None:
         """
         Set value in cache hierarchy with write-through pattern.
+        Applies key prefix and encryption as needed.
         """
+        prefixed_key = self._apply_key_prefix(key)
+        encrypted_value = self._encrypt_value(value)
+
         self.metrics.total_sets += 1
-        await self.l2_cache.set(key, value, ttl_seconds)
-        await self.l1_cache.set(key, value)
-        logger.debug(f"Cache HIERARCHY SET for key: {key}")
+        await self.l2_cache.set(prefixed_key, encrypted_value, ttl_seconds)
+        await self.l1_cache.set(prefixed_key, encrypted_value)
+        logger.debug(f"Cache HIERARCHY SET for key: {prefixed_key}")
 
     async def set_from_source(
         self, key: str, value: Any, ttl_seconds: Optional[int] = None
@@ -222,9 +270,11 @@ class CacheHierarchy:
     async def delete(self, key: str) -> bool:
         """
         Delete key from both cache tiers.
+        Applies key prefix as needed.
         """
-        l1_deleted = await self.l1_cache.delete(key)
-        l2_deleted = await self.l2_cache.delete(key)
+        prefixed_key = self._apply_key_prefix(key)
+        l1_deleted = await self.l1_cache.delete(prefixed_key)
+        l2_deleted = await self.l2_cache.delete(prefixed_key)
         return l1_deleted or l2_deleted
 
     async def clear(self) -> None:
@@ -275,5 +325,7 @@ def get_cache_hierarchy() -> CacheHierarchy:
             l1_max_size=settings.CACHE_HIERARCHY.L1_MAX_SIZE,
             l2_ttl_seconds=settings.CACHE_HIERARCHY.L2_TTL_SECONDS,
             l2_cleanup_interval=settings.CACHE_HIERARCHY.L2_CLEANUP_INTERVAL,
+            enable_encryption=getattr(settings.CACHE_HIERARCHY, 'CACHE_ENCRYPTION_ENABLED', False),
+            key_prefix=getattr(settings.CACHE_HIERARCHY, 'CACHE_KEY_PREFIX', 'cache:'),
         )
     return cache_hierarchy

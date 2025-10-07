@@ -37,9 +37,10 @@ def setup_logging():
         cache_logger_on_first_use=True,
     )
     
-    # Create logs directory if it doesn't exist
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
+    # Create logs directory with YYYYMMDD format if it doesn't exist
+    today = datetime.now().strftime("%Y%m%d")
+    log_dir = Path("logs") / today
+    log_dir.mkdir(parents=True, exist_ok=True)
 
     # Configure root logger
     root_logger = logging.getLogger()

@@ -6,7 +6,7 @@ from resync.cqrs.base import IQueryHandler, QueryResult
 from resync.cqrs.queries import (
     GetSystemStatusQuery, GetWorkstationsStatusQuery, GetJobsStatusQuery,
     GetCriticalPathStatusQuery, GetJobStatusQuery, GetJobStatusBatchQuery,
-    GetSystemHealthQuery, SearchJobsQuery, GetPerformanceMetricsQuery
+    GetSystemHealthQuery, SearchJobsQuery, GetPerformanceMetricsQuery, CheckTWSConnectionQuery
 )
 from resync.core.interfaces import ITWSClient
 from resync.models.tws import SystemStatus, WorkstationStatus, JobStatus, CriticalJob

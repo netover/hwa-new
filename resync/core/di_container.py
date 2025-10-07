@@ -12,6 +12,7 @@ of the DI contract to ensure system reliability.
 import asyncio
 import inspect
 import logging
+from datetime import datetime
 from enum import Enum, auto
 from typing import (
     Any,
@@ -113,10 +114,28 @@ class DIContainer:
     resolving dependencies when services are requested.
     """
 
-    def __init__(self) -> None:
-        """Initialize an empty container."""
+    def __init__(self, strict_mode: bool = False) -> None:
+        """
+        Initialize an empty container.
+
+        Args:
+            strict_mode: Whether to enable strict validation mode that raises exceptions
+                        for any validation ambiguity or failure.
+        """
         self._registrations: Dict[Type[Any], ServiceRegistration[Any, Any]] = {}
-        logger.info("DIContainer initialized")
+        self._strict_mode = strict_mode
+        logger.info(f"DIContainer initialized (strict_mode={strict_mode})")
+    
+    @property
+    def strict_mode(self) -> bool:
+        """Get the current strict mode setting."""
+        return self._strict_mode
+    
+    @strict_mode.setter
+    def strict_mode(self, value: bool) -> None:
+        """Set the strict mode setting."""
+        self._strict_mode = value
+        logger.info(f"DIContainer strict mode set to {value}")
 
     def register(
         self,
@@ -152,6 +171,26 @@ class DIContainer:
             f"Registered {interface.__name__} -> {implementation.__name__} with scope {scope.name}, "
             f"health_required={health_required}"
         )
+        # Audit log for registration
+        logger.info(
+            "SERVICE_REGISTRATION_AUDIT",
+            action="register",
+            interface=interface.__name__,
+            implementation=implementation.__name__,
+            scope=scope.name,
+            health_required=health_required,
+            timestamp=datetime.utcnow().isoformat(),
+            source="DI_Container"
+        )
+        # In strict mode, also log this as a critical registration for audit purposes
+        if self._strict_mode:
+            logger.critical(
+                "STRICT_MODE_SERVICE_REGISTRATION",
+                interface=interface.__name__,
+                implementation=implementation.__name__,
+                scope=scope.name,
+                timestamp=datetime.utcnow().isoformat()
+            )
 
     def register_instance(
         self, interface: Type[TInterface], instance: TImplementation
@@ -163,20 +202,35 @@ class DIContainer:
             interface: The interface type that will be requested.
             instance: The pre-created instance to return when the interface is requested.
         """
+        # Validate that the instance conforms to the interface
+        instance_type = type(instance)
+        self._validate_implementation(interface, instance_type)
+        
         registration = ServiceRegistration(
             interface=interface,
-            implementation=type(instance),
+            implementation=instance_type,
             scope=ServiceScope.SINGLETON,
         )
         registration.instance = instance
         self._registrations[interface] = registration
-        logger.debug(f"Registered instance of {interface.__name__}")
+        logger.debug(f"Registered instance of {interface.__name__} ({instance_type.__name__})")
+        # Audit log for registration
+        logger.info(
+            "SERVICE_REGISTRATION_AUDIT",
+            action="register_instance",
+            interface=interface.__name__,
+            implementation=instance_type.__name__,
+            scope="SINGLETON",
+            timestamp=datetime.utcnow().isoformat(),
+            source="DI_Container"
+        )
 
     def register_factory(
         self,
         interface: Type[TInterface],
         factory: Callable[..., TImplementation],
         scope: ServiceScope = ServiceScope.SINGLETON,
+        implementation_type_hint: Optional[Type[TImplementation]] = None,
     ) -> None:
         """
         Register a factory function to create instances of a service.
@@ -185,15 +239,39 @@ class DIContainer:
             interface: The interface type that will be requested.
             factory: A function that creates instances of the implementation.
             scope: The lifecycle scope of the service (default: SINGLETON).
+            implementation_type_hint: Optional explicit type hint for the implementation.
+                                   Required in strict mode.
         """
+        # In strict mode, require implementation type hint for factory registrations
+        if self._strict_mode and implementation_type_hint is None:
+            raise ValueError(
+                f"Strict mode requires explicit implementation_type_hint for factory "
+                f"registration of {interface.__name__}"
+            )
+        
+        # Validate the implementation if type hint is provided
+        if implementation_type_hint is not None:
+            self._validate_implementation(interface, implementation_type_hint)
+        
         self._registrations[interface] = ServiceRegistration(
             interface=interface,
-            implementation=object,  # Type doesn't matter for factory
+            implementation=implementation_type_hint or object,  # Use hint or fallback
             scope=scope,
             factory=factory,
         )
         logger.debug(
             f"Registered factory for {interface.__name__} with scope {scope.name}"
+        )
+        # Audit log for registration
+        logger.info(
+            "SERVICE_REGISTRATION_AUDIT",
+            action="register_factory",
+            interface=interface.__name__,
+            implementation=(implementation_type_hint or object).__name__,
+            scope=scope.name,
+            has_factory=True,
+            timestamp=datetime.utcnow().isoformat(),
+            source="DI_Container"
         )
 
     async def get(self, interface: Type[T]) -> T:
@@ -336,15 +414,60 @@ class DIContainer:
 
         Raises:
             ValueError: If validation fails.
+            TypeError: If validation fails due to type mismatch.
         """
         # Check if implementation is a subclass of interface (if interface is a class)
-        if inspect.isclass(interface) and not issubclass(implementation, interface):
-            # Allow if it's a protocol (structural typing)
-            if hasattr(interface, "__protocol__"):
+        if inspect.isclass(interface):
+            # Check if it's a Protocol
+            if hasattr(interface, "_is_protocol") or hasattr(interface, "__protocol__"):
+                # For protocols, perform more thorough validation by checking methods
+                try:
+                    # Check if implementation implements all protocol methods
+                    missing_methods = []
+                    for attr_name in dir(interface):
+                        # Skip private/magic methods and special attributes
+                        if not attr_name.startswith('_') and not attr_name.endswith('__'):
+                            attr = getattr(interface, attr_name)
+                            # Check if it's a method in the protocol (callable and not a property)
+                            if callable(attr) and not isinstance(attr, property):
+                                impl_attr = getattr(implementation, attr_name, None)
+                                if impl_attr is None or not callable(impl_attr):
+                                    missing_methods.append(attr_name)
+                    
+                    if missing_methods:
+                        error_msg = (
+                            f"{implementation.__name__} does not implement required methods "
+                            f"from protocol {interface.__name__}: {missing_methods}"
+                        )
+                        raise ValueError(error_msg)
+                except Exception as e:
+                    error_msg = (
+                        f"Error validating protocol {interface.__name__} against "
+                        f"implementation {implementation.__name__}: {e}"
+                    )
+                    raise ValueError(error_msg) from e
+                        
+                # If we reach here, protocol validation passed
+                logger.debug(
+                    f"Protocol validation passed for {interface.__name__} -> {implementation.__name__}"
+                )
                 return
-            raise ValueError(
-                f"{implementation.__name__} does not implement {interface.__name__}"
-            )
+
+            # For regular classes, check if implementation is a subclass of interface
+            try:
+                if not issubclass(implementation, interface):
+                    error_msg = (
+                        f"{implementation.__name__} does not implement {interface.__name__}"
+                    )
+                    raise ValueError(error_msg)
+            except TypeError as e:
+                # Handle protocols that cause TypeError in issubclass check
+                # This can happen with non-runtime-checkable protocols
+                error_msg = (
+                    f"TypeError during issubclass check for {implementation.__name__} "
+                    f"and {interface.__name__}: {e}"
+                )
+                raise TypeError(error_msg) from e
 
         # Additional validations can be added here
         logger.debug(
@@ -502,6 +625,33 @@ class DIContainer:
             status["services"][interface.__name__] = service_status
 
         return status
+
+    def get_registration_audit(self) -> Dict[str, Any]:
+        """
+        Get audit information for all service registrations.
+        
+        Returns:
+            Dictionary containing audit information for all registrations.
+        """
+        audit_info = {
+            "total_registrations": len(self._registrations),
+            "registrations": [],
+            "strict_mode": self._strict_mode,
+            "timestamp": asyncio.get_event_loop().time(),
+        }
+        
+        for interface, registration in self._registrations.items():
+            reg_info = {
+                "interface": interface.__name__,
+                "implementation": registration.implementation.__name__,
+                "scope": registration.scope.name,
+                "has_factory": registration.factory is not None,
+                "has_instance": registration.instance is not None,
+                "health_required": registration.health_required,
+            }
+            audit_info["registrations"].append(reg_info)
+            
+        return audit_info
 
     def clear(self) -> None:
         """Clear all registrations and cached instances."""

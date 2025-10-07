@@ -127,7 +127,7 @@ def authenticated_rate_limit(func: Callable) -> Callable:
 def critical_rate_limit(func: Callable) -> Callable:
     """Decorator for critical endpoints (agents, chat) with strict rate limiting."""
     return limiter.limit(
-        RateLimitConfig.CRITICAL_ENDPOINTS,
+        f"{settings.RATE_LIMIT_CRITICAL_PER_MINUTE}/minute",
         key_func=get_authenticated_user_identifier
     )(func)
 

@@ -3,7 +3,7 @@ import asyncio
 import logging  # Use logging instead of print
 import time
 
-from litellm import acompletion, get_remaining_tokens
+from litellm import acompletion
 from litellm.exceptions import (
     AuthenticationError,
     ContentPolicyViolationError,
