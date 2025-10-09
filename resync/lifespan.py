@@ -1,5 +1,3 @@
-"""Lifespan management for the FastAPI application."""
-
 from __future__ import annotations
 
 import asyncio
@@ -22,47 +20,18 @@ from resync.core.interfaces import ITWSClient, IAgentManager, IKnowledgeGraph
 from resync.core.tws_monitor import get_tws_monitor, shutdown_tws_monitor
 from resync.cqrs.dispatcher import initialize_dispatcher
 from resync.api_gateway.container import setup_dependencies
+from resync.core.redis_init import RedisInitializer
 
 from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
 
-
 class RedisStartupError(Exception):
     """Critical error during Redis initialization."""
     pass
 
-
-@asynccontextmanager
-async def redis_connection_manager() -> AsyncIterator:
-    """
-    Context manager to manage Redis connection with proper cleanup.
-    
-    Yields:
-        Redis client connected and validated
-        
-    Raises:
-        RedisStartupError: If failed after all attempts
-    """
-    from resync.core.async_cache import get_redis_client
-    
-    client = None
-    try:
-        client = await get_redis_client()
-        await client.ping()
-        yield client
-    finally:
-        if client:
-            try:
-                await client.close()
-                await client.connection_pool.disconnect()
-            except Exception as e:
-                logger.warning(
-                    "redis_cleanup_failed",
-                    error=type(e).__name__,
-                    message=str(e)
-                )
-
+# Create a global RedisInitializer instance
+redis_initializer = RedisInitializer()
 
 async def initialize_redis_with_retry(
     max_retries: int = 3,
@@ -70,12 +39,12 @@ async def initialize_redis_with_retry(
     max_backoff: float = 10.0
 ) -> None:
     """
-    Initialize Redis with exponential backoff retry.
+    Initialize Redis with the robust RedisInitializer.
     
     Args:
         max_retries: Maximum number of attempts
-        base_backoff: Base wait time in seconds
-        max_backoff: Maximum wait time in seconds
+        base_backoff: Base backoff time in seconds
+        max_backoff: Maximum backoff time in seconds
         
     Raises:
         RedisStartupError: If failed after all attempts
@@ -113,96 +82,47 @@ async def initialize_redis_with_retry(
     
     start_time = asyncio.get_event_loop().time()
     
-    for attempt in range(max_retries):
-        startup_metrics["attempts"] += 1
+    try:
+        # Use the robust RedisInitializer
+        redis_client = await redis_initializer.initialize(
+            max_retries=max_retries,
+            base_backoff=base_backoff,
+            max_backoff=max_backoff
+        )
         
-        try:
-            async with redis_connection_manager() as redis_client:
-                # Initialize idempotency manager
-                from resync.api.dependencies import initialize_idempotency_manager
-                await initialize_idempotency_manager(redis_client)
-                
-                # Success
-                startup_metrics["duration_seconds"] = (
-                    asyncio.get_event_loop().time() - start_time
-                )
-                
-                logger.info(
-                    "redis_initialized_successfully",
-                    metrics=startup_metrics,
-                    duration_ms=int(startup_metrics["duration_seconds"] * 1000)
-                )
-                return
-                
-        except (ConnectionError, TimeoutError, BusyLoadingError) as e:
-            startup_metrics["connection_failures"] += 1
-            
-            if attempt >= max_retries - 1:
-                logger.critical(
-                    "redis_initialization_failed",
-                    reason="max_retries_exceeded",
-                    metrics=startup_metrics,
-                    error_type=type(e).__name__
-                )
-                raise RedisStartupError(
-                    f"Redis unavailable after {max_retries} attempts"
-                ) from e
-            
-            # Exponential backoff
-            backoff = min(max_backoff, base_backoff * (2 ** attempt))
-            logger.warning(
-                "redis_connection_retry",
-                attempt=attempt + 1,
-                max_retries=max_retries,
-                backoff_seconds=backoff,
-                error_type=type(e).__name__
-            )
-            await asyncio.sleep(backoff)
-            
-        except AuthenticationError as e:
-            startup_metrics["auth_failures"] += 1
-            logger.critical(
-                "redis_authentication_failed",
-                metrics=startup_metrics,
-                error_type=type(e).__name__
-            )
-            raise RedisStartupError("Redis authentication failed") from e
-            
-        except ResponseError as e:
-            # Handle ACL/permission errors
-            error_msg = str(e).upper()
-            if "NOAUTH" in error_msg or "WRONGPASS" in error_msg:
-                startup_metrics["auth_failures"] += 1
-                logger.critical(
-                    "redis_access_denied",
-                    metrics=startup_metrics,
-                    error_type=type(e).__name__
-                )
-                raise RedisStartupError("Redis access denied") from e
-            else:
-                # Other ResponseError - try retry
-                if attempt >= max_retries - 1:
-                    logger.critical(
-                        "redis_response_error",
-                        metrics=startup_metrics,
-                        error_type=type(e).__name__
-                    )
-                    raise RedisStartupError(
-                        f"Redis error: {type(e).__name__}"
-                    ) from e
-                
-                backoff = min(max_backoff, base_backoff * (2 ** attempt))
-                await asyncio.sleep(backoff)
-                
-        except Exception as e:
-            # Unexpected error - fail fast
-            logger.critical(
-                "redis_unexpected_error",
-                error_type=type(e).__name__,
-                # Don't include details in production
-                message=str(e) if settings.ENVIRONMENT != "production" else None
-            )
-            raise RedisStartupError(f"Unexpected error: {type(e).__name__}") from e
+        # Initialize idempotency manager
+        from resync.api.dependencies import initialize_idempotency_manager
+        await initialize_idempotency_manager(redis_client)
+        
+        # Success
+        startup_metrics["duration_seconds"] = (
+            asyncio.get_event_loop().time() - start_time
+        )
+        
+        logger.info(
+            "redis_initialized_successfully",
+            metrics=startup_metrics,
+            duration_ms=int(startup_metrics["duration_seconds"] * 1000)
+        )
+        
+    except (ConnectionError, TimeoutError, BusyLoadingError, AuthenticationError) as e:
+        startup_metrics["connection_failures"] += 1
+        logger.critical(
+            "redis_initialization_failed",
+            reason="initialization_failed",
+            metrics=startup_metrics,
+            error_type=type(e).__name__
+        )
+        raise RedisStartupError(
+            f"Redis initialization failed: {str(e)}"
+        ) from e
+    except Exception as e:
+        logger.critical(
+            "redis_unexpected_error",
+            error_type=type(e).__name__,
+            message=str(e) if settings.ENVIRONMENT != "production" else None
+        )
+        raise RedisStartupError(f"Unexpected error during Redis initialization: {type(e).__name__}") from e
 
 
 @asynccontextmanager

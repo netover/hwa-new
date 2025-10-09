@@ -141,23 +141,20 @@ class Settings(BaseSettings):
     redis_pool_health_check_interval: int = Field(default=60, ge=10)
     redis_pool_max_lifetime: int = Field(default=1800, ge=300)
 
-    # Redis Startup
+    # Redis Initialization
     redis_max_startup_retries: int = Field(default=3, ge=1, le=10)
     redis_startup_backoff_base: float = Field(default=0.1, gt=0)
     redis_startup_backoff_max: float = Field(default=10.0, gt=0)
+    redis_startup_lock_timeout: int = Field(default=30, ge=5, description="Timeout for distributed Redis initialization lock")
+    redis_health_check_interval: int = Field(default=5, ge=1, description="Interval for Redis connection health checks")
 
-    # ============================================================================
-    # CACHE
-    # ============================================================================
-
-    async_cache_ttl: int = Field(default=60, ge=1, description="TTL do cache em segundos")
-    async_cache_cleanup_interval: int = Field(default=30, ge=1)
-    async_cache_num_shards: int = Field(default=16, ge=1, le=256)
-    async_cache_enable_wal: bool = Field(default=False)
-    async_cache_wal_path: str | None = Field(default=None)
-    async_cache_max_entries: int = Field(default=100000, ge=100)
-    async_cache_max_memory_mb: int = Field(default=100, ge=10)
-    async_cache_paranoia_mode: bool = Field(default=False)
+    # Robust Cache Configuration
+    robust_cache_max_items: int = Field(default=100_000, ge=100, description="Maximum number of items in robust cache")
+    robust_cache_max_memory_mb: int = Field(default=100, ge=10, description="Maximum memory usage for robust cache")
+    robust_cache_eviction_batch_size: int = Field(default=100, ge=1, description="Number of items to evict in one batch")
+    robust_cache_enable_weak_refs: bool = Field(default=True, description="Enable weak references for large objects")
+    robust_cache_enable_wal: bool = Field(default=False, description="Enable Write-Ahead Logging for cache")
+    robust_cache_wal_path: str | None = Field(default=None, description="Path for cache Write-Ahead Log")
 
     # ============================================================================
     # LLM

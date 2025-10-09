@@ -603,6 +603,44 @@ We welcome contributions to improve Resync! Please follow these guidelines:
 - **Memory Bounds** - Memory-constrained cache management
 - **Connection Pools** - Optimized connection management
 
+#### Redis Initialization
+The `RedisInitializer` provides robust Redis connection management with:
+- Thread-safe initialization
+- Exponential backoff retry logic
+- Distributed locking mechanism
+- Connection validation
+- Comprehensive health check loop
+
+Example configuration:
+```python
+# In settings.toml or environment variables
+redis_max_startup_retries = 3
+redis_startup_backoff_base = 0.1
+redis_startup_backoff_max = 10.0
+redis_startup_lock_timeout = 30
+redis_health_check_interval = 5
+```
+
+#### Robust Cache Manager
+The `RobustCacheManager` offers advanced caching capabilities:
+- Accurate deep size calculation
+- LRU (Least Recently Used) eviction strategy
+- Configurable memory and item limits
+- Weak references for large objects
+- Write-Ahead Logging (WAL) support
+- Comprehensive metrics collection
+
+Example configuration:
+```python
+# In settings.toml or environment variables
+robust_cache_max_items = 100_000
+robust_cache_max_memory_mb = 100
+robust_cache_eviction_batch_size = 100
+robust_cache_enable_weak_refs = true
+robust_cache_enable_wal = false
+robust_cache_wal_path = "./cache_wal"
+```
+
 ### Security & Authentication
 - **PyJWT** - JSON Web Token implementation
 - **Passlib** - Password hashing utilities

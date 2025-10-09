@@ -12,9 +12,6 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from resync.settings import settings
-from resync.core.structured_logger import get_logger
-
-logger = get_logger(__name__)
 
 # Security schemes
 # Allow missing Authorization to support HttpOnly cookie fallback
