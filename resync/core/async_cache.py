@@ -1742,3 +1742,30 @@ class AsyncTTLCache:
                     runtime_metrics.cache_size.set(self.size())
         except Exception as e:
             logger.error("WAL_replay_DELETE_failed", key=key, error=str(e))
+
+
+async def get_redis_client():
+    """
+    Get an async Redis client for connection validation.
+
+    Returns:
+        AsyncRedis: Connected Redis client
+    """
+    try:
+        from redis.asyncio import Redis as AsyncRedis
+        from resync.settings import settings
+
+        # Create async Redis client
+        client = AsyncRedis.from_url(
+            settings.REDIS_URL,
+            socket_connect_timeout=5,
+            socket_timeout=5,
+            retry_on_timeout=True,
+            decode_responses=False
+        )
+
+        return client
+
+    except Exception as e:
+        logger.error("Failed to create Redis client", error=str(e))
+        raise

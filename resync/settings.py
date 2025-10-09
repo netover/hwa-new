@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from enum import Enum
 from pathlib import Path
 from typing import Literal
@@ -13,6 +14,28 @@ class Environment(str, Enum):
     DEVELOPMENT = "development"
     PRODUCTION = "production"
     TEST = "test"
+
+
+class CacheHierarchyConfig:
+    """Configuration object for cache hierarchy settings."""
+
+    def __init__(
+        self,
+        l1_max_size: int,
+        l2_ttl_seconds: int,
+        l2_cleanup_interval: int,
+        num_shards: int = 8,
+        max_workers: int = 4,
+        enable_encryption: bool = False,
+        key_prefix: str = "cache:",
+    ):
+        self.L1_MAX_SIZE = l1_max_size
+        self.L2_TTL_SECONDS = l2_ttl_seconds
+        self.L2_CLEANUP_INTERVAL = l2_cleanup_interval
+        self.NUM_SHARDS = num_shards
+        self.MAX_WORKERS = max_workers
+        self.CACHE_ENCRYPTION_ENABLED = enable_encryption
+        self.CACHE_KEY_PREFIX = key_prefix
 
 
 class Settings(BaseSettings):
@@ -141,14 +164,14 @@ class Settings(BaseSettings):
     # ============================================================================
 
     llm_endpoint: str = Field(
-        default="http://localhost:11434/v1",
-        description="Endpoint da API LLM"
+        default="https://openrouter.ai/api/v1",
+        description="Endpoint da API LLM (OpenRouter)"
     )
 
     llm_api_key: str = Field(
-        default="dummy_key_for_development",
+        default="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",
         min_length=1,
-        description="Chave de API do LLM"
+        description="Chave de API do LLM (OpenRouter)"
     )
 
     llm_timeout: float = Field(
@@ -159,6 +182,31 @@ class Settings(BaseSettings):
 
     auditor_model_name: str = Field(default="gpt-3.5-turbo")
     agent_model_name: str = Field(default="gpt-4o")
+
+    # ============================================================================
+    # CACHE CONFIGURATION
+
+    # Cache Hierarchy Configuration
+    cache_hierarchy_l1_max_size: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_L1_MAX_SIZE", 5000)),
+        description="Maximum number of entries in L1 cache"
+    )
+    cache_hierarchy_l2_ttl: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_L2_TTL", 600)),
+        description="Time-To-Live for L2 cache entries in seconds"
+    )
+    cache_hierarchy_l2_cleanup_interval: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_L2_CLEANUP_INTERVAL", 60)),
+        description="Cleanup interval for L2 cache in seconds"
+    )
+    cache_hierarchy_num_shards: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_NUM_SHARDS", 8)),
+        description="Number of shards for cache"
+    )
+    cache_hierarchy_max_workers: int = Field(
+        default=int(os.environ.get("CACHE_HIERARCHY_MAX_WORKERS", 4)),
+        description="Max workers for cache operations"
+    )
 
     # ============================================================================
     # TWS (Workload Automation)
@@ -429,6 +477,17 @@ class Settings(BaseSettings):
     @property
     def AGENT_MODEL_NAME(self):
         return self.agent_model_name
+
+    @property
+    def CACHE_HIERARCHY(self):
+        """Cache hierarchy configuration object."""
+        return CacheHierarchyConfig(
+            l1_max_size=self.cache_hierarchy_l1_max_size,
+            l2_ttl_seconds=self.cache_hierarchy_l2_ttl,
+            l2_cleanup_interval=self.cache_hierarchy_l2_cleanup_interval,
+            num_shards=self.cache_hierarchy_num_shards,
+            max_workers=self.cache_hierarchy_max_workers,
+        )
 
     # Connection pool properties
     @property

@@ -80,6 +80,19 @@ async def call_llm(
         effective_api_key = None
 
     try:
+        # Check if LiteLLM is available and has models configured
+        try:
+            from litellm import acompletion
+            # Try to get router to check if models are available
+            from resync.core.litellm_init import get_litellm_router
+            router = get_litellm_router()
+            if not router or len(router.model_list) == 0:
+                raise ImportError("No models available in LiteLLM router")
+        except ImportError:
+            # Fallback to simple mock response for development
+            logger.warning("LiteLLM not available or no models configured, using mock response")
+            return "LLM service is currently unavailable. This is a mock response for development purposes."
+
         # Use LiteLLM's acompletion for enhanced functionality with timeout
         response = await asyncio.wait_for(
             acompletion(

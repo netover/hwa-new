@@ -40,12 +40,15 @@ def initialize_litellm():
             enable_pre_call_checks=True,
         )
         
-        # Override with app-specific settings
+        # Override with app-specific settings for OpenRouter
         if hasattr(settings, 'LLM_ENDPOINT') and settings.LLM_ENDPOINT:
             os.environ["OPENAI_API_BASE"] = settings.LLM_ENDPOINT
-            
+
         if hasattr(settings, 'LLM_API_KEY') and settings.LLM_API_KEY:
             os.environ["OPENAI_API_KEY"] = settings.LLM_API_KEY
+
+        # Set OpenRouter specific environment variables
+        os.environ["OPENROUTER_API_KEY"] = settings.LLM_API_KEY if hasattr(settings, 'LLM_API_KEY') and settings.LLM_API_KEY else ""
         
         logger.info("LiteLLM initialized successfully with TWS-specific configuration")
         

@@ -85,6 +85,23 @@ async def initialize_redis_with_retry(
     if not redis_url:
         logger.critical("redis_url_not_configured")
         raise RedisStartupError("REDIS_URL environment variable not set")
+
+    # Skip Redis initialization in development if Redis is not available
+    environment = getattr(settings, 'APP_ENV', 'development')
+    if environment == 'development':
+        try:
+            import redis
+            # Quick test to see if Redis is available
+            sync_client = redis.Redis.from_url(redis_url, socket_timeout=2)
+            sync_client.ping()
+            sync_client.close()
+        except Exception as e:
+            logger.warning(
+                "redis_not_available_in_development",
+                error=str(e),
+                message="Redis not available, skipping Redis-dependent features for development"
+            )
+            return
     
     # Startup metrics
     startup_metrics = {

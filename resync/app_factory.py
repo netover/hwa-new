@@ -92,8 +92,7 @@ class ApplicationFactory:
     # Store container reference
             app.state.container = app_container
 
-            # Initialize container
-            await app_container.initialize()
+            # Container is already initialized during creation
 
             # Get required services
             tws_client = await app_container.get(ITWSClient)
@@ -140,7 +139,6 @@ class ApplicationFactory:
 
             try:
                 await shutdown_tws_monitor()
-                await app_container.shutdown()
                 logger.info("application_shutdown_completed")
             except Exception as e:
                 logger.error(
@@ -236,7 +234,7 @@ class ApplicationFactory:
             auto_reload=settings.is_development,
             cache_size=400 if settings.is_production else 0,
             enable_async=True,
-            extensions=['resync.core.csp_jinja_extension.CSPNonceExtension']
+            # extensions=['resync.core.csp_jinja_extension.CSPNonceExtension']
         )
 
         self.templates = Jinja2Templates(directory=str(templates_dir))
@@ -333,6 +331,8 @@ class ApplicationFactory:
             (cors_monitor_router, "/api/v1", ["CORS"]),
             (performance_router, "/api", ["Performance"]),
             (admin_router, "/api/v1", ["Admin"]),
+            # Also register admin router at root level for /admin access
+            (admin_router, "", ["Admin"]),
         ]
 
         for router, prefix, tags in routers:
@@ -380,11 +380,7 @@ class ApplicationFactory:
             """Redirect root to admin panel."""
             return RedirectResponse(url="/admin", status_code=302)
 
-        # Admin panel
-        @self.app.get("/admin", include_in_schema=False, response_class=HTMLResponse)
-        async def admin_panel(request: Request):
-            """Serve the admin panel."""
-            return self._render_template("admin.html", request)
+        # Admin panel is now handled by the admin router
 
         # Revision page
         @self.app.get("/revisao", include_in_schema=False, response_class=HTMLResponse)

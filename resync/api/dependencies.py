@@ -19,6 +19,9 @@ from resync.core.exceptions import (
 
 logger = get_logger(__name__)
 
+# Global idempotency manager instance
+_idempotency_manager: Optional[IdempotencyManager] = None
+
 # ============================================================================
 # IDEMPOTENCY DEPENDENCIES
 # ============================================================================
@@ -26,13 +29,18 @@ logger = get_logger(__name__)
 
 async def get_idempotency_manager() -> IdempotencyManager:
     """Obtém a instância do IdempotencyManager a partir do container de DI.
-    
+
     Returns:
         IdempotencyManager configurado
-        
+
     Raises:
         ServiceUnavailableError: Se o serviço de idempotência não estiver disponível.
     """
+    # Try to use the initialized global manager first
+    if _idempotency_manager is not None:
+        return _idempotency_manager
+
+    # Fallback to DI container
     try:
         manager = await app_container.get(IdempotencyManager)
         return manager
@@ -96,6 +104,33 @@ async def require_idempotency_key(
         )
     
     return x_idempotency_key
+
+
+async def initialize_idempotency_manager(redis_client):
+    """
+    Initialize the global idempotency manager with Redis client.
+
+    Args:
+        redis_client: Redis async client for persistence
+    """
+    try:
+        from resync.core.idempotency import IdempotencyManager
+
+        # Initialize the global manager
+        manager = IdempotencyManager(redis_client)
+        # Store globally for dependency injection
+        _idempotency_manager = manager
+
+        logger.info("idempotency_manager_initialized", redis_available=True)
+
+    except Exception as e:
+        logger.error(
+            "idempotency_manager_initialization_failed",
+            error=str(e),
+            redis_available=False
+        )
+        # Create in-memory fallback
+        _idempotency_manager = None
 
 
 # ============================================================================

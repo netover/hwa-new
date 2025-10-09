@@ -1,56 +1,44 @@
 # LiteLLM Configuration for Resync TWS Application
 # This configuration defines model routing rules and provider settings
-# for both local (Ollama) and remote (OpenAI, etc.) LLM usage
+# for OpenRouter API usage
 
 model_list:
-  # Ollama models (for local usage)
-  - model_name: "ollama/mistral"
+  # Primary OpenRouter model - Tongyi DeepResearch
+  - model_name: "tongyi-deepresearch"
     litellm_params:
-      model: "ollama/mistral"
-      api_base: "http://localhost:11434"
+      model: "alibaba/tongyi-deepresearch-30b-a3b:free"
+      api_key: "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"
+      api_base: "https://openrouter.ai/api/v1"
       temperature: 0.7
-  - model_name: "ollama/llama3"
-    litellm_params:
-      model: "ollama/llama3"
-      api_base: "http://localhost:11434"
-      temperature: 0.7
+      max_tokens: 4096
 
-  # OpenAI models (for remote usage)
-  - model_name: "gpt-4o"
+  # Fallback OpenRouter model
+  - model_name: "openrouter-fallback"
     litellm_params:
-      model: "gpt-4o"
-      api_key: "{APP_LLM_API_KEY}"  # Will be replaced by environment variable
-      temperature: 0.3
-  - model_name: "gpt-4o-mini"
-    litellm_params:
-      model: "gpt-4o-mini"
-      api_key: "{APP_LLM_API_KEY}"
-      temperature: 0.3
-
-  # Default fallback model
-  - model_name: "fallback-model"
-    litellm_params:
-      model: "gpt-4o-mini"
-      api_key: "{APP_LLM_API_KEY}"
+      model: "meta-llama/llama-3.2-3b-instruct:free"
+      api_key: "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"
+      api_base: "https://openrouter.ai/api/v1"
       temperature: 0.5
+      max_tokens: 2048
 
 # Model aliases for easier referencing in code
 model_aliases:
-  "tws-troubleshooting": "gpt-4o"
-  "tws-basic-query": "gpt-4o-mini"
-  "tws-local-model": "ollama/mistral"
+  "tws-troubleshooting": "tongyi-deepresearch"
+  "tws-basic-query": "openrouter-fallback"
+  "tws-research": "tongyi-deepresearch"
+  "tws-general": "openrouter-fallback"
 
 # Router settings for model selection
 router_settings:
   # Model group aliases for different use cases
   model_group_alias:
-    - {group_name: "tws-general", list_of_model_names: ["gpt-4o-mini", "ollama/mistral"]}
-    - {group_name: "tws-troubleshooting", list_of_model_names: ["gpt-4o", "gpt-4o-mini"]}
-    - {group_name: "tws-local", list_of_model_names: ["ollama/mistral", "ollama/llama3"]}
+    - {group_name: "tws-general", list_of_model_names: ["openrouter-fallback", "tongyi-deepresearch"]}
+    - {group_name: "tws-troubleshooting", list_of_model_names: ["tongyi-deepresearch", "openrouter-fallback"]}
+    - {group_name: "tws-research", list_of_model_names: ["tongyi-deepresearch", "openrouter-fallback"]}
 
   # Default fallback settings
   fallbacks:
-    - {type: "model", fallbacks: ["gpt-4o-mini", "gpt-4o"]}
+    - {type: "model", fallbacks: ["openrouter-fallback", "tongyi-deepresearch"]}
   
   # Timeout settings
   timeout: 600  # 10 minutes for complex TWS operations

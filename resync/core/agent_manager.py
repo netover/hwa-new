@@ -21,21 +21,90 @@ except ImportError:
     AGNO_AVAILABLE = False
 
     class MockAgent:
-        """Mock Agent class for testing when agno is not available."""
+        """Mock Agent class compatible with agno.Agent interface."""
 
         def __init__(
             self,
             tools: Any = None,
             model: Any = None,
             instructions: Any = None,
+            name: str = "Mock Agent",
+            description: str = "Mock agent for testing",
             **kwargs: Any,
         ) -> None:
+            # Initialize all required attributes
             self.tools = tools or []
             self.model = model
+            self.llm_model = model  # Alias para compatibilidade com FastAPI
             self.instructions = instructions
-            # Mock methods that might be called
-            self.run = self._mock_run
-            self._mock_run: Any = lambda *args, **kwargs: None
+            self.name = name
+            self.description = description
+
+            # Additional attributes that FastAPI might expect
+            self.role = "Mock Agent"
+            self.goal = "Provide mock responses for testing"
+            self.backstory = description
+
+        async def arun(self, message: str) -> str:
+            """Process a message and return a response."""
+            print(f"[MockAgent] Processing message: {message}")
+            try:
+                msg = message.lower()
+                print(f"[MockAgent] Lower case message: {msg}")
+
+                if "job" in msg and ("abend" in msg or "erro" in msg):
+                    result = "Jobs em estado ABEND encontrados:\\n- Data Processing (ID: JOB002) na workstation TWS_AGENT2\\n\\nRecomendo investigar o log do job e verificar dependências."
+                    print(f"[MockAgent] Returning ABEND result: {result[:50]}...")
+                    return result
+
+                elif "status" in msg or "workstation" in msg:
+                    result = "Status atual do ambiente TWS:\\n\\nWorkstations:\\n- TWS_MASTER: ONLINE\\n- TWS_AGENT1: ONLINE\\n- TWS_AGENT2: OFFLINE\\n\\nJobs:\\n- Daily Backup: SUCC (TWS_AGENT1)\\n- Data Processing: ABEND (TWS_AGENT2)\\n- Report Generation: SUCC (TWS_AGENT1)"
+                    print(f"[MockAgent] Returning status result: {result[:50]}...")
+                    return result
+
+                elif "tws" in msg:
+                    result = f"Como {self.name}, posso ajudar com questões relacionadas ao TWS. Que informações você precisa?"
+                    print(f"[MockAgent] Returning TWS result: {result[:50]}...")
+                    return result
+
+                else:
+                    result = f"Entendi sua mensagem: '{message}'. Como {self.name}, estou aqui para ajudar com questões do TWS."
+                    print(f"[MockAgent] Returning default result: {result[:50]}...")
+                    return result
+
+            except Exception as e:
+                result = f"Erro simples: {str(e)}"
+                print(f"[MockAgent] Error: {e}")
+                return result
+
+        def run(self, message: str) -> str:
+            """Synchronous version of arun for compatibility."""
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import asyncio
+                    async def run_async():
+                        return await self.arun(message)
+                    return asyncio.create_task(run_async())
+                else:
+                    return loop.run_until_complete(self.arun(message))
+            except Exception:
+                import asyncio
+                return asyncio.run(self.arun(message))
+
+        def to_dict(self) -> dict:
+            """Convert agent to dictionary for serialization - required by FastAPI."""
+            return {
+                "name": self.name,
+                "description": self.description,
+                "model": str(self.model) if self.model else None,
+                "llm_model": str(self.llm_model) if self.llm_model else None,
+                "role": self.role,
+                "goal": self.goal,
+                "backstory": self.backstory,
+                "tools": [str(t) for t in self.tools] if self.tools else [],
+            }
 
 
 from pydantic import BaseModel
@@ -97,7 +166,7 @@ class AgentManager:
     _lock = threading.RLock()
     _initialized = False
     
-    def __new__(cls):
+    def __new__(cls, *args, **kwargs):
         """Implementação Borg Pattern - mais pythônico que Singleton clássico."""
         obj = super().__new__(cls)
         obj.__dict__ = cls._shared_state
@@ -110,7 +179,68 @@ class AgentManager:
 
     async def get_agent(self, agent_id: str) -> Any:
         """Retrieves an agent by its ID."""
-        return self.agents.get(agent_id)
+        # Check if agent already exists
+        if agent_id in self.agents:
+            return self.agents[agent_id]
+
+        # Create agent on demand
+        agent = await self._create_agent(agent_id)
+        if agent:
+            self.agents[agent_id] = agent
+        return agent
+
+    async def _create_agent(self, agent_id: str) -> Any:
+        """Create an agent instance for the given ID."""
+        try:
+            # Get agent configuration
+            agent_config = None
+            for config in self.agent_configs:
+                if config.id == agent_id:
+                    agent_config = config
+                    break
+
+            if not agent_config:
+                logger.warning(f"No configuration found for agent '{agent_id}'")
+                return None
+
+            # Get TWS client for tools
+            if not self.tws_client:
+                async with self._tws_init_lock:
+                    if not self.tws_client:
+                        from resync.core.fastapi_di import get_service
+                        from resync.core.interfaces import ITWSClient
+                        try:
+                            self.tws_client = await get_service(ITWSClient)()
+                        except Exception as e:
+                            logger.warning(f"Failed to get TWS client: {e}")
+                            self.tws_client = None
+
+            # Create agent with tools
+            if AGNO_AVAILABLE:
+                # Create real agent with tools
+                agent = Agent(
+                    model=agent_config.model_name,
+                    tools=list(self.tools.values()),
+                    instructions=f"You are a {agent_config.name} assistant for TWS operations. {agent_config.backstory}",
+                    name=agent_config.name,
+                )
+                logger.info(f"Created real agent: {agent}")
+                return agent
+            else:
+                # Create mock agent with ALL required attributes - FIXED
+                agent = MockAgent(
+                    tools=list(self.tools.values()),
+                    model=agent_config.model_name,
+                    instructions=f"You are a {agent_config.name} assistant for TWS operations. {agent_config.backstory}",
+                    name=agent_config.name,
+                    description=agent_config.backstory,  # ✅ PASSAR DESCRIPTION
+                )
+                logger.info(f"Created mock agent: {agent}, has arun: {hasattr(agent, 'arun')}")
+                return agent
+
+        except Exception as e:
+            logger.error(f"Failed to create agent '{agent_id}': {e}")
+            return None
 
     async def get_all_agents(self) -> List[AgentConfig]:
         """Returns the configuration of all loaded agents."""
@@ -120,19 +250,13 @@ class AgentManager:
         """Discover available tools for agents."""
         try:
             from resync.tool_definitions.tws_tools import (
-                get_workstations_status_tool,
-                get_jobs_status_tool,
-                get_system_status_tool,
-                check_tws_connection_tool,
-                invalidate_tws_cache_tool,
+                tws_status_tool,
+                tws_troubleshooting_tool,
             )
 
             return {
-                "get_workstations_status": get_workstations_status_tool,
-                "get_jobs_status": get_jobs_status_tool,
-                "get_system_status": get_system_status_tool,
-                "check_tws_connection": check_tws_connection_tool,
-                "invalidate_tws_cache": invalidate_tws_cache_tool,
+                "get_tws_status": tws_status_tool.get_tws_status,
+                "analyze_tws_failures": tws_troubleshooting_tool.analyze_failures,
             }
         except ImportError as e:
             logger.warning(f"Could not import TWS tools: {e}")
@@ -188,7 +312,33 @@ class AgentManager:
 
                     self.settings = settings_module
                     self.agents: Dict[str, Any] = {}
-                    self.agent_configs: List[AgentConfig] = []
+                    # Load default agent configurations
+                    self.agent_configs: List[AgentConfig] = [
+                        AgentConfig(
+                            id="tws-troubleshooting",
+                            name="TWS Troubleshooting Agent",
+                            role="TWS Troubleshooting Specialist",
+                            goal="Help users identify and resolve TWS system issues",
+                            backstory="I am an expert AI assistant specialized in IBM Workload Automation (TWS) troubleshooting and system monitoring.",
+                            tools=["get_tws_status", "analyze_tws_failures"],
+                            model_name="tongyi-deepresearch",
+                            temperature=0.7,
+                            memory=True,
+                            verbose=False
+                        ),
+                        AgentConfig(
+                            id="tws-general",
+                            name="TWS General Assistant",
+                            role="TWS General Assistant",
+                            goal="Provide general assistance for TWS operations and monitoring",
+                            backstory="I am a helpful AI assistant for IBM Workload Automation (TWS) operations, providing information about system status and job execution.",
+                            tools=["get_tws_status", "analyze_tws_failures"],
+                            model_name="openrouter-fallback",
+                            temperature=0.5,
+                            memory=True,
+                            verbose=False
+                        )
+                    ]
                     self.tools: Dict[str, Any] = self._discover_tools()
                     self.tws_client: Optional[OptimizedTWSClient] = None
                     self._mock_tws_client: Optional[MockTWSClient] = None

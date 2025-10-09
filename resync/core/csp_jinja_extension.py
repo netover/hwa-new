@@ -28,29 +28,14 @@ class CSPNonceExtension(Extension):
     def _get_csp_nonce(self) -> str:
         """
         Get the CSP nonce from the current request context.
-        
+
         Returns:
             The CSP nonce string, or empty string if not available
         """
-        # This will be populated by the CSP middleware
-        # The actual nonce is stored in request.state.csp_nonce
-        # We need to access the request context
-        from fastapi import Request
-        
-        # Try to get the request from the current context
-        try:
-            # This is a simplified approach - in a real implementation,
-            # we would need to access the request from the current context
-            # For now, we'll return an empty string if we can't access the request
-            request: Optional[Request] = None
-            if hasattr(self, 'environment') and hasattr(self.environment, 'handler'):
-                request = self.environment.handler.get('request', None)
-            
-            if request and hasattr(request, 'state') and hasattr(request.state, 'csp_nonce'):
-                return str(request.state.csp_nonce)
-        except Exception:
-            pass
-        
+        # CSP nonce is not available in template context during rendering
+        # This function is called during template rendering, but the request context
+        # is not directly accessible here. The nonce should be passed explicitly
+        # in the template context instead.
         return ""
 
 def setup_csp_jinja_extension(templates):
