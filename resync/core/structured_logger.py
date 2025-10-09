@@ -13,17 +13,30 @@ Características:
 
 import logging
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union, Tuple
 from datetime import datetime
+from contextvars import ContextVar
 
 import structlog
 from structlog.types import EventDict, WrappedLogger
+from fastapi import Request, Response
 
-from resync.core.context import get_correlation_id, get_user_id, get_request_id
+from resync.settings import settings
 
 
 # ============================================================================
-# PROCESSADORES CUSTOMIZADOS
+# CONTEXT VARIABLES
+# ============================================================================
+
+# Store current request context for logging
+_current_request_ctx: ContextVar[Optional[Dict[str, Any]]] = ContextVar(
+    'current_request_ctx', 
+    default=None
+)
+
+
+# ============================================================================
+# CUSTOM PROCESSORS
 # ============================================================================
 
 def add_correlation_id(
@@ -41,6 +54,7 @@ def add_correlation_id(
     Returns:
         Event dict com correlation_id
     """
+    from resync.core.context import get_correlation_id
     correlation_id = get_correlation_id()
     if correlation_id:
         event_dict['correlation_id'] = correlation_id
@@ -62,6 +76,7 @@ def add_user_context(
     Returns:
         Event dict com user_id
     """
+    from resync.core.context import get_user_id
     user_id = get_user_id()
     if user_id:
         event_dict['user_id'] = user_id
@@ -83,6 +98,7 @@ def add_request_context(
     Returns:
         Event dict com request_id
     """
+    from resync.core.context import get_request_id
     request_id = get_request_id()
     if request_id:
         event_dict['request_id'] = request_id
@@ -104,10 +120,8 @@ def add_service_context(
     Returns:
         Event dict com service_name e environment
     """
-    from resync.settings import settings
-    
     event_dict['service_name'] = settings.PROJECT_NAME
-    event_dict['environment'] = settings.environment
+    event_dict['environment'] = settings.environment.value
     event_dict['version'] = settings.PROJECT_VERSION
     
     return event_dict
@@ -169,10 +183,25 @@ def censor_sensitive_data(
     Returns:
         Event dict com dados sensíveis censurados
     """
-    sensitive_keys = {
+    sensitive_patterns = {
+        # Exact key matches
         'password', 'token', 'secret', 'api_key', 'apikey',
-        'authorization', 'auth', 'credential', 'private_key'
+        'authorization', 'auth', 'credential', 'private_key',
+        'access_token', 'refresh_token', 'client_secret',
+        'pin', 'cvv', 'ssn', 'credit_card', 'card_number'
     }
+    
+    # Patterns to detect sensitive values
+    sensitive_value_patterns = [
+        r'(?:password|pwd)=["\'][^"\']*["\']',
+        r'(?:token|secret|key)=["\'][^"\']*["\']',
+        r'(?:authorization)[:\s]*bearer\s+[^\s]+',
+        r'(?:basic)\s+[a-zA-Z0-9+/=]+',
+        r'\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}',  # Credit card pattern
+        r'\b\d{3}-?\d{2}-?\d{4}\b',  # SSN pattern
+    ]
+    
+    import re
     
     def censor_dict(d: Dict[str, Any]) -> Dict[str, Any]:
         """Censura recursivamente um dicionário."""
@@ -181,7 +210,7 @@ def censor_sensitive_data(
             key_lower = key.lower()
             
             # Verificar se a chave contém termo sensível
-            if any(sensitive in key_lower for sensitive in sensitive_keys):
+            if any(sensitive in key_lower for sensitive in sensitive_patterns):
                 result[key] = '***REDACTED***'
             elif isinstance(value, dict):
                 result[key] = censor_dict(value)
@@ -190,6 +219,12 @@ def censor_sensitive_data(
                     censor_dict(item) if isinstance(item, dict) else item
                     for item in value
                 ]
+            elif isinstance(value, str):
+                # Apply value pattern censoring
+                censored_value = value
+                for pattern in sensitive_value_patterns:
+                    censored_value = re.sub(pattern, '***REDACTED***', censored_value, flags=re.IGNORECASE)
+                result[key] = censored_value
             else:
                 result[key] = value
         
@@ -198,8 +233,29 @@ def censor_sensitive_data(
     return censor_dict(event_dict)
 
 
+def add_request_metadata(
+    logger: WrappedLogger,
+    method_name: str,
+    event_dict: EventDict
+) -> EventDict:
+    """Adiciona metadados da requisição ao log.
+    
+    Args:
+        logger: Logger
+        method_name: Nome do método de log
+        event_dict: Dicionário do evento
+        
+    Returns:
+        Event dict com metadados da requisição
+    """
+    request_ctx = _current_request_ctx.get()
+    if request_ctx:
+        event_dict.update(request_ctx)
+    return event_dict
+
+
 # ============================================================================
-# CONFIGURAÇÃO
+# CONFIGURATION
 # ============================================================================
 
 def configure_structured_logging(
@@ -230,6 +286,7 @@ def configure_structured_logging(
         add_user_context,
         add_request_context,
         add_service_context,
+        add_request_metadata,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
         censor_sensitive_data,
@@ -274,7 +331,7 @@ def get_logger(name: Optional[str] = None) -> structlog.BoundLogger:
 
 
 # ============================================================================
-# HELPERS DE LOGGING
+# LOGGING HELPERS
 # ============================================================================
 
 class LoggerAdapter:
@@ -317,8 +374,7 @@ class LoggerAdapter:
             **kwargs: Contexto adicional
         """
         if exc_info:
-            import traceback
-            kwargs['exc_info'] = traceback.format_exc()
+            kwargs['exc_info'] = True
         
         self.logger.error(event, **kwargs)
     
@@ -336,8 +392,7 @@ class LoggerAdapter:
             **kwargs: Contexto adicional
         """
         if exc_info:
-            import traceback
-            kwargs['exc_info'] = traceback.format_exc()
+            kwargs['exc_info'] = True
         
         self.logger.critical(event, **kwargs)
     
@@ -366,7 +421,7 @@ def get_logger_adapter(name: Optional[str] = None) -> LoggerAdapter:
 
 
 # ============================================================================
-# LOGGING DE PERFORMANCE
+# PERFORMANCE LOGGING
 # ============================================================================
 
 class PerformanceLogger:
@@ -386,6 +441,10 @@ class PerformanceLogger:
         path: str,
         status_code: int,
         duration_ms: float,
+        request_size: Optional[int] = None,
+        response_size: Optional[int] = None,
+        user_agent: Optional[str] = None,
+        client_ip: Optional[str] = None,
         **kwargs
     ) -> None:
         """Loga informações de uma requisição HTTP.
@@ -395,22 +454,48 @@ class PerformanceLogger:
             path: Caminho da requisição
             status_code: Código de status da resposta
             duration_ms: Duração em milissegundos
+            request_size: Tamanho da requisição em bytes
+            response_size: Tamanho da resposta em bytes
+            user_agent: User-Agent do cliente
+            client_ip: IP do cliente
             **kwargs: Contexto adicional
         """
-        self.logger.info(
-            "http_request",
-            method=method,
-            path=path,
-            status_code=status_code,
-            duration_ms=round(duration_ms, 2),
-            **kwargs
-        )
+        log_data = {
+            "event_type": "http_request",
+            "method": method,
+            "path": path,
+            "status_code": status_code,
+            "duration_ms": round(duration_ms, 2),
+        }
+        
+        if request_size is not None:
+            log_data["request_size_bytes"] = request_size
+            
+        if response_size is not None:
+            log_data["response_size_bytes"] = response_size
+            
+        if user_agent:
+            log_data["user_agent"] = user_agent
+            
+        if client_ip:
+            log_data["client_ip"] = client_ip
+        
+        log_data.update(kwargs)
+        
+        # Log as info for successful requests, warning for client errors, error for server errors
+        if 200 <= status_code < 300:
+            self.logger.info("http_request_processed", **log_data)
+        elif 400 <= status_code < 500:
+            self.logger.warning("http_client_error", **log_data)
+        else:
+            self.logger.error("http_server_error", **log_data)
     
     def log_database_query(
         self,
         query_type: str,
         duration_ms: float,
         rows_affected: Optional[int] = None,
+        query: Optional[str] = None,
         **kwargs
     ) -> None:
         """Loga informações de uma query de banco de dados.
@@ -419,19 +504,36 @@ class PerformanceLogger:
             query_type: Tipo de query (SELECT, INSERT, etc.)
             duration_ms: Duração em milissegundos
             rows_affected: Número de linhas afetadas
+            query: Query SQL (censurada)
             **kwargs: Contexto adicional
         """
         log_data = {
+            "event_type": "database_query",
             "query_type": query_type,
             "duration_ms": round(duration_ms, 2),
         }
         
         if rows_affected is not None:
             log_data["rows_affected"] = rows_affected
+            
+        if query:
+            # Censor sensitive parts of the query
+            import re
+            censored_query = re.sub(
+                r"(password|pwd|secret|token)\s*=\s*['\"][^'\"]*['\"]",
+                r"\1=***REDACTED***",
+                query,
+                flags=re.IGNORECASE
+            )
+            log_data["query"] = censored_query
         
         log_data.update(kwargs)
         
-        self.logger.info("database_query", **log_data)
+        # Warn for slow queries (> 1 second)
+        if duration_ms > 1000:
+            self.logger.warning("slow_database_query", **log_data)
+        else:
+            self.logger.info("database_query_executed", **log_data)
     
     def log_external_call(
         self,
@@ -439,6 +541,8 @@ class PerformanceLogger:
         operation: str,
         duration_ms: float,
         success: bool,
+        request_size: Optional[int] = None,
+        response_size: Optional[int] = None,
         **kwargs
     ) -> None:
         """Loga chamada a serviço externo.
@@ -448,16 +552,110 @@ class PerformanceLogger:
             operation: Operação realizada
             duration_ms: Duração em milissegundos
             success: Se a chamada foi bem-sucedida
+            request_size: Tamanho da requisição em bytes
+            response_size: Tamanho da resposta em bytes
             **kwargs: Contexto adicional
         """
-        self.logger.info(
-            "external_call",
-            service_name=service_name,
-            operation=operation,
-            duration_ms=round(duration_ms, 2),
-            success=success,
-            **kwargs
-        )
+        log_data = {
+            "event_type": "external_call",
+            "service_name": service_name,
+            "operation": operation,
+            "duration_ms": round(duration_ms, 2),
+            "success": success,
+        }
+        
+        if request_size is not None:
+            log_data["request_size_bytes"] = request_size
+            
+        if response_size is not None:
+            log_data["response_size_bytes"] = response_size
+        
+        log_data.update(kwargs)
+        
+        # Error for failures, warn for slow calls, info for normal
+        if not success:
+            self.logger.error("external_call_failed", **log_data)
+        elif duration_ms > 5000:  # More than 5 seconds
+            self.logger.warning("slow_external_call", **log_data)
+        else:
+            self.logger.info("external_call_completed", **log_data)
+    
+    def log_cache_operation(
+        self,
+        operation: str,
+        key: str,
+        hit: bool,
+        duration_ms: Optional[float] = None,
+        **kwargs
+    ) -> None:
+        """Loga operações de cache.
+        
+        Args:
+            operation: Tipo de operação (GET, SET, DELETE)
+            key: Chave do cache
+            hit: Se foi um hit ou miss
+            duration_ms: Duração em milissegundos
+            **kwargs: Contexto adicional
+        """
+        log_data = {
+            "event_type": "cache_operation",
+            "operation": operation,
+            "key": key,
+            "hit": hit,
+        }
+        
+        if duration_ms is not None:
+            log_data["duration_ms"] = round(duration_ms, 2)
+        
+        log_data.update(kwargs)
+        
+        self.logger.info("cache_operation_performed", **log_data)
+    
+    def log_security_event(
+        self,
+        event_type: str,
+        severity: str,
+        source_ip: Optional[str] = None,
+        user_id: Optional[str] = None,
+        details: Optional[str] = None,
+        **kwargs
+    ) -> None:
+        """Loga eventos de segurança.
+        
+        Args:
+            event_type: Tipo de evento de segurança
+            severity: Severidade (low, medium, high, critical)
+            source_ip: IP de origem
+            user_id: ID do usuário
+            details: Detalhes do evento
+            **kwargs: Contexto adicional
+        """
+        log_data = {
+            "event_type": "security_event",
+            "security_event_type": event_type,
+            "severity": severity,
+        }
+        
+        if source_ip:
+            log_data["source_ip"] = source_ip
+            
+        if user_id:
+            log_data["user_id"] = user_id
+            
+        if details:
+            log_data["details"] = details
+        
+        log_data.update(kwargs)
+        
+        # Log with appropriate level based on severity
+        if severity == "critical":
+            self.logger.critical("security_event_detected", **log_data)
+        elif severity == "high":
+            self.logger.error("security_event_detected", **log_data)
+        elif severity == "medium":
+            self.logger.warning("security_event_detected", **log_data)
+        else:
+            self.logger.info("security_event_detected", **log_data)
 
 
 def get_performance_logger(name: Optional[str] = None) -> PerformanceLogger:
@@ -472,6 +670,65 @@ def get_performance_logger(name: Optional[str] = None) -> PerformanceLogger:
     return PerformanceLogger(get_logger(name))
 
 
+# ============================================================================
+# CONTEXT MANAGEMENT
+# ============================================================================
+
+def set_request_context(request: Request) -> None:
+    """Define contexto da requisição para logging.
+    
+    Args:
+        request: Requisição FastAPI
+    """
+    context = {
+        "http_method": request.method,
+        "http_path": request.url.path,
+        "client_ip": request.client.host if request.client else None,
+        "user_agent": request.headers.get("user-agent"),
+    }
+    
+    # Add query parameters (filtered for sensitive data)
+    if request.query_params:
+        filtered_params = {}
+        for key, value in request.query_params.items():
+            if any(sensitive in key.lower() for sensitive in 
+                   ['password', 'token', 'secret', 'key', 'auth']):
+                filtered_params[key] = '***REDACTED***'
+            else:
+                filtered_params[key] = value
+        context["query_params"] = filtered_params
+    
+    _current_request_ctx.set(context)
+
+
+class StructuredErrorLogger:
+    """Structured error logger for consistent error logging."""
+
+    @staticmethod
+    def log_error(
+        error: Exception,
+        context: dict,
+        level: str = "error"
+    ) -> None:
+        """
+        Log error with structured context.
+
+        Args:
+            error: The exception to log
+            context: Additional context information
+            level: Log level (debug, info, warning, error, critical)
+        """
+        logger = get_logger(__name__)
+
+        log_data = {
+            "error_type": type(error).__name__,
+            "error_message": str(error),
+            **context
+        }
+
+        logger.log(logging.getLevelName(level.upper()), "structured_error", **log_data)
+
+
 __all__ = [
     # Configuração
     'configure_structured_logging',
@@ -481,6 +738,7 @@ __all__ = [
     # Classes
     'LoggerAdapter',
     'PerformanceLogger',
+    'StructuredErrorLogger',
     # Processadores
     'add_correlation_id',
     'add_user_context',
@@ -489,4 +747,7 @@ __all__ = [
     'add_timestamp',
     'add_log_level',
     'censor_sensitive_data',
+    'add_request_metadata',
+    # Context management
+    'set_request_context',
 ]

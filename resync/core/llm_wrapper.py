@@ -4,12 +4,12 @@ with the agent system using the LLM optimizer.
 """
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict
 
 from resync.core.llm_optimizer import TWS_LLMOptimizer
+from resync.core.structured_logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Global instance of the LLM optimizer
 llm_optimizer = TWS_LLMOptimizer()
@@ -52,7 +52,7 @@ class OptimizedLLMWrapper:
             )
             return response
         except Exception as e:
-            logger.error(f"LLM optimization failed: {e}", exc_info=True)
+            logger.error("llm_optimization_failed", error=str(e), exc_info=True)
             # Fallback to direct LLM call if optimization fails
             from resync.core.utils.llm import call_llm
             return await call_llm(query, model="gpt-3.5-turbo")

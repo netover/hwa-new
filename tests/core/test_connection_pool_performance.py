@@ -14,6 +14,7 @@ This module contains comprehensive performance tests to validate:
 
 import asyncio
 import pytest
+import pytest_asyncio
 import time
 import gc
 import psutil

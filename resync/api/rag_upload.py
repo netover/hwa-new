@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, BackgroundTasks
 
 from resync.core.exceptions import FileProcessingError
 from resync.core.fastapi_di import get_file_ingestor
@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api/rag", tags=["rag"])
 
 @router.post("/upload", summary="Upload a document for RAG ingestion")
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = file_dependency,
     file_ingestor: IFileIngestor = file_ingestor_dependency,
 ):
@@ -56,7 +57,7 @@ async def upload_document(
 
         # Start file ingestion in the background
         # We don't want to block the response while processing potentially large files
-        asyncio.create_task(file_ingestor.ingest_file(destination))
+        background_tasks.add_task(file_ingestor.ingest_file, destination)
 
         # Get the filename from the path
         safe_filename = destination.name

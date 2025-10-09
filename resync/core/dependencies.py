@@ -37,7 +37,7 @@ async def get_tws_client() -> AsyncGenerator[OptimizedTWSClient | MockTWSClient,
 
         yield client
     except Exception as e:
-        logger.error(f"Failed to retrieve TWS client: {e}", exc_info=True)
+        logger.error("failed_to_retrieve_TWS_client", error=str(e), exc_info=True)
         raise
     finally:
         # This is where teardown logic would go, if any was needed.

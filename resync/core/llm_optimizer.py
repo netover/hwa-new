@@ -53,7 +53,7 @@ class TWS_LLMOptimizer:
 
         # Model routing based on complexity
         self.model_routing = {
-            "simple": settings.AUDITOR_MODEL_NAME,  # For basic queries
+            "simple": getattr(settings, "AUDITOR_MODEL_NAME", "gpt-3.5-turbo"),  # For basic queries
             "complex": getattr(
                 settings, "AGENT_MODEL_NAME", "gpt-4o"
             ),  # For complex analysis
@@ -304,7 +304,10 @@ class TWS_LLMOptimizer:
             return full_response
 
         except Exception as e:
-            logger.error(f"Error in LLM streaming: {e}")
+            logger.error(
+                "Error in LLM streaming",
+                error=str(e)
+            )
             # Fallback to original method (which now also uses LiteLLM)
             result = await call_llm(prompt, model=model, max_tokens=1000)
             await self.response_cache.set(cache_key, result)

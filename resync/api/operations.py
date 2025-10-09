@@ -4,12 +4,12 @@ Este módulo demonstra o uso de idempotency keys em operações que não devem
 ser duplicadas, como criação de recursos, transações, etc.
 """
 
-from typing import Optional
+from typing import Optional, Annotated
 from datetime import datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 from resync.api.dependencies import (
     get_idempotency_manager,
@@ -69,11 +69,12 @@ class ResourceResponse(BaseModel):
         }
 
 
+Currency = Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")]
 class TransactionRequest(BaseModel):
     """Request para criar uma transação."""
-    
+
     amount: float = Field(..., description="Valor da transação", gt=0)
-    currency: str = Field(default="USD", description="Moeda", pattern="^[A-Z]{3}$")
+    currency: Currency = Field(default="USD", description="Moeda")
     description: str = Field(..., description="Descrição da transação", min_length=1)
     
     class Config:

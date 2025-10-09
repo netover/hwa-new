@@ -43,7 +43,7 @@ class DistributedAuditLock:
         self._lock_prefix: str = "audit_lock"
         self.release_script_sha: Optional[str] = None
 
-        logger.info(f"DistributedAuditLock initialized with Redis at {self.redis_url}")
+        logger.info("DistributedAuditLock initialized with Redis", redis_url=self.redis_url)
 
     async def connect(self) -> None:
         """Initialize Redis connection."""
@@ -138,7 +138,7 @@ class DistributedAuditLock:
         lock_key = self._get_lock_key(memory_id)
         result = await self.client.delete(lock_key)
         if result:
-            logger.warning(f"Forcefully released audit lock for memory: {memory_id}")
+            logger.warning("forcefully_released_audit_lock_for_memory", memory_id=memory_id)
         return bool(result)
 
     async def cleanup_expired_locks(self, max_age: int = 60) -> int:
@@ -290,7 +290,7 @@ class AuditLockContext:
                 )  # type: ignore[misc]
 
             if result == 1:
-                logger.debug(f"Successfully released audit lock: {self.lock_key}")
+                logger.debug("successfully_released_audit_lock", lock_key=self.lock_key)
             else:
                 # Check current lock value to determine if it was already expired or not owned
                 current_value = await self.client.get(self.lock_key)
@@ -310,8 +310,8 @@ class AuditLockContext:
             logger.error("Value error during lock release: %s", e)
             raise AuditError(f"Value error during lock release: {e}") from e
         except Exception as e:
-            logger.error("Unexpected error during lock release: %s", e)
-            logger.error(f"Lock details - Key: {self.lock_key}, Value: {self.lock_value[:8] if self.lock_value else None}")
+            logger.error("Unexpected error during lock release", error=str(e))
+            logger.error("lock_details", key=self.lock_key, value=self.lock_value[:8] if self.lock_value else None)
             raise AuditError(f"Unexpected error during lock release: {e}") from e
 
     async def release(self) -> None:

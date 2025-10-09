@@ -9,6 +9,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from .enhanced_security import configure_enhanced_security
+
 logger = logging.getLogger(__name__)
 
 
@@ -42,5 +44,9 @@ def add_additional_security_headers(app: FastAPI) -> None:
     Args:
         app: FastAPI application instance
     """
+    # Configure enhanced security features
+    configure_enhanced_security(app)
+    
+    # Add additional security headers middleware
     app.add_middleware(AdditionalSecurityHeadersMiddleware)
     logger.info("Additional security headers middleware added")

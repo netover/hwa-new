@@ -7,12 +7,12 @@ Este módulo demonstra o uso completo de:
 - Respostas padronizadas
 """
 
-from typing import List, Optional
+from typing import List, Optional, Annotated, Dict, Any
 from datetime import datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 from resync.api.models.responses import (
     ProblemDetail,
@@ -55,12 +55,17 @@ class Book(BaseModel):
         }
 
 
+class BookOut(Book):
+    _links: Dict[str, Any]
+
+
+ISBN = Annotated[str, StringConstraints(pattern=r"^[\d-]+$")]
 class BookCreate(BaseModel):
     """Request para criar livro."""
-    
+
     title: str = Field(..., description="Título do livro", min_length=1, max_length=200)
     author: str = Field(..., description="Autor do livro", min_length=1, max_length=100)
-    isbn: Optional[str] = Field(None, description="ISBN", pattern=r"^[\d-]+$")
+    isbn: Optional[ISBN] = Field(None, description="ISBN")
     published_year: Optional[int] = Field(None, description="Ano de publicação", ge=1000, le=9999)
 
 
@@ -183,7 +188,7 @@ async def list_books(
 
 @router.get(
     "/books/{book_id}",
-    response_model=Book,
+    response_model=BookOut,
     summary="Get book by ID with HATEOAS",
     description="""
     Obtém um livro específico com links HATEOAS.
@@ -262,7 +267,7 @@ async def get_book(book_id: str):
 
 @router.post(
     "/books",
-    response_model=Book,
+    response_model=BookOut,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new book",
     description="""

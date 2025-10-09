@@ -26,6 +26,9 @@ import time
 class GlobalExceptionHandlerMiddleware(BaseHTTPMiddleware):
     """Middleware for handling all exceptions and returning standardized error responses."""
 
+    def __init__(self, app):
+        super().__init__(app)
+
     async def dispatch(self, request: Request, call_next: Callable[[Request], Any]) -> Response:
         """Process the request and handle any exceptions that occur."""
         correlation_id = generate_correlation_id()
@@ -188,6 +191,7 @@ async def http_exception_handler(request: Request, exc: Any) -> JSONResponse:
 def register_exception_handlers(app: Any) -> None:
     """Register all exception handlers with the FastAPI application."""
     from fastapi import HTTPException
+    from resync.core.exceptions_enhanced import ResyncException
 
     # Add the global exception handler middleware
     add_global_exception_handler(app)
@@ -195,8 +199,21 @@ def register_exception_handlers(app: Any) -> None:
     # Register specific exception handlers
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(ResyncException, resync_exception_handler)
 
     logger.info("All exception handlers registered")
+
+
+async def resync_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Handle custom Resync exceptions."""
+    correlation_id = getattr(request.state, 'correlation_id', generate_correlation_id())
+
+    logger.error(f"Resync exception for {request.method} {request.url.path}: {exc}")
+
+    error_response = create_error_response_from_exception(exc, request, correlation_id)
+    log_error_response(error_response, exc)
+
+    return create_json_response_from_error(error_response)
 
 
 # Context manager for request correlation ID

@@ -1,663 +1,521 @@
-"""Sistema de Idempotency Keys para operações idempotentes.
+"""
+Sistema de Idempotency Keys para o Resync
 
-Este módulo implementa o padrão de Idempotency Keys para garantir que
-operações críticas possam ser executadas múltiplas vezes com segurança,
-retornando sempre o mesmo resultado.
+Este módulo implementa um sistema completo de idempotency keys para garantir
+que operações críticas não sejam executadas múltiplas vezes, mesmo em caso
+de falhas de rede ou retry automático.
 
-Casos de uso:
-- Pagamentos e transações financeiras
-- Criação de recursos
-- Operações de escrita críticas
-- Prevenção de duplicação em retries
+Características:
+- Storage Redis para alta performance
+- TTL configurável para limpeza automática
+- Proteção contra processamento concorrente
+- Serialização/deserialização automática
+- Métricas de monitoramento
 
-Baseado nas práticas da Stripe API.
+Author: Resync Team
+Date: October 2025
 """
 
-import asyncio
-import json
 import hashlib
+import json
+import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, Optional, TypeVar
-from dataclasses import dataclass, asdict
-from enum import Enum
-from functools import wraps
+from typing import Any, Dict, Optional, Union
 
-from resync.core.exceptions import ResourceConflictError, ValidationError
+from redis.asyncio import Redis
+
+from resync.core.exceptions import BusinessError
 from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
 
-T = TypeVar('T')
 
-
-# ============================================================================
-# MODELS
-# ============================================================================
-
-class IdempotencyStatus(str, Enum):
-    """Status de uma operação idempotente."""
-    PROCESSING = "processing"  # Em processamento
-    COMPLETED = "completed"    # Completada com sucesso
-    FAILED = "failed"          # Falhou
+@dataclass
+class IdempotencyConfig:
+    """Configuração do sistema de idempotency"""
+    ttl_hours: int = 24
+    redis_db: int = 1
+    key_prefix: str = "idempotency"
+    processing_prefix: str = "processing"
+    max_response_size_kb: int = 64  # 64KB máximo por resposta
 
 
 @dataclass
 class IdempotencyRecord:
-    """Registro de uma operação idempotente.
-    
-    Attributes:
-        key: Chave de idempotência
-        status: Status da operação
-        result: Resultado da operação (se completada)
-        error: Erro da operação (se falhou)
-        created_at: Timestamp de criação
-        updated_at: Timestamp de última atualização
-        expires_at: Timestamp de expiração
-        request_hash: Hash da requisição para validação
-    """
-    key: str
-    status: IdempotencyStatus
-    result: Optional[Any] = None
-    error: Optional[str] = None
-    created_at: datetime = None
-    updated_at: datetime = None
-    expires_at: datetime = None
-    request_hash: Optional[str] = None
-    
-    def __post_init__(self):
-        """Inicializa timestamps se não fornecidos."""
-        now = datetime.utcnow()
-        if self.created_at is None:
-            self.created_at = now
-        if self.updated_at is None:
-            self.updated_at = now
-    
+    """Registro de idempotency armazenado"""
+    idempotency_key: str
+    request_hash: str
+    response_data: Dict[str, Any]
+    status_code: int
+    created_at: datetime
+    expires_at: datetime
+    request_metadata: Dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> Dict[str, Any]:
-        """Converte para dicionário."""
-        data = asdict(self)
-        data['status'] = self.status.value
-        data['created_at'] = self.created_at.isoformat() if self.created_at else None
-        data['updated_at'] = self.updated_at.isoformat() if self.updated_at else None
-        data['expires_at'] = self.expires_at.isoformat() if self.expires_at else None
-        return data
-    
+        """Converte para dicionário para serialização"""
+        return {
+            "idempotency_key": self.idempotency_key,
+            "request_hash": self.request_hash,
+            "response_data": self.response_data,
+            "status_code": self.status_code,
+            "created_at": self.created_at.isoformat(),
+            "expires_at": self.expires_at.isoformat(),
+            "request_metadata": self.request_metadata
+        }
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'IdempotencyRecord':
-        """Cria instância a partir de dicionário."""
-        data = data.copy()
-        data['status'] = IdempotencyStatus(data['status'])
-        
-        for field in ['created_at', 'updated_at', 'expires_at']:
-            if data.get(field):
-                data[field] = datetime.fromisoformat(data[field])
-        
-        return cls(**data)
+        """Cria instância a partir de dicionário"""
+        return cls(
+            idempotency_key=data["idempotency_key"],
+            request_hash=data["request_hash"],
+            response_data=data["response_data"],
+            status_code=data["status_code"],
+            created_at=datetime.fromisoformat(data["created_at"]),
+            expires_at=datetime.fromisoformat(data["expires_at"]),
+            request_metadata=data.get("request_metadata", {})
+        )
 
 
-# ============================================================================
-# STORAGE INTERFACE
-# ============================================================================
+@dataclass
+class IdempotencyMetrics:
+    """Métricas do sistema de idempotency"""
+    total_requests: int = 0
+    cache_hits: int = 0
+    cache_misses: int = 0
+    concurrent_blocks: int = 0
+    storage_errors: int = 0
+    expired_cleanups: int = 0
 
-class IdempotencyStorage:
-    """Interface abstrata para storage de idempotency keys.
-    
-    Implementações concretas podem usar Redis, banco de dados, etc.
-    """
-    
-    async def get(self, key: str) -> Optional[IdempotencyRecord]:
-        """Obtém registro de idempotência.
-        
-        Args:
-            key: Chave de idempotência
-            
-        Returns:
-            Registro se existir, None caso contrário
-        """
-        raise NotImplementedError
-    
-    async def set(
-        self,
-        key: str,
-        record: IdempotencyRecord,
-        ttl_seconds: Optional[int] = None
-    ) -> None:
-        """Armazena registro de idempotência.
-        
-        Args:
-            key: Chave de idempotência
-            record: Registro a ser armazenado
-            ttl_seconds: Tempo de vida em segundos
-        """
-        raise NotImplementedError
-    
-    async def delete(self, key: str) -> None:
-        """Remove registro de idempotência.
-        
-        Args:
-            key: Chave de idempotência
-        """
-        raise NotImplementedError
-    
-    async def exists(self, key: str) -> bool:
-        """Verifica se chave existe.
-        
-        Args:
-            key: Chave de idempotência
-            
-        Returns:
-            True se existir, False caso contrário
-        """
-        raise NotImplementedError
+    @property
+    def hit_rate(self) -> float:
+        """Taxa de acertos do cache"""
+        if self.total_requests == 0:
+            return 0.0
+        return self.cache_hits / self.total_requests
 
-
-class InMemoryIdempotencyStorage(IdempotencyStorage):
-    """Implementação em memória para desenvolvimento/testes.
-    
-    ATENÇÃO: Não usar em produção! Dados são perdidos ao reiniciar.
-    """
-    
-    def __init__(self):
-        """Inicializa storage em memória."""
-        self._storage: Dict[str, IdempotencyRecord] = {}
-        self._lock = asyncio.Lock()
-    
-    async def get(self, key: str) -> Optional[IdempotencyRecord]:
-        """Obtém registro."""
-        async with self._lock:
-            record = self._storage.get(key)
-            
-            # Verificar expiração
-            if record and record.expires_at:
-                if datetime.utcnow() > record.expires_at:
-                    del self._storage[key]
-                    return None
-            
-            return record
-    
-    async def set(
-        self,
-        key: str,
-        record: IdempotencyRecord,
-        ttl_seconds: Optional[int] = None
-    ) -> None:
-        """Armazena registro."""
-        async with self._lock:
-            if ttl_seconds:
-                record.expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
-            
-            self._storage[key] = record
-    
-    async def delete(self, key: str) -> None:
-        """Remove registro."""
-        async with self._lock:
-            self._storage.pop(key, None)
-    
-    async def exists(self, key: str) -> bool:
-        """Verifica existência."""
-        record = await self.get(key)
-        return record is not None
-
-
-# ============================================================================
-# IDEMPOTENCY MANAGER
-# ============================================================================
 
 class IdempotencyManager:
-    """Gerenciador de operações idempotentes.
-    
-    Coordena o armazenamento e recuperação de resultados de operações
-    idempotentes, garantindo que a mesma operação não seja executada
-    múltiplas vezes.
-    
-    Example:
-        ```python
-        manager = IdempotencyManager(storage)
-        
-        @manager.idempotent(ttl_seconds=3600)
-        async def create_payment(amount: float, idempotency_key: str):
-            # Operação crítica
-            return await payment_service.create(amount)
-        ```
     """
-    
+    Gerenciador de chaves de idempotência
+
+    Responsável por armazenar e recuperar respostas de operações
+    idempotentes, garantindo que operações críticas não sejam
+    executadas múltiplas vezes.
+    """
+
     def __init__(
         self,
-        storage: IdempotencyStorage,
-        default_ttl_seconds: int = 86400  # 24 horas
+        redis_client: Redis,
+        config: Optional[IdempotencyConfig] = None
     ):
-        """Inicializa o manager.
-        
-        Args:
-            storage: Storage para idempotency keys
-            default_ttl_seconds: TTL padrão em segundos
-        """
-        self.storage = storage
-        self.default_ttl_seconds = default_ttl_seconds
-    
-    def _compute_request_hash(self, *args, **kwargs) -> str:
-        """Computa hash da requisição para validação.
-        
-        Args:
-            *args: Argumentos posicionais
-            **kwargs: Argumentos nomeados
-            
-        Returns:
-            Hash SHA256 da requisição
-        """
-        # Serializar argumentos
-        data = {
-            'args': str(args),
-            'kwargs': str(sorted(kwargs.items()))
-        }
-        
-        serialized = json.dumps(data, sort_keys=True)
-        return hashlib.sha256(serialized.encode()).hexdigest()
-    
-    async def execute_idempotent(
-        self,
-        key: str,
-        func: Callable[..., T],
-        *args,
-        ttl_seconds: Optional[int] = None,
-        validate_request: bool = True,
-        **kwargs
-    ) -> T:
-        """Executa função de forma idempotente.
-        
-        Args:
-            key: Chave de idempotência
-            func: Função a ser executada
-            *args: Argumentos posicionais
-            ttl_seconds: TTL customizado
-            validate_request: Se deve validar hash da requisição
-            **kwargs: Argumentos nomeados
-            
-        Returns:
-            Resultado da função
-            
-        Raises:
-            ResourceConflictError: Se operação já está em processamento
-            ValidationError: Se requisição não corresponde ao hash armazenado
-        """
-        if not key:
-            raise ValidationError(
-                message="Idempotency key is required",
-                details={"field": "idempotency_key"}
-            )
-        
-        ttl = ttl_seconds or self.default_ttl_seconds
-        request_hash = self._compute_request_hash(*args, **kwargs) if validate_request else None
-        
-        # Verificar se já existe
-        existing = await self.storage.get(key)
-        
-        if existing:
-            # Validar hash da requisição
-            if validate_request and existing.request_hash != request_hash:
-                logger.warning(
-                    "Idempotency key reused with different request",
-                    idempotency_key=key
-                )
-                raise ValidationError(
-                    message="Idempotency key already used with different request",
-                    details={
-                        "idempotency_key": key,
-                        "reason": "request_mismatch"
-                    }
-                )
-            
-            # Verificar status
-            if existing.status == IdempotencyStatus.PROCESSING:
-                logger.info(
-                    "Operation already in progress",
-                    idempotency_key=key
-                )
-                raise ResourceConflictError(
-                    message="Operation already in progress",
-                    details={"idempotency_key": key}
-                )
-            
-            elif existing.status == IdempotencyStatus.COMPLETED:
-                logger.info(
-                    "Returning cached result",
-                    idempotency_key=key
-                )
-                return existing.result
-            
-            elif existing.status == IdempotencyStatus.FAILED:
-                logger.info(
-                    "Previous attempt failed, retrying",
-                    idempotency_key=key
-                )
-                # Permitir retry em caso de falha
-        
-        # Criar registro de processamento
-        record = IdempotencyRecord(
-            key=key,
-            status=IdempotencyStatus.PROCESSING,
-            request_hash=request_hash
-        )
-        
-        await self.storage.set(key, record, ttl)
-        
+        self.redis = redis_client
+        self.config = config or IdempotencyConfig()
+        self.metrics = IdempotencyMetrics()
+
         logger.info(
-            "Starting idempotent operation",
-            idempotency_key=key
+            "Idempotency manager initialized",
+            ttl_hours=self.config.ttl_hours,
+            redis_db=self.config.redis_db,
+            max_response_size_kb=self.config.max_response_size_kb
         )
-        
-        # Executar função
+
+    async def get_cached_response(
+        self,
+        idempotency_key: str,
+        request_data: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Recupera resposta em cache para chave de idempotência
+
+        Args:
+            idempotency_key: Chave de idempotência
+            request_data: Dados da requisição para validação (opcional)
+
+        Returns:
+            Resposta em cache ou None se não encontrada
+        """
+        self.metrics.total_requests += 1
+
         try:
-            if asyncio.iscoroutinefunction(func):
-                result = await func(*args, **kwargs)
-            else:
-                result = func(*args, **kwargs)
-            
-            # Armazenar resultado
-            record.status = IdempotencyStatus.COMPLETED
-            record.result = result
-            record.updated_at = datetime.utcnow()
-            
-            await self.storage.set(key, record, ttl)
-            
-            logger.info(
-                "Idempotent operation completed",
-                idempotency_key=key
+            key = self._make_key(idempotency_key)
+            cached_data = await self.redis.get(key)
+
+            if not cached_data:
+                self.metrics.cache_misses += 1
+                return None
+
+            # Desserializar dados
+            record_data = json.loads(cached_data)
+            record = IdempotencyRecord.from_dict(record_data)
+
+            # Verificar se expirou (defesa extra)
+            if datetime.utcnow() > record.expires_at:
+                await self.redis.delete(key)
+                self.metrics.expired_cleanups += 1
+                logger.warning(
+                    "Expired idempotency record cleaned up",
+                    idempotency_key=idempotency_key
+                )
+                return None
+
+            # Validar hash da requisição se fornecido
+            if request_data is not None:
+                current_hash = self._hash_request_data(request_data)
+                if current_hash != record.request_hash:
+                    logger.warning(
+                        "Idempotency key collision detected",
+                        idempotency_key=idempotency_key,
+                        stored_hash=record.request_hash,
+                        current_hash=current_hash
+                    )
+                    # Em caso de colisão, não usar cache
+                    return None
+
+            self.metrics.cache_hits += 1
+
+            logger.debug(
+                "Idempotency cache hit",
+                idempotency_key=idempotency_key,
+                age_seconds=(datetime.utcnow() - record.created_at).total_seconds()
             )
-            
-            return result
-        
+
+            return {
+                "status_code": record.status_code,
+                "data": record.response_data,
+                "cached_at": record.created_at.isoformat(),
+                "expires_at": record.expires_at.isoformat()
+            }
+
         except Exception as e:
-            # Armazenar erro
-            record.status = IdempotencyStatus.FAILED
-            record.error = str(e)
-            record.updated_at = datetime.utcnow()
-            
-            await self.storage.set(key, record, ttl)
-            
+            self.metrics.storage_errors += 1
             logger.error(
-                "Idempotent operation failed",
-                idempotency_key=key,
+                "Failed to get cached response",
+                idempotency_key=idempotency_key,
                 error=str(e)
             )
-            
-            raise
-    
-    def idempotent(
+            return None
+
+    async def cache_response(
         self,
-        ttl_seconds: Optional[int] = None,
-        validate_request: bool = True,
-        key_param: str = "idempotency_key"
-    ):
-        """Decorator para tornar função idempotente.
-        
-        Args:
-            ttl_seconds: TTL customizado
-            validate_request: Se deve validar hash da requisição
-            key_param: Nome do parâmetro que contém a chave
-            
-        Example:
-            ```python
-            @manager.idempotent(ttl_seconds=3600)
-            async def create_order(order_data: dict, idempotency_key: str):
-                return await db.create_order(order_data)
-            ```
+        idempotency_key: str,
+        response_data: Dict[str, Any],
+        status_code: int = 200,
+        request_data: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
-        def decorator(func: Callable) -> Callable:
-            @wraps(func)
-            async def wrapper(*args, **kwargs):
-                # Extrair idempotency key
-                key = kwargs.get(key_param)
-                
-                if not key:
-                    raise ValidationError(
-                        message=f"Missing required parameter: {key_param}",
-                        details={"field": key_param}
-                    )
-                
-                # Remover key dos kwargs para não passar para a função
-                func_kwargs = {k: v for k, v in kwargs.items() if k != key_param}
-                
-                return await self.execute_idempotent(
-                    key=key,
-                    func=func,
-                    *args,
-                    ttl_seconds=ttl_seconds,
-                    validate_request=validate_request,
-                    **func_kwargs
+        Armazena resposta para chave de idempotência
+
+        Args:
+            idempotency_key: Chave de idempotência
+            response_data: Dados da resposta
+            status_code: Código de status HTTP
+            request_data: Dados da requisição para hash
+            metadata: Metadados adicionais
+
+        Returns:
+            True se armazenado com sucesso, False caso contrário
+        """
+        try:
+            # Verificar tamanho da resposta
+            response_size = len(json.dumps(response_data).encode('utf-8'))
+            max_size_bytes = self.config.max_response_size_kb * 1024
+
+            if response_size > max_size_bytes:
+                logger.warning(
+                    "Response too large for idempotency cache",
+                    idempotency_key=idempotency_key,
+                    size_kb=response_size / 1024,
+                    max_size_kb=self.config.max_response_size_kb
                 )
-            
-            return wrapper
-        
-        return decorator
+                return False
 
+            # Criar registro
+            now = datetime.utcnow()
+            expires_at = now + timedelta(hours=self.config.ttl_hours)
 
-# ============================================================================
-# MIDDLEWARE
-# ============================================================================
+            record = IdempotencyRecord(
+                idempotency_key=idempotency_key,
+                request_hash=self._hash_request_data(request_data) if request_data else "",
+                response_data=response_data,
+                status_code=status_code,
+                created_at=now,
+                expires_at=expires_at,
+                request_metadata=metadata or {}
+            )
 
-class IdempotencyMiddleware:
-    """Middleware para extrair e validar idempotency keys de requisições HTTP.
-    
-    Extrai a chave do header X-Idempotency-Key e a disponibiliza
-    no contexto da requisição.
-    """
-    
-    HEADER_NAME = "X-Idempotency-Key"
-    
-    def __init__(
-        self,
-        app,
-        manager: IdempotencyManager,
-        required_methods: tuple = ("POST", "PUT", "PATCH")
-    ):
-        """Inicializa o middleware.
-        
-        Args:
-            app: Aplicação ASGI
-            manager: Gerenciador de idempotência
-            required_methods: Métodos HTTP que requerem idempotency key
+            # Serializar e armazenar
+            key = self._make_key(idempotency_key)
+            data = json.dumps(record.to_dict())
+
+            ttl_seconds = int((expires_at - now).total_seconds())
+            success = await self.redis.setex(key, ttl_seconds, data)
+
+            if success:
+                logger.debug(
+                    "Response cached for idempotency",
+                    idempotency_key=idempotency_key,
+                    ttl_seconds=ttl_seconds,
+                    size_kb=response_size / 1024
+                )
+                return True
+            else:
+                logger.error(
+                    "Failed to cache response",
+                    idempotency_key=idempotency_key
+                )
+                return False
+
+        except Exception as e:
+            self.metrics.storage_errors += 1
+            logger.error(
+                "Failed to cache response",
+                idempotency_key=idempotency_key,
+                error=str(e)
+            )
+            return False
+
+    async def is_processing(self, idempotency_key: str) -> bool:
         """
-        self.app = app
-        self.manager = manager
-        self.required_methods = required_methods
-    
-    async def __call__(self, scope, receive, send):
-        """Processa requisição."""
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-        
-        # Extrair idempotency key do header
-        headers = dict(scope.get("headers", []))
-        idempotency_key = headers.get(
-            self.HEADER_NAME.lower().encode(),
-            b""
-        ).decode()
-        
-        # Armazenar no scope
-        if idempotency_key:
-            scope["idempotency_key"] = idempotency_key
-        
-        await self.app(scope, receive, send)
+        Verifica se operação já está em processamento
+
+        Args:
+            idempotency_key: Chave de idempotência
+
+        Returns:
+            True se já está em processamento
+        """
+        try:
+            processing_key = self._make_processing_key(idempotency_key)
+            return await self.redis.exists(processing_key)
+        except Exception as e:
+            logger.error(
+                "Failed to check processing status",
+                idempotency_key=idempotency_key,
+                error=str(e)
+            )
+            return False
+
+    async def mark_processing(
+        self,
+        idempotency_key: str,
+        ttl_seconds: int = 300
+    ) -> bool:
+        """
+        Marca operação como em processamento
+
+        Args:
+            idempotency_key: Chave de idempotência
+            ttl_seconds: TTL para a marca de processamento
+
+        Returns:
+            True se marcado com sucesso
+        """
+        try:
+            processing_key = self._make_processing_key(idempotency_key)
+            success = await self.redis.setex(
+                processing_key,
+                ttl_seconds,
+                json.dumps({
+                    "started_at": datetime.utcnow().isoformat(),
+                    "ttl_seconds": ttl_seconds
+                })
+            )
+
+            if success:
+                logger.debug(
+                    "Operation marked as processing",
+                    idempotency_key=idempotency_key,
+                    ttl_seconds=ttl_seconds
+                )
+                return True
+            else:
+                logger.error(
+                    "Failed to mark operation as processing",
+                    idempotency_key=idempotency_key
+                )
+                return False
+
+        except Exception as e:
+            self.metrics.storage_errors += 1
+            logger.error(
+                "Failed to mark processing",
+                idempotency_key=idempotency_key,
+                error=str(e)
+            )
+            return False
+
+    async def clear_processing(self, idempotency_key: str) -> bool:
+        """
+        Remove marca de processamento
+
+        Args:
+            idempotency_key: Chave de idempotência
+
+        Returns:
+            True se removido com sucesso
+        """
+        try:
+            processing_key = self._make_processing_key(idempotency_key)
+            deleted = await self.redis.delete(processing_key)
+
+            if deleted:
+                logger.debug(
+                    "Processing mark cleared",
+                    idempotency_key=idempotency_key
+                )
+            else:
+                logger.debug(
+                    "No processing mark to clear",
+                    idempotency_key=idempotency_key
+                )
+
+            return True
+
+        except Exception as e:
+            logger.error(
+                "Failed to clear processing mark",
+                idempotency_key=idempotency_key,
+                error=str(e)
+            )
+            return False
+
+    async def invalidate_key(self, idempotency_key: str) -> bool:
+        """
+        Invalida chave de idempotência (remove do cache)
+
+        Args:
+            idempotency_key: Chave a ser invalidada
+
+        Returns:
+            True se invalidada com sucesso
+        """
+        try:
+            key = self._make_key(idempotency_key)
+            processing_key = self._make_processing_key(idempotency_key)
+
+            # Remover ambos: resposta cacheada e marca de processamento
+            deleted_count = await self.redis.delete(key, processing_key)
+
+            logger.info(
+                "Idempotency key invalidated",
+                idempotency_key=idempotency_key,
+                keys_deleted=deleted_count
+            )
+
+            return deleted_count > 0
+
+        except Exception as e:
+            logger.error(
+                "Failed to invalidate idempotency key",
+                idempotency_key=idempotency_key,
+                error=str(e)
+            )
+            return False
+
+    async def cleanup_expired(self) -> int:
+        """
+        Limpa registros expirados (chamado periodicamente)
+
+        Returns:
+            Número de registros removidos
+        """
+        try:
+            # Redis já remove automaticamente com TTL, mas podemos
+            # fazer limpeza manual se necessário
+            # Por enquanto, apenas logging de métricas
+            logger.info(
+                "Idempotency cleanup completed",
+                metrics=self.get_metrics()
+            )
+            return 0
+
+        except Exception as e:
+            logger.error("Failed to cleanup expired records", error=str(e))
+            return 0
+
+    def get_metrics(self) -> Dict[str, Any]:
+        """Retorna métricas atuais"""
+        return {
+            "total_requests": self.metrics.total_requests,
+            "cache_hits": self.metrics.cache_hits,
+            "cache_misses": self.metrics.cache_misses,
+            "hit_rate": self.metrics.hit_rate,
+            "concurrent_blocks": self.metrics.concurrent_blocks,
+            "storage_errors": self.metrics.storage_errors,
+            "expired_cleanups": self.metrics.expired_cleanups
+        }
+
+    def _make_key(self, idempotency_key: str) -> str:
+        """Cria chave Redis para resposta cacheada"""
+        return f"{self.config.key_prefix}:{idempotency_key}"
+
+    def _make_processing_key(self, idempotency_key: str) -> str:
+        """Cria chave Redis para marca de processamento"""
+        return f"{self.config.processing_prefix}:{idempotency_key}"
+
+    def _hash_request_data(self, request_data: Dict[str, Any]) -> str:
+        """
+        Gera hash dos dados da requisição para detectar mudanças
+
+        Args:
+            request_data: Dados da requisição
+
+        Returns:
+            Hash SHA256 dos dados
+        """
+        # Normalizar dados para hash consistente
+        normalized = json.dumps(request_data, sort_keys=True)
+        return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
 
 
-# ============================================================================
-# HELPERS
-# ============================================================================
+class IdempotencyKeyGenerator:
+    """
+    Gerador de chaves de idempotência
+    """
+
+    @staticmethod
+    def generate() -> str:
+        """Gera nova chave de idempotência"""
+        return str(uuid.uuid4())
+
+    @staticmethod
+    def is_valid(key: str) -> bool:
+        """Valida formato da chave de idempotência"""
+        try:
+            uuid.UUID(key)
+            return True
+        except ValueError:
+            return False
+
+
+# Funções utilitárias
+
+async def create_idempotency_manager(
+    redis_url: str,
+    config: Optional[IdempotencyConfig] = None
+) -> IdempotencyManager:
+    """
+    Factory function para criar IdempotencyManager
+
+    Args:
+        redis_url: URL de conexão Redis
+        config: Configuração opcional
+
+    Returns:
+        Instância configurada do IdempotencyManager
+    """
+    redis_client = Redis.from_url(redis_url, db=(config.redis_db if config else 1))
+    return IdempotencyManager(redis_client, config)
+
 
 def generate_idempotency_key() -> str:
-    """Gera uma nova idempotency key.
-    
-    Returns:
-        UUID v4 como string
-    """
-    import uuid
-    return str(uuid.uuid4())
+    """Alias para geração rápida de chave"""
+    return IdempotencyKeyGenerator.generate()
 
 
-# Instância global para facilitar uso
-_default_storage = InMemoryIdempotencyStorage()
-_default_manager = IdempotencyManager(_default_storage)
-
-
-def get_default_manager() -> IdempotencyManager:
-    """Obtém o manager padrão.
-    
-    Returns:
-        Manager de idempotência padrão
-    """
-    return _default_manager
-
-
-def set_default_storage(storage: IdempotencyStorage) -> None:
-    """Define o storage padrão.
-    
-    Args:
-        storage: Storage a ser usado
-    """
-    global _default_manager
-    _default_manager = IdempotencyManager(storage)
-
-
-__all__ = [
-    # Models
-    'IdempotencyStatus',
-    'IdempotencyRecord',
-    # Storage
-    'IdempotencyStorage',
-    'InMemoryIdempotencyStorage',
-    # Manager
-    'IdempotencyManager',
-    # Middleware
-    'IdempotencyMiddleware',
-    # Helpers
-    'generate_idempotency_key',
-    'get_default_manager',
-    'set_default_storage',
-]
-
-
-
-class RedisIdempotencyStorage(IdempotencyStorage):
-    """Implementação Redis para produção.
-    
-    Usa Redis para armazenar idempotency keys com TTL automático.
-    Recomendado para ambientes de produção.
-    """
-    
-    def __init__(self, redis_client):
-        """Inicializa storage Redis.
-        
-        Args:
-            redis_client: Cliente Redis (redis.asyncio.Redis)
-        """
-        self.redis = redis_client
-        self._key_prefix = "idempotency:"
-    
-    def _make_key(self, key: str) -> str:
-        """Cria chave Redis com prefixo.
-        
-        Args:
-            key: Chave de idempotência
-            
-        Returns:
-            Chave com prefixo
-        """
-        return f"{self._key_prefix}{key}"
-    
-    async def get(self, key: str) -> Optional[IdempotencyRecord]:
-        """Obtém registro do Redis."""
-        redis_key = self._make_key(key)
-        data = await self.redis.get(redis_key)
-        
-        if not data:
-            return None
-        
-        try:
-            record_dict = json.loads(data)
-            return IdempotencyRecord.from_dict(record_dict)
-        except (json.JSONDecodeError, ValueError, KeyError) as e:
-            logger.error(
-                "Failed to deserialize idempotency record",
-                key=key,
-                error=str(e)
-            )
-            return None
-    
-    async def set(
-        self,
-        key: str,
-        record: IdempotencyRecord,
-        ttl_seconds: Optional[int] = None
-    ) -> None:
-        """Armazena registro no Redis."""
-        redis_key = self._make_key(key)
-        data = json.dumps(record.to_dict())
-        
-        if ttl_seconds:
-            await self.redis.setex(redis_key, ttl_seconds, data)
-        else:
-            await self.redis.set(redis_key, data)
-    
-    async def delete(self, key: str) -> None:
-        """Remove registro do Redis."""
-        redis_key = self._make_key(key)
-        await self.redis.delete(redis_key)
-    
-    async def exists(self, key: str) -> bool:
-        """Verifica se chave existe no Redis."""
-        redis_key = self._make_key(key)
-        return await self.redis.exists(redis_key) > 0
-
-
-# ============================================================================
-# IDEMPOTENCY MANAGER
-# ============================================================================
-
-class IdempotencyManager:
-    """Gerenciador de operações idempotentes.
-    
-    Coordena o armazenamento e recuperação de resultados de operações
-    idempotentes, garantindo que a mesma operação não seja executada
-    múltiplas vezes.
-    
-    Example:
-        ```python
-        manager = IdempotencyManager(storage)
-        
-        @manager.idempotent(ttl_seconds=3600)
-        async def create_payment(amount: float, idempotency_key: str):
-            # Operação crítica
-            return await payment_service.create(amount)
-        ```
-    """
-    
-    def __init__(
-        self,
-        storage: IdempotencyStorage,
-        default_ttl_seconds: int = 86400  # 24 horas
-    ):
-        """Inicializa o manager.
-        
-        Args:
-            storage: Storage para idempotency keys
-            default_ttl_seconds: TTL padrão em segundos
-        """
-        self.storage = storage
-        self.default_ttl_seconds = default_ttl_seconds
-    
-    def _compute_request_hash(self, *args, **kwargs) -> str:
-        """Computa hash da requisição para validação.
-        
-        Args:
-            *args: Argumentos posicionais
-            **kwargs: Argumentos nomeados
-            
-        Returns:
-            Hash SHA256 da requisição
-        """
-        # Serializar argumentos
-        data = {
-            'args': str(args),
-            'kwargs': str(sorted(kwargs.items()))
-        }
+def validate_idempotency_key(key: str) -> bool:
+    """Alias para validação rápida de chave"""
+    return IdempotencyKeyGenerator.is_valid(key)

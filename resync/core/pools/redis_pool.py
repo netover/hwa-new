@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import AsyncIterator, Optional
 
 import redis.asyncio as redis
 from redis.asyncio import Redis as AsyncRedis
@@ -64,7 +64,7 @@ class RedisConnectionPool(ConnectionPool[AsyncRedis]):
             raise DatabaseError(f"Failed to setup Redis connection pool: {e}") from e
 
     @asynccontextmanager
-    async def get_connection(self):
+    async def get_connection(self) -> AsyncIterator[AsyncRedis]:
         """Get a Redis connection from the pool."""
         if not self._initialized or self._shutdown:
             raise DatabaseError("Redis pool not initialized or shutdown")
@@ -77,34 +77,30 @@ class RedisConnectionPool(ConnectionPool[AsyncRedis]):
 
         try:
             # Record pool request
-            self.stats.pool_hits += 1
+            await self.increment_stat('pool_hits')
 
             # Yield the Redis client (connection pooling is handled internally by Redis-py)
             yield self._client
 
         except RedisConnectionError as e:
-            self.stats.connection_errors += 1
-            self.stats.pool_misses += 1
+            await self.increment_stat('connection_errors')
+            await self.increment_stat('pool_misses')
             logger.error(f"Redis connection error: {e}")
             raise DatabaseError(f"Redis connection error: {e}") from e
         except RedisError as e:
-            self.stats.pool_misses += 1
+            await self.increment_stat('pool_misses')
             logger.error(f"Redis error: {e}")
             raise DatabaseError(f"Redis error: {e}") from e
         except Exception as e:
-            self.stats.pool_misses += 1
+            await self.increment_stat('pool_misses')
             logger.error(f"Failed to get Redis connection: {e}")
             raise DatabaseError(f"Failed to acquire Redis connection: {e}") from e
         finally:
             wait_time = time.time() - start_time
-            self.update_wait_time(wait_time)
+            await self.update_wait_time(wait_time)
 
             # Record connection metrics
-            runtime_metrics.record_histogram(
-                f"connection_pool.{self.config.pool_name}.acquire_time",
-                wait_time,
-                {"pool_name": self.config.pool_name}
-            )
+            logger.debug(f"Redis connection acquired in {wait_time:.3f}s for pool {self.config.pool_name}")
 
     async def _close_pool(self) -> None:
         """Close the Redis connection pool."""

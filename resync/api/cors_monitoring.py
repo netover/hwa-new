@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Query, Request
@@ -67,7 +67,7 @@ async def get_cors_stats(request: Request) -> CORSStats:
         preflight_requests=0,
         violations=0,
         violation_rate=0.0,
-        last_updated=datetime.now()
+        last_updated=datetime.now(timezone.utc)
     )
 
 

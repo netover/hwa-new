@@ -48,7 +48,7 @@ async def get_db_connection_pool():
             yield get_db_connection()
 
     except Exception as e:
-        logger.error(f"Failed to get database connection from pool: {e}")
+        logger.error("failed_to_get_database_connection_from_pool", error=str(e))
         # Fallback to direct connection on any error
         yield get_db_connection()
 
@@ -73,7 +73,7 @@ def initialize_database() -> None:
         """
         )
         conn.commit()
-    logger.info(f"Database initialized at {DATABASE_PATH}")
+    logger.info("database_initialized", database_path=DATABASE_PATH)
 
 
 def _validate_audit_record(memory: Dict[str, Any]) -> Dict[str, Any]:

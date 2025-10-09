@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,7 +8,13 @@ from resync.core.fastapi_di import get_agent_manager
 from resync.main import app
 
 # Use the TestClient with our main FastAPI app
-client = TestClient(app)
+# Patch the rate limit decorator to skip rate limiting during tests
+def mock_rate_limit_decorator(func):
+    return func
+
+with patch('resync.lifespan.initialize_redis_with_retry'), \
+     patch('resync.core.rate_limiter.critical_rate_limit', mock_rate_limit_decorator):
+    client = TestClient(app)
 
 # --- Sample Data for Mocking ---
 sample_agent_config_1 = AgentConfig(
@@ -86,6 +92,7 @@ def test_get_agent_details_success(mock_agent_manager):
 def test_get_agent_details_not_found(mock_agent_manager):
     """
     Tests GET /api/v1/agents/{agent_id} - when the agent is not found.
+    Should return 404 with standardized error response format.
     """
     # Arrange: Configure the mock to return None, simulating a not-found agent
     mock_agent_manager.get_agent_config.return_value = None
@@ -93,9 +100,25 @@ def test_get_agent_details_not_found(mock_agent_manager):
     # Act
     response = client.get("/api/v1/agents/non-existent-agent")
 
-    # Assert: The global exception handler should catch NotFoundError and return 404
+    # Assert: Should return 404 Not Found with proper error format
     assert response.status_code == 404
-    assert response.json() == {
-        "detail": "Agent with ID 'non-existent-agent' not found.",
-        "type": "NotFoundError",
-    }
+    response_data = response.json()
+
+    # Assert the RFC 7807 Problem Details format with custom extensions
+    assert "type" in response_data
+    assert "title" in response_data
+    assert "status" in response_data
+    assert "detail" in response_data
+    assert "instance" in response_data
+    assert "correlation_id" in response_data
+    assert "timestamp" in response_data
+    assert "error_code" in response_data
+    assert "severity" in response_data
+
+    # Check specific values for the NotFoundError
+    assert response_data["status"] == 404
+    assert response_data["error_code"] == "RESOURCE_NOT_FOUND"
+    assert "Resource Not Found" in response_data["title"]
+    assert "Not Found" in response_data["detail"]
+    assert response_data["instance"] == "/api/v1/agents/non-existent-agent"
+    assert response_data["severity"] == "info"

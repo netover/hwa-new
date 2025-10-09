@@ -3,11 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from resync.core.agent_manager import AgentManager
-from resync.core.exceptions import (
+from ..agent_manager import AgentManager
+from ..exceptions import (
     InvalidConfigError,
     MissingConfigError,
     ParsingError,
+>>>>>>> REPLACE
 )
 
 # Marks all tests in this file as async

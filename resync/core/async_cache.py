@@ -408,7 +408,7 @@ class AsyncTTLCache:
             self._needs_wal_replay_on_first_use = False 
             # Perform the WAL replay
             replayed_ops = await self._replay_wal_on_startup()
-            logger.info(f"Replayed {replayed_ops} operations from WAL on first use")
+            logger.info("replayed_operations_from_WAL_on_first_use", replayed_ops=replayed_ops)
 
         try:
             # Validate and normalize key
@@ -562,7 +562,7 @@ class AsyncTTLCache:
             self._needs_wal_replay_on_first_use = False 
             # Perform the WAL replay
             replayed_ops = await self._replay_wal_on_startup()
-            logger.info(f"Replayed {replayed_ops} operations from WAL on first use")
+            logger.info("replayed_operations_from_WAL_on_first_use", replayed_ops=replayed_ops)
 
         try:
             # FUZZING-HARDENED INPUT VALIDATION
@@ -578,7 +578,7 @@ class AsyncTTLCache:
                 )
                 log_success = await self.wal.log_operation(wal_entry)
                 if not log_success:
-                    logger.error(f"Failed to log SET operation to WAL for key {key}")
+                    logger.error("failed_to_log_SET_operation_to_WAL", key=key)
                     # Optionally, could raise an exception here if WAL logging is critical
                     # For now, we'll continue but log the issue
 
@@ -787,7 +787,7 @@ class AsyncTTLCache:
             self._needs_wal_replay_on_first_use = False 
             # Perform the WAL replay
             replayed_ops = await self._replay_wal_on_startup()
-            logger.info(f"Replayed {replayed_ops} operations from WAL on first use")
+            logger.info("replayed_operations_from_WAL_on_first_use", replayed_ops=replayed_ops)
 
         try:
             # If WAL is enabled, log the operation before applying it to the cache
@@ -798,7 +798,7 @@ class AsyncTTLCache:
                 )
                 log_success = await self.wal.log_operation(wal_entry)
                 if not log_success:
-                    logger.error(f"Failed to log DELETE operation to WAL for key {key}")
+                    logger.error("failed_to_log_DELETE_operation_to_WAL", key=key)
                     # Optionally, could raise an exception here if WAL logging is critical
                     # For now, we'll continue but log the issue
 
@@ -1718,7 +1718,7 @@ class AsyncTTLCache:
                 # Final bounds check - reject if still over bounds
                 # This is crucial to ensure we never exceed the configured limits
                 if not self._check_cache_bounds():
-                    logger.warning(f"Cache bounds exceeded during WAL replay for key {repr(validated_key)}")
+                    logger.warning("cache_bounds_exceeded_during_WAL_replay", key=repr(validated_key))
                     return
 
                 # Only add the entry if we're within bounds
@@ -1726,7 +1726,7 @@ class AsyncTTLCache:
                 runtime_metrics.cache_sets.increment()
                 runtime_metrics.cache_size.set(self.size())
         except Exception as e:
-            logger.error(f"WAL replay SET failed for key {repr(key)}: {e}")
+            logger.error("WAL_replay_SET_failed", key=repr(key), error=str(e))
 
     async def apply_wal_delete(self, key: str):
         """
@@ -1741,4 +1741,4 @@ class AsyncTTLCache:
                     runtime_metrics.cache_evictions.increment()
                     runtime_metrics.cache_size.set(self.size())
         except Exception as e:
-            logger.error(f"WAL replay DELETE failed for key {key}: {e}")
+            logger.error("WAL_replay_DELETE_failed", key=key, error=str(e))

@@ -125,7 +125,7 @@ def configure_container(app_container: DIContainer = container) -> DIContainer:
 
         logger.info("DI container configured with all service registrations")
     except Exception as e:
-        logger.error(f"Error configuring DI container: {e}")
+        logger.error("error_configuring_di_container", error=str(e))
         raise
 
     return app_container
@@ -146,10 +146,10 @@ def get_service(service_type: Type[T]) -> Callable[[], T]:
         try:
             return container.get(service_type)
         except KeyError:
-            logger.error(f"Service {service_type.__name__} not registered in container")
+            logger.error("service_not_registered_in_container", service_type=service_type.__name__)
             raise RuntimeError(f"Required service {service_type.__name__} is not available in the DI container")
         except Exception as e:
-            logger.error(f"Error resolving service {service_type.__name__}: {e}")
+            logger.error("error_resolving_service", service_type=service_type.__name__, error=str(e))
             raise RuntimeError(f"Error resolving service {service_type.__name__}: {str(e)}")
 
     # Set the return annotation for FastAPI to use
@@ -204,7 +204,7 @@ class DIMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             return response
         except Exception as e:
-            logger.error(f"Error in DIMiddleware dispatch: {e}")
+            logger.error("error_in_DIMiddleware_dispatch", error=str(e))
             # Re-raise the exception to be handled by other error handlers
             raise
 

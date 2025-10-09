@@ -171,9 +171,9 @@ class KeyLock:
             if key in self.locks and not self.locks[key].locked():
                 del self.locks[key]
                 del self.lock_access_times[key]
-                logger.debug(f"Cleaned up lock for key: {key}")
+                logger.debug("cleaned_up_lock", key=key)
             else:
-                logger.debug(f"Skipped cleanup for lock {key} - still in use")
+                logger.debug("skipped_cleanup_for_lock_still_in_use", key=key)
 
 
 class ShardLockManager:
@@ -363,11 +363,11 @@ class TWS_OptimizedAsyncCache:
                 await asyncio.sleep(self.cleanup_interval)
                 cleaned = await self.cleanup_expired()
                 if cleaned > 0:
-                    logger.debug(f"Cleaned up {cleaned} expired cache entries")
+                    logger.debug("cleaned_up_expired_cache_entries", count=cleaned)
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in cache cleanup: {e}")
+                logger.error("error_in_cache_cleanup", error=str(e))
 
     async def size(self) -> int:
         """Get the total number of entries in the cache."""

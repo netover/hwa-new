@@ -189,7 +189,7 @@ class CacheHierarchy:
         if self.enable_encryption:
             # TODO: Implement proper encryption using the encryption service
             # For now, just log that encryption would happen
-            logger.debug(f"Encryption enabled but not yet implemented for value type: {type(value)}")
+            logger.debug("encryption_enabled_but_not_yet_implemented", value_type=type(value).__name__)
             # This should use resync.core.encryption_service
         return value
 
@@ -198,7 +198,7 @@ class CacheHierarchy:
         if self.enable_encryption:
             # TODO: Implement proper decryption using the encryption service
             # For now, just log that decryption would happen
-            logger.debug(f"Decryption enabled but not yet implemented for value type: {type(value)}")
+            logger.debug("decryption_enabled_but_not_yet_implemented", value_type=type(value).__name__)
             # This should use resync.core.encryption_service
         return value
 
@@ -257,7 +257,7 @@ class CacheHierarchy:
         self.metrics.total_sets += 1
         await self.l2_cache.set(prefixed_key, encrypted_value, ttl_seconds)
         await self.l1_cache.set(prefixed_key, encrypted_value)
-        logger.debug(f"Cache HIERARCHY SET for key: {prefixed_key}")
+        logger.debug("cache_hierarchy_set", key=prefixed_key)
 
     async def set_from_source(
         self, key: str, value: Any, ttl_seconds: Optional[int] = None

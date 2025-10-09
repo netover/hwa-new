@@ -20,6 +20,9 @@ from resync.core.websocket_pool_manager import websocket_pool_manager
 from resync.core.app_context import AppContext
 from resync.settings import settings
 
+from .health_utils import initialize_health_result, get_health_checks_dict
+>>>>>>> REPLACE
+
 logger = logging.getLogger(__name__)
 
 class HealthCheckService:
@@ -74,28 +77,11 @@ class HealthCheckService:
         logger.debug(f"Starting comprehensive health check [correlation_id: {correlation_id}]")
         
         # Initialize result
-        result = HealthCheckResult(
-            overall_status=HealthStatus.HEALTHY,
-            timestamp=datetime.now(),
-            correlation_id=correlation_id,
-            components={},
-            summary={},
-            alerts=[],
-            performance_metrics={}
-        )
+        result = initialize_health_result(correlation_id)
         
         # Perform all health checks in parallel
-        health_checks = {
-            "database": self._check_database_health(),
-            "redis": self._check_redis_health(),
-            "cache_hierarchy": self._check_cache_health(),
-            "file_system": self._check_file_system_health(),
-            "memory": self._check_memory_health(),
-            "cpu": self._check_cpu_health(),
-            "tws_monitor": self._check_tws_monitor_health(),
-            "connection_pools": self._check_connection_pools_health(),
-            "websocket_pool": self._check_websocket_pool_health(),
-        }
+        health_checks = get_health_checks_dict(self)
+>>>>>>> REPLACE
         
         # Execute all checks
         check_results = await asyncio.gather(*health_checks.values(), return_exceptions=True)

@@ -1,17 +1,17 @@
 """Validation middleware for automatic request validation."""
 
 import json
-import logging
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Type
 
 from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
+import structlog
 
 from .common import ValidationErrorResponse, ValidationSeverity
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ValidationMiddleware:
@@ -86,7 +86,7 @@ class ValidationMiddleware:
             # Re-raise HTTP exceptions
             raise
         except Exception as e:
-            logger.error(f"Validation middleware error: {str(e)}", exc_info=True)
+            logger.error("validation_middleware_error", error=str(e), exc_info=True)
             return await self._handle_internal_error(request, e)
 
     def _should_skip_validation(self, request: Request) -> bool:
@@ -244,7 +244,7 @@ class ValidationMiddleware:
         except ValidationError:
             raise
         except Exception as e:
-            logger.error(f"Body validation error: {str(e)}", exc_info=True)
+            logger.error("body_validation_error", error=str(e), exc_info=True)
             raise ValidationError.from_exception_data("body", [str(e)])
 
     def _validate_query_params(
@@ -292,7 +292,7 @@ class ValidationMiddleware:
         except ValidationError:
             raise
         except Exception as e:
-            logger.error(f"Query parameter validation error: {str(e)}", exc_info=True)
+            logger.error("query_parameter_validation_error", error=str(e), exc_info=True)
             raise ValidationError.from_exception_data("query_params", [str(e)])
 
     def _apply_custom_validators(
@@ -315,7 +315,7 @@ class ValidationMiddleware:
             try:
                 data = validator_func(data, request)
             except Exception as e:
-                logger.warning(f"Custom validator '{validator_name}' failed: {str(e)}")
+                logger.warning("custom_validator_failed", validator_name=validator_name, error=str(e))
 
         return data
 
@@ -328,8 +328,10 @@ class ValidationMiddleware:
             validated_data: Validated request data
         """
         logger.info(
-            f"Validation successful - {request.method} {request.url.path} - "
-            f"Data validated: {validated_data is not None}"
+            "validation_successful",
+            method=request.method,
+            path=request.url.path,
+            data_validated=validated_data is not None
         )
 
     async def _handle_validation_error(
@@ -372,8 +374,10 @@ class ValidationMiddleware:
         # Log validation failure
         if self.enable_logging:
             logger.warning(
-                f"Validation failed - {request.method} {request.url.path} - "
-                f"Errors: {len(error_details)}"
+                "validation_failed",
+                method=request.method,
+                path=request.url.path,
+                error_count=len(error_details)
             )
 
         # Use custom error handler if provided

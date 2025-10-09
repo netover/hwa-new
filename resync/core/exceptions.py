@@ -1066,6 +1066,33 @@ class PerformanceError(BaseAppException):
         )
 
 
+class HealthCheckError(BaseAppException):
+    """Exceção para erros durante verificações de saúde do sistema."""
+    
+    def __init__(
+        self,
+        message: str = "Health check error",
+        component: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        original_exception: Optional[Exception] = None
+    ):
+        if details is None:
+            details = {}
+        if component:
+            details["component"] = component
+        
+        super().__init__(
+            message=message,
+            error_code=ErrorCode.INTERNAL_ERROR,
+            status_code=500,
+            details=details,
+            correlation_id=correlation_id,
+            severity=ErrorSeverity.ERROR,
+            original_exception=original_exception
+        )
+
+
 # ============================================================================
 # COMPATIBILIDADE COM CÓDIGO LEGADO
 # ============================================================================
@@ -1157,6 +1184,7 @@ __all__ = [
     "NotificationError",
     "NotFoundError",
     "PerformanceError",
+    "HealthCheckError",
     # Utilities
     "get_exception_by_error_code",
 ]

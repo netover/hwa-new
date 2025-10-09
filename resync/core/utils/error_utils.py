@@ -1,6 +1,7 @@
 """Error response utilities for standardized error handling."""
 
 import logging
+import re
 import traceback
 import uuid
 from typing import Any, Dict, List, Optional, Union
@@ -9,6 +10,8 @@ from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from functools import lru_cache
+from typing import FrozenSet, Pattern
 
 from resync.core.logger import log_with_correlation
 from resync.models.error_models import (
@@ -442,35 +445,83 @@ def _handle_business_logic_exception(builder: ErrorResponseBuilder, exception: E
         )
 
 
+class ErrorSanitizer:
+    """
+    Advanced error message sanitizer with pre-compiled regex patterns
+    for secure and efficient sensitive data removal.
+    """
+
+    SENSITIVE_PATTERNS = [
+        re.compile(r'(?i)password\s*[:=]\s*[^\s,;]+'),
+        re.compile(r'(?i)token\s*[:=]\s*[^\s,;]+'),
+        re.compile(r'(?i)(?:api_)?key\s*[:=]\s*[^\s,;]+'),
+        re.compile(r'(?i)credentials?\s*[:=]\s*[^\s,;]+'),
+        re.compile(r'(?i)connection_string\s*[:=]\s*[^\s,;]+'),
+        re.compile(r'(?i)secret\s*[:=]\s*[^\s,;]+'),
+        re.compile(r'(?i)auth\s*[:=]\s*[^\s,;]+'),
+        re.compile(r'(?i)bearer\s+[^\s,;]+'),
+        re.compile(r'(?i)authorization\s*:\s*[^\s,;]+'),
+    ]
+
+    @classmethod
+    def sanitize(cls, message: str) -> str:
+        """
+        Sanitize error messages to prevent sensitive information disclosure.
+
+        Args:
+            message: The error message to sanitize
+
+        Returns:
+            Sanitized message with sensitive data redacted
+        """
+        if not message:
+            return "An error occurred"
+
+        sanitized = str(message)  # Ensure string type
+        for pattern in cls.SENSITIVE_PATTERNS:
+            sanitized = pattern.sub('[REDACTED]', sanitized)
+
+        return sanitized
+
+
+@lru_cache(maxsize=128)
+def get_sensitive_patterns() -> FrozenSet[Pattern]:
+    """
+    Get cached sensitive patterns for efficient reuse.
+
+    Returns memoized set of compiled regex patterns for sensitive data detection.
+    """
+    return frozenset([
+        re.compile(pattern)
+        for pattern in [
+            r'(?i)password\s*[:=]\s*[^\s,;]+',
+            r'(?i)token\s*[:=]\s*[^\s,;]+',
+            r'(?i)(?:api_)?key\s*[:=]\s*[^\s,;]+',
+            r'(?i)credentials?\s*[:=]\s*[^\s,;]+',
+            r'(?i)connection_string\s*[:=]\s*[^\s,;]+',
+            r'(?i)secret\s*[:=]\s*[^\s,;]+',
+            r'(?i)auth\s*[:=]\s*[^\s,;]+',
+            r'(?i)bearer\s+[^\s,;]+',
+            r'(?i)authorization\s*:\s*[^\s,;]+',
+        ]
+    ])
+
+
 def sanitize_error_message(message: str) -> str:
     """
     Sanitize error messages to prevent sensitive information disclosure.
+
+    This function is maintained for backward compatibility.
+    Use ErrorSanitizer.sanitize() for new code.
     """
-    if not message:
-        return "An error occurred"
-    
-    # Replace potentially sensitive information
-    sanitized = message
-    sensitive_patterns = [
-        r'password\s*[:=]\s*[\w\d!@#$%^&*()]+',
-        r'token\s*[:=]\s*[A-Za-z0-9_\-\.]+',
-        r'key\s*[:=]\s*[A-Za-z0-9_\-]+',
-        r'api_key\s*[:=]\s*[A-Za-z0-9_\-]+',
-        r'credential\s*[:=]\s*[^\s,;]+',
-        r'connection_string[:=]\s*[^\s,;]+'
-    ]
-    
-    import re
-    for pattern in sensitive_patterns:
-        sanitized = re.sub(pattern, '[REDACTED]', sanitized, flags=re.IGNORECASE)
-    
-    return sanitized
+    return ErrorSanitizer.sanitize(message)
 
 
 def create_json_response_from_error(error_response: BaseErrorResponse) -> JSONResponse:
     """Create FastAPI JSONResponse from standardized error response."""
     status_code = get_error_status_code(error_response.category)
-    content = error_response.dict(exclude_none=True)
+    # Use model_dump_json to properly serialize with JSON encoders
+    content = error_response.model_dump(exclude_none=True, mode='json')
 
     return JSONResponse(
         status_code=status_code,

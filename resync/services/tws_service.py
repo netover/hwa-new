@@ -11,7 +11,7 @@ import httpx
 from resync.core.cache_hierarchy import get_cache_hierarchy
 from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.core.exceptions import TWSConnectionError
-from resync.core.retry import http_retry
+from resync.core.resilience import circuit_breaker, retry_with_backoff, with_timeout
 from resync.models.tws import (
     CriticalJob,
     JobStatus,
@@ -121,7 +121,18 @@ class OptimizedTWSClient:
         else:
             return self.client if hasattr(self, 'client') else None
 
-    @http_retry(max_attempts=3, min_wait=1.0, max_wait=5.0)
+    @circuit_breaker(
+        failure_threshold=3,
+        recovery_timeout=30,
+        name="tws_http_client"
+    )
+    @retry_with_backoff(
+        max_retries=3,
+        base_delay=1.0,
+        max_delay=10.0,
+        jitter=True
+    )
+    @with_timeout(settings.TWS_REQUEST_TIMEOUT)
     async def _make_request(
         self, method: str, url: str, **kwargs: Any
     ) -> httpx.Response:
@@ -173,6 +184,18 @@ class OptimizedTWSClient:
             # Wrap unexpected errors for consistent error handling
             raise TWSConnectionError("An unexpected error occurred", original_exception=e)
 
+    @circuit_breaker(
+        failure_threshold=5,
+        recovery_timeout=60,
+        name="tws_ping"
+    )
+    @retry_with_backoff(
+        max_retries=2,
+        base_delay=0.5,
+        max_delay=3.0,
+        jitter=True
+    )
+    @with_timeout(5.0)
     async def ping(self) -> None:
         """
         Performs a lightweight connectivity test to the TWS server.
@@ -204,6 +227,12 @@ class OptimizedTWSClient:
             logger.error(f"Unexpected error during TWS ping: {e}")
             raise TWSConnectionError("TWS ping failed unexpectedly", original_exception=e)
 
+    @circuit_breaker(
+        failure_threshold=3,
+        recovery_timeout=30,
+        name="tws_check_connection"
+    )
+    @with_timeout(10.0)
     async def check_connection(self) -> bool:
         """Verifies the connection to the TWS server is active."""
         try:
@@ -212,6 +241,18 @@ class OptimizedTWSClient:
         except TWSConnectionError:
             return False
 
+    @circuit_breaker(
+        failure_threshold=3,
+        recovery_timeout=30,
+        name="tws_workstations"
+    )
+    @retry_with_backoff(
+        max_retries=2,
+        base_delay=1.0,
+        max_delay=5.0,
+        jitter=True
+    )
+    @with_timeout(settings.TWS_REQUEST_TIMEOUT)
     async def get_workstations_status(self) -> List[WorkstationStatus]:
         """Retrieves the status of all workstations, utilizing the cache."""
         cache_key = "workstations_status"
@@ -229,6 +270,18 @@ class OptimizedTWSClient:
             await self.cache.set(cache_key, workstations, ttl=settings.TWS_CACHE_TTL)
             return workstations
 
+    @circuit_breaker(
+        failure_threshold=3,
+        recovery_timeout=30,
+        name="tws_jobs_status"
+    )
+    @retry_with_backoff(
+        max_retries=2,
+        base_delay=1.0,
+        max_delay=5.0,
+        jitter=True
+    )
+    @with_timeout(settings.TWS_REQUEST_TIMEOUT)
     async def get_jobs_status(self) -> List[JobStatus]:
         """Retrieves the status of all jobs, utilizing the cache."""
         cache_key = "jobs_status"
@@ -260,6 +313,18 @@ class OptimizedTWSClient:
             await self.cache.set(cache_key, critical_jobs, ttl=settings.TWS_CACHE_TTL)
             return critical_jobs
 
+    @circuit_breaker(
+        failure_threshold=2,
+        recovery_timeout=60,
+        name="tws_system_status"
+    )
+    @retry_with_backoff(
+        max_retries=3,
+        base_delay=1.0,
+        max_delay=8.0,
+        jitter=True
+    )
+    @with_timeout(settings.TWS_REQUEST_TIMEOUT)
     async def get_system_status(self) -> SystemStatus:
         """Retrieves a comprehensive system status with parallel execution."""
         # Execute all three calls concurrently

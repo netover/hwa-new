@@ -5,11 +5,12 @@ This module contains standard error handling patterns that can be reused
 across multiple modules in the application.
 """
 import logging
-from typing import Any, Callable, Type, Union, TypeVar, cast
+import time
+from typing import Any, Callable, Type, Union, TypeVar, cast, Optional
 import asyncio
 from functools import wraps
 
-from resync.core.exceptions import ResyncException
+from ..exceptions import ResyncException
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def handle_parsing_errors(error_message: str = "Error occurred during parsing") 
                 return func(*args, **kwargs)
             except Exception as e:
                 logger.debug(f"{error_message}: {e}")
-                from resync.core.exceptions import ParsingError
+                from ..exceptions import ParsingError
                 raise ParsingError(f"{error_message}: {e}") from e
         return cast(F, wrapper)
     return decorator
@@ -51,7 +52,7 @@ def handle_llm_errors(error_message: str = "Error occurred during LLM call") -> 
                 return func(*args, **kwargs)
             except Exception as e:
                 logger.error(f"{error_message}: {e}", exc_info=True)
-                from resync.core.exceptions import LLMError
+                from ..exceptions import LLMError
                 raise LLMError(f"{error_message}: {e}") from e
         return cast(F, wrapper)
     return decorator
@@ -85,66 +86,75 @@ def retry_on_exception(
     delay: float = 1.0,
     backoff: float = 2.0,
     exceptions: tuple = (Exception,),
-    logger: logging.Logger = None
+    logger: Optional[logging.Logger] = None
 ) -> Callable[[F], F]:
     """
     Decorator to retry a function if specific exceptions are raised.
-    
+
+    Supports both synchronous and asynchronous functions with proper
+    event loop management.
+
     Args:
         max_retries: Maximum number of retry attempts
-        delay: Initial delay between retries
+        delay: Initial delay between retries (seconds)
         backoff: Multiplier for delay after each retry
         exceptions: Tuple of exception types to catch
         logger: Logger to use for retry messages
+
+    Returns:
+        Decorated function that retries on specified exceptions
     """
     def decorator(func: F) -> F:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            nonlocal logger
-            if logger is None:
-                logger_instance = logging.getLogger(func.__module__)
-            else:
-                logger_instance = logger
-            
-            current_delay = delay
-            
-            for attempt in range(max_retries + 1):
-                try:
-                    return func(*args, **kwargs)
-                except exceptions as e:
-                    if attempt < max_retries:
-                        logger_instance.info(
-                            f"Attempt {attempt + 1} failed for {func.__name__}: {e}. "
-                            f"Retrying in {current_delay:.2f} seconds..."
-                        )
-                        if asyncio.iscoroutinefunction(func):
-                            # For async functions, properly await the sleep
-                            import asyncio
-                            # Create a new event loop if none exists
-                            try:
-                                loop = asyncio.get_running_loop()
-                                if loop.is_running():
-                                    # If loop is running, schedule the sleep
-                                    import concurrent.futures
-                                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                                        executor.submit(time.sleep, current_delay)
-                                else:
-                                    loop.run_until_complete(asyncio.sleep(current_delay))
-                            except RuntimeError:
-                                # No running loop, create a new one
-                                asyncio.run(asyncio.sleep(current_delay))
+        if asyncio.iscoroutinefunction(func):
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                logger_instance = logger or logging.getLogger(func.__module__)
+                current_delay = delay
+
+                for attempt in range(max_retries + 1):
+                    try:
+                        return await func(*args, **kwargs)
+                    except exceptions as e:
+                        if attempt < max_retries:
+                            logger_instance.info(
+                                f"Attempt {attempt + 1} failed: {e}. "
+                                f"Retrying in {current_delay:.2f} seconds..."
+                            )
+                            await asyncio.sleep(current_delay)
+                            current_delay *= backoff
                         else:
-                            import time
+                            logger_instance.error(
+                                f"Failed after {max_retries} retries: {e}",
+                                exc_info=True
+                            )
+                            raise
+                return None  # This should never be reached
+            return cast(F, async_wrapper)
+        else:
+            @wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                logger_instance = logger or logging.getLogger(func.__module__)
+                current_delay = delay
+
+                for attempt in range(max_retries + 1):
+                    try:
+                        return func(*args, **kwargs)
+                    except exceptions as e:
+                        if attempt < max_retries:
+                            logger_instance.info(
+                                f"Attempt {attempt + 1} failed: {e}. "
+                                f"Retrying in {current_delay:.2f} seconds..."
+                            )
                             time.sleep(current_delay)
-                        current_delay *= backoff
-                    else:
-                        logger_instance.error(
-                            f"Function {func.__name__} failed after {max_retries} retries: {e}",
-                            exc_info=True
-                        )
-                        raise e
-            return None  # This should never be reached
-        return cast(F, wrapper)
+                            current_delay *= backoff
+                        else:
+                            logger_instance.error(
+                                f"Failed after {max_retries} retries: {e}",
+                                exc_info=True
+                            )
+                            raise
+                return None  # This should never be reached
+            return cast(F, sync_wrapper)
     return decorator
 
 

@@ -41,4 +41,4 @@ async def handle_config_change() -> None:
         logger.info("Broadcasted config update to all clients.")
 
     except Exception as e:
-        logger.error(f"Error handling config change: {e}", exc_info=True)
+        logger.error("error_handling_config_change", error=str(e), exc_info=True)

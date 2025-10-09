@@ -48,7 +48,7 @@ class EncryptionService:
             return decrypted_data.decode()
         except Exception as e:
             # If decryption fails, raise an exception instead of returning original data
-            logger.error(f"Decryption failed for data: {encrypted_data[:50]}... Error: {str(e)}")
+            logger.error("decryption_failed", encrypted_data_preview=encrypted_data[:50], error=str(e))
             raise ValueError(f"Decryption failed: {str(e)}") from e
 
 

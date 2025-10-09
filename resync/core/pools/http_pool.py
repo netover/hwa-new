@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Any, AsyncIterator, Optional
 
 import httpx
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class HTTPConnectionPool(ConnectionPool[httpx.AsyncClient]):
     """HTTP connection pool for external API calls."""
 
-    def __init__(self, config: ConnectionPoolConfig, base_url: str, **client_kwargs):
+    def __init__(self, config: ConnectionPoolConfig, base_url: str, **client_kwargs: Any) -> None:
         super().__init__(config)
         self.base_url = base_url
         self.client_kwargs = client_kwargs
@@ -66,7 +66,7 @@ class HTTPConnectionPool(ConnectionPool[httpx.AsyncClient]):
             raise TWSConnectionError(f"Failed to setup HTTP connection pool: {e}") from e
 
     @asynccontextmanager
-    async def get_connection(self):
+    async def get_connection(self) -> AsyncIterator[httpx.AsyncClient]:
         """Get an HTTP connection from the pool."""
         if not self._initialized or self._shutdown:
             raise TWSConnectionError("HTTP pool not initialized or shutdown")
@@ -75,28 +75,24 @@ class HTTPConnectionPool(ConnectionPool[httpx.AsyncClient]):
 
         try:
             # Record pool request
-            self.stats.pool_hits += 1
+            await self.increment_stat('pool_hits')
 
             # Get connection (httpx handles pooling)
             if not self._client:
                 raise TWSConnectionError("HTTP client not available")
-            
+
             yield self._client
 
         except Exception as e:
-            self.stats.pool_misses += 1
+            await self.increment_stat('pool_misses')
             logger.error(f"Failed to get HTTP connection: {e}")
             raise TWSConnectionError(f"Failed to acquire HTTP connection: {e}") from e
         finally:
             wait_time = time.time() - start_time
-            self.update_wait_time(wait_time)
+            await self.update_wait_time(wait_time)
 
             # Record connection metrics
-            runtime_metrics.record_histogram(
-                f"connection_pool.{self.config.pool_name}.acquire_time",
-                wait_time,
-                {"pool_name": self.config.pool_name}
-            )
+            logger.debug(f"HTTP connection acquired in {wait_time:.3f}s for pool {self.config.pool_name}")
 
     async def _close_pool(self) -> None:
         """Close the HTTP connection pool."""

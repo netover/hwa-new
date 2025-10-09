@@ -1,6 +1,5 @@
 # resync/core/utils/llm.py
 import asyncio
-import logging  # Use logging instead of print
 import time
 
 from litellm import acompletion
@@ -13,13 +12,27 @@ from litellm.exceptions import (
     APIError
 )
 
-from resync.core.exceptions import LLMError
-from resync.settings import settings
-from resync.core.utils.common_error_handlers import retry_on_exception
+from ..exceptions import LLMError
+from ...settings import settings
+from ..resilience import circuit_breaker, retry_with_backoff, with_timeout
+from .common_error_handlers import retry_on_exception
+from ..structured_logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
+@circuit_breaker(
+    failure_threshold=3,
+    recovery_timeout=60,
+    name="llm_service"
+)
+@retry_with_backoff(
+    max_retries=3,
+    base_delay=1.0,
+    max_delay=30.0,
+    jitter=True
+)
+@with_timeout(settings.LLM_TIMEOUT)
 @retry_on_exception(
     max_retries=3,
     delay=1.0,
@@ -36,6 +49,7 @@ async def call_llm(
     initial_backoff: float = 1.0,
     api_base: str = None,
     api_key: str = None,
+    timeout: float = 30.0,
 ) -> str:
     """
     Calls an LLM through LiteLLM with support for multiple providers (OpenAI, Ollama, etc.).
@@ -50,12 +64,13 @@ async def call_llm(
         initial_backoff: Initial delay in seconds before the first retry.
         api_base: Optional API base URL (for local models like Ollama).
         api_key: Optional API key (defaults to settings if not provided).
+        timeout: Maximum time in seconds to wait for the LLM response.
 
     Returns:
         The content of the LLM's response.
 
     Raises:
-        LLMError: If the LLM call fails after all retry attempts.
+        LLMError: If the LLM call fails after all retry attempts or times out.
     """
     start_time = time.time()
     
@@ -65,19 +80,22 @@ async def call_llm(
         effective_api_key = None
 
     try:
-        # Use LiteLLM's acompletion for enhanced functionality
-        response = await acompletion(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            api_base=api_base or getattr(settings, "LLM_ENDPOINT", None),
-            api_key=effective_api_key,
-            # Additional LiteLLM features
-            metadata={
-                "user_id": getattr(settings, "APP_NAME", "resync"),
-                "session_id": f"tws_{int(time.time())}"
-            }
+        # Use LiteLLM's acompletion for enhanced functionality with timeout
+        response = await asyncio.wait_for(
+            acompletion(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                temperature=temperature,
+                api_base=api_base or getattr(settings, "LLM_ENDPOINT", None),
+                api_key=effective_api_key,
+                # Additional LiteLLM features
+                metadata={
+                    "user_id": getattr(settings, "APP_NAME", "resync"),
+                    "session_id": f"tws_{int(time.time())}"
+                }
+            ),
+            timeout=timeout
         )
 
         # Validate response
@@ -100,30 +118,36 @@ async def call_llm(
         # Record successful call metrics
         total_time = time.time() - start_time
         logger.info(
-            f"LLM call completed successfully in {total_time:.2f}s "
-            f"(model: {model}, input_tokens: {input_tokens}, output_tokens: {output_tokens})"
+            "llm_call_completed",
+            duration_seconds=round(total_time, 2),
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens
         )
 
         return content
 
+    except asyncio.TimeoutError:
+        logger.error("llm_timeout", timeout_seconds=timeout)
+        raise LLMError(f"LLM call timed out after {timeout} seconds")
     except ContentPolicyViolationError as e:
-        logger.warning(f"Content policy violation: {e}")
+        logger.warning("llm_content_policy_violation", error=str(e))
         raise LLMError(f"Content policy violation: {str(e)}")
     except ContextWindowExceededError as e:
-        logger.error(f"Context window exceeded: {e}")
+        logger.error("llm_context_window_exceeded", error=str(e))
         raise LLMError(f"Context window exceeded: {str(e)}")
     except AuthenticationError as e:
-        logger.error(f"Authentication error: {e}")
+        logger.error("llm_authentication_error", error=str(e))
         raise LLMError(f"Authentication error: {str(e)}")
     except RateLimitError as e:
-        logger.warning(f"Rate limit exceeded: {e}")
+        logger.warning("llm_rate_limit_exceeded", error=str(e))
         raise LLMError(f"Rate limit exceeded: {str(e)}")
     except InvalidRequestError as e:
-        logger.error(f"Invalid request: {e}")
+        logger.error("llm_invalid_request", error=str(e))
         raise LLMError(f"Invalid request: {str(e)}")
     except APIError as e:
-        logger.error(f"API error: {e}")
+        logger.error("llm_api_error", error=str(e))
         raise LLMError(f"API error: {str(e)}")
     except Exception as e:
-        logger.error(f"Unexpected error in LLM call: {e}")
+        logger.error("llm_unexpected_error", error=str(e))
         raise LLMError(f"Unexpected error: {str(e)}")

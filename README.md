@@ -225,26 +225,106 @@ The application uses a hierarchical configuration system with:
 - Environment-specific overrides in `settings.{environment}.toml`
 - Environment variables with `APP_` prefix
 
-## Running the Application
+## Architecture
 
-### Development Mode
+Resync follows a modern, modular architecture designed for scalability, security, and maintainability. The system is built around FastAPI with dependency injection and comprehensive error handling.
+
+### Core Components
+
+#### Entry Points
+- **`resync/main.py`** - Primary application entry point
+  - Creates and configures the FastAPI application
+  - Sets up middleware, routes, and dependency injection
+  - Handles application lifecycle events
+
+- **`resync/app_factory.py`** - Application factory
+  - Creates and configures the FastAPI application instance
+  - Sets up dependency injection container
+  - Configures middleware, routes, and error handling
+  - Manages application settings and environment configuration
+
+#### Application Factory Pattern
+The application uses a factory pattern for clean initialization:
+
+```python
+# resync/app_factory.py
+from fastapi import FastAPI
+from resync.core.di_container import app_container
+
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application."""
+    app = FastAPI(title="Resync", version="1.0.0")
+    
+    # Setup dependency injection
+    app_container.wire(modules=["resync.api.endpoints"])
+    
+    # Register routes and middleware
+    setup_routes(app)
+    setup_middleware(app)
+    
+    return app
+```
+
+#### Dependency Injection
+The system uses a comprehensive dependency injection container:
+- **`resync/core/di_container.py`** - Dependency injection container
+- **`resync/core/container.py`** - Service registration and resolution
+- Services are registered and resolved through the container for testability
+
+#### Security Layer
+- **CSP Validation** - `resync/csp_validation.py`
+- **Authentication** - JWT-based authentication system
+- **CORS Configuration** - Strict origin validation
+- **Input Validation** - Comprehensive request validation
+
+### Running the Application
+
+The primary command to run the application:
+
 ```bash
-# Run with mock TWS data (default)
 uvicorn resync.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Production Mode
+**Command Breakdown:**
+- `uvicorn` - ASGI server for running FastAPI applications
+- `resync.main:app` - Entry point (module:app_instance)
+- `--reload` - Enable auto-reload for development
+- `--host 0.0.0.0` - Bind to all interfaces
+- `--port 8000` - Listen on port 8000
+
+#### Production Deployment
+For production environments, omit the `--reload` flag:
+
 ```bash
-# Run with real TWS connection
 uvicorn resync.main:app --host 0.0.0.0 --port 8000
 ```
 
-### Docker
+#### Docker Deployment
 ```bash
-# Build and run with Docker
 docker build -t resync .
 docker run -p 8000:8000 resync
 ```
+
+### Component Overview
+
+- **API Layer** (`resync/api/`) - REST API endpoints and request handling
+- **Core Services** (`resync/core/`) - Business logic and core functionality
+- **Services** (`resync/services/`) - External service integrations
+- **Models** (`resync/models/`) - Data models and validation schemas
+- **Middleware** (`resync/api/middleware/`) - Request/response processing
+
+### Dependency Injection Container
+The dependency injection container manages service lifecycle and dependencies:
+
+```python
+# Example service registration
+from resync.core.di_container import app_container
+from resync.services.tws_service import TWSService
+
+app_container.register(TWSService)
+```
+
+Services are resolved automatically through the container, enabling easy testing and configuration.
 
 ## API Endpoints
 

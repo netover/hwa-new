@@ -12,7 +12,8 @@ from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, AsyncIterator, Dict, Generic, List, Optional, TypeVar
+from collections import deque
 
 from resync.core.metrics import runtime_metrics
 
@@ -63,7 +64,8 @@ class ConnectionPool(ABC, Generic[T]):
         self._shutdown = False
         self.stats = ConnectionPoolStats(pool_name=config.pool_name)
         self._lock = asyncio.Lock()  # For thread-safe operations
-        self._wait_times = []  # Track connection acquisition times for metrics
+        self._stats_lock = asyncio.Lock()  # For thread-safe stats operations
+        self._wait_times: deque[float] = deque(maxlen=1000)  # Track connection acquisition times for metrics
 
     async def initialize(self) -> None:
         """Initialize the connection pool."""
@@ -88,7 +90,7 @@ class ConnectionPool(ABC, Generic[T]):
 
     @asynccontextmanager
     @abstractmethod
-    async def get_connection(self):
+    async def get_connection(self) -> AsyncIterator[T]:  # type: ignore[misc]
         """Get a connection from the pool."""
         pass
 
@@ -113,16 +115,19 @@ class ConnectionPool(ABC, Generic[T]):
         """Close the connection pool - to be implemented by subclasses."""
         pass
 
-    def update_wait_time(self, wait_time: float) -> None:
+    async def update_wait_time(self, wait_time: float) -> None:
         """Update wait time statistics."""
-        self._wait_times.append(wait_time)
-        # Keep only last 1000 measurements to prevent memory issues
-        if len(self._wait_times) > 1000:
-            self._wait_times = self._wait_times[-1000:]
-        
-        # Calculate average
-        if self._wait_times:
-            self.stats.average_wait_time = sum(self._wait_times) / len(self._wait_times)
+        async with self._stats_lock:
+            self._wait_times.append(wait_time)
+            # Calculate average
+            if self._wait_times:
+                self.stats.average_wait_time = sum(self._wait_times) / len(self._wait_times)
+
+    async def increment_stat(self, stat_name: str, amount: int = 1) -> None:
+        """Increment a statistic in a thread-safe manner."""
+        async with self._stats_lock:
+            current_value = getattr(self.stats, stat_name, 0)
+            setattr(self.stats, stat_name, current_value + amount)
 
     async def health_check(self) -> bool:
         """Perform a health check on the pool."""
@@ -131,7 +136,7 @@ class ConnectionPool(ABC, Generic[T]):
 
         try:
             # Try to get and use a connection briefly
-            async with self.get_connection() as conn:
+            async with self.get_connection() as conn:  # type: ignore[var-annotated]
                 # The actual health check depends on the connection type
                 # This is a basic check that just tries to acquire a connection
                 pass

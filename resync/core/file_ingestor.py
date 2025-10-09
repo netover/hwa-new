@@ -1,7 +1,6 @@
 # resync/core/file_ingestor.py
 from __future__ import annotations
 
-import logging
 import os
 import re
 import shutil
@@ -16,8 +15,9 @@ from openpyxl.utils.exceptions import InvalidFileException
 from resync.core.exceptions import FileProcessingError, KnowledgeGraphError
 from resync.core.interfaces import IFileIngestor, IKnowledgeGraph
 from resync.settings import settings
+from resync.core.structured_logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def is_path_protected(file_path: Path) -> bool:
@@ -98,7 +98,7 @@ def chunk_text(
 
 def read_pdf(file_path: Path) -> str:
     """Extracts text from a PDF file."""
-    logger.info(f"Reading PDF file: {file_path}")
+    logger.info("reading_pdf_file", file_path=str(file_path))
     try:
         reader = pypdf.PdfReader(file_path)
         text = "".join(
@@ -106,29 +106,46 @@ def read_pdf(file_path: Path) -> str:
         )
         return text
     except FileNotFoundError as e:
-        logger.error("PDF file not found: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "pdf_file_not_found",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except PermissionError as e:
         logger.error(
-            "Permission denied accessing PDF file: %s - %s", file_path, e, exc_info=True
+            "permission_denied_reading_pdf",
+            file_path=str(file_path),
+            error=str(e)
         )
         return ""
     except pypdf.errors.PdfReadError as e:
-        logger.error("PDF read error: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "pdf_read_error",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except ValueError as e:
-        logger.error("Invalid PDF content: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "invalid_pdf_content",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except Exception as e:  # Catch any other pypdf or system errors
         logger.critical(
-            "Unexpected error reading PDF %s: %s", file_path, e, exc_info=True
+            "unexpected_error_reading_pdf",
+            file_path=str(file_path),
+            error=str(e),
+            exc_info=True
         )
         raise FileProcessingError(f"Failed to process PDF {file_path}") from e
 
 
 def read_json(file_path: Path) -> str:
     """Extracts text from a JSON file."""
-    logger.info(f"Reading JSON file: {file_path}")
+    logger.info("reading_json_file", file_path=str(file_path))
     try:
         import json
 
@@ -151,63 +168,83 @@ def read_json(file_path: Path) -> str:
             return str(data)
 
     except FileNotFoundError as e:
-        logger.error("JSON file not found: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "json_file_not_found",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except PermissionError as e:
         logger.error(
-            "Permission denied accessing JSON file: %s - %s",
-            file_path,
-            e,
-            exc_info=True,
+            "permission_denied_reading_json",
+            file_path=str(file_path),
+            error=str(e)
         )
         return ""
     except json.JSONDecodeError as e:
-        logger.error("Invalid JSON format: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "invalid_json_format",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except UnicodeDecodeError as e:
         logger.error(
-            "Encoding error reading JSON file: %s - %s", file_path, e, exc_info=True
+            "encoding_error_reading_json",
+            file_path=str(file_path),
+            error=str(e)
         )
         return ""
     except Exception as e:  # Catch other potential OS or parsing errors
         logger.critical(
-            "Unexpected error reading JSON %s: %s", file_path, e, exc_info=True
+            "unexpected_error_reading_json",
+            file_path=str(file_path),
+            error=str(e),
+            exc_info=True
         )
         raise FileProcessingError(f"Failed to process JSON {file_path}") from e
 
 
 def read_txt(file_path: Path) -> str:
     """Extracts text from a plain text file."""
-    logger.info(f"Reading text file: {file_path}")
+    logger.info("reading_text_file", file_path=str(file_path))
     try:
         text = file_path.read_text(encoding="utf-8")
         return text
     except FileNotFoundError as e:
-        logger.error("Text file not found: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "text_file_not_found",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except PermissionError as e:
         logger.error(
-            "Permission denied accessing text file: %s - %s",
-            file_path,
-            e,
-            exc_info=True,
+            "permission_denied_reading_text_file",
+            file_path=str(file_path),
+            error=str(e)
         )
         return ""
     except UnicodeDecodeError as e:
         logger.error(
-            "Encoding error reading text file: %s - %s", file_path, e, exc_info=True
+            "encoding_error_reading_text_file",
+            file_path=str(file_path),
+            error=str(e)
         )
         return ""
     except (OSError, IOError) as e:
         logger.critical(
-            "Unexpected OS error reading text %s: %s", file_path, e, exc_info=True
+            "unexpected_os_error_reading_text_file",
+            file_path=str(file_path),
+            error=str(e),
+            exc_info=True
         )
         raise FileProcessingError(f"Failed to process text file {file_path}") from e
 
 
 def read_doc(file_path: Path) -> str:
     """Extracts text from a DOC file (older Word format)."""
-    logger.info(f"Reading DOC file: {file_path}")
+    logger.info("reading_doc_file", file_path=str(file_path))
     try:
         # Try to use python-docx first (it can sometimes handle .doc files)
         try:
@@ -221,28 +258,38 @@ def read_doc(file_path: Path) -> str:
         # Fallback: try to use antiword or similar tool if available
         # For now, return a message indicating the file type is not fully supported
         logger.warning(
-            f"DOC file {file_path} requires manual processing or external tool"
+            "doc_file_requires_manual_processing",
+            file_path=str(file_path)
         )
         return f"[DOC file: {file_path.name} - Manual processing may be required]"
 
     except FileNotFoundError as e:
-        logger.error("DOC file not found: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "doc_file_not_found",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except PermissionError as e:
         logger.error(
-            "Permission denied accessing DOC file: %s - %s", file_path, e, exc_info=True
+            "permission_denied_reading_doc_file",
+            file_path=str(file_path),
+            error=str(e)
         )
         return ""
     except Exception as e:  # Catch other potential library or system errors
         logger.critical(
-            "Unexpected error reading DOC %s: %s", file_path, e, exc_info=True
+            "unexpected_error_reading_doc_file",
+            file_path=str(file_path),
+            error=str(e),
+            exc_info=True
         )
         raise FileProcessingError(f"Failed to process DOC file {file_path}") from e
 
 
 def read_xls(file_path: Path) -> str:
     """Extracts text from an XLS file (older Excel format)."""
-    logger.info(f"Reading XLS file: {file_path}")
+    logger.info("reading_xls_file", file_path=str(file_path))
     try:
         # Try to use openpyxl first (it can sometimes handle .xls files)
         try:
@@ -295,91 +342,127 @@ def read_xls(file_path: Path) -> str:
 
         except ImportError:
             logger.warning(
-                f"XLS file {file_path} requires xlrd library for full support"
+                "xls_file_requires_xlrd_library",
+                file_path=str(file_path)
             )
             return f"[XLS file: {file_path.name} - Install xlrd for better support]"
         except Exception as e:
-            logger.error(f"Error processing XLS file {file_path}: {e}")
+            logger.error(
+                "error_processing_xls_file",
+                file_path=str(file_path),
+                error=str(e)
+            )
             return f"[XLS file: {file_path.name} - Processing error: {e}]"
 
     except FileNotFoundError as e:
-        logger.error("XLS file not found: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "xls_file_not_found",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except PermissionError as e:
         logger.error(
-            "Permission denied accessing XLS file: %s - %s", file_path, e, exc_info=True
+            "permission_denied_reading_xls_file",
+            file_path=str(file_path),
+            error=str(e)
         )
         return ""
     except Exception as e:  # Catch other potential library or system errors
         logger.critical(
-            "Unexpected error reading XLS %s: %s", file_path, e, exc_info=True
+            "unexpected_error_reading_xls_file",
+            file_path=str(file_path),
+            error=str(e),
+            exc_info=True
         )
         raise FileProcessingError(f"Failed to process XLS file {file_path}") from e
 
 
 def read_md(file_path: Path) -> str:
     """Extracts text from a Markdown file."""
-    logger.info(f"Reading Markdown file: {file_path}")
+    logger.info("reading_markdown_file", file_path=str(file_path))
     try:
         text = file_path.read_text(encoding="utf-8")
         return text
     except FileNotFoundError as e:
-        logger.error("Markdown file not found: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "markdown_file_not_found",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except PermissionError as e:
         logger.error(
-            "Permission denied accessing Markdown file: %s - %s",
-            file_path,
-            e,
-            exc_info=True,
+            "permission_denied_reading_markdown_file",
+            file_path=str(file_path),
+            error=str(e)
         )
         return ""
     except UnicodeDecodeError as e:
         logger.error(
-            "Encoding error reading Markdown file: %s - %s", file_path, e, exc_info=True
+            "encoding_error_reading_markdown_file",
+            file_path=str(file_path),
+            error=str(e)
         )
         return ""
     except (OSError, IOError) as e:
         logger.critical(
-            "Unexpected OS error reading Markdown %s: %s", file_path, e, exc_info=True
+            "unexpected_os_error_reading_markdown_file",
+            file_path=str(file_path),
+            error=str(e),
+            exc_info=True
         )
         raise FileProcessingError(f"Failed to process Markdown file {file_path}") from e
 
 
 def read_docx(file_path: Path) -> str:
     """Extracts text from a DOCX file."""
-    logger.info(f"Reading DOCX file: {file_path}")
+    logger.info("reading_docx_file", file_path=str(file_path))
     try:
         doc = docx.Document(file_path)
         text = "\n".join(para.text for para in doc.paragraphs if para.text)
         return text
     except FileNotFoundError as e:
-        logger.error("DOCX file not found: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "docx_file_not_found",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except PermissionError as e:
         logger.error(
-            "Permission denied accessing DOCX file: %s - %s",
-            file_path,
-            e,
-            exc_info=True,
+            "permission_denied_reading_docx_file",
+            file_path=str(file_path),
+            error=str(e)
         )
         return ""  # Corrected import for PackageNotFoundError
     except docx.opc.exceptions.PackageNotFoundError as e:
-        logger.error("Invalid DOCX package: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "invalid_docx_package",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except ValueError as e:
-        logger.error("Invalid DOCX content: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "invalid_docx_content",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except Exception as e:  # Catch other potential library or system errors
         logger.critical(
-            "Unexpected error reading DOCX %s: %s", file_path, e, exc_info=True
+            "unexpected_error_reading_docx_file",
+            file_path=str(file_path),
+            error=str(e),
+            exc_info=True
         )
         raise FileProcessingError(f"Failed to process DOCX file {file_path}") from e
 
 
 def read_excel(file_path: Path) -> str:
     """Extracts text from an XLSX file, iterating through all sheets and cells."""
-    logger.info(f"Reading Excel file: {file_path}")
+    logger.info("reading_excel_file", file_path=str(file_path))
     text_parts = []
     try:
         workbook = openpyxl.load_workbook(file_path, read_only=True)
@@ -395,25 +478,39 @@ def read_excel(file_path: Path) -> str:
                     text_parts.append(" | ".join(row_texts))
         return "\n".join(text_parts)
     except FileNotFoundError as e:
-        logger.error("Excel file not found: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "excel_file_not_found",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except PermissionError as e:
         logger.error(
-            "Permission denied accessing Excel file: %s - %s",
-            file_path,
-            e,
-            exc_info=True,
+            "permission_denied_reading_excel_file",
+            file_path=str(file_path),
+            error=str(e)
         )
         return ""
     except InvalidFileException as e:
-        logger.error("Invalid Excel file: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "invalid_excel_file",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except ValueError as e:
-        logger.error("Invalid Excel content: %s - %s", file_path, e, exc_info=True)
+        logger.error(
+            "invalid_excel_content",
+            file_path=str(file_path),
+            error=str(e)
+        )
         return ""
     except Exception as e:  # Catch other potential library or system errors
         logger.critical(
-            "Unexpected error reading Excel %s: %s", file_path, e, exc_info=True
+            "unexpected_error_reading_excel_file",
+            file_path=str(file_path),
+            error=str(e),
+            exc_info=True
         )
         raise FileProcessingError(f"Failed to process Excel file {file_path}") from e
 
@@ -450,7 +547,8 @@ class FileIngestor(IFileIngestor):
         # Ensure the RAG directory exists
         self.rag_directory.mkdir(exist_ok=True)
         logger.info(
-            f"FileIngestor initialized with RAG directory: {self.rag_directory}"
+            "file_ingestor_initialized",
+            rag_directory=str(self.rag_directory)
         )
 
     async def save_uploaded_file(self, file_name: str, file_content) -> Path:
@@ -477,14 +575,23 @@ class FileIngestor(IFileIngestor):
         destination = self.rag_directory / safe_filename
 
         try:
-            logger.info(f"Saving uploaded file: {safe_filename}")
+            logger.info(
+                "saving_uploaded_file",
+                filename=safe_filename
+            )
             with destination.open("wb") as buffer:
                 shutil.copyfileobj(file_content, buffer)
-            logger.info(f"Successfully saved file to {destination}")
+            logger.info(
+                "successfully_saved_file",
+                destination=str(destination)
+            )
             return destination
         except (IOError, OSError) as e:
             logger.critical(
-                f"Failed to save uploaded file {safe_filename}: {e}", exc_info=True
+                "failed_to_save_uploaded_file",
+                filename=safe_filename,
+                error=str(e),
+                exc_info=True
             )
             raise FileProcessingError(
                 f"Could not save file due to OS error: {e}"
@@ -501,33 +608,44 @@ class FileIngestor(IFileIngestor):
             True if ingestion was successful, False otherwise
         """
         if not file_path.exists():
-            logger.warning(f"File not found for ingestion: {file_path}")
+            logger.warning(
+                "file_not_found_for_ingestion",
+                file_path=str(file_path)
+            )
             return False
 
         # Check if file is in knowledge base directories
         if not is_path_in_knowledge_base(file_path):
             logger.warning(
-                f"File {file_path} is not in knowledge base directories. Skipping ingestion."
+                "file_not_in_knowledge_base_directories",
+                file_path=str(file_path)
             )
             return False
 
         # Check if file is in protected directories (should not be deleted during processing)
         if is_path_protected(file_path):
             logger.info(
-                f"File {file_path} is in protected directory - will not be deleted after processing"
+                "file_in_protected_directory",
+                file_path=str(file_path)
             )
 
         file_ext = file_path.suffix.lower()
         reader = self.file_readers.get(file_ext)
 
         if not reader:
-            logger.warning(f"Unsupported file type: {file_ext}. Skipping.")
+            logger.warning(
+                "unsupported_file_type",
+                file_extension=file_ext
+            )
             return False
 
         # Read the file content
         content = reader(file_path)
         if not content:
-            logger.warning(f"No content extracted from {file_path}. Skipping.")
+            logger.warning(
+                "no_content_extracted",
+                file_path=str(file_path)
+            )
             return False
 
         # Chunk the content and add to knowledge graph
@@ -545,39 +663,42 @@ class FileIngestor(IFileIngestor):
                 chunk_count += 1
             except KnowledgeGraphError as e:
                 logger.error(
-                    "Knowledge graph error adding chunk %d from %s: %s",
-                    i + 1,
-                    file_path,
-                    e,
-                    exc_info=True,
+                    "knowledge_graph_error_adding_chunk",
+                    chunk_index=i + 1,
+                    file_path=str(file_path),
+                    error=str(e),
+                    exc_info=True
                 )
             except ValueError as e:
                 logger.error(
-                    "Value error adding chunk %d from %s: %s",
-                    i + 1,
-                    file_path,
-                    e,
-                    exc_info=True,
+                    "value_error_adding_chunk",
+                    chunk_index=i + 1,
+                    file_path=str(file_path),
+                    error=str(e),
+                    exc_info=True
                 )
             except TypeError as e:
                 logger.error(
-                    "Type error adding chunk %d from %s: %s",
-                    i + 1,
-                    file_path,
-                    e,
-                    exc_info=True,
+                    "type_error_adding_chunk",
+                    chunk_index=i + 1,
+                    file_path=str(file_path),
+                    error=str(e),
+                    exc_info=True
                 )
             except Exception:
                 logger.critical(
-                    "Critical unhandled error adding chunk %d from %s",
-                    i + 1,
-                    file_path,
-                    exc_info=True,
+                    "critical_unhandled_error_adding_chunk",
+                    chunk_index=i + 1,
+                    file_path=str(file_path),
+                    exc_info=True
                 )
                 # We don't re-raise here to allow processing of other chunks
 
         logger.info(
-            f"Successfully ingested {chunk_count}/{len(chunks)} chunks from {file_path}"
+            "successfully_ingested_chunks",
+            chunk_count=chunk_count,
+            total_chunks=len(chunks),
+            file_path=str(file_path)
         )
         return chunk_count > 0
 
@@ -592,9 +713,6 @@ async def load_existing_rag_documents(file_ingestor: IFileIngestor) -> int:
     Returns:
         Number of documents processed
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
     processed_count = 0
 
     # Process all knowledge base directories
@@ -602,10 +720,16 @@ async def load_existing_rag_documents(file_ingestor: IFileIngestor) -> int:
         knowledge_path = settings.BASE_DIR / knowledge_dir
 
         if not knowledge_path.exists():
-            logger.warning(f"Knowledge base directory not found: {knowledge_path}")
+            logger.warning(
+                "knowledge_base_directory_not_found",
+                knowledge_path=str(knowledge_path)
+            )
             continue
 
-        logger.info(f"Processing knowledge base directory: {knowledge_path}")
+        logger.info(
+            "processing_knowledge_base_directory",
+            knowledge_path=str(knowledge_path)
+        )
 
         # Walk through all files in the directory tree
         for file_path in knowledge_path.rglob("*"):
@@ -613,20 +737,29 @@ async def load_existing_rag_documents(file_ingestor: IFileIngestor) -> int:
                 # Check if file is in protected directories (should be processed)
                 if is_path_in_knowledge_base(file_path):
                     try:
-                        logger.info(f"Loading existing document: {file_path.name}")
+                        logger.info(
+                            "loading_existing_document",
+                            filename=file_path.name
+                        )
                         await file_ingestor.ingest_file(file_path)
                         processed_count += 1
                     except FileProcessingError as e:
                         logger.error(
-                            "Failed to process document %s: %s",
-                            file_path,
-                            e,
-                            exc_info=True,
+                            "failed_to_process_document",
+                            file_path=str(file_path),
+                            error=str(e),
+                            exc_info=True
                         )
                 else:
-                    logger.debug(f"Skipping protected file: {file_path}")
+                    logger.debug(
+                        "skipping_protected_file",
+                        file_path=str(file_path)
+                    )
 
-    logger.info(f"Loaded {processed_count} existing RAG documents")
+    logger.info(
+        "loaded_existing_rag_documents",
+        processed_count=processed_count
+    )
     return processed_count
 
 

@@ -17,7 +17,7 @@ from resync.core.metrics import runtime_metrics
 from resync.core.rate_limiter import authenticated_rate_limit, public_rate_limit
 from resync.core.tws_monitor import tws_monitor
 from resync.models.tws import SystemStatus
-from resync.settings import settings, settings_dynaconf
+from resync.settings import settings
 
 # Import CQRS components
 from resync.cqrs.dispatcher import dispatcher, initialize_dispatcher
@@ -492,13 +492,16 @@ async def files_endpoint(request: Request, path: str) -> FilesResponse:
     requested_path = allowed_base / normalized_path
     requested_path = requested_path.resolve()
     
-    # Verify the requested path is within the allowed base
+    # Compat: Python 3.8 não possui is_relative_to
     try:
-        # Use pathlib's is_relative_to which is more robust than relative_to
-        if not requested_path.is_relative_to(allowed_base):
-            raise HTTPException(status_code=400, detail="Invalid path: path traversal detected")
-    except ValueError:
-        # This means the requested path is outside the allowed base
+        is_inside = requested_path.is_relative_to(allowed_base)  # py>=3.9
+    except AttributeError:
+        try:
+            requested_path.relative_to(allowed_base)
+            is_inside = True
+        except ValueError:
+            is_inside = False
+    if not is_inside:
         raise HTTPException(status_code=400, detail="Invalid path: path traversal detected")
     
     # Verify the file exists and is not a directory
@@ -602,25 +605,19 @@ async def login_page(request: Request) -> HTMLResponse:
             <script>
                 document.getElementById('loginForm').addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    
                     const formData = new FormData(e.target);
                     const data = {
                         username: formData.get('username'),
                         password: formData.get('password')
                     };
-                    
                     try {
                         const response = await fetch('/token', {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                            },
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                             body: new URLSearchParams(data)
                         });
-                        
                         if (response.ok) {
-                            const result = await response.json();
-                            localStorage.setItem('access_token', result.access_token);
+                            // Token é enviado como cookie HttpOnly; não usar localStorage
                             window.location.href = '/dashboard';
                         } else {
                             const error = await response.json();
@@ -650,17 +647,20 @@ async def login_for_access_token(request: Request,
     OAuth2 compatible token login, get an access token for future requests.
     """
     from resync.api.auth import authenticate_admin, create_access_token
-    
-    user = authenticate_admin(username, password)
+    user = await authenticate_admin(username, password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     access_token = create_access_token(data={"sub": username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    # Define também como cookie HttpOnly para mitigar XSS (mantém JSON para compat)
+    from fastapi import Response
+    resp = Response(content='{"access_token": "' + access_token + '", "token_type": "bearer"}', media_type="application/json")
+    resp.set_cookie("access_token", access_token, httponly=True, secure=True, samesite="lax", max_age=ACCESS_TOKEN_EXPIRE_MINUTES*60 if "ACCESS_TOKEN_EXPIRE_MINUTES" in globals() else 1800, path="/")
+    return resp
 
 
 @api_router.post("/llm/optimize", summary="Optimize LLM query with TWS-specific optimizations", 
@@ -688,7 +688,7 @@ async def optimize_llm_query(
             optimized=True,
             query=query_data.query,
             response=response,
-            cache_used=not query_data.use_cache  # Simplified - in real implementation would check cache hit
+            cache_used=bool(query_data.use_cache)  # melhor aproximação até termos flag de hit real
         )
     except Exception as e:
         logger.error(f"LLM optimization failed: {e}", exc_info=True)

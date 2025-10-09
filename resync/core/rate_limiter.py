@@ -8,7 +8,7 @@ rate limit exceeded responses.
 
 from __future__ import annotations
 
-import logging
+import structlog
 from datetime import datetime, timedelta
 from typing import Callable, Optional
 
@@ -19,7 +19,7 @@ from slowapi.util import get_remote_address
 
 from resync.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 
@@ -53,10 +53,10 @@ def get_authenticated_user_identifier(request: Request) -> str:
 # Initialize the main rate limiter with Redis storage
 limiter = Limiter(
     key_func=get_remote_address,
-    storage_uri=settings.RATE_LIMIT_STORAGE_URI,
-    key_prefix=settings.RATE_LIMIT_KEY_PREFIX,
+    storage_uri=getattr(settings, 'RATE_LIMIT_STORAGE_URI', 'redis://localhost:6379'),
+    key_prefix=getattr(settings, 'RATE_LIMIT_KEY_PREFIX', 'resync:ratelimit:'),
     headers_enabled=True,
-    strategy="moving-window" if settings.RATE_LIMIT_SLIDING_WINDOW else "fixed-window"
+    strategy="moving-window" if getattr(settings, 'RATE_LIMIT_SLIDING_WINDOW', True) else "fixed-window"
 )
 
 
@@ -102,9 +102,12 @@ def create_rate_limit_exceeded_response(
     response.headers["Retry-After"] = str(retry_after)
 
     logger.warning(
-        f"Rate limit exceeded for {request.client.host} on {request.url.path}. "
-        f"Limit: {exc.limit} requests per {exc.window} seconds. "
-        f"Retry after: {retry_after} seconds."
+        "rate_limit_exceeded",
+        client_host=request.client.host,
+        path=request.url.path,
+        limit=exc.limit,
+        window=exc.window,
+        retry_after=retry_after
     )
 
     return response
@@ -113,13 +116,13 @@ def create_rate_limit_exceeded_response(
 # Decorator functions for different endpoint categories
 def public_rate_limit(func: Callable) -> Callable:
     """Decorator for public endpoints with standard rate limiting."""
-    return limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_PER_MINUTE}/minute")(func)
+    return limiter.limit(f"{getattr(settings, 'RATE_LIMIT_PUBLIC_PER_MINUTE', 100)}/minute")(func)
 
 
 def authenticated_rate_limit(func: Callable) -> Callable:
     """Decorator for authenticated endpoints with higher rate limiting."""
     return limiter.limit(
-        f"{settings.RATE_LIMIT_AUTHENTICATED_PER_MINUTE}/minute",
+        f"{getattr(settings, 'RATE_LIMIT_AUTHENTICATED_PER_MINUTE', 1000)}/minute",
         key_func=get_authenticated_user_identifier
     )(func)
 
@@ -127,24 +130,24 @@ def authenticated_rate_limit(func: Callable) -> Callable:
 def critical_rate_limit(func: Callable) -> Callable:
     """Decorator for critical endpoints (agents, chat) with strict rate limiting."""
     return limiter.limit(
-        f"{settings.RATE_LIMIT_CRITICAL_PER_MINUTE}/minute",
+        f"{getattr(settings, 'RATE_LIMIT_CRITICAL_PER_MINUTE', 50)}/minute",
         key_func=get_authenticated_user_identifier
     )(func)
 
 
 def error_handler_rate_limit(func: Callable) -> Callable:
     """Decorator for error handler endpoints."""
-    return limiter.limit(f"{settings.RATE_LIMIT_ERROR_HANDLER_PER_MINUTE}/minute")(func)
+    return limiter.limit(f"{getattr(settings, 'RATE_LIMIT_ERROR_HANDLER_PER_MINUTE', 15)}/minute")(func)
 
 
 def websocket_rate_limit(func: Callable) -> Callable:
     """Decorator for WebSocket endpoints."""
-    return limiter.limit(f"{settings.RATE_LIMIT_WEBSOCKET_PER_MINUTE}/minute")(func)
+    return limiter.limit(f"{getattr(settings, 'RATE_LIMIT_WEBSOCKET_PER_MINUTE', 30)}/minute")(func)
 
 
 def dashboard_rate_limit(func: Callable) -> Callable:
     """Decorator for dashboard endpoints."""
-    return limiter.limit(f"{settings.RATE_LIMIT_DASHBOARD_PER_MINUTE}/minute")(func)
+    return limiter.limit(f"{getattr(settings, 'RATE_LIMIT_DASHBOARD_PER_MINUTE', 10)}/minute")(func)
 
 
 # Custom rate limit middleware for adding headers to all responses
@@ -188,7 +191,10 @@ def init_rate_limiter(app):
     # Add custom middleware for rate limit headers
     app.add_middleware(CustomRateLimitMiddleware, limiter=limiter)
 
-    logger.info("Rate limiting initialized with Redis backend")
-    logger.info(f"Public endpoints: {settings.RATE_LIMIT_PUBLIC_PER_MINUTE}/minute")
-    logger.info(f"Authenticated endpoints: {settings.RATE_LIMIT_AUTHENTICATED_PER_MINUTE}/minute")
-    logger.info(f"Critical endpoints: {settings.RATE_LIMIT_CRITICAL_PER_MINUTE}/minute")
+    logger.info("rate_limiting_initialized", backend="Redis")
+    logger.info(
+        "rate_limit_configurations",
+        public=f"{getattr(settings, 'RATE_LIMIT_PUBLIC_PER_MINUTE', 100)}/minute",
+        authenticated=f"{getattr(settings, 'RATE_LIMIT_AUTHENTICATED_PER_MINUTE', 1000)}/minute",
+        critical=f"{getattr(settings, 'RATE_LIMIT_CRITICAL_PER_MINUTE', 50)}/minute"
+    )

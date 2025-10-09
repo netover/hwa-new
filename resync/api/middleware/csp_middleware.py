@@ -3,9 +3,12 @@
 import base64
 import logging
 import secrets
+from typing import Optional, Dict, List, Any
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+
+from resync.csp_validation import process_csp_report, CSPValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,7 @@ class CSPMiddleware(BaseHTTPMiddleware):
         self.report_only = report_only
         # Don't import settings here to avoid potential circular imports
         # Import will be done lazily when needed
-        self.report_uri = None  # Will be set when first needed
+        self._settings = None  # Will be set when first needed
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """
@@ -58,7 +61,7 @@ class CSPMiddleware(BaseHTTPMiddleware):
         # Add CSP headers to response
         self._add_csp_headers(response, csp_policy)
 
-        # Log CSP violations if configured
+        # Handle CSP violations if this is the CSP violation endpoint
         if request.url.path == "/csp-violation-report":
             await self._handle_csp_violation_report(request)
 
@@ -89,9 +92,9 @@ class CSPMiddleware(BaseHTTPMiddleware):
         # Import settings lazily to avoid circular imports
         from resync.settings import settings
         
-        # Initialize report_uri if not already set
-        if self.report_uri is None:
-            self.report_uri = getattr(settings, "CSP_REPORT_URI", None)
+        # Always get fresh settings to support mocking in tests
+        # In production, settings is a singleton so this has minimal overhead
+        self._settings = settings
         
         # Base CSP directives with enhanced security
         directives = {
@@ -109,16 +112,17 @@ class CSPMiddleware(BaseHTTPMiddleware):
         }
         
         # Allow connect-src to external URLs if configured
-        connect_src_urls = getattr(settings, "CSP_CONNECT_SRC_URLS", [])
+        connect_src_urls = getattr(self._settings, "CSP_CONNECT_SRC_URLS", [])
         if connect_src_urls:
             directives["connect-src"].extend(connect_src_urls)
         
         # Add report-uri if configured
-        if self.report_uri:
-            directives["report-uri"] = [self.report_uri]
+        report_uri = getattr(self._settings, "CSP_REPORT_URI", None)
+        if report_uri:
+            directives["report-uri"] = [report_uri]
         else:
             # Add report-to directive for modern CSP reporting (if supported)
-            report_to = getattr(settings, "CSP_REPORT_TO", None)
+            report_to = getattr(self._settings, "CSP_REPORT_TO", None)
             if report_to:
                 directives["report-to"] = [report_to]
 
@@ -149,6 +153,9 @@ class CSPMiddleware(BaseHTTPMiddleware):
         # Add X-XSS-Protection for legacy browsers
         response.headers["X-XSS-Protection"] = "1; mode=block"
 
+        # Add Referrer-Policy for privacy protection
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
     async def _handle_csp_violation_report(self, request: Request) -> None:
         """
         Handle CSP violation reports with rate limiting and proper logging.
@@ -160,22 +167,28 @@ class CSPMiddleware(BaseHTTPMiddleware):
             if request.method != "POST":
                 return
                 
-            # Get the violation report from request body
-            body = await request.body()
+            # Process the CSP report with enhanced validation
             try:
-                import json
-                report = json.loads(body.decode('utf-8'))
-                violation_info = report.get('csp-report', {})
+                result = await process_csp_report(request)
                 
-                # Log specific violation details
+                # Log specific violation details from sanitized data
+                report = result.get("report", {})
+                csp_report = report.get("csp-report", {}) if isinstance(report, dict) and "csp-report" in report else report
+                
                 logger.warning(
-                    f"CSP Violation: blocked-uri={violation_info.get('blocked-uri', 'unknown')}, "
-                    f"violated-directive={violation_info.get('violated-directive', 'unknown')}, "
-                    f"effective-directive={violation_info.get('effective-directive', 'unknown')}, "
-                    f"script-sample={violation_info.get('script-sample', 'none')}"
+                    f"CSP Violation: blocked-uri={csp_report.get('blocked-uri', 'unknown')}, "
+                    f"violated-directive={csp_report.get('violated-directive', 'unknown')}, "
+                    f"effective-directive={csp_report.get('effective-directive', 'unknown')}, "
+                    f"script-sample={csp_report.get('script-sample', 'none')}"
                 )
-            except json.JSONDecodeError:
-                logger.warning(f"CSP violation reported: {body.decode('utf-8', errors='ignore')}")
+            except CSPValidationError as e:
+                logger.warning(f"Invalid CSP violation report: {e}")
+                # We still return 200 to avoid giving attackers information
+                return
+            except Exception as e:
+                logger.error(f"Error processing CSP violation report: {e}")
+                # We still return 200 to avoid giving attackers information
+                return
                 
         except Exception as e:
             logger.error(f"Error processing CSP violation report: {e}")

@@ -9,11 +9,7 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from resync.core.container import app_container
-from resync.core.idempotency import (
-    IdempotencyManager,
-    RedisIdempotencyStorage,
-    InMemoryIdempotencyStorage,
-)
+from resync.core.idempotency import IdempotencyManager
 from resync.core.exceptions import ValidationError
 from resync.core.structured_logger import get_logger
 from resync.core.exceptions import (
@@ -108,7 +104,7 @@ async def require_idempotency_key(
 
 async def get_correlation_id(
     x_correlation_id: Optional[str] = Header(None, alias="X-Correlation-ID"),
-    request: Request = None
+    request: Optional[Request] = None
 ) -> str:
     """Obtém ou gera correlation ID.
     

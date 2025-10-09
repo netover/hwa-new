@@ -80,7 +80,7 @@ class ConnectionManager:
         # Use pool manager for enhanced broadcasting with monitoring
         if self._pool_manager and self._pool_manager.connections:
             successful_sends = await self._pool_manager.broadcast(message)
-            logger.info(f"Broadcast completed: {successful_sends} clients received the message")
+            logger.info("broadcast_completed", successful_sends=successful_sends, message="clients received the message")
             return
 
         # Fallback to legacy broadcasting for backward compatibility
@@ -88,7 +88,7 @@ class ConnectionManager:
             logger.info("Broadcast requested, but no active connections.")
             return
 
-        logger.info(f"Broadcasting message to {len(self.active_connections)} clients.")
+        logger.info("broadcasting_message", client_count=len(self.active_connections))
         # Create a list of tasks to send messages concurrently
         tasks = [
             connection.send_text(message)
@@ -120,7 +120,7 @@ class ConnectionManager:
         # Use pool manager for enhanced JSON broadcasting with monitoring
         if self._pool_manager and self._pool_manager.connections:
             successful_sends = await self._pool_manager.broadcast_json(data)
-            logger.info(f"JSON broadcast completed: {successful_sends} clients received the data")
+            logger.info("json_broadcast_completed", successful_sends=successful_sends, message="clients received the data")
             return
 
         # Fallback to legacy JSON broadcasting for backward compatibility

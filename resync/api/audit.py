@@ -396,44 +396,6 @@ def get_audit_logs(
 
 
 @router.post("/log", response_model=AuditRecordResponse)
-def create_audit_log(
-    request: Request,
-    audit_data: AuditRecordResponse
-) -> AuditRecordResponse:
-    """
-    Create a new audit log entry.
-    """
-    # Get the current user from request state
-    current_user_id = getattr(request.state, 'user_id', 'system') if hasattr(request.state, 'user_id') else 'system'
-    correlation_id = getattr(request.state, 'correlation_id', None) if hasattr(request.state, 'correlation_id') else None
-    
-    try:
-        # Log the audit event
-        log_audit_event(
-            action="create_audit_log", 
-            user_id=current_user_id, 
-            details={
-                "target_user_id": audit_data.user_id,
-                "target_action": audit_data.action,
-                "target_details": audit_data.details
-            },
-            correlation_id=correlation_id
-        )
-        
-        # In a real implementation, we would store this in the audit database
-        # For now, we'll just return the data that was provided
-        return audit_data
-    except Exception as e:
-        log_audit_event(
-            action="create_audit_log_error", 
-            user_id=current_user_id, 
-            details={"error": str(e)},
-            correlation_id=correlation_id
-        )
-        raise HTTPException(
-            status_code=500, detail=f"Error creating audit log: {e}"
-        ) from e
-@router.post("/log", response_model=AuditRecordResponse)
 async def create_audit_log(
     request: Request,
     audit_data: AuditRecordResponse,
@@ -499,19 +461,4 @@ async def create_audit_log(
         func=_create_audit_log,
         ttl_seconds=3600  # 1 hour TTL for audit logs
     )
-
-# resync/api/audit.py
-import logging
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-)
-from datetime import datetime
-from enum import Enum
-
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.security import HTTPBearer
-from pydantic import field_validator, BaseModel, Field
 

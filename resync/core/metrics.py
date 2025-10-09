@@ -98,6 +98,12 @@ class RuntimeMetrics:
         # System metrics
         self.correlation_ids_active = MetricGauge()
         self.async_operations_active = MetricGauge()
+
+        # LLM metrics (from the improvement suggestions)
+        self.llm_requests = MetricCounter()
+        self.llm_errors = MetricCounter()
+        self.llm_duration = MetricHistogram()
+        self.llm_tokens = MetricCounter()
         self.error_rate = MetricHistogram()
         
         # Error metrics
@@ -300,6 +306,70 @@ def get_correlation_context() -> str:
     # In a real async context, this would use contextvars
     # For now, we'll create a new one if none exists
     return runtime_metrics.create_correlation_id()
+
+
+def track_llm_metrics(func):
+    """
+    Decorator to track LLM operation metrics.
+
+    Tracks request count, duration, errors, and token usage.
+    Compatible with both sync and async functions.
+    """
+    import functools
+    import inspect
+
+    @functools.wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        start_time = time.time()
+        runtime_metrics.llm_requests.increment()
+
+        try:
+            result = await func(*args, **kwargs)
+
+            # Track duration
+            duration = time.time() - start_time
+            runtime_metrics.llm_duration.observe(duration)
+
+            # Try to extract token usage from result if available
+            if hasattr(result, 'usage') and result.usage:
+                input_tokens = getattr(result.usage, 'prompt_tokens', 0)
+                output_tokens = getattr(result.usage, 'completion_tokens', 0)
+                runtime_metrics.llm_tokens.increment(input_tokens + output_tokens)
+
+            return result
+
+        except Exception as e:
+            runtime_metrics.llm_errors.increment()
+            raise
+
+    @functools.wraps(func)
+    def sync_wrapper(*args, **kwargs):
+        start_time = time.time()
+        runtime_metrics.llm_requests.increment()
+
+        try:
+            result = func(*args, **kwargs)
+
+            # Track duration
+            duration = time.time() - start_time
+            runtime_metrics.llm_duration.observe(duration)
+
+            # Try to extract token usage from result if available
+            if hasattr(result, 'usage') and result.usage:
+                input_tokens = getattr(result.usage, 'prompt_tokens', 0)
+                output_tokens = getattr(result.usage, 'completion_tokens', 0)
+                runtime_metrics.llm_tokens.increment(input_tokens + output_tokens)
+
+            return result
+
+        except Exception as e:
+            runtime_metrics.llm_errors.increment()
+            raise
+
+    if inspect.iscoroutinefunction(func):
+        return async_wrapper
+    else:
+        return sync_wrapper
 
 
 def log_with_correlation(

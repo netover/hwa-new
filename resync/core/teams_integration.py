@@ -5,7 +5,7 @@ job status monitoring, and conversational AI capabilities.
 """
 
 import asyncio
-import logging
+import structlog
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -15,7 +15,9 @@ import aiohttp
 from resync.core.exceptions import NotificationError
 from resync.settings import settings
 
-logger = logging.getLogger(__name__)
+from .shared_utils import TeamsNotification, create_job_status_notification
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -114,11 +116,11 @@ class TeamsIntegration:
             NotificationError: If notification fails due to configuration issues
         """
         if not self.config.enabled:
-            logger.debug("Teams integration is disabled, skipping notification")
+            logger.debug("teams_notification_skipped", reason="integration_disabled")
             return False
 
         if not self.config.webhook_url:
-            logger.warning("Teams webhook URL not configured, cannot send notification")
+            logger.warning("teams_notification_failed", reason="webhook_url_not_configured")
             raise NotificationError("Teams webhook URL not configured")
 
         try:
@@ -129,18 +131,18 @@ class TeamsIntegration:
             session = await self._get_session()
             async with session.post(self.config.webhook_url, json=teams_message) as response:
                 if response.status in [200, 201, 202, 204]:
-                    logger.info(f"Teams notification sent successfully: {notification.title}")
+                    logger.info("teams_notification_sent", title=notification.title)
                     return True
                 else:
                     error_text = await response.text()
-                    logger.error(f"Failed to send Teams notification: {response.status} - {error_text}")
+                    logger.error("teams_notification_failed", status=response.status, error=error_text)
                     return False
 
         except aiohttp.ClientError as e:
-            logger.error(f"Network error sending Teams notification: {e}", exc_info=True)
+            logger.error("teams_notification_network_error", error=str(e), exc_info=True)
             raise NotificationError(f"Network error sending Teams notification: {e}") from e
         except Exception as e:
-            logger.error(f"Unexpected error sending Teams notification: {e}", exc_info=True)
+            logger.error("teams_notification_unexpected_error", error=str(e), exc_info=True)
             raise NotificationError(f"Unexpected error sending Teams notification: {e}") from e
 
     def _format_teams_message(self, notification: TeamsNotification) -> Dict[str, Any]:
@@ -266,27 +268,19 @@ class TeamsIntegration:
         job_status = job_data.get("status", "").upper()
         if job_status in [status.upper() for status in self.config.job_status_filters]:
             # Send notification
-            notification = TeamsNotification(
-                title=f"Job Status Alert: {job_data.get('job_name', 'Unknown Job')}",
-                message=f"Job {job_data.get('job_name', 'Unknown Job')} entered status {job_status}",
-                severity="error" if job_status == "ABEND" else "warning",
-                job_id=job_data.get("job_id"),
-                job_status=job_status,
-                instance_name=instance_name,
-                additional_data={
-                    "start_time": job_data.get("start_time"),
-                    "end_time": job_data.get("end_time"),
-                    "duration": job_data.get("duration"),
-                    "owner": job_data.get("owner")
-                }
+            notification = create_job_status_notification(
+                job_data, instance_name, self.config.job_status_filters
             )
+            
+            if notification is None:
+                return
 
             try:
                 await self.send_notification(notification)
             except NotificationError as e:
-                logger.error(f"Failed to send job status notification: {e}")
+                logger.error("job_status_notification_failed", error=str(e))
             except Exception as e:
-                logger.error(f"Unexpected error sending job status notification: {e}")
+                logger.error("job_status_notification_unexpected_error", error=str(e))
 
     async def learn_from_conversation(self, message: str, context: Dict[str, Any]) -> None:
         """Learn from Teams conversation for AI enhancement.
@@ -298,7 +292,7 @@ class TeamsIntegration:
         if not self.config.enabled or not self.config.enable_conversation_learning:
             return
 
-        logger.info(f"Learning from Teams conversation: {message[:100]}...")
+        logger.info("learning_from_teams_conversation", message_preview=message[:100])
         # This would integrate with the knowledge graph/learning system
         # For now, just log that we're learning from the conversation
         pass
@@ -327,14 +321,17 @@ class TeamsIntegration:
             except Exception as e:
                 status["webhook_accessible"] = False
                 status["webhook_error"] = str(e)
-                logger.warning(f"Teams webhook health check failed: {e}")
+                logger.warning(
+                    "teams_webhook_health_check_failed",
+                    error=str(e)
+                )
 
         return status
 
     async def shutdown(self) -> None:
         """Shutdown Teams integration service."""
         await self._close_session()
-        logger.info("Teams integration service shut down")
+        logger.info("teams_integration_service_shutdown")
 
 
 # Global Teams integration instance

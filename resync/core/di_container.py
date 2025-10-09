@@ -126,7 +126,7 @@ class DIContainer:
         """
         self._registrations: Dict[Type[Any], ServiceRegistration[Any, Any]] = {}
         self._strict_mode = strict_mode
-        logger.info(f"DIContainer initialized (strict_mode={strict_mode})")
+        logger.info("di_container_initialized", strict_mode=strict_mode)
     
     @property
     def strict_mode(self) -> bool:
@@ -137,7 +137,7 @@ class DIContainer:
     def strict_mode(self, value: bool) -> None:
         """Set the strict mode setting."""
         self._strict_mode = value
-        logger.info(f"DIContainer strict mode set to {value}")
+        logger.info("di_container_strict_mode_set", value=value)
 
     def register(
         self,
@@ -215,7 +215,7 @@ class DIContainer:
         )
         registration.instance = instance
         self._registrations[interface] = registration
-        logger.debug(f"Registered instance of {interface.__name__} ({instance_type.__name__})")
+        logger.debug("registered_instance", interface=interface.__name__, instance_type=instance_type.__name__)
         # Audit log for registration
         logger.info(
             "SERVICE_REGISTRATION_AUDIT",
@@ -529,7 +529,7 @@ class DIContainer:
 
         except asyncio.TimeoutError:
             registration._health_check_failures += 1
-            logger.error(f"Health check timeout for {registration.interface.__name__}")
+            logger.error("health_check_timeout", interface=registration.interface.__name__)
             return False
         except Exception as e:
             registration._health_check_failures += 1

@@ -6,6 +6,7 @@ in addition to the existing Redis-based audit queue functionality.
 """
 
 import logging
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -75,7 +76,7 @@ class AuditLogManager:
         Create audit log tables if they don't exist.
         """
         Base.metadata.create_all(bind=self.engine)
-        logger.info(f"Audit logs database initialized at {self.db_path}")
+        logger.info("audit_logs_database_initialized", db_path=str(self.db_path))
     
     @contextmanager
     def get_session(self) -> Session:
@@ -91,7 +92,7 @@ class AuditLogManager:
             session.commit()
         except Exception as e:
             session.rollback()
-            logger.error(f"Database session error: {e}", exc_info=True)
+            logger.error("database_session_error", error=str(e), exc_info=True)
             raise
         finally:
             session.close()
@@ -141,11 +142,11 @@ class AuditLogManager:
                 audit_id = audit_entry.id
                 session.commit()
                 
-            logger.debug(f"Audit event logged: {action} by {user_id}, ID: {audit_id}")
+            logger.debug("audit_event_logged", action=action, user_id=user_id, audit_id=audit_id)
             return audit_id
             
         except Exception as e:
-            logger.error(f"Failed to log audit event: {e}", exc_info=True)
+            logger.error("failed_to_log_audit_event", error=str(e), exc_info=True)
             return None
     
     def query_audit_logs(
@@ -210,11 +211,11 @@ class AuditLogManager:
                         'severity': entry.severity
                     })
                 
-                logger.debug(f"Queried {len(results)} audit logs")
+                logger.debug("queried_audit_logs", count=len(results))
                 return results
                 
         except Exception as e:
-            logger.error(f"Failed to query audit logs: {e}", exc_info=True)
+            logger.error("failed_to_query_audit_logs", error=str(e), exc_info=True)
             return []
     
     def get_audit_metrics(self) -> Dict[str, Any]:
@@ -250,7 +251,7 @@ class AuditLogManager:
                 return metrics
                 
         except Exception as e:
-            logger.error(f"Failed to get audit metrics: {e}", exc_info=True)
+            logger.error("failed_to_get_audit_metrics", error=str(e), exc_info=True)
             return {
                 "total_logs": 0,
                 "by_severity": {},

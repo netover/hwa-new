@@ -6,13 +6,13 @@ from redis import Redis
 from redis.exceptions import ConnectionError, TimeoutError
 from resync.core.async_cache import AsyncTTLCache
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from resync.core.fastapi_di import get_tws_client
 from resync.core.interfaces import ITWSClient
 from resync.core.rate_limiter import authenticated_rate_limit
-from resync.settings import settings, settings_dynaconf
+from resync.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -175,20 +175,20 @@ class RedisCacheManager:
     def clear_pattern(self, pattern: str) -> int:
         """
         Delete multiple keys matching a pattern.
-        
+
         Args:
             pattern: The pattern to match (e.g., "tws:*")
-            
+
         Returns:
             Number of keys deleted
         """
         try:
-            keys = self.redis_client.keys(pattern)
-            if keys:
-                deleted = self.redis_client.delete(*keys)
-                logger.debug(f"Cleared {deleted} keys matching pattern: {pattern}")
-                return int(deleted)
-            return 0
+            # Use SCAN to avoid blocking Redis in production
+            total_deleted = 0
+            for key in self.redis_client.scan_iter(match=pattern, count=1000):
+                total_deleted += int(self.redis_client.delete(key))
+            logger.debug(f"Cleared {total_deleted} keys matching pattern: {pattern}")
+            return total_deleted
         except Exception as e:
             logger.error(f"Error clearing pattern: {e}")
             return 0
@@ -196,19 +196,18 @@ class RedisCacheManager:
     def get_cache_stats(self) -> CacheStats:
         """
         Get cache statistics.
-        
+
         Returns:
             CacheStats object with statistics
         """
         info = self.redis_client.info()
-        keyspace = info.get('keyspace_stats', {})
-        
-        hits = info.get('keyspace_hits', 0)
-        misses = info.get('keyspace_misses', 0)
+        keyspace = info.get('Keyspace', {})  # {'db0': {'keys': 123, ...}}
+        hits = int(info.get('keyspace_hits', 0))
+        misses = int(info.get('keyspace_misses', 0))
         total = hits + misses
-        hit_rate = hits / total if total > 0 else 0
-        size = sum([int(v.split(',')[0]) for k, v in keyspace.items()])
-        
+        hit_rate = (hits / total) if total > 0 else 0.0
+        size = sum(int(db_info.get('keys', 0)) for db_info in keyspace.values())
+
         return CacheStats(
             hits=hits,
             misses=misses,
@@ -230,9 +229,9 @@ def validate_connection_pool() -> bool:
     """
     # Use settings from the application configuration
     try:
-        min_conn = int(settings_dynaconf.get("REDIS_MIN_CONNECTIONS", 1))
-        max_conn = int(settings_dynaconf.get("REDIS_MAX_CONNECTIONS", 10))
-        timeout = float(settings_dynaconf.get("REDIS_TIMEOUT", 30.0))
+        min_conn = settings.redis_min_connections
+        max_conn = settings.redis_max_connections
+        timeout = settings.redis_timeout
     except (TypeError, ValueError) as e:
         logger.error(f"Error parsing Redis connection settings: {e}")
         return False
@@ -240,7 +239,7 @@ def validate_connection_pool() -> bool:
     return ConnectionPoolValidator.validate_connection_pool(min_conn, max_conn, timeout)
 
 
-async def verify_admin_credentials(creds: HTTPBasicCredentials = security_dependency):
+async def verify_admin_credentials(creds: HTTPBasicCredentials = security_dependency) -> None:
     """
     Dependência para verificar as credenciais de administrador usando Basic Auth.
 
@@ -291,6 +290,7 @@ async def verify_admin_credentials(creds: HTTPBasicCredentials = security_depend
 )
 @authenticated_rate_limit
 async def invalidate_tws_cache(
+    request: Request,
     scope: str = "system",  # 'system', 'jobs', 'workstations'
     tws_client: ITWSClient = tws_client_dependency,
     # Call verify_admin_credentials inside the function to handle rate limiting properly
@@ -305,8 +305,8 @@ async def invalidate_tws_cache(
     - **scope='workstations'**: Invalidates only the workstation list cache.
     """
     try:
-        # Verify admin credentials inside the function to handle rate limiting properly
-        verify_admin_credentials(creds)
+        # Verify admin credentials (await async dependency)
+        await verify_admin_credentials(creds)
 
         # Log the cache invalidation request for security auditing
         logger.info(f"Cache invalidation requested by user '{creds.username}' with scope '{scope}'")
@@ -372,12 +372,12 @@ async def invalidate_tws_cache(
 
 @cache_router.get("/stats", summary="Get cache statistics", response_model=CacheStats)
 @authenticated_rate_limit
-async def get_cache_stats(creds: HTTPBasicCredentials = security_dependency) -> CacheStats:
+async def get_cache_stats(request: Request, creds: HTTPBasicCredentials = security_dependency) -> CacheStats:
     """
     Get cache statistics including hit rate, size, etc.
     """
     # Verify admin credentials
-    verify_admin_credentials(creds)
+    await verify_admin_credentials(creds)
     
     # Initialize Redis manager if not already done
     global redis_manager

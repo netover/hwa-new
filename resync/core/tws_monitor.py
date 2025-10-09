@@ -7,7 +7,7 @@ performance metrics collection, and alert generation for anomalies.
 from __future__ import annotations
 
 import asyncio
-import logging
+import structlog
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -15,9 +15,10 @@ from typing import Any, Dict, List, Optional
 
 from resync.core.exceptions import PerformanceError
 from resync.core.interfaces import ITWSClient
-from resync.core.teams_integration import TeamsNotification, get_teams_integration
+from resync.core.teams_integration import get_teams_integration
+from .shared_utils import TeamsNotification, create_job_status_notification
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -89,7 +90,7 @@ class TWSMonitor:
             "circuit_breaker_trips": 3,  # 3 trips per hour
         }
 
-        logger.info("TWSMonitor initialized")
+        logger.info("tws_monitor_initialized")
 
     async def start_monitoring(self) -> None:
         """Start continuous monitoring."""
@@ -99,7 +100,7 @@ class TWSMonitor:
 
         self._is_monitoring = True
         self._monitoring_task = asyncio.create_task(self._monitoring_loop())
-        logger.info("TWS monitoring started")
+        logger.info("tws_monitoring_started")
 
     async def stop_monitoring(self) -> None:
         """Stop continuous monitoring."""
@@ -111,7 +112,7 @@ class TWSMonitor:
             except asyncio.CancelledError:
                 pass
             self._monitoring_task = None
-        logger.info("TWS monitoring stopped")
+        logger.info("tws_monitoring_stopped")
 
     async def _monitoring_loop(self) -> None:
         """Main monitoring loop."""
@@ -123,7 +124,7 @@ class TWSMonitor:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in monitoring loop: {e}", exc_info=True)
+                logger.error("error_in_tws_monitoring_loop", error=str(e), exc_info=True)
                 await asyncio.sleep(10)  # Brief pause on error
 
     async def _collect_metrics(self) -> None:
@@ -166,7 +167,7 @@ class TWSMonitor:
             ]
 
         except Exception as e:
-            logger.error(f"Error collecting metrics: {e}", exc_info=True)
+            logger.error("error_collecting_metrics", error=str(e), exc_info=True)
 
     async def _measure_api_response_time(self) -> float:
         """Measure API response time."""
@@ -274,7 +275,7 @@ class TWSMonitor:
         # Add new alerts
         for alert in alerts_to_add:
             self.alerts.append(alert)
-            logger.warning(f"New alert generated: {alert.message}")
+            logger.warning("new_alert_generated", message=alert.message)
 
             # Send Teams notification for critical alerts
             if alert.severity in ["critical", "high"]:
@@ -302,7 +303,7 @@ class TWSMonitor:
             await teams_integration.send_notification(notification)
 
         except Exception as e:
-            logger.error(f"Failed to send Teams notification for alert: {e}", exc_info=True)
+            logger.error("failed_to_send_teams_notification_for_alert", error=str(e), exc_info=True)
 
     async def monitor_job_status_change(self, job_data: Dict[str, Any], instance_name: str) -> None:
         """Monitor job status changes and send notifications for configured statuses.
@@ -328,25 +329,17 @@ class TWSMonitor:
             job_status = job_data.get("status", "").upper()
             if job_status in [status.upper() for status in teams_integration.config.job_status_filters]:
                 # Send notification
-                notification = TeamsNotification(
-                    title=f"Job Status Alert: {job_data.get('job_name', 'Unknown Job')}",
-                    message=f"Job {job_data.get('job_name', 'Unknown Job')} entered status {job_status}",
-                    severity="error" if job_status == "ABEND" else "warning",
-                    job_id=job_data.get("job_id"),
-                    job_status=job_status,
-                    instance_name=instance_name,
-                    additional_data={
-                        "start_time": job_data.get("start_time"),
-                        "end_time": job_data.get("end_time"),
-                        "duration": job_data.get("duration"),
-                        "owner": job_data.get("owner")
-                    }
+                notification = create_job_status_notification(
+                    job_data, instance_name, teams_integration.config.job_status_filters
                 )
+                
+                if notification is None:
+                    return
 
                 await teams_integration.send_notification(notification)
 
         except Exception as e:
-            logger.error(f"Failed to process job status change for Teams notification: {e}", exc_info=True)
+            logger.error("failed_to_process_job_status_change_for_teams_notification", error=str(e), exc_info=True)
 
     def get_performance_report(self) -> Dict[str, Any]:
         """Get comprehensive performance report.
@@ -409,7 +402,10 @@ class TWSMonitor:
             }
 
         except Exception as e:
-            logger.error(f"Error generating performance report: {e}", exc_info=True)
+            logger.error(
+                "Error generating performance report",
+                error=str(e)
+            )
             raise PerformanceError(f"Failed to generate performance report: {e}") from e
 
     def get_alerts(self, limit: int = 10) -> List[Dict[str, Any]]:

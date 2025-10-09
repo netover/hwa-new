@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, patch
 
 import psutil
 import pytest
+import pytest_asyncio
 
 from resync.core.connection_pool_manager import (
     get_connection_pool_manager,

@@ -1,7 +1,8 @@
 import pytest
 
-from resync.core.exceptions import ParsingError
-from resync.core.utils.json_parser import parse_llm_json_response
+from ..exceptions import ParsingError
+from .json_parser import parse_llm_json_response
+>>>>>>> REPLACE
 
 
 def test_parse_llm_json_success():
