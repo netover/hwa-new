@@ -41,6 +41,104 @@ Thank you for your interest in contributing to Resync! This document outlines ou
   - Use `HTTPException` with descriptive messages
   - Log errors with context using `logger.error()`
 
+### Type Safety Guidelines
+
+#### **Core Principles**
+- **Always use type hints** for function parameters and return values
+- **Prefer native types** (Python 3.9+): `dict[str, Any]` over `Dict[str, Any]`
+- **Use `from __future__ import annotations`** for forward references
+- **Avoid `Any`** unless absolutely necessary - prefer specific types
+- **Leverage Union types**: `str | None` instead of `Optional[str]`
+
+#### **Function Signatures**
+```python
+# ✅ Good
+from __future__ import annotations
+
+def process_data(data: dict[str, Any]) -> list[str]:
+    """Process data and return results."""
+    pass
+
+# ❌ Avoid
+def process_data(data: Dict[str, Any]) -> List[str]:  # Old typing imports
+    pass
+
+def process_data(data):  # No type hints
+    pass
+```
+
+#### **Class Attributes & Methods**
+```python
+class DataProcessor:
+    def __init__(self, config: dict[str, Any]) -> None:
+        self.config = config
+
+    def process(self, input_data: str) -> dict[str, Any]:
+        return {"result": input_data.upper()}
+```
+
+#### **Exception Handling in Endpoints**
+```python
+# ✅ Correct - Raise HTTPException
+async def api_endpoint(request: Request) -> dict[str, str]:
+    try:
+        result = await some_operation()
+        return {"data": result}
+    except Exception as e:
+        logger.error("Operation failed: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# ❌ Incorrect - Return HTTPException
+async def api_endpoint(request: Request) -> dict[str, str]:
+    try:
+        result = await some_operation()
+        return {"data": result}
+    except Exception as e:
+        return HTTPException(status_code=500, detail="Error")  # Wrong!
+```
+
+#### **Type Ignore Comments**
+Use specific error codes when ignoring type checks:
+```python
+# ✅ Specific ignore
+result = external_api_call()  # type: ignore[no-any-return]
+
+# ❌ Vague ignore
+result = external_api_call()  # type: ignore
+```
+
+#### **Import Organization**
+```python
+# Standard library
+import logging
+from typing import Any
+
+# Third-party
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+# Local imports
+from resync.core.exceptions import CustomError
+```
+
+#### **Advanced Patterns**
+- **Generic Types**: Use `TypeVar` for reusable generic functions
+- **Protocol Classes**: Define interfaces with `Protocol`
+- **Literal Types**: Use `Literal["option1", "option2"]` for enums
+- **TypedDict**: For complex dictionary structures
+
+#### **Testing Type Safety**
+- Run `mypy . --ignore-missing-imports` before committing
+- Fix type errors or add justified `# type: ignore[error-code]` comments
+- Maintain strict mode compatibility as a long-term goal
+
+#### **Common Mistakes to Avoid**
+- Returning `Any` from typed functions
+- Using bare `Exception` in catch blocks
+- Missing return type annotations
+- Using old `typing` imports instead of native types
+- Ignoring type errors without justification
+
 ### Commit Messages
 Follow the conventional commits format:
 ```

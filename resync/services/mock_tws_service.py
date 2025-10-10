@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from resync.models.tws import (
     CriticalJob,
@@ -114,7 +114,32 @@ class MockTWSClient:
             True
         """
         await asyncio.sleep(0.1)  # Simulate network delay
-        return self.mock_data.get("connection_status", False)
+        connection_status = self.mock_data.get("connection_status")
+        return bool(connection_status) if connection_status is not None else False
+
+    async def ping(self) -> None:
+        """
+        Performs a lightweight connectivity test for the mock TWS server.
+
+        This method simulates a ping operation for health checks.
+
+        Raises:
+            ConnectionError: If the mock server is configured as unreachable
+            TimeoutError: If the mock server is configured to timeout
+        """
+        await asyncio.sleep(0.05)  # Simulate quick network delay
+
+        # Check mock configuration for ping behavior
+        ping_config = self.mock_data.get("ping_config", {})
+
+        if ping_config.get("timeout", False):
+            raise TimeoutError("Mock TWS server ping timed out")
+
+        if not ping_config.get("reachable", True):
+            raise ConnectionError("Mock TWS server is unreachable")
+
+        # Ping successful for mock
+        return None
 
     async def get_workstations_status(self) -> List[WorkstationStatus]:
         """
@@ -127,10 +152,15 @@ class MockTWSClient:
             Simulates an asynchronous delay with a 0.1 second wait
         """
         await asyncio.sleep(0.1)
-        return [
-            WorkstationStatus(**ws)
-            for ws in self.mock_data.get("workstations_status", [])
-        ]
+        workstations_data = self.mock_data.get("workstations_status", [])
+        workstations = []
+        for ws in workstations_data:
+            if isinstance(ws, dict):
+                try:
+                    workstations.append(WorkstationStatus(**ws))
+                except Exception as e:
+                    logger.warning(f"Failed to create WorkstationStatus from data: {e}")
+        return workstations
 
     async def get_jobs_status(self) -> List[JobStatus]:
         """
@@ -143,7 +173,15 @@ class MockTWSClient:
             Simulates an asynchronous delay with a 0.1 second wait
         """
         await asyncio.sleep(0.1)
-        return [JobStatus(**job) for job in self.mock_data.get("jobs_status", [])]
+        jobs_data = self.mock_data.get("jobs_status", [])
+        jobs = []
+        for job in jobs_data:
+            if isinstance(job, dict):
+                try:
+                    jobs.append(JobStatus(**job))
+                except Exception as e:
+                    logger.warning(f"Failed to create JobStatus from data: {e}")
+        return jobs
 
     async def get_critical_path_status(self) -> List[CriticalJob]:
         """
@@ -156,9 +194,14 @@ class MockTWSClient:
             Simulates an asynchronous delay with a 0.1 second wait
         """
         await asyncio.sleep(0.1)
-        return [
-            CriticalJob(**job) for job in self.mock_data.get("critical_path_status", [])
-        ]
+        critical_jobs = []
+        for job in self.mock_data.get("critical_path_status", []):
+            if isinstance(job, dict):
+                try:
+                    critical_jobs.append(CriticalJob(**job))
+                except Exception as e:
+                    logger.warning(f"Failed to create CriticalJob from data: {e}")
+        return critical_jobs
 
     async def get_system_status(self) -> SystemStatus:
         """
@@ -261,20 +304,20 @@ class MockTWSClient:
         await asyncio.sleep(0.1)  # Simulate network delay
         return [
             {
-                "job_id": job_id,
+                "job_id": str(job_id),
                 "status": "SUCC",
                 "timestamp": "2024-01-01T10:00:00Z",
                 "duration": "5m",
             },
             {
-                "job_id": job_id,
+                "job_id": str(job_id),
                 "status": "RUNNING",
                 "timestamp": "2024-01-01T11:00:00Z",
                 "duration": "2m",
             },
         ]
 
-    async def list_jobs(self, status_filter: str = None) -> List[JobStatus]:
+    async def list_jobs(self, status_filter: Optional[str] = None) -> List[JobStatus]:
         """
         Mocks listing all jobs, optionally filtered by status.
 
@@ -294,6 +337,47 @@ class MockTWSClient:
             jobs = [job for job in jobs if job.status == status_filter]
 
         return jobs
+
+    async def validate_connection(
+        self, 
+        host: str = None, 
+        port: int = None, 
+        user: str = None, 
+        password: str = None
+    ) -> dict[str, bool]:
+        """
+        Mocks validating TWS connection parameters.
+        
+        Args:
+            host: TWS server hostname (optional)
+            port: TWS server port (optional)
+            user: TWS username (optional)
+            password: TWS password (optional)
+            
+        Returns:
+            Dictionary with validation result
+        """
+        # Simulate validation process
+        await asyncio.sleep(0.05)  # Simulate short network delay for validation
+        
+        # Get validation config from mock data or default to success
+        validation_config = self.mock_data.get("validation_config", {})
+        validation_success = validation_config.get("connection_valid", True)
+        
+        if validation_success:
+            return {
+                "valid": True,
+                "message": f"Successfully validated connection to mock TWS server",
+                "host": host or "mock-tws-server",
+                "port": port or 31111
+            }
+        else:
+            return {
+                "valid": False,
+                "message": "Mock TWS connection validation failed as configured",
+                "host": host or "mock-tws-server",
+                "port": port or 31111
+            }
 
     async def close(self) -> None:
         """

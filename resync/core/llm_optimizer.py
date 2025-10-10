@@ -6,12 +6,22 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from typing import Any
 
+import pybreaker
 from resync.core.async_cache import AsyncTTLCache
 from resync.core.llm_monitor import llm_cost_monitor
 from resync.core.utils.llm import call_llm
 from resync.settings import settings
+from resync.core.litellm_init import get_litellm_router
+
+# Define the circuit breaker for LLM API calls
+llm_api_breaker = pybreaker.CircuitBreaker(
+    fail_max=5,
+    reset_timeout=60,
+    exclude=(ValueError,)  # Don't count validation errors
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +53,7 @@ class TWS_LLMOptimizer:
 
         # Model routing based on complexity
         self.model_routing = {
-            "simple": settings.AUDITOR_MODEL_NAME,  # For basic queries
+            "simple": getattr(settings, "AUDITOR_MODEL_NAME", "gpt-3.5-turbo"),  # For basic queries
             "complex": getattr(
                 settings, "AGENT_MODEL_NAME", "gpt-4o"
             ),  # For complex analysis
@@ -79,7 +89,7 @@ class TWS_LLMOptimizer:
 
     def _select_model(self, query: str, context: dict) -> str:
         """
-        Select appropriate model based on query complexity.
+        Select appropriate model based on query complexity and availability.
 
         Args:
             query: User query
@@ -103,6 +113,35 @@ class TWS_LLMOptimizer:
         is_complex = any(
             indicator in query_lower for indicator in complexity_indicators
         )
+        
+        # Check if we have a LiteLLM router available for advanced model selection
+        router = get_litellm_router()
+        if router:
+            # Use LiteLLM's model group feature if available
+            if is_complex:
+                # Try to use a TWS troubleshooting model group if defined
+                try:
+                    from litellm import get_available_models
+                    available_models = get_available_models()
+                    if any("gpt-4" in model for model in available_models):
+                        return self.model_routing["troubleshooting"]
+                    elif any("gpt-4" in model for model in self.model_routing.values()):
+                        return self.model_routing["complex"]
+                except:
+                    pass  # Fall back to normal selection
+            
+            # Check for local model preference
+            if not is_complex and "local" in settings.ENVIRONMENT.lower():
+                # Prioritize local Ollama models for non-complex queries in local environments
+                try:
+                    # Check if Ollama is available
+                    import httpx
+                    with httpx.Client(timeout=5.0) as client:
+                        response = client.get(f"{settings.LLM_ENDPOINT}/api/tags")  # Assuming Ollama endpoint
+                        if response.status_code == 200:
+                            return "ollama/mistral"  # Use local model for simple queries
+                except:
+                    pass  # Ollama not available, continue with normal selection
 
         if is_complex:
             return self.model_routing["complex"]
@@ -117,7 +156,7 @@ class TWS_LLMOptimizer:
         stream: bool = False,
     ) -> Any:
         """
-        Get optimized LLM response with caching and model routing.
+        Get optimized LLM response with LiteLLM integration, caching and model routing.
 
         Args:
             query: User query
@@ -133,7 +172,7 @@ class TWS_LLMOptimizer:
 
         # Generate cache key
         context_str = str(sorted(context.items()))
-        cache_key = hashlib.md5(f"{query}:{context_str}".encode()).hexdigest()
+        cache_key = hashlib.sha256(f"{query}:{context_str}".encode()).hexdigest()
 
         # Check response cache first
         if use_cache:
@@ -169,22 +208,29 @@ class TWS_LLMOptimizer:
         try:
             if stream and "troubleshoot" in template_key:
                 # Use streaming for troubleshooting
-                response = await self._stream_response(prompt, model, context)
+                response = await self.stream_llm_response(prompt, model)
             else:
                 async with llm_api_breaker:
                     response = await call_llm(
                         prompt,
                         model=model,
                         max_tokens=500 if template_key != "troubleshooting" else 1000,
+                        # Pass settings-based configuration to take advantage of LiteLLM features
+                        api_base=getattr(settings, "LLM_ENDPOINT", None),
+                        api_key=settings.LLM_API_KEY if settings.LLM_API_KEY != "your_default_api_key_here" else None
                     )
 
             response_time = time.time() - start_time
 
             # Track costs and performance
+            # Try to get actual token counts from LiteLLM if available
+            input_tokens = len(prompt.split()) * 1.3  # Fallback estimate
+            output_tokens = len(str(response).split()) * 1.3  # Fallback estimate
+
             await llm_cost_monitor.track_request(
                 model=model,
-                input_tokens=len(prompt.split()) * 1.3,  # Rough estimate
-                output_tokens=len(str(response).split()) * 1.3,
+                input_tokens=int(input_tokens),
+                output_tokens=int(output_tokens),
                 response_time=response_time,
                 success=True,
             )
@@ -208,21 +254,64 @@ class TWS_LLMOptimizer:
 
         return response
 
-    async def _stream_response(self, prompt: str, model: str, context: dict) -> Any:
+    async def stream_llm_response(self, prompt: str, model: str = "gpt-4") -> str:
         """
-        Stream LLM response for long outputs.
+        Streams response from LLM with caching.
 
         Args:
-            prompt: LLM prompt
-            model: Model to use
-            context: Additional context
+            prompt: The input prompt
+            model: The LLM model to use
 
         Returns:
             Streamed response
         """
-        # For now, return regular response
-        # TODO: Implement actual streaming when LLM provider supports it
-        return await call_llm(prompt, model=model, max_tokens=1000)
+        # Check cache first
+        cache_key = f"stream_{hash(prompt)}_{model}"
+        cached = await self.response_cache.get(cache_key)
+
+        if cached:
+            logger.info(f"LLM stream cache hit for key: {cache_key}")
+            return cached
+
+        # Use litellm for streaming capability
+        try:
+            from litellm import acompletion
+
+            # Prepare the message in the required format
+            messages = [{"content": prompt, "role": "user"}]
+
+            # Create async generator for streaming
+            response = await acompletion(
+                model=model,
+                messages=messages,
+                stream=True,
+                max_tokens=1000,
+                temperature=0.7,
+                api_base=getattr(settings, "LLM_ENDPOINT", None),
+                api_key=settings.LLM_API_KEY if settings.LLM_API_KEY != "your_default_api_key_here" else None
+            )
+
+            full_response = ""
+            async for chunk in response:
+                if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
+                    content = chunk.choices[0].get('delta', {}).get('content', '')
+                    if content:
+                        full_response += content
+
+            # Cache the result
+            await self.response_cache.set(cache_key, full_response)
+
+            return full_response
+
+        except Exception as e:
+            logger.error(
+                "Error in LLM streaming",
+                error=str(e)
+            )
+            # Fallback to original method (which now also uses LiteLLM)
+            result = await call_llm(prompt, model=model, max_tokens=1000)
+            await self.response_cache.set(cache_key, result)
+            return result
 
     async def clear_caches(self) -> None:
         """Clear both prompt and response caches."""

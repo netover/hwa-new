@@ -9,7 +9,7 @@ import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +161,7 @@ class CircuitBreaker:
         elif new_state == CircuitBreakerState.CLOSED:
             self.stats.failures = 0
 
-        logger.debug(f"Circuit breaker state: {old_state.value} -> {new_state.value}")
+        logger.debug("circuit_breaker_state_changed", old_state=old_state.value, new_state=new_state.value)
 
     def _should_attempt_reset(self) -> bool:
         """Check if circuit breaker should attempt to reset."""

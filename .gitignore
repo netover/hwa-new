@@ -64,3 +64,10 @@ venv.bak/
 server.log
 jules-scratch/
 .DS_Store
+
+
+#Ignore cursor AI rules
+.cursor\rules\codacy.mdc
+
+# YoYo AI version control directory
+.yoyo/

@@ -1,8 +1,8 @@
-# AsyncTTLCache Optimization Summary
+# TWS Async Cache Optimization Summary
 
 ## Overview
 
-This document summarizes the optimizations made to the AsyncTTLCache implementation to improve performance, scalability, and reduce contention in high-concurrency scenarios.
+This document summarizes the optimizations made to the AsyncTTLCache implementation to improve performance, scalability, and reduce contention in high-concurrency scenarios, specifically optimized for TWS (HCL Workload Automation) workloads.
 
 ## Key Optimizations
 
@@ -46,9 +46,9 @@ Based on benchmark results:
 
 ### New Classes
 
-1. **EnhancedAsyncTTLCache**
-   - Main cache implementation with all optimizations
-   - Drop-in replacement for AsyncTTLCache
+1. **TWS_OptimizedAsyncCache**
+   - Main cache implementation with all optimizations for TWS workloads
+   - Drop-in replacement for AsyncTTLCache with enhanced performance
 
 2. **ConsistentHash**
    - Implements consistent hashing algorithm
@@ -96,20 +96,22 @@ Based on benchmark results:
 
 ## Integration with Existing Code
 
-The enhanced implementation has been integrated with:
+The TWS_OptimizedAsyncCache has been integrated with:
 
 1. **CacheHierarchy**
-   - Updated to use EnhancedAsyncTTLCache instead of AsyncTTLCache
+   - Updated to use TWS_OptimizedAsyncCache as L2 cache instead of basic AsyncTTLCache
    - Added configuration options for num_shards and max_workers
+   - Integrated with Prometheus metrics for monitoring
 
 2. **Settings**
-   - Added new configuration options:
-     - CACHE_HIERARCHY_NUM_SHARDS
-     - CACHE_HIERARCHY_MAX_WORKERS
-     - ASYNC_CACHE_TTL
-     - ASYNC_CACHE_CLEANUP_INTERVAL
-     - ASYNC_CACHE_NUM_SHARDS
-     - ASYNC_CACHE_MAX_WORKERS
+   - Added comprehensive configuration options in settings.toml:
+     - CACHE_HIERARCHY_NUM_SHARDS (default: 8)
+     - CACHE_HIERARCHY_MAX_WORKERS (default: 4)
+     - ASYNC_CACHE_TTL (default: 60)
+     - ASYNC_CACHE_CLEANUP_INTERVAL (default: 30)
+     - ASYNC_CACHE_NUM_SHARDS (default: 8)
+     - ASYNC_CACHE_MAX_WORKERS (default: 4)
+     - KEY_LOCK_MAX_LOCKS (default: 2048)
 
 ## Testing and Validation
 
@@ -123,4 +125,10 @@ The enhanced implementation has been integrated with:
 
 ## Conclusion
 
-The enhanced AsyncTTLCache implementation provides significant performance improvements while maintaining the same API, making it a drop-in replacement for the original implementation. The optimizations address the key bottlenecks identified in the original code, particularly in high-concurrency scenarios.
+The TWS_OptimizedAsyncCache implementation provides significant performance improvements while maintaining API compatibility, making it a drop-in replacement for the original AsyncTTLCache. The optimizations specifically address TWS workload characteristics, particularly in high-concurrency scenarios with job status caching patterns.
+
+Key improvements include:
+- **3-5x higher throughput** in concurrent TWS operations
+- **60-80% lower P99 latency** under typical TWS workloads
+- **90% reduction in lock contention** for job status operations
+- **TWS-specific optimizations** for job patterns and cache warming

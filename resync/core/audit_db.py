@@ -1,7 +1,9 @@
 import logging
 import sqlite3
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
+from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -22,6 +24,33 @@ def get_db_connection() -> sqlite3.Connection:
 
     conn.row_factory = sqlite3.Row  # Access columns by name
     return conn
+
+@asynccontextmanager
+async def get_db_connection_pool():
+    """
+    Get a database connection from the connection pool.
+    Falls back to direct connection if pool is not available.
+
+    Yields:
+        Database connection (SQLAlchemy Engine)
+    """
+    try:
+        pool_manager = await get_connection_pool_manager()
+        db_pool = pool_manager.get_pool("database")
+
+        if db_pool:
+            # Use connection from pool
+            async with db_pool.get_connection() as engine:
+                yield engine
+        else:
+            # Fallback to direct SQLite connection
+            logger.warning("Database connection pool not available, using direct connection")
+            yield get_db_connection()
+
+    except Exception as e:
+        logger.error("failed_to_get_database_connection_from_pool", error=str(e))
+        # Fallback to direct connection on any error
+        yield get_db_connection()
 
 
 def initialize_database() -> None:
@@ -44,14 +73,93 @@ def initialize_database() -> None:
         """
         )
         conn.commit()
-    logger.info(f"Database initialized at {DATABASE_PATH}")
+    logger.info("database_initialized", database_path=DATABASE_PATH)
+
+
+def _validate_audit_record(memory: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Comprehensive input validation for audit records based on fuzzing failures.
+    """
+    if not isinstance(memory, dict):
+        raise TypeError("Memory must be a dictionary")
+
+    if memory is None:
+        raise ValueError("Memory cannot be None")
+
+    validated = {}
+
+    # ID VALIDATION - CRITICAL FIELD
+    memory_id = memory.get("id")
+    if memory_id is None:
+        raise ValueError("Memory ID is required")
+    elif not isinstance(memory_id, (str, int)):
+        raise TypeError("Memory ID must be string or int")
+    else:
+        str_id = str(memory_id)
+        if len(str_id) == 0:
+            raise ValueError("Memory ID cannot be empty")
+        if len(str_id) > 255:
+            raise ValueError("Memory ID too long (max 255)")
+        if "\x00" in str_id:
+            raise ValueError("Memory ID cannot contain null bytes")
+        validated["id"] = str_id
+
+    # USER QUERY VALIDATION
+    user_query = memory.get("user_query")
+    if user_query is not None:
+        if not isinstance(user_query, str):
+            raise TypeError("User query must be string")
+        if len(user_query) > 10000:
+            raise ValueError("User query too long (max 10000)")
+        if "\x00" in user_query:
+            raise ValueError("User query cannot contain null bytes")
+        validated["user_query"] = user_query
+    else:
+        raise ValueError("User query is required")
+
+    # AGENT RESPONSE VALIDATION
+    agent_response = memory.get("agent_response")
+    if agent_response is not None:
+        if not isinstance(agent_response, str):
+            raise TypeError("Agent response must be string")
+        if len(agent_response) > 50000:
+            raise ValueError("Agent response too long (max 50000)")
+        if "\x00" in agent_response:
+            raise ValueError("Agent response cannot contain null bytes")
+        validated["agent_response"] = agent_response
+    else:
+        raise ValueError("Agent response is required")
+
+    # OPTIONAL FIELDS WITH VALIDATION
+    ia_audit_reason = memory.get("ia_audit_reason")
+    if ia_audit_reason is not None:
+        if not isinstance(ia_audit_reason, str):
+            raise TypeError("IA audit reason must be string")
+        if len(ia_audit_reason) > 1000:
+            raise ValueError("IA audit reason too long (max 1000)")
+        validated["ia_audit_reason"] = ia_audit_reason
+
+    ia_audit_confidence = memory.get("ia_audit_confidence")
+    if ia_audit_confidence is not None:
+        try:
+            confidence_float = float(ia_audit_confidence)
+            if not (0.0 <= confidence_float <= 1.0):
+                raise ValueError("IA audit confidence must be between 0.0 and 1.0")
+            validated["ia_audit_confidence"] = confidence_float
+        except (ValueError, TypeError):
+            raise ValueError("IA audit confidence must be a number between 0.0 and 1.0")
+
+    return validated
 
 
 def add_audit_record(memory: Dict[str, Any]) -> Optional[int]:
     """
-    Adds a new memory to the audit queue for review.
+    Adds a new memory to the audit queue for review with input validation.
     Returns the ID of the new record or None if already exists.
     """
+    # FUZZING-HARDENED INPUT VALIDATION
+    validated_memory = _validate_audit_record(memory)
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -63,20 +171,21 @@ def add_audit_record(memory: Dict[str, Any]) -> Optional[int]:
                 ) VALUES (?, ?, ?, ?, ?, ?)
             """,
                 (
-                    memory["id"],
-                    memory["user_query"],
-                    memory["agent_response"],
-                    memory.get("ia_audit_reason"),
-                    memory.get("ia_audit_confidence"),
+                    validated_memory["id"],
+                    validated_memory["user_query"],
+                    validated_memory["agent_response"],
+                    validated_memory.get("ia_audit_reason"),
+                    validated_memory.get("ia_audit_confidence"),
                     "pending",
                 ),
             )
             conn.commit()
-            logger.debug("Added memory %s to audit queue.", memory["id"])
+            logger.debug("Added memory %s to audit queue.", validated_memory["id"])
             return cursor.lastrowid
         except sqlite3.IntegrityError:
             logger.debug(
-                "Memory %s already exists in audit queue. Skipping.", memory["id"]
+                "Memory %s already exists in audit queue. Skipping.",
+                validated_memory["id"],
             )
             return None
         except Exception as e:

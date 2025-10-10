@@ -5,7 +5,12 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from resync.core.exceptions import NetworkError, ProcessingError
+from resync.core.exceptions import (
+    ToolConnectionError,
+    ToolExecutionError,
+    ToolProcessingError,
+    TWSConnectionError,
+)
 from resync.services.tws_service import OptimizedTWSClient
 
 # --- Logging Setup ---
@@ -18,15 +23,13 @@ class TWSToolReadOnly(BaseModel):
     This prevents each tool from creating its own client instance.
     """
 
-    # The client is optional and will be injected by the AgentManager
     tws_client: Optional[OptimizedTWSClient] = Field(
         default=None,
-        exclude=True,  # Exclude from Pydantic's model representation
+        exclude=True,
         description="The TWS client instance, injected at runtime.",
     )
 
     class Config:
-        # Allow arbitrary types like the OptimizedTWSClient
         arbitrary_types_allowed = True
 
 
@@ -36,22 +39,14 @@ class TWSStatusTool(TWSToolReadOnly):
     async def get_tws_status(self) -> str:
         """
         Fetches the current status of TWS workstations and jobs.
-
-        This tool provides a high-level overview of the environment's health,
-        summarizing the state of all monitored components.
-
-        Returns:
-            A string summarizing the status of workstations and jobs.
         """
         if not self.tws_client:
-            logger.error("TWS client not available for TWSStatusTool.")
-            return "Erro: Cliente TWS não configurado."
+            raise ToolExecutionError("TWS client not available for TWSStatusTool.")
 
         try:
             logger.info("TWSStatusTool: Fetching system status.")
             status = await self.tws_client.get_system_status()
 
-            # Format the output for the LLM
             workstation_summary = ", ".join(
                 [f"{ws.name} ({ws.status})" for ws in status.workstations]
             )
@@ -67,21 +62,16 @@ class TWSStatusTool(TWSToolReadOnly):
                 f"- Workstations: {workstation_summary or 'Nenhuma encontrada.'}\n"
                 f"- Jobs: {job_summary or 'Nenhum encontrado.'}"
             )
-        except ConnectionError as e:
-            logger.error("Connection error in TWSStatusTool: %s", e, exc_info=True)
-            return f"Erro de conexão ao obter o status do TWS: {e}"
-        except TimeoutError as e:
-            logger.error("Timeout error in TWSStatusTool: %s", e, exc_info=True)
-            return f"Timeout ao obter o status do TWS: {e}"
-        except NetworkError as e:
-            logger.error("Network error in TWSStatusTool: %s", e, exc_info=True)
-            return f"Erro de rede ao obter o status do TWS: {e}"
+        except TWSConnectionError as e:
+            logger.error("TWS connection error in TWSStatusTool: %s", e, exc_info=True)
+            raise ToolConnectionError("Falha de comunicação com o TWS ao obter o status do sistema.") from e
         except ValueError as e:
             logger.error("Value error in TWSStatusTool: %s", e, exc_info=True)
-            return f"Erro de dados ao obter o status do TWS: {e}"
+            raise ToolProcessingError("Erro ao processar os dados de status do TWS.") from e
         except Exception as e:
             logger.error("Unexpected error in TWSStatusTool: %s", e, exc_info=True)
-            return f"Erro inesperado ao obter o status do TWS: {e}"
+            # Catch-all for other unexpected errors
+            raise ToolExecutionError("Ocorreu um erro inesperado ao obter o status do TWS.") from e
 
 
 class TWSTroubleshootingTool(TWSToolReadOnly):
@@ -90,16 +80,9 @@ class TWSTroubleshootingTool(TWSToolReadOnly):
     async def analyze_failures(self) -> str:
         """
         Analyzes failed jobs and down workstations to identify root causes.
-
-        This tool inspects jobs in an 'ABEND' (abnormally ended) state and
-        workstations in a 'DOWN' state, providing a diagnostic summary.
-
-        Returns:
-            A string with a diagnostic analysis of TWS failures.
         """
         if not self.tws_client:
-            logger.error("TWS client not available for TWSTroubleshootingTool.")
-            return "Erro: Cliente TWS não configurado."
+            raise ToolExecutionError("TWS client not available for TWSTroubleshootingTool.")
 
         try:
             logger.info("TWSTroubleshootingTool: Fetching system status for analysis.")
@@ -111,64 +94,33 @@ class TWSTroubleshootingTool(TWSToolReadOnly):
             ]
 
             if not failed_jobs and not down_workstations:
-                return (
-                    "Nenhuma falha crítica encontrada. O ambiente TWS parece estável."
-                )
+                return "Nenhuma falha crítica encontrada. O ambiente TWS parece estável."
 
             analysis = "Análise de Problemas no TWS:\n"
             if failed_jobs:
                 analysis += f"- Jobs com Falha ({len(failed_jobs)}): "
-                analysis += ", ".join(
-                    [f"{j.name} (workstation: {j.workstation})" for j in failed_jobs]
-                )
+                analysis += ", ".join([f"{j.name} (workstation: {j.workstation})" for j in failed_jobs])
                 analysis += "\n"
 
             if down_workstations:
                 analysis += f"- Workstations com Problemas ({len(down_workstations)}): "
-                analysis += ", ".join(
-                    [f"{w.name} (status: {w.status})" for w in down_workstations]
-                )
+                analysis += ", ".join([f"{w.name} (status: {w.status})" for w in down_workstations])
                 analysis += "\n"
 
             return analysis
 
-        except ConnectionError as e:
-            logger.error(
-                "Connection error in TWSTroubleshootingTool: %s", e, exc_info=True
-            )
-            return f"Erro de conexão ao analisar as falhas do TWS: {e}"
-        except TimeoutError as e:
-            logger.error(
-                "Timeout error in TWSTroubleshootingTool: %s", e, exc_info=True
-            )
-            return f"Timeout ao analisar as falhas do TWS: {e}"
-        except NetworkError as e:
-            logger.error(
-                "Network error in TWSTroubleshootingTool: %s", e, exc_info=True
-            )
-            return f"Erro de rede ao analisar as falhas do TWS: {e}"
-        except ValueError as e:
-            logger.error("Value error in TWSTroubleshootingTool: %s", e, exc_info=True)
-            return f"Erro de dados ao analisar as falhas do TWS: {e}"
-        except AttributeError as e:
-            logger.error(
-                "Attribute error in TWSTroubleshootingTool: %s", e, exc_info=True
-            )
-            return f"Erro de atributo ao analisar as falhas do TWS: {e}"
-        except ProcessingError as e:
-            logger.error(
-                "Processing error in TWSTroubleshootingTool: %s", e, exc_info=True
-            )
-            return f"Erro de processamento ao analisar as falhas do TWS: {e}"
+        except TWSConnectionError as e:
+            logger.error("TWS connection error in TWSTroubleshootingTool: %s", e, exc_info=True)
+            raise ToolConnectionError("Falha de comunicação com o TWS ao analisar as falhas.") from e
+        except (ValueError, AttributeError) as e:
+            logger.error("Data or processing error in TWSTroubleshootingTool: %s", e, exc_info=True)
+            raise ToolProcessingError("Erro ao processar os dados de falhas do TWS.") from e
         except Exception as e:
-            logger.error(
-                "Unexpected error in TWSTroubleshootingTool: %s", e, exc_info=True
-            )
-            return f"Erro inesperado ao analisar as falhas do TWS: {e}"
+            logger.error("Unexpected error in TWSTroubleshootingTool: %s", e, exc_info=True)
+            raise ToolExecutionError("Ocorreu um erro inesperado ao analisar as falhas do TWS.") from e
 
 
 # --- Tool Instantiation ---
 # Create single, reusable instances of the tools.
 tws_status_tool = TWSStatusTool()
-
 tws_troubleshooting_tool = TWSTroubleshootingTool()

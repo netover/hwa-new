@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 import random
 import statistics
 import time
-from typing import Any, Dict
+from typing import Any
 
 from resync.core.async_cache import AsyncTTLCache
 from resync.core.enhanced_async_cache import TWS_OptimizedAsyncCache
@@ -16,11 +18,11 @@ class CacheBenchmark:
     implementations and compare their results.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the benchmark tool."""
-        self.results: Dict[str, Dict[str, Any]] = {}
+        self.results: dict[str, dict[str, Any]] = {}
 
-    async def setup_caches(self, num_shards: int = 16):
+    async def setup_caches(self, num_shards: int = 16) -> tuple[Any, Any]:
         """
         Set up cache instances for benchmarking.
 
@@ -46,7 +48,7 @@ class CacheBenchmark:
         cache: Any,
         operation: str,
         num_operations: int = 10000,
-    ) -> Dict[str, float]:
+    ) -> dict[str, Any]:
         """
         Run benchmark for a single operation type.
 
@@ -101,7 +103,7 @@ class CacheBenchmark:
         num_workers: int = 10,
         operations_per_worker: int = 1000,
         read_ratio: float = 0.7,
-    ) -> Dict[str, float]:
+    ) -> dict[str, Any]:
         """
         Run benchmark with concurrent workers.
 
@@ -120,7 +122,7 @@ class CacheBenchmark:
             await cache.set(f"concurrent_key_{i}", f"concurrent_value_{i}")
 
         # Define worker function
-        async def worker(worker_id: int):
+        async def worker(worker_id: int) -> list[float]:
             latencies = []
             for i in range(operations_per_worker):
                 key = f"concurrent_key_{random.randint(0, operations_per_worker-1)}"
@@ -174,7 +176,7 @@ class CacheBenchmark:
         cache: Any,
         num_entries: int = 100000,
         expired_ratio: float = 0.5,
-    ) -> Dict[str, float]:
+    ) -> dict[str, Any]:
         """
         Benchmark cache cleanup performance.
 
@@ -215,7 +217,7 @@ class CacheBenchmark:
             "cache": cache_name,
         }
 
-    async def run_all_benchmarks(self) -> Dict[str, Dict[str, Any]]:
+    async def run_all_benchmarks(self) -> dict[str, dict[str, Any]]:
         """
         Run all benchmarks and return results.
 
@@ -379,7 +381,7 @@ class CacheBenchmark:
         )
 
 
-async def main():
+async def main() -> None:
     """Run the benchmark suite."""
     print("Starting cache benchmark...")
     benchmark = CacheBenchmark()

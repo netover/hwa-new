@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # --- Common Models ---
@@ -17,6 +17,29 @@ class BaseModelWithTime(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+    # Security fields
+    captcha_token: Optional[str] = None
+    client_fingerprint: Optional[str] = None
+    session_token: Optional[str] = None
+
+
+class UserRegistrationRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+    # Security fields
+    captcha_token: Optional[str] = None
+    terms_accepted: bool = False
+    client_fingerprint: Optional[str] = None
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str
+    # Security fields
+    session_token: Optional[str] = None
+    client_fingerprint: Optional[str] = None
 
 
 class Token(BaseModel):
@@ -60,7 +83,7 @@ class AgentConfig(BaseModel):
     name: str
     type: AgentType
     description: Optional[str] = None
-    configuration: Dict[str, Any] = {}
+    configuration: Dict[str, Any] = Field(default_factory=dict)
 
 
 # --- System Monitoring Models ---

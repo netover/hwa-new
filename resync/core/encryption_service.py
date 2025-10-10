@@ -2,24 +2,30 @@
 Encryption service for Resync core.
 """
 
-import logging
 import base64
+import logging
 import os
+from typing import Optional
+
 from cryptography.fernet import Fernet
+
+logger = logging.getLogger(__name__)
 
 
 class EncryptionService:
     """Simple encryption service for sensitive data handling."""
 
-    def __init__(self, key: bytes = None):
+    def __init__(self, key: Optional[bytes] = None):
         # In production, the key should be stored securely
         if key:
             self.key = key
-        elif os.getenv("ENCRYPTION_KEY"):
-            self.key = os.getenv("ENCRYPTION_KEY").encode()
         else:
-            # This is still not ideal in production - key should be provided
-            self.key = Fernet.generate_key()
+            env_key = os.getenv("ENCRYPTION_KEY")
+            if env_key:
+                self.key = env_key.encode()
+            else:
+                # This is still not ideal in production - key should be provided
+                self.key = Fernet.generate_key()
         self.cipher_suite = Fernet(self.key)
 
     @staticmethod
@@ -40,9 +46,10 @@ class EncryptionService:
             encrypted_bytes = base64.b64decode(encrypted_data.encode())
             decrypted_data = self.cipher_suite.decrypt(encrypted_bytes)
             return decrypted_data.decode()
-        except Exception:
-            # If decryption fails, return the original data
-            return encrypted_data
+        except Exception as e:
+            # If decryption fails, raise an exception instead of returning original data
+            logger.error("decryption_failed", encrypted_data_preview=encrypted_data[:50], error=str(e))
+            raise ValueError(f"Decryption failed: {str(e)}") from e
 
 
 # Global instance

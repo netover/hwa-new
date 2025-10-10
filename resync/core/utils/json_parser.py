@@ -1,353 +1,104 @@
-"""
-Robust JSON parsing utilities for LLM responses.
-
-This module provides enhanced JSON parsing capabilities with multiple fallback strategies
-for handling malformed or inconsistent JSON responses from language models.
-"""
-
+# resync/core/utils/json_parser.py
 import json
 import logging
-import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
-try:
-    import orjson
-
-    ORJSON_AVAILABLE = True
-except ImportError:
-    ORJSON_AVAILABLE = False
-
-from resync.core.exceptions import DataParsingError
+from ..exceptions import ParsingError
+from .common_error_handlers import handle_parsing_errors
 
 logger = logging.getLogger(__name__)
 
-
-class JSONParseError(DataParsingError):
-    """Exception raised when JSON parsing fails."""
-
-
-class RobustJSONParser:
-    """
-    A robust JSON parser designed specifically for LLM responses.
-
-    Features:
-    - Multiple parsing strategies with fallbacks
-    - Fast parsing using orjson when available
-    - Comprehensive error handling and logging
-    - Support for various malformed JSON formats
-    """
-
-    def __init__(self) -> None:
-        """Initialize the parser with regex patterns for JSON extraction."""
-        # Common patterns for JSON in LLM responses
-        self.json_patterns = [
-            r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}",  # Simple JSON object
-            r'\{(?:[^{}]|"(?:[^"\\]|\\.)*"|[^{}]*\{[^{}]*\}[^{}]*)*\}',  # Complex JSON with nested objects
-            r"\{[^{}]*\}",  # Basic object pattern
-            r"\{.*\}",  # Greedy pattern as last resort
-        ]
-
-        # Common prefixes/suffixes to strip
-        self.strip_prefixes = [
-            "```json\n",
-            "```json",
-            "json\n",
-            "```\n",
-            "Here is the JSON:\n",
-            "JSON:\n",
-            "Response:\n",
-        ]
-        self.strip_suffixes = ["\n```", "```", "\n", " "]
-
-    def clean_llm_response(self, response: str) -> str:
-        """
-        Clean LLM response by removing common prefixes/suffixes and normalizing.
-
-        Args:
-            response: Raw LLM response text.
-
-        Returns:
-            Cleaned response text.
-        """
-        cleaned = response.strip()
-
-        # Remove common markdown formatting
-        if cleaned.startswith("```"):
-            cleaned = cleaned.replace("```json", "").replace("```", "").strip()
-
-        # Remove common prefixes
-        for prefix in self.strip_prefixes:
-            if cleaned.startswith(prefix):
-                cleaned = cleaned[len(prefix) :].strip()
-                break
-
-        # Remove common suffixes
-        for suffix in self.strip_suffixes:
-            if cleaned.endswith(suffix):
-                cleaned = cleaned[: -len(suffix)].strip()
-                break
-
-        return cleaned
-
-    def extract_json_from_text(self, text: str) -> List[str]:
-        """
-        Extract all JSON-like strings from text using multiple regex patterns.
-
-        Args:
-            text: Text to search for JSON objects.
-
-        Returns:
-            List of potential JSON strings found in the text.
-        """
-        candidates = []
-
-        for pattern in self.json_patterns:
-            matches = re.findall(pattern, text, re.DOTALL)
-            candidates.extend(matches)
-
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_candidates = []
-        for candidate in candidates:
-            if candidate not in seen:
-                seen.add(candidate)
-                unique_candidates.append(candidate)
-
-        return unique_candidates
-
-    def parse_json_safe(
-        self, json_str: str
-    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-        """
-        Safely parse a JSON string with comprehensive error handling.
-
-        Args:
-            json_str: JSON string to parse.
-
-        Returns:
-            Tuple of (parsed_dict, error_message). Parsed dict is None if parsing failed.
-        """
-        if not json_str or not json_str.strip():
-            return None, "Empty JSON string"
-
-        try:
-            # Try orjson first if available (faster)
-            if ORJSON_AVAILABLE:
-                try:
-                    return orjson.loads(json_str), None
-                except orjson.JSONDecodeError:
-                    pass
-
-            # Fall back to standard json library
-            return json.loads(json_str), None
-
-        except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            error_msg = f"JSON decode error: {str(e)}"
-            logger.debug(
-                f"Failed to parse JSON: {error_msg}. Input: {json_str[:100]}..."
-            )
-            return None, error_msg
-
-    def try_fix_common_json_issues(self, json_str: str) -> List[str]:
-        """
-        Attempt to fix common JSON formatting issues.
-
-        Args:
-            json_str: Malformed JSON string.
-
-        Returns:
-            List of potentially fixed JSON strings to try.
-        """
-        fixes = [json_str]  # Original first
-
-        # Fix trailing commas
-        fixed = re.sub(r",(\s*[}\]])", r"\1", json_str)
-        if fixed != json_str:
-            fixes.append(fixed)
-
-        # Fix single quotes (though this might break some strings)
-        if "'" in json_str and json_str.count("'") > json_str.count('"'):
-            fixed = json_str.replace("'", '"')
-            fixes.append(fixed)
-
-        # Fix missing quotes around keys
-        fixed = re.sub(r"(\w+):", r'"\1":', json_str)
-        if fixed != json_str:
-            fixes.append(fixed)
-
-        # Try to balance braces if they're unbalanced
-        open_braces = json_str.count("{")
-        close_braces = json_str.count("}")
-        if open_braces > close_braces:
-            fixes.append(json_str + "}")
-        elif close_braces > open_braces:
-            fixes.append("{" + json_str)
-
-        return fixes
-
-    def extract_and_parse_json(
-        self, text: str, max_candidates: int = 5
-    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-        """
-        Extract and parse JSON from LLM response with multiple fallback strategies.
-
-        Args:
-            text: Text containing JSON response from LLM.
-            max_candidates: Maximum number of JSON candidates to try.
-
-        Returns:
-            Tuple of (parsed_json, error_message). Returns None, error_msg if all parsing fails.
-        """
-        if not text or not text.strip():
-            logger.debug("JSON parsing failed: Empty response text")
-            return None, "Empty response text"
-
-        # Clean the response
-        cleaned_text = self.clean_llm_response(text)
-        if not cleaned_text:
-            logger.debug("JSON parsing failed: Response became empty after cleaning")
-            return None, "Response became empty after cleaning"
-
-        # Try parsing the cleaned text directly first
-        parsed, error = self.parse_json_safe(cleaned_text)
-        if parsed is not None:
-            logger.debug("JSON parsing succeeded with direct parsing")
-            return parsed, None
-
-        # Extract JSON candidates from the cleaned text
-        candidates = self.extract_json_from_text(cleaned_text)
-
-        # Limit candidates to avoid excessive processing
-        candidates = candidates[:max_candidates]
-        logger.debug(f"Extracted {len(candidates)} JSON candidates from response")
-
-        # Try each candidate
-        for i, candidate in enumerate(candidates):
-            logger.debug(f"Trying candidate {i + 1}: {candidate[:100]}...")
-            # Try the candidate as-is
-            parsed, error = self.parse_json_safe(candidate)
-            if parsed is not None:
-                logger.debug(f"JSON parsing succeeded with candidate {i + 1}")
-                return parsed, None
-
-            # Try to fix common issues
-            fixed_candidates = self.try_fix_common_json_issues(candidate)
-            for j, fixed in enumerate(fixed_candidates):
-                if fixed != candidate:  # Only try if different
-                    logger.debug(
-                        f"Trying fixed candidate {i + 1}.{j + 1}: {fixed[:100]}..."
-                    )
-                    parsed, error = self.parse_json_safe(fixed)
-                    if parsed is not None:
-                        logger.debug(
-                            f"JSON parsing succeeded with fixed candidate {i + 1}.{j + 1}"
-                        )
-                        return parsed, None
-
-        # If all parsing failed, return the best error message
-        error_msg = f"Failed to extract valid JSON from response. Tried {len(candidates)} candidates."
-        logger.warning(
-            f"JSON parsing failed: {error_msg}. Original text: {text[:200]}..."
-        )
-        return None, error_msg
-
-    def parse_with_schema_validation(
-        self, text: str, required_keys: List[str]
-    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-        """
-        Parse JSON and validate it contains required keys.
-
-        Args:
-            text: Text containing JSON response from LLM.
-            required_keys: List of keys that must be present in the JSON.
-
-        Returns:
-            Tuple of (parsed_json, error_message).
-        """
-        parsed, error = self.extract_and_parse_json(text)
-        if parsed is None:
-            logger.debug(f"Schema validation failed: Could not parse JSON - {error}")
-            return None, error
-
-        missing_keys = []
-        for key in required_keys:
-            if key not in parsed:
-                missing_keys.append(key)
-
-        if missing_keys:
-            error_msg = f"Missing required keys: {missing_keys}"
-            logger.warning(
-                f"Schema validation failed: {error_msg}. Parsed keys: {list(parsed.keys())}"
-            )
-            return None, error_msg
-
-        logger.debug("Schema validation succeeded: All required keys present")
-        return parsed, None
+# Security constants
+MAX_JSON_SIZE = 1024 * 1024  # 1MB limit for JSON content
+MAX_TEXT_SIZE = 10 * 1024 * 1024  # 10MB limit for input text
 
 
-# Global instance for convenience
-json_parser = RobustJSONParser()
-
-
+@handle_parsing_errors("Failed to parse LLM JSON response")
 def parse_llm_json_response(
-    response: str, required_keys: Optional[List[str]] = None
+    text: str,
+    required_keys: List[str],
+    max_size: int = MAX_JSON_SIZE,
+    strict: bool = True
 ) -> Dict[str, Any]:
     """
-    Convenience function to parse JSON from LLM response.
+    Extracts, parses, and validates a JSON object from a string,
+    often from an LLM response.
+
+    This function includes security measures to prevent DoS attacks
+    through large input processing.
 
     Args:
-        response: Raw LLM response text.
-        required_keys: Optional list of keys that must be present.
-
-    Returns:
-        Parsed JSON dictionary.
+        text: The string potentially containing a JSON object.
+        required_keys: A list of keys that must be present in the JSON.
+        max_size: Maximum allowed size for JSON string (security limit).
+        strict: If True, raise on extra keys not in required_keys.
 
     Raises:
-        JSONParseError: If parsing fails or required keys are missing.
-    """
-    if required_keys:
-        parsed, error = json_parser.parse_with_schema_validation(
-            response, required_keys
-        )
-    else:
-        parsed, error = json_parser.extract_and_parse_json(response)
-
-    if parsed is None:
-        raise JSONParseError(f"Failed to parse JSON from LLM response: {error}")
-
-    return parsed
-
-
-def safe_parse_llm_json_response(
-    response: str, required_keys: Optional[List[str]] = None
-) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    """
-    Safe version of parse_llm_json_response that doesn't raise exceptions.
-
-    Args:
-        response: Raw LLM response text.
-        required_keys: Optional list of keys that must be present.
+        ParsingError: If the JSON is malformed, cannot be found, is missing
+                      required keys, or exceeds size limits.
+        ValueError: If input exceeds max_size.
 
     Returns:
-        Tuple of (parsed_json, error_message).
+        The parsed and validated JSON data as a dictionary.
     """
+    # Security: Check input size limits
+    if len(text) > MAX_TEXT_SIZE:
+        raise ParsingError(f"Input text exceeds maximum size of {MAX_TEXT_SIZE} bytes")
+
+    if len(text.encode('utf-8')) > MAX_TEXT_SIZE:
+        raise ParsingError(f"Input text exceeds maximum size of {MAX_TEXT_SIZE} bytes")
+
+    # Sanitization: Remove null bytes and other potentially harmful characters
+    text = text.replace('\x00', '').replace('\ufeff', '')
+
+    # Basic cleanup: find the first '{' and last '}'
+    start_index = text.find("{")
+    end_index = text.rfind("}")
+    if start_index == -1 or end_index == -1 or start_index > end_index:
+        raise ParsingError("No valid JSON object found in the text.")
+
+    json_str = text[start_index : end_index + 1]
+
+    # Security: Check JSON string size
+    if len(json_str) > max_size:
+        raise ParsingError(f"JSON content exceeds maximum size of {max_size} bytes")
+
     try:
-        if required_keys:
-            return json_parser.parse_with_schema_validation(response, required_keys)
-        else:
-            return json_parser.extract_and_parse_json(response)
-    except JSONParseError as e:
-        logger.warning("JSON parse error in safe_parse_llm_json_response: %s", e)
-        return None, str(e)
-    except ValueError as e:
-        logger.warning("Value error in safe_parse_llm_json_response: %s", e)
-        return None, f"Value error: {str(e)}"
-    except TypeError as e:
-        logger.warning("Type error in safe_parse_llm_json_response: %s", e)
-        return None, f"Type error: {str(e)}"
-    except KeyError as e:
-        logger.warning("Key error in safe_parse_llm_json_response: %s", e)
-        return None, f"Missing key: {str(e)}"
-    except Exception as e:
-        logger.error("Unexpected error in safe_parse_llm_json_response: %s", e)
-        return None, f"Unexpected error: {str(e)}"
+        data = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logger.warning("JSON decode error", error=str(e), json_length=len(json_str))
+        raise ParsingError(f"Invalid JSON format: {str(e)}")
+
+    # Validate that result is a dictionary
+    if not isinstance(data, dict):
+        raise ParsingError("Parsed JSON is not an object (dictionary)")
+
+    # Check for required keys
+    missing_keys = [key for key in required_keys if key not in data]
+    if missing_keys:
+        raise ParsingError(
+            f"JSON is missing required keys: {', '.join(missing_keys)}"
+        )
+
+    # Optional strict validation: ensure no extra keys
+    if strict and required_keys:
+        extra_keys = [key for key in data.keys() if key not in required_keys]
+        if extra_keys:
+            raise ParsingError(
+                f"JSON contains unexpected keys in strict mode: {', '.join(extra_keys)}"
+            )
+
+    # Security: Prevent extremely deep nesting (basic protection)
+    def check_nesting(obj: Any, max_depth: int = 10, current_depth: int = 0) -> None:
+        if current_depth > max_depth:
+            raise ParsingError(f"JSON nesting depth exceeds maximum of {max_depth}")
+        if isinstance(obj, dict):
+            for value in obj.values():
+                check_nesting(value, max_depth, current_depth + 1)
+        elif isinstance(obj, list):
+            for item in obj:
+                check_nesting(item, max_depth, current_depth + 1)
+
+    check_nesting(data)
+
+    return data

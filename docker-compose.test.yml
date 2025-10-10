@@ -20,6 +20,7 @@ services:
     volumes:
       - .:/app
     environment:
+      APP_ENV: test
       TEST_EVIDENCE_FAILURE_OPTIONS: -vv --ignore=./docs/,./scripts/
       PYTHONPATH: /app
     depends_on:
