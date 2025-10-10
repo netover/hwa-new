@@ -13,9 +13,7 @@ import asyncio
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar, Optional, Dict, Any
-from datetime import datetime, timedelta
-from threading import Lock
+from typing import Generic, TypeVar, Optional, Any
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -51,27 +49,22 @@ class CacheStorage(ABC):
     @abstractmethod
     async def get(self, key: str) -> Optional[Any]:
         """Recupera valor do storage."""
-        pass
 
     @abstractmethod
     async def set(self, key: str, value: Any, ttl: Optional[float] = None) -> None:
         """Armazena valor no storage."""
-        pass
 
     @abstractmethod
     async def delete(self, key: str) -> bool:
         """Remove valor do storage."""
-        pass
 
     @abstractmethod
     async def clear(self) -> None:
         """Limpa todo o storage."""
-        pass
 
     @abstractmethod
     async def keys(self) -> list[str]:
         """Retorna todas as chaves no storage."""
-        pass
 
 
 class InMemoryCacheStorage(CacheStorage):
@@ -333,6 +326,10 @@ class ImprovedAsyncCache:
     async def get_keys(self) -> list[str]:
         """Retorna todas as chaves ativas no cache."""
         return await self.storage.keys()
+
+    async def keys(self) -> list[str]:
+        """Alias para get_keys() para compatibilidade com testes existentes."""
+        return await self.get_keys()
 
     async def get_stats(self) -> dict:
         """Retorna estatísticas completas do cache."""

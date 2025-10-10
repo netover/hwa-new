@@ -62,12 +62,12 @@ async def test_memory_bounds_integration():
     # Add old entries
     old_time = datetime.now() - timedelta(days=3)
     for i in range(5):
-        service.health_history.append(
-            type(service.health_history[0])(
-                timestamp=old_time - timedelta(hours=i),
-                overall_status=HealthStatus.HEALTHY
-            )
+        # Create a new HealthCheckResult directly instead of trying to copy from empty list
+        old_result = HealthCheckResult(
+            overall_status=HealthStatus.HEALTHY,
+            timestamp=old_time - timedelta(hours=i)
         )
+        service.health_history.append(old_result)
 
     cleanup_result = await service.force_cleanup()
     print(f"   Age cleanup result: {cleanup_result}")

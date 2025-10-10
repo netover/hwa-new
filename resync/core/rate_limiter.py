@@ -21,6 +21,43 @@ from resync.settings import settings
 
 logger = structlog.get_logger(__name__)
 
+from dataclasses import dataclass
+
+
+@dataclass
+class RateLimitConfig:
+    """Configuration for rate limiting."""
+
+    requests_per_minute: int = 100
+    burst_limit: int = 10
+    window_size: int = 60  # seconds
+    strategy: str = "moving-window"  # "moving-window" or "fixed-window"
+
+    # Class attributes for endpoint configurations
+    PUBLIC_ENDPOINTS: str = "100/minute"
+    AUTHENTICATED_ENDPOINTS: str = "1000/minute"
+    CRITICAL_ENDPOINTS: str = "50/minute"
+    ERROR_HANDLER: str = "15/minute"
+    WEBSOCKET: str = "30/minute"
+    DASHBOARD: str = "10/minute"
+
+
+@dataclass
+class TieredRateLimitConfig:
+    """Configuration for tiered rate limiting."""
+
+    public: RateLimitConfig = None
+    authenticated: RateLimitConfig = None
+    critical: RateLimitConfig = None
+
+    def __post_init__(self):
+        if self.public is None:
+            self.public = RateLimitConfig(requests_per_minute=100)
+        if self.authenticated is None:
+            self.authenticated = RateLimitConfig(requests_per_minute=1000)
+        if self.critical is None:
+            self.critical = RateLimitConfig(requests_per_minute=50)
+
 
 
 
@@ -56,7 +93,7 @@ limiter = Limiter(
     storage_uri=getattr(settings, 'RATE_LIMIT_STORAGE_URI', 'redis://localhost:6379'),
     key_prefix=getattr(settings, 'RATE_LIMIT_KEY_PREFIX', 'resync:ratelimit:'),
     headers_enabled=True,
-    strategy="moving-window" if getattr(settings, 'RATE_LIMIT_SLIDING_WINDOW', True) else "fixed-window"
+    strategy="moving-window" if getattr(settings, 'rate_limit_sliding_window', True) else "fixed-window"
 )
 
 
@@ -81,15 +118,17 @@ def create_rate_limit_exceeded_response(
 
     reset_time = datetime.utcnow() + timedelta(seconds=retry_after)
 
+    import json
+
     response = Response(
-        content={
+        content=json.dumps({
             "error": "Rate limit exceeded",
             "message": f"Too many requests. Please try again in {retry_after} seconds.",
             "retry_after": retry_after,
             "retry_after_datetime": reset_time.isoformat() + "Z",
             "limit": exc.limit,
             "window": exc.window,
-        },
+        }),
         status_code=429,
         media_type="application/json"
     )

@@ -81,6 +81,14 @@ class ErrorCode(str, Enum):
     # Erros de Cache
     CACHE_ERROR = "CACHE_ERROR"
     CACHE_MISS = "CACHE_MISS"
+    POOL_EXHAUSTED = "POOL_EXHAUSTED"
+
+    # Erros de Redis
+    REDIS_ERROR = "REDIS_ERROR"
+    REDIS_CONNECTION_ERROR = "REDIS_CONNECTION_ERROR"
+    REDIS_AUTH_ERROR = "REDIS_AUTH_ERROR"
+    REDIS_TIMEOUT_ERROR = "REDIS_TIMEOUT_ERROR"
+    REDIS_INITIALIZATION_ERROR = "REDIS_INITIALIZATION_ERROR"
     
     # Erros de Configuração
     CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
@@ -575,7 +583,7 @@ class InvalidConfigError(ConfigurationError):
 
 class MissingConfigError(ConfigurationError):
     """Exceção para quando um arquivo de configuração não é encontrado."""
-    
+
     def __init__(
         self,
         message: str = "Missing configuration",
@@ -592,6 +600,110 @@ class MissingConfigError(ConfigurationError):
             original_exception=original_exception
         )
         self.error_code = ErrorCode.MISSING_CONFIGURATION
+
+
+class RedisError(BaseAppException):
+    """Exceção base para erros relacionados ao Redis."""
+
+    def __init__(
+        self,
+        message: str = "Redis error",
+        details: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        original_exception: Optional[Exception] = None
+    ):
+        super().__init__(
+            message=message,
+            error_code=ErrorCode.REDIS_ERROR,
+            status_code=500,
+            details=details,
+            correlation_id=correlation_id,
+            severity=ErrorSeverity.ERROR,
+            original_exception=original_exception
+        )
+
+
+class RedisInitializationError(RedisError):
+    """Erro ao inicializar Redis."""
+
+    def __init__(
+        self,
+        message: str = "Redis initialization error",
+        details: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        original_exception: Optional[Exception] = None
+    ):
+        super().__init__(
+            message=message,
+            details=details,
+            correlation_id=correlation_id,
+            original_exception=original_exception
+        )
+        self.error_code = ErrorCode.REDIS_INITIALIZATION_ERROR
+        self.severity = ErrorSeverity.CRITICAL
+
+
+class RedisConnectionError(RedisInitializationError):
+    """Erro de conexão ao Redis."""
+
+    def __init__(
+        self,
+        message: str = "Redis connection error",
+        details: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        original_exception: Optional[Exception] = None
+    ):
+        super().__init__(
+            message=message,
+            details=details,
+            correlation_id=correlation_id,
+            original_exception=original_exception
+        )
+        self.error_code = ErrorCode.REDIS_CONNECTION_ERROR
+
+
+class RedisAuthError(RedisInitializationError):
+    """Erro de autenticação Redis."""
+
+    def __init__(
+        self,
+        message: str = "Redis authentication error",
+        details: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        original_exception: Optional[Exception] = None
+    ):
+        super().__init__(
+            message=message,
+            details=details,
+            correlation_id=correlation_id,
+            original_exception=original_exception
+        )
+        self.error_code = ErrorCode.REDIS_AUTH_ERROR
+
+
+class RedisTimeoutError(RedisInitializationError):
+    """Timeout em operação Redis."""
+
+    def __init__(
+        self,
+        message: str = "Redis timeout error",
+        timeout_seconds: Optional[float] = None,
+        details: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        original_exception: Optional[Exception] = None
+    ):
+        if details is None:
+            details = {}
+        if timeout_seconds:
+            details["timeout_seconds"] = timeout_seconds
+
+        super().__init__(
+            message=message,
+            details=details,
+            correlation_id=correlation_id,
+            original_exception=original_exception
+        )
+        self.error_code = ErrorCode.REDIS_TIMEOUT_ERROR
 
 
 class AgentError(BaseAppException):
@@ -746,7 +858,6 @@ class ToolTimeoutError(ToolExecutionError):
 
 class ToolProcessingError(ToolExecutionError):
     """Exceção para erros de processamento de dados dentro de uma ferramenta."""
-    pass
 
 
 class KnowledgeGraphError(BaseAppException):
@@ -900,7 +1011,6 @@ class ParsingError(BaseAppException):
 
 class DataParsingError(ParsingError):
     """Exceção para erros específicos de parsing de dados."""
-    pass
 
 
 class NetworkError(BaseAppException):
@@ -993,6 +1103,33 @@ class CacheError(BaseAppException):
             status_code=500,
             details=details,
             correlation_id=correlation_id,
+            severity=ErrorSeverity.ERROR,
+            original_exception=original_exception
+        )
+
+
+class PoolExhaustedError(CacheError):
+    """Exceção para quando o pool de conexões está esgotado."""
+
+    def __init__(
+        self,
+        message: str = "Connection pool exhausted",
+        pool_name: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        original_exception: Optional[Exception] = None
+    ):
+        if details is None:
+            details = {}
+        if pool_name:
+            details["pool_name"] = pool_name
+
+        super().__init__(
+            message=message,
+            error_code=ErrorCode.POOL_EXHAUSTED,
+            status_code=503,
+            details=details,
+            correlation_id=correlation_id,
             severity=ErrorSeverity.WARNING,
             original_exception=original_exception
         )
@@ -1030,7 +1167,6 @@ class NotFoundError(ResourceNotFoundError):
     
     Alias para ResourceNotFoundError para compatibilidade.
     """
-    pass
 
 
 class PerformanceError(BaseAppException):
@@ -1129,6 +1265,11 @@ def get_exception_by_error_code(error_code: ErrorCode) -> type[BaseAppException]
         ErrorCode.DATABASE_ERROR: DatabaseError,
         ErrorCode.CACHE_ERROR: CacheError,
         ErrorCode.CONFIGURATION_ERROR: ConfigurationError,
+        ErrorCode.REDIS_ERROR: RedisError,
+        ErrorCode.REDIS_CONNECTION_ERROR: RedisConnectionError,
+        ErrorCode.REDIS_AUTH_ERROR: RedisAuthError,
+        ErrorCode.REDIS_TIMEOUT_ERROR: RedisTimeoutError,
+        ErrorCode.REDIS_INITIALIZATION_ERROR: RedisInitializationError,
         ErrorCode.TWS_CONNECTION_ERROR: TWSConnectionError,
         ErrorCode.LLM_ERROR: LLMError,
         ErrorCode.NETWORK_ERROR: NetworkError,
@@ -1159,10 +1300,18 @@ __all__ = [
     "ServiceUnavailableError",
     "CircuitBreakerError",
     "TimeoutError",
+     "PerformanceError",
+     "HealthCheckError",
+     "PoolExhaustedError",
     # Domain Specific
     "ConfigurationError",
     "InvalidConfigError",
     "MissingConfigError",
+    "RedisError",
+    "RedisInitializationError",
+    "RedisConnectionError",
+    "RedisAuthError",
+    "RedisTimeoutError",
     "AgentError",
     "TWSConnectionError",
     "AgentExecutionError",
