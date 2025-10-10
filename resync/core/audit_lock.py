@@ -43,7 +43,7 @@ class DistributedAuditLock:
         self._lock_prefix: str = "audit_lock"
         self.release_script_sha: Optional[str] = None
 
-        logger.info(f"DistributedAuditLock initialized with Redis at {self.redis_url}")
+        logger.info("DistributedAuditLock initialized with Redis", redis_url=self.redis_url)
 
     async def connect(self) -> None:
         """Initialize Redis connection."""
@@ -138,7 +138,7 @@ class DistributedAuditLock:
         lock_key = self._get_lock_key(memory_id)
         result = await self.client.delete(lock_key)
         if result:
-            logger.warning(f"Forcefully released audit lock for memory: {memory_id}")
+            logger.warning("forcefully_released_audit_lock_for_memory", memory_id=memory_id)
         return bool(result)
 
     async def cleanup_expired_locks(self, max_age: int = 60) -> int:
@@ -188,8 +188,13 @@ class DistributedAuditLock:
             logger.error("Value error in audit lock cleanup: %s", e)
             raise AuditError(f"Value error in audit lock cleanup: {e}") from e
         except Exception as e:
-            logger.error("Unexpected error cleaning up expired audit locks: %s", e)
-            raise AuditError(f"Unexpected error during audit lock cleanup: {e}") from e
+            logger.critical(
+                "Unexpected critical error cleaning up expired audit locks.",
+                exc_info=True,
+            )
+            raise AuditError(
+                "Unexpected critical error during audit lock cleanup"
+            ) from e
 
 
 class AuditLockContext:
@@ -267,9 +272,9 @@ class AuditLockContext:
         try:
             # Use EVALSHA for atomic check-and-delete
             if self.release_script_sha:
-                result: int = await self.client.evalsha(
+                result = await self.client.evalsha(
                     self.release_script_sha, 1, self.lock_key, self.lock_value
-                )
+                )  # type: ignore[misc]
             else:
                 # Fallback to eval if script not loaded
                 logger.warning("Using eval fallback - script not loaded")
@@ -280,16 +285,23 @@ class AuditLockContext:
                     return 0
                 end
                 """
-                result: int = await self.client.eval(
+                result = await self.client.eval(
                     lua_script, 1, self.lock_key, self.lock_value
-                )
+                )  # type: ignore[misc]
 
             if result == 1:
-                logger.debug(f"Released audit lock: {self.lock_key}")
+                logger.debug("successfully_released_audit_lock", lock_key=self.lock_key)
             else:
-                logger.warning(
-                    f"Failed to release audit lock: {self.lock_key} (may have expired)"
-                )
+                # Check current lock value to determine if it was already expired or not owned
+                current_value = await self.client.get(self.lock_key)
+                if current_value is not None:
+                    logger.warning(
+                        f"Failed to release audit lock: {self.lock_key} (not owned by this instance)"
+                    )
+                else:
+                    logger.debug(
+                        f"Audit lock {self.lock_key} was already expired/removed"
+                    )
 
         except RedisError as e:
             logger.error("Redis error during lock release: %s", e)
@@ -298,7 +310,8 @@ class AuditLockContext:
             logger.error("Value error during lock release: %s", e)
             raise AuditError(f"Value error during lock release: {e}") from e
         except Exception as e:
-            logger.error("Unexpected error during lock release: %s", e)
+            logger.error("Unexpected error during lock release", error=str(e))
+            logger.error("lock_details", key=self.lock_key, value=self.lock_value[:8] if self.lock_value else None)
             raise AuditError(f"Unexpected error during lock release: {e}") from e
 
     async def release(self) -> None:
@@ -327,5 +340,12 @@ async def distributed_audit_lock(
         yield
 
 
-# Global instance for easy access
-audit_lock = DistributedAuditLock()
+# For backward compatibility, provide a shared instance if needed
+# This should be initialized during application startup and injected
+# as a dependency rather than using global state
+def get_audit_lock() -> DistributedAuditLock:
+    """
+    Factory function to get an audit lock instance.
+    This helps with dependency injection and testing.
+    """
+    return DistributedAuditLock()

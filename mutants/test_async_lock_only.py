@@ -266,7 +266,7 @@ async def test_async_lock_functionality():
     with patch.object(MockOptimizedTWSClient, "__init__", mock_tws_init):
         # Act - Create multiple concurrent tasks that all try to initialize the TWS client
         tasks = []
-        for i in range(5):
+        for _i in range(5):
             task = asyncio.create_task(agent_manager._get_tws_client())
             tasks.append(task)
 

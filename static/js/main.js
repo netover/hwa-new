@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fetchAgents = async () => {
         try {
-            const response = await fetch('/api/agents');
+            const response = await fetch('/api/v1/');
             if (!response.ok) throw new Error('Failed to fetch agents');
             const agents = await response.json();
 
@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}/ws/${agentId}`;
+        const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/ws/${agentId}`;
         websocket = new WebSocket(wsUrl);
 
         websocket.onopen = () => {

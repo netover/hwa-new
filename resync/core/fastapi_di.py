@@ -1,5 +1,4 @@
-"""
-FastAPI Integration for Dependency Injection
+"""FastAPI Integration for Dependency Injection
 
 This module provides utilities for integrating the DIContainer with FastAPI's
 dependency injection system. It includes functions for creating FastAPI dependencies
@@ -9,9 +8,9 @@ that resolve services from the container.
 import inspect
 import logging
 from functools import wraps
-from typing import Any, Callable, Type, TypeVar
+from typing import Any, Callable, Dict, Optional, Type, TypeVar, get_type_hints
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from resync.core.agent_manager import AgentManager
@@ -28,6 +27,7 @@ from resync.core.interfaces import (
     ITWSClient,
 )
 from resync.core.knowledge_graph import AsyncKnowledgeGraph
+from resync.core.teams_integration import TeamsIntegration, get_teams_integration
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
@@ -52,13 +52,25 @@ def get_tws_client_factory():
     else:
         logger.info("Creating OptimizedTWSClient.")
         return OptimizedTWSClient(
-            hostname=settings.TWS_HOSTNAME,
+            hostname=settings.TWS_HOST,
             port=settings.TWS_PORT,
-            username=settings.TWS_USERNAME,
+            username=settings.TWS_USER,
             password=settings.TWS_PASSWORD,
             engine_name=settings.TWS_ENGINE_NAME,
             engine_owner=settings.TWS_ENGINE_OWNER,
         )
+
+
+def get_teams_integration_factory():
+    """
+    Factory function to create Teams integration service.
+
+    Returns:
+        TeamsIntegration service instance.
+    """
+    logger.info("Creating TeamsIntegration service.")
+    # This will create a singleton instance
+    return TeamsIntegration()
 
 
 def configure_container(app_container: DIContainer = container) -> DIContainer:
@@ -71,41 +83,51 @@ def configure_container(app_container: DIContainer = container) -> DIContainer:
     Returns:
         The configured container.
     """
-    # Register interfaces and implementations
-    app_container.register(IAgentManager, AgentManager, ServiceScope.SINGLETON)
-    app_container.register(
-        IConnectionManager, ConnectionManager, ServiceScope.SINGLETON
-    )
-    app_container.register(IKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON)
-    app_container.register(IAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
+    try:
+        # Register interfaces and implementations
+        app_container.register(IAgentManager, AgentManager, ServiceScope.SINGLETON)
+        app_container.register(
+            IConnectionManager, ConnectionManager, ServiceScope.SINGLETON
+        )
+        app_container.register(IKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON)
+        app_container.register(IAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
 
-    # Register TWS client with factory
-    app_container.register_factory(
-        ITWSClient, get_tws_client_factory, ServiceScope.SINGLETON
-    )
+        # Register TWS client with factory
+        app_container.register_factory(
+            ITWSClient, get_tws_client_factory, ServiceScope.SINGLETON
+        )
 
-    # Register FileIngestor - depends on KnowledgeGraph
-    # Using a factory function to ensure dependencies are properly resolved
-    def file_ingestor_factory():
-        knowledge_graph = app_container.get(IKnowledgeGraph)
-        return create_file_ingestor(knowledge_graph)
+        # Register Teams integration with factory
+        app_container.register_factory(
+            TeamsIntegration, get_teams_integration_factory, ServiceScope.SINGLETON
+        )
 
-    app_container.register_factory(
-        IFileIngestor, file_ingestor_factory, ServiceScope.SINGLETON
-    )
+        # Register FileIngestor - depends on KnowledgeGraph
+        # Using a factory function to ensure dependencies are properly resolved
+        def file_ingestor_factory():
+            knowledge_graph = app_container.get(IKnowledgeGraph)
+            return create_file_ingestor(knowledge_graph)
 
-    # Register concrete types (for when the concrete type is requested directly)
-    app_container.register(AgentManager, AgentManager, ServiceScope.SINGLETON)
-    app_container.register(ConnectionManager, ConnectionManager, ServiceScope.SINGLETON)
-    app_container.register(
-        AsyncKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON
-    )
-    app_container.register(AsyncAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
-    app_container.register_factory(
-        OptimizedTWSClient, get_tws_client_factory, ServiceScope.SINGLETON
-    )
+        app_container.register_factory(
+            IFileIngestor, file_ingestor_factory, ServiceScope.SINGLETON
+        )
 
-    logger.info("DI container configured with all service registrations")
+        # Register concrete types (for when the concrete type is requested directly)
+        app_container.register(AgentManager, AgentManager, ServiceScope.SINGLETON)
+        app_container.register(ConnectionManager, ConnectionManager, ServiceScope.SINGLETON)
+        app_container.register(
+            AsyncKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON
+        )
+        app_container.register(AsyncAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
+        app_container.register_factory(
+            OptimizedTWSClient, get_tws_client_factory, ServiceScope.SINGLETON
+        )
+
+        logger.info("DI container configured with all service registrations")
+    except Exception as e:
+        logger.error("error_configuring_di_container", error=str(e))
+        raise
+
     return app_container
 
 
@@ -121,7 +143,14 @@ def get_service(service_type: Type[T]) -> Callable[[], T]:
     """
 
     def _get_service() -> T:
-        return container.get(service_type)
+        try:
+            return container.get(service_type)
+        except KeyError:
+            logger.error("service_not_registered_in_container", service_type=service_type.__name__)
+            raise RuntimeError(f"Required service {service_type.__name__} is not available in the DI container")
+        except Exception as e:
+            logger.error("error_resolving_service", service_type=service_type.__name__, error=str(e))
+            raise RuntimeError(f"Error resolving service {service_type.__name__}: {str(e)}")
 
     # Set the return annotation for FastAPI to use
     _get_service.__annotations__ = {"return": service_type}
@@ -135,6 +164,7 @@ get_knowledge_graph = get_service(IKnowledgeGraph)
 get_audit_queue = get_service(IAuditQueue)
 get_tws_client = get_service(ITWSClient)
 get_file_ingestor = get_service(IFileIngestor)
+get_teams_integration = get_service(TeamsIntegration)
 
 
 class DIMiddleware(BaseHTTPMiddleware):
@@ -155,7 +185,7 @@ class DIMiddleware(BaseHTTPMiddleware):
         self.container = container_instance
         logger.info("DIMiddleware initialized")
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Any:
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """
         Process the request and attach the container to it.
 
@@ -166,15 +196,22 @@ class DIMiddleware(BaseHTTPMiddleware):
         Returns:
             The response from the next handler.
         """
-        # Attach the container to the request state
-        request.state.container = self.container
+        try:
+            # Attach the container to the request state
+            request.state.container = self.container
 
-        # Continue processing the request
-        response = await call_next(request)
-        return response
+            # Continue processing the request
+            response = await call_next(request)
+            return response
+        except Exception as e:
+            logger.error("error_in_DIMiddleware_dispatch", error=str(e))
+            # Re-raise the exception to be handled by other error handlers
+            raise
 
 
-def inject_container(app: FastAPI, container_instance: DIContainer = None) -> None:
+def inject_container(
+    app: FastAPI, container_instance: Optional[DIContainer] = None
+) -> None:
     """
     Configure the application to use the DI container.
 
@@ -203,7 +240,8 @@ def with_injection(func: Callable) -> Callable:
     Decorator that injects dependencies into a function from the container.
 
     This decorator inspects the function's signature and resolves dependencies
-    from the container based on type annotations.
+    from the container based on type annotations. It now correctly handles
+    both synchronous and asynchronous functions.
 
     Args:
         func: The function to inject dependencies into.
@@ -213,35 +251,31 @@ def with_injection(func: Callable) -> Callable:
     """
     signature = inspect.signature(func)
     parameters = list(signature.parameters.values())
+    type_hints = get_type_hints(func)
 
-    @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        # Get type hints for parameters
-        type_hints = get_type_hints(func)
-
-        # Build arguments for the function
+    def inject_dependencies(kwargs: Dict[str, Any]) -> None:
+        """Helper to inject dependencies into kwargs."""
         for param in parameters:
-            # Skip if the parameter is already provided
             if param.name in kwargs:
                 continue
-
-            # Skip *args and **kwargs
             if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
                 continue
-
-            # Get parameter type
             param_type = type_hints.get(param.name, Any)
-
-            # Try to resolve the parameter from the container
             try:
                 kwargs[param.name] = container.get(param_type)
             except KeyError:
-                # If the parameter has a default value, use it
                 if param.default is not param.empty:
                     kwargs[param.name] = param.default
-                # Otherwise, just skip it and let the function handle it
 
-        # Call the function with the resolved dependencies
-        return func(*args, **kwargs)
-
-    return wrapper
+    if inspect.iscoroutinefunction(func):
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            inject_dependencies(kwargs)
+            return await func(*args, **kwargs)
+        return async_wrapper
+    else:
+        @wraps(func)
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            inject_dependencies(kwargs)
+            return func(*args, **kwargs)
+        return sync_wrapper

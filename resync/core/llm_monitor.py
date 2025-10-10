@@ -126,6 +126,25 @@ class LLMCostMonitor:
 
     def _get_cost_per_1k_tokens(self, model: str) -> Dict[str, float]:
         """Get cost per 1K tokens for different models."""
+        # With LiteLLM integration, we can also use LiteLLM's cost calculation
+        # but keeping this for fallback and custom models
+        from litellm import get_model_info
+        
+        try:
+            # Try to get cost info from LiteLLM if available
+            model_info = get_model_info(model=model)
+            if model_info and "input_cost_per_token" in model_info:
+                input_cost = model_info["input_cost_per_token"]
+                output_cost = model_info["output_cost_per_token"]
+                # Convert to cost per 1K tokens
+                return {
+                    "input": input_cost * 1000,
+                    "output": output_cost * 1000
+                }
+        except Exception:
+            # Fallback to hardcoded values
+            pass
+        
         # Approximate costs (update with real pricing)
         costs = {
             "gpt-4o": {"input": 0.005, "output": 0.015},
@@ -133,7 +152,13 @@ class LLMCostMonitor:
             "claude-3-haiku": {"input": 0.00025, "output": 0.00125},
             "claude-3-sonnet": {"input": 0.003, "output": 0.015},
             "llama3": {"input": 0.000, "output": 0.000},  # Free for local
+            "ollama/*": {"input": 0.000, "output": 0.000},  # Free for local Ollama models
         }
+        
+        # Handle Ollama models specifically
+        if model.startswith("ollama/"):
+            return {"input": 0.000, "output": 0.000}
+        
         return costs.get(model, {"input": 0.001, "output": 0.004})
 
     async def _check_budget_alerts(self) -> None:

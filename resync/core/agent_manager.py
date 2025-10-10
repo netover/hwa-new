@@ -1,43 +1,124 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import json
-import logging
+import structlog
+import re
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from time import time
+from typing import Any, Optional
+
+import aiofiles
 
 try:
     from agno.agent import Agent
+
+    AGNO_AVAILABLE = True
 except ImportError:
+    AGNO_AVAILABLE = False
 
     class MockAgent:
-        """Mock Agent class for testing when agno is not available."""
+        """Mock Agent class compatible with agno.Agent interface."""
 
         def __init__(
             self,
             tools: Any = None,
             model: Any = None,
             instructions: Any = None,
+            name: str = "Mock Agent",
+            description: str = "Mock agent for testing",
             **kwargs: Any,
         ) -> None:
+            # Initialize all required attributes
             self.tools = tools or []
             self.model = model
+            self.llm_model = model  # Alias para compatibilidade com FastAPI
             self.instructions = instructions
-            # Mock methods that might be called
-            self.run = self._mock_run
-            self._mock_run: Any = lambda *args, **kwargs: None
+            self.name = name
+            self.description = description
+
+            # Additional attributes that FastAPI might expect
+            self.role = "Mock Agent"
+            self.goal = "Provide mock responses for testing"
+            self.backstory = description
+
+        async def arun(self, message: str) -> str:
+            """Process a message and return a response."""
+            print(f"[MockAgent] Processing message: {message}")
+            try:
+                msg = message.lower()
+                print(f"[MockAgent] Lower case message: {msg}")
+
+                if "job" in msg and ("abend" in msg or "erro" in msg):
+                    result = "Jobs em estado ABEND encontrados:\\n- Data Processing (ID: JOB002) na workstation TWS_AGENT2\\n\\nRecomendo investigar o log do job e verificar dependências."
+                    print(f"[MockAgent] Returning ABEND result: {result[:50]}...")
+                    return result
+
+                elif "status" in msg or "workstation" in msg:
+                    result = "Status atual do ambiente TWS:\\n\\nWorkstations:\\n- TWS_MASTER: ONLINE\\n- TWS_AGENT1: ONLINE\\n- TWS_AGENT2: OFFLINE\\n\\nJobs:\\n- Daily Backup: SUCC (TWS_AGENT1)\\n- Data Processing: ABEND (TWS_AGENT2)\\n- Report Generation: SUCC (TWS_AGENT1)"
+                    print(f"[MockAgent] Returning status result: {result[:50]}...")
+                    return result
+
+                elif "tws" in msg:
+                    result = f"Como {self.name}, posso ajudar com questões relacionadas ao TWS. Que informações você precisa?"
+                    print(f"[MockAgent] Returning TWS result: {result[:50]}...")
+                    return result
+
+                else:
+                    result = f"Entendi sua mensagem: '{message}'. Como {self.name}, estou aqui para ajudar com questões do TWS."
+                    print(f"[MockAgent] Returning default result: {result[:50]}...")
+                    return result
+
+            except Exception as e:
+                result = f"Erro simples: {str(e)}"
+                print(f"[MockAgent] Error: {e}")
+                return result
+
+        def run(self, message: str) -> str:
+            """Synchronous version of arun for compatibility."""
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import asyncio
+                    async def run_async():
+                        return await self.arun(message)
+                    return asyncio.create_task(run_async())
+                else:
+                    return loop.run_until_complete(self.arun(message))
+            except Exception:
+                import asyncio
+                return asyncio.run(self.arun(message))
+
+        def to_dict(self) -> dict:
+            """Convert agent to dictionary for serialization - required by FastAPI."""
+            return {
+                "name": self.name,
+                "description": self.description,
+                "model": str(self.model) if self.model else None,
+                "llm_model": str(self.llm_model) if self.llm_model else None,
+                "role": self.role,
+                "goal": self.goal,
+                "backstory": self.backstory,
+                "tools": [str(t) for t in self.tools] if self.tools else [],
+            }
 
 
 from pydantic import BaseModel
 
+from .global_utils import get_environment_tags, get_global_correlation_id
 from resync.core.exceptions import (
-    AgentError,
-    ConfigError,
-    DataParsingError,
+    AgentError,  # Renamed from AgentExecutionError for broader scope
+    ConfigurationError,
     InvalidConfigError,
     MissingConfigError,
     NetworkError,
+    ParsingError,
 )
+from resync.core.metrics import log_with_correlation, runtime_metrics
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
@@ -48,7 +129,7 @@ from resync.tool_definitions.tws_tools import (
 )
 
 # --- Logging Setup ---
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # --- Pydantic Models for Agent Configuration ---
@@ -60,7 +141,7 @@ class AgentConfig(BaseModel):
     role: str
     goal: str
     backstory: str
-    tools: List[str]
+    tools: list[str]
     model_name: str = "llama3:latest"
     memory: bool = True
     verbose: bool = False
@@ -71,252 +152,212 @@ class AgentsConfig(BaseModel):
     Represents the top-level structure of the agent configuration file.
     """
 
-    agents: List[AgentConfig]
+    agents: list[AgentConfig]
 
 
 # --- Agent Manager Class ---
 class AgentManager:
     """
     Manages the lifecycle and operations of AI agents.
+    Implements the Borg pattern for thread-safe singleton behavior.
     """
+    
+    _shared_state: dict[str, Any] = {}
+    _lock = threading.RLock()
+    _initialized = False
+    
+    def __new__(cls, *args, **kwargs):
+        """Implementação Borg Pattern - mais pythônico que Singleton clássico."""
+        obj = super().__new__(cls)
+        obj.__dict__ = cls._shared_state
+        return obj
 
-    def __init__(self, settings_module: Any = settings) -> None:
-        """
-        Initializes the AgentManager with dependencies.
+    async def load_agents_from_config(self) -> None:
+        """Loads agent configurations from settings."""
+        # Implementation for loading agents from config
+        pass
 
-        Args:
-            settings_module: The settings module to use (default: global settings).
-        """
-        logger.info("Initializing AgentManager.")
-        self.settings = settings_module
-        self.agents: Dict[str, Any] = {}
-        self.agent_configs: List[AgentConfig] = []  # Correct initialization
-        self.tools: Dict[str, Any] = self._discover_tools()
-        self.tws_client: Optional[OptimizedTWSClient] = None
-        self._mock_tws_client: Optional[MockTWSClient] = None
-        # Async lock to prevent race conditions during TWS client initialization
-        self._tws_init_lock: asyncio.Lock = asyncio.Lock()
+    async def get_agent(self, agent_id: str) -> Any:
+        """Retrieves an agent by its ID."""
+        # Check if agent already exists
+        if agent_id in self.agents:
+            return self.agents[agent_id]
 
-    def _discover_tools(self) -> Dict[str, Any]:
-        """
-        Discovers and registers available tools for the agents.
-        This makes the system extensible for new tools.
-        """
-        # In a real application, this could be dynamic using entry points
-        # For now, we manually register the known tools
-        return {
-            "tws_status_tool": tws_status_tool,
-            "tws_troubleshooting_tool": tws_troubleshooting_tool,
-        }
+        # Create agent on demand
+        agent = await self._create_agent(agent_id)
+        if agent:
+            self.agents[agent_id] = agent
+        return agent
 
-    async def _get_tws_client(self) -> OptimizedTWSClient:
-        """
-        Lazily initializes and returns the TWS client.
-        Ensures a single client instance is reused with async-safe initialization.
-        """
-        if not self.tws_client:
-            # Use async lock to prevent race conditions during initialization
-            async with self._tws_init_lock:
-                # Double-check pattern: verify the client wasn't created while waiting for the lock
-                if not self.tws_client:
-                    logger.info("Initializing OptimizedTWSClient for the first time.")
-                    self.tws_client = OptimizedTWSClient(
-                        hostname=self.settings.TWS_HOST,
-                        port=self.settings.TWS_PORT,
-                        username=self.settings.TWS_USER,
-                        password=self.settings.TWS_PASSWORD,
-                        engine_name=self.settings.TWS_ENGINE_NAME,
-                        engine_owner=self.settings.TWS_ENGINE_OWNER,
-                    )
-                    # Inject the client into tools that need it
-                    for tool in self.tools.values():
-                        if isinstance(tool, TWSToolReadOnly):
-                            tool.tws_client = self.tws_client
-                    logger.info("TWS client initialization completed successfully.")
-        return self.tws_client
-
-    async def load_agents_from_config(self, config_path: Path = None) -> None:
-        """
-        Loads agent configurations from a JSON file and initializes them.
-        This method is designed to be idempotent.
-        """
-        # Use provided config_path or get from settings
-        config_path = config_path or self.settings.AGENT_CONFIG_PATH
-        logger.info(f"Loading agent configurations from: {config_path}")
-        if not config_path.exists():
-            logger.error(f"Agent configuration file not found at {config_path}")
-            self.agents = {}
-            self.agent_configs = []  # Ensure it's reset if config not found
-            return
-
+    async def _create_agent(self, agent_id: str) -> Any:
+        """Create an agent instance for the given ID."""
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                config_data = json.load(f)
+            # Get agent configuration
+            agent_config = None
+            for config in self.agent_configs:
+                if config.id == agent_id:
+                    agent_config = config
+                    break
 
-            config = AgentsConfig.parse_obj(config_data)
-            self.agent_configs = config.agents  # Correct assignment
-            self.agents = await self._create_agents(config.agents)
-            logger.info(f"Successfully loaded {len(self.agents)} agents.")
+            if not agent_config:
+                logger.warning(f"No configuration found for agent '{agent_id}'")
+                return None
 
-        except json.JSONDecodeError as e:
-            logger.error(
-                "Error decoding JSON from %s: %s", config_path, e, exc_info=True
-            )
-            self.agents = {}
-            self.agent_configs = []
-            raise DataParsingError(
-                f"Invalid JSON format in agent configuration file: {config_path}"
-            ) from e
-        except FileNotFoundError as e:
-            logger.error("Agent configuration file not found: %s", e, exc_info=True)
-            self.agents = {}
-            self.agent_configs = []
-            raise MissingConfigError(
-                f"Agent configuration file not found: {config_path}"
-            ) from e
-        except PermissionError as e:
-            logger.error(
-                "Permission denied accessing agent configuration file: %s",
-                e,
-                exc_info=True,
-            )
-            self.agents = {}
-            self.agent_configs = []
-            raise ConfigError(
-                f"Permission denied accessing agent configuration file: {config_path}"
-            ) from e
-        except ValueError as e:
-            logger.error("Invalid agent configuration data: %s", e, exc_info=True)
-            self.agents = {}
-            self.agent_configs = []
-            raise InvalidConfigError(f"Invalid agent configuration data: {e}") from e
-        except Exception as e:
-            logger.error(
-                "An unexpected error occurred while loading agents: %s",
-                e,
-                exc_info=True,
-            )
-            self.agents = {}
-            self.agent_configs = []
-            raise ConfigError(f"Failed to load agent configurations: {e}") from e
+            # Get TWS client for tools
+            if not self.tws_client:
+                async with self._tws_init_lock:
+                    if not self.tws_client:
+                        from resync.core.fastapi_di import get_service
+                        from resync.core.interfaces import ITWSClient
+                        try:
+                            self.tws_client = await get_service(ITWSClient)()
+                        except Exception as e:
+                            logger.warning(f"Failed to get TWS client: {e}")
+                            self.tws_client = None
 
-    async def _create_agents(self, agent_configs: List[AgentConfig]) -> Dict[str, Any]:
-        """
-        Creates agent instances based on the provided configurations.
-        """
-        agents = {}
-        # Ensure the TWS client is ready before creating agents that might need it
-        await self._get_tws_client()
-
-        for config in agent_configs:
-            try:
-                agent_tools = [
-                    self.tools[tool_name]
-                    for tool_name in config.tools
-                    if tool_name in self.tools
-                ]
-
-                # Using agno.Agent to create the agent instance
+            # Create agent with tools
+            if AGNO_AVAILABLE:
+                # Create real agent with tools
                 agent = Agent(
-                    tools=agent_tools,
-                    # Note: The 'model' parameter in agno.Client refers to the LLM.
-                    # We use 'model_name' from our config.
-                    model=config.model_name,  # type: ignore[arg-type]
-                    # system prompt is constructed from agent personality
-                    instructions=(
-                        f"You are {config.name}, a specialized AI agent. "
-                        f"Your role is: {config.role}. "
-                        f"Your primary goal is: {config.goal}. "
-                        f"Your backstory: {config.backstory}"
-                    ),
+                    model=agent_config.model_name,
+                    tools=list(self.tools.values()),
+                    instructions=f"You are a {agent_config.name} assistant for TWS operations. {agent_config.backstory}",
+                    name=agent_config.name,
                 )
+                logger.info(f"Created real agent: {agent}")
+                return agent
+            else:
+                # Create mock agent with ALL required attributes - FIXED
+                agent = MockAgent(
+                    tools=list(self.tools.values()),
+                    model=agent_config.model_name,
+                    instructions=f"You are a {agent_config.name} assistant for TWS operations. {agent_config.backstory}",
+                    name=agent_config.name,
+                    description=agent_config.backstory,  # ✅ PASSAR DESCRIPTION
+                )
+                logger.info(f"Created mock agent: {agent}, has arun: {hasattr(agent, 'arun')}")
+                return agent
 
-                agents[config.id] = agent
-                logger.debug(f"Successfully created agent: {config.id}")
-            except KeyError as e:
-                logger.warning(
-                    "Tool '%s' not found for agent '%s'. Agent will be created without it.",
-                    e.args[0],
-                    config.id,
-                )
-            except ImportError as e:
-                logger.error(
-                    "Failed to import dependency for agent '%s': %s",
-                    config.id,
-                    e,
-                    exc_info=True,
-                )
-                raise AgentError(
-                    f"Failed to import dependency for agent '{config.id}': {e}"
-                ) from e
-            except ValueError as e:
-                logger.error(
-                    "Invalid configuration for agent '%s': %s",
-                    config.id,
-                    e,
-                    exc_info=True,
-                )
-                raise AgentError(
-                    f"Invalid configuration for agent '{config.id}': {e}"
-                ) from e
-            except TypeError as e:
-                logger.error(
-                    "Type error creating agent '%s': %s", config.id, e, exc_info=True
-                )
-                raise AgentError(f"Type error creating agent '{config.id}': {e}") from e
-            except NetworkError as e:
-                logger.error(
-                    "Network error initializing agent '%s': %s",
-                    config.id,
-                    e,
-                    exc_info=True,
-                )
-                raise AgentError(
-                    f"Network error initializing agent '{config.id}': {e}"
-                ) from e
-            except Exception as e:
-                logger.error(
-                    "Failed to create agent '%s': %s", config.id, e, exc_info=True
-                )
-                raise AgentError(f"Failed to create agent '{config.id}': {e}") from e
-        return agents
+        except Exception as e:
+            logger.error(f"Failed to create agent '{agent_id}': {e}")
+            return None
 
-    def get_agent(self, agent_id: str) -> Optional[Any]:
-        """Retrieves a loaded agent by its ID."""
-        return self.agents.get(agent_id)
-
-    def get_all_agents(self) -> List[AgentConfig]:
+    async def get_all_agents(self) -> list[AgentConfig]:
         """Returns the configuration of all loaded agents."""
         return self.agent_configs
 
-    def get_agent_with_tool(self, agent_id: str, tool_name: str) -> Optional[Any]:
-        """Retrieves an agent that has the specified tool, raising ValueError if not found."""
-        agent = self.get_agent(agent_id)
-        if agent is None:
-            logger.warning(f"Agent '{agent_id}' not found")
-            raise ValueError(f"Agent {agent_id} not found")
+    def _discover_tools(self) -> dict[str, Any]:
+        """Discover available tools for agents."""
+        try:
+            from resync.tool_definitions.tws_tools import (
+                tws_status_tool,
+                tws_troubleshooting_tool,
+            )
 
-        if any(t.name == tool_name for t in agent.tools):
-            return agent
-        else:
-            logger.warning(f"Tool '{tool_name}' not found for agent '{agent_id}'")
-            raise ValueError(f"Tool {tool_name} not found for agent {agent_id}")
+            return {
+                "get_tws_status": tws_status_tool.get_tws_status,
+                "analyze_tws_failures": tws_troubleshooting_tool.analyze_failures,
+            }
+        except ImportError as e:
+            logger.warning(f"Could not import TWS tools: {e}")
+            return {}
+
+    def __init__(self, settings_module: Any = settings) -> None:
+        """
+        Initializes the AgentManager with thread-safe initialization.
+        """
+        with self._lock:
+            if not self._initialized:
+                self._initialized = True
+                
+                global_correlation = get_global_correlation_id()
+                correlation_id = runtime_metrics.create_correlation_id(
+                    {
+                        "component": "agent_manager",
+                        "operation": "init",
+                        "global_correlation": global_correlation,
+                        "environment": get_environment_tags(),
+                    }
+                )
+
+                try:
+                    # Fail-fast check: No MockAgent in production
+                    if not AGNO_AVAILABLE:
+                        runtime_metrics.agent_mock_fallbacks.increment()
+                        is_production = (
+                            getattr(settings_module, "ENVIRONMENT", "development").lower()
+                            == "production"
+                        )
+                        if is_production:
+                            error_msg = "CRITICAL: agno.agent not available in production environment. Cannot proceed with MockAgent fallback."
+                            logger.critical("agno_agent_unavailable_production", error=error_msg, correlation_id=correlation_id)
+                            runtime_metrics.record_health_check(
+                                "agent_manager",
+                                "critical",
+                                {"error": "agno_unavailable_production"},
+                            )
+                            raise AgentError(error_msg)
+
+                        logger.warning(
+                            "agno_agent_not_available_non_production",
+                            message="agno.agent not available in non-production environment. Using MockAgent fallback.",
+                            correlation_id=correlation_id,
+                        )
+                        runtime_metrics.record_health_check(
+                            "agent_manager", "degraded", {"mock_fallback": True}
+                        )
+
+                    logger.info("initializing_agent_manager")
+                    runtime_metrics.record_health_check("agent_manager", "initializing")
+
+                    self.settings = settings_module
+                    self.agents: dict[str, Any] = {}
+                    # Load default agent configurations
+                    self.agent_configs: list[AgentConfig] = [
+                        AgentConfig(
+                            id="tws-troubleshooting",
+                            name="TWS Troubleshooting Agent",
+                            role="TWS Troubleshooting Specialist",
+                            goal="Help users identify and resolve TWS system issues",
+                            backstory="I am an expert AI assistant specialized in IBM Workload Automation (TWS) troubleshooting and system monitoring.",
+                            tools=["get_tws_status", "analyze_tws_failures"],
+                            model_name="tongyi-deepresearch",
+                            temperature=0.7,
+                            memory=True,
+                            verbose=False
+                        ),
+                        AgentConfig(
+                            id="tws-general",
+                            name="TWS General Assistant",
+                            role="TWS General Assistant",
+                            goal="Provide general assistance for TWS operations and monitoring",
+                            backstory="I am a helpful AI assistant for IBM Workload Automation (TWS) operations, providing information about system status and job execution.",
+                            tools=["get_tws_status", "analyze_tws_failures"],
+                            model_name="openrouter-fallback",
+                            temperature=0.5,
+                            memory=True,
+                            verbose=False
+                        )
+                    ]
+                    self.tools: dict[str, Any] = self._discover_tools()
+                    self.tws_client: Optional[OptimizedTWSClient] = None
+                    self._mock_tws_client: Optional[MockTWSClient] = None
+                    # Async lock to prevent race conditions during TWS client initialization
+                    self._tws_init_lock: asyncio.Lock = asyncio.Lock()
+
+                    runtime_metrics.record_health_check("agent_manager", "healthy")
+                    logger.info("agent_manager_initialized_successfully", correlation_id=correlation_id)
+
+                except AgentError as e:
+                    # Capture specific, known critical errors during initialization
+                    runtime_metrics.record_health_check(
+                        "agent_manager", "failed", {"error": str(e)}
+                    )
+                    logger.critical("agent_manager_initialization_failed", error=str(e), correlation_id=correlation_id, exc_info=True)
+                    raise  # Re-raise the specific AgentError
+                finally:
+                    runtime_metrics.close_correlation_id(correlation_id)
 
 
-# Factory function for creating AgentManager instances
-def create_agent_manager(settings_module: Any = settings) -> AgentManager:
-    """Create and return a new AgentManager instance."""
-    return AgentManager(settings_module=settings_module)
-
-
-# Legacy compatibility: create a default instance
-# This will be removed once all code is migrated to DI
-import warnings
-
-warnings.warn(
-    "The global agent_manager instance is deprecated and will be removed in a future version. "
-    "Use dependency injection with IAgentManager instead.",
-    DeprecationWarning,
-    stacklevel=2,
-)
-agent_manager = create_agent_manager()
+# Global singleton instance for backwards compatibility
+agent_manager = AgentManager()

@@ -31,7 +31,7 @@ for i, (response, required_keys) in enumerate(test_cases):
 try:
     parse_llm_json_response("This is not JSON at all")
     print("Malformed test: FAILED - Should have raised exception")
-except Exception as e:
+except Exception:
     print("Malformed test: SUCCESS - Correctly raised exception")
 
 print("JSON parser testing completed.")

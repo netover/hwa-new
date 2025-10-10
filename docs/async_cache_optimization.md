@@ -1,6 +1,6 @@
-# AsyncTTLCache Optimization
+# TWS Async Cache Optimization
 
-This document outlines the optimizations made to the AsyncTTLCache implementation to improve performance, scalability, and reduce contention in high-concurrency scenarios.
+This document outlines the optimizations made to the AsyncTTLCache implementation to improve performance, scalability, and reduce contention in high-concurrency scenarios, specifically optimized for TWS (HCL Workload Automation) workloads.
 
 ## Analysis of Original AsyncTTLCache
 
@@ -119,13 +119,13 @@ Benchmarks show significant improvements in the enhanced implementation:
 The enhanced cache implementation maintains the same API as the original, making it a drop-in replacement:
 
 ```python
-from resync.core.enhanced_async_cache import EnhancedAsyncTTLCache
+from resync.core.enhanced_async_cache import TWS_OptimizedAsyncCache
 
 # Create a cache instance
-cache = EnhancedAsyncTTLCache(
+cache = TWS_OptimizedAsyncCache(
     ttl_seconds=60,
     cleanup_interval=30,
-    num_shards=16
+    num_shards=8  # Otimizado para TWS workloads
 )
 
 # Use the cache with the same API
@@ -135,12 +135,13 @@ value = await cache.get("key")
 
 ## Configuration Options
 
-The enhanced implementation adds new configuration options:
+The TWS_OptimizedAsyncCache implementation uses configuration from settings.toml:
 
-- `num_shards`: Number of shards (default: 16)
+- `num_shards`: Number of shards (default: 8, otimizado para TWS)
 - `max_workers`: Maximum number of worker threads for parallel operations (default: 4)
 - `ttl_seconds`: Default TTL for cache entries (default: 60)
 - `cleanup_interval`: How often to run cleanup (default: 30)
+- `concurrency_threshold`: Threshold para ajuste dinâmico de sharding (default: 5)
 
 ## Running Benchmarks
 
@@ -154,14 +155,16 @@ This will run a series of benchmarks and display the results, showing the perfor
 
 ## Integration with CacheHierarchy
 
-The enhanced cache can be used as a drop-in replacement in the CacheHierarchy:
+The TWS_OptimizedAsyncCache is integrated as the L2 cache in the CacheHierarchy:
 
 ```python
-from resync.core.enhanced_async_cache import EnhancedAsyncTTLCache
+from resync.core.enhanced_async_cache import TWS_OptimizedAsyncCache
 
-# In CacheHierarchy.__init__
-self.l2_cache = EnhancedAsyncTTLCache(
+# In CacheHierarchy.__init__ (resync/core/cache_hierarchy.py)
+self.l2_cache = TWS_OptimizedAsyncCache(
     ttl_seconds=settings.CACHE_HIERARCHY_L2_TTL,
-    cleanup_interval=settings.CACHE_HIERARCHY_L2_CLEANUP_INTERVAL
+    cleanup_interval=settings.CACHE_HIERARCHY_L2_CLEANUP_INTERVAL,
+    num_shards=settings.CACHE_HIERARCHY_NUM_SHARDS,
+    max_workers=settings.CACHE_HIERARCHY_MAX_WORKERS
 )
 ```

@@ -1,3 +1,7 @@
+from pathlib import Path
+
+from pydantic import Field
+
 from .base import Settings
 
 
@@ -25,6 +29,15 @@ class ProductionSettings(Settings):
 
     # Override settings for production
     # TWS credentials MUST be set via environment variables in production
+    # Knowledge Base and Protection Settings
+    KNOWLEDGE_BASE_DIRS: list[Path] = Field(
+        default=[Settings.BASE_DIR / "resync/RAG"],
+        description="Directories included in the knowledge base (includes all RAG subdirectories)"
+    )
+    PROTECTED_DIRECTORIES: list[Path] = Field(
+        default=[Settings.BASE_DIR / "resync/RAG/BASE"],
+        description="Core knowledge base directory protected from deletion"
+    )
     # TWS_HOST: str = "your_prod_tws_host"
     # TWS_PORT: int = 31116
     # TWS_USER: str = "prod_user"
@@ -39,3 +52,17 @@ class ProductionSettings(Settings):
     # Mem0 settings for production
     # MEM0_STORAGE_HOST: str = "your_prod_qdrant_host"
     # MEM0_STORAGE_PORT: int = 6333
+
+    # --- CORS Configuration for Production ---
+    CORS_ALLOWED_ORIGINS: str = Field(
+        default="",  # Must be configured explicitly in production
+        description="Comma-separated list of allowed origins for CORS in production."
+    )
+    CORS_ALLOW_CREDENTIALS: bool = Field(
+        default=False,  # More restrictive for production
+        description="Allow credentials in CORS requests (disabled by default in production)."
+    )
+    CORS_LOG_VIOLATIONS: bool = Field(
+        default=True,  # Always log violations in production
+        description="Log CORS violations for security monitoring in production."
+    )

@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from resync.core.audit_queue import AsyncAuditQueue
-from resync.core.metrics import MetricsRegistry
 
 
 # Mock dependencies to isolate load test
@@ -57,13 +56,8 @@ def mock_ia_auditor():
     return mock
 
 
-@pytest.fixture
-def metrics_collector():
-    return MetricsRegistry()
-
-
 @pytest.mark.asyncio
-async def test_audit_load_test(mock_audit_queue, mock_ia_auditor, metrics_collector):
+async def test_audit_load_test(mock_audit_queue, mock_ia_auditor):
     """
     Load test for concurrent audit processing under high concurrency.
     Validates system behavior with 100+ concurrent audit requests.

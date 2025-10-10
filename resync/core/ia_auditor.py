@@ -1,47 +1,71 @@
 # resync/core/ia_auditor.py
 import asyncio
-import logging
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from resync.core import audit_queue
-from resync.core.audit_lock import audit_lock
-from resync.core.knowledge_graph import (  # noqa: N813
-    AsyncKnowledgeGraph as knowledge_graph,
+import httpx
+
+from resync.core.audit_lock import DistributedAuditLock
+from resync.core.audit_queue import AsyncAuditQueue
+from resync.core.exceptions import (
+    AuditError,
+    DatabaseError,
+    KnowledgeGraphError,
+    LLMError,
+    ParsingError,
 )
+from resync.core.knowledge_graph import AsyncKnowledgeGraph
 from resync.core.utils.json_parser import parse_llm_json_response
 from resync.core.utils.llm import call_llm
 from resync.settings import settings
+from resync.core.structured_logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+# Initialize singleton instances
+knowledge_graph = AsyncKnowledgeGraph()
+audit_lock = DistributedAuditLock()
+audit_queue = AsyncAuditQueue()
+
+# --- Constants for IA Auditor Logic ---
+AUDIT_DELETION_CONFIDENCE_THRESHOLD = 0.85
+AUDIT_FLAGGING_CONFIDENCE_THRESHOLD = 0.6
+AUDIT_HIGH_RATING_THRESHOLD = 3
+RECENT_MEMORIES_FETCH_LIMIT = 100
 
 
-async def _validate_memory_for_analysis(mem: dict) -> bool:
+async def _validate_memory_for_analysis(mem: Dict[str, Any]) -> bool:
     """Checks if a memory is valid for analysis."""
-    memory_id = mem["id"]
+    memory_id = str(mem.get("id", ""))
     if await knowledge_graph.is_memory_already_processed(memory_id):
-        logger.debug(f"Memory {memory_id} already processed, skipping.")
+        logger.debug("memory_already_processed", memory_id=memory_id)
         return False
 
-    if mem.get("rating") is not None and mem.get("rating") >= 3:
-        logger.debug(
-            f"Memory {memory_id} has high rating ({mem.get('rating')}), skipping."
-        )
+    rating = mem.get("rating")
+    if (
+        rating is not None
+        and isinstance(rating, (int, float))
+        and rating >= AUDIT_HIGH_RATING_THRESHOLD
+    ):
+        logger.debug("memory_has_high_rating", memory_id=memory_id, rating=rating)
         return False
 
     if not mem.get("user_query") or not mem.get("agent_response"):
         logger.debug(
-            f"Memory {memory_id} missing user_query or agent_response, skipping."
+            "memory_missing_required_fields", memory_id=memory_id
         )
         return False
 
     # Skip if memory is already approved by human
     if await knowledge_graph.is_memory_approved(memory_id):
-        logger.debug(f"Memory {memory_id} already approved by human, skipping.")
+        logger.debug("memory_already_approved_by_human", memory_id=memory_id)
         return False
 
     return True
 
 
-async def _get_llm_analysis(user_query: str, agent_response: str) -> dict | None:
+async def _get_llm_analysis(
+    user_query: str, agent_response: str
+) -> Optional[Dict[str, Any]]:
     """Gets the analysis of a memory from the LLM."""
     prompt = f"""
     You are an expert TWS (IBM MQ/Workload Scheduler) auditor.
@@ -71,28 +95,51 @@ async def _get_llm_analysis(user_query: str, agent_response: str) -> dict | None
             result,
             required_keys=["is_incorrect", "confidence", "reason"],
         )
-    except Exception as e:
-        logger.warning(f"IA Auditor: LLM analysis failed: {e}")
+    except (httpx.RequestError, httpx.HTTPStatusError) as e:
+        logger.error("llm_network_error", error=str(e), exc_info=True)
+        raise LLMError("Network error during memory audit analysis") from e
+    except ParsingError as e:
+        logger.error(
+            "llm_json_parsing_failed", error=str(e), exc_info=True
+        )
+        # Return None to indicate a non-critical failure for this memory
         return None
+    except Exception as e:
+        logger.critical("unexpected_error_in_llm_analysis", error=str(e), exc_info=True)
+        # Encapsulate unexpected errors in a domain-specific one
+        raise LLMError("Failed to get LLM analysis for memory audit") from e
 
 
 async def _perform_action_on_memory(
-    mem: dict, analysis: dict
-) -> tuple[str, dict] | None:
+    mem: Dict[str, Any], analysis: Dict[str, Any]
+) -> Optional[Tuple[str, Union[str, Dict[str, Any]]]]:
     """Performs the appropriate action on a memory based on the LLM analysis."""
-    memory_id = mem["id"]
-    if analysis.get("is_incorrect") and analysis.get("confidence", 0) > 0.85:
+    memory_id = str(mem.get("id", ""))
+    confidence = float(analysis.get("confidence", 0))
+
+    if (
+        analysis.get("is_incorrect")
+        and confidence > AUDIT_DELETION_CONFIDENCE_THRESHOLD
+    ):
         logger.info(
-            f"🚨 DELETING: ID {memory_id} | Confidence: {analysis.get('confidence', 0):.2f} | Reason: {analysis.get('reason', 'N/A')}"
+            "deleting_memory",
+            memory_id=memory_id,
+            confidence=confidence,
+            reason=analysis.get('reason', 'N/A')
         )
         success = await knowledge_graph.atomic_check_and_delete(memory_id)
         return ("delete", memory_id) if success else None
 
-    elif analysis.get("is_incorrect") and analysis.get("confidence", 0) > 0.6:
-        reason = analysis.get("reason", "N/A")
-        confidence = analysis.get("confidence", 0)
+    elif (
+        analysis.get("is_incorrect")
+        and confidence > AUDIT_FLAGGING_CONFIDENCE_THRESHOLD
+    ):
+        reason = str(analysis.get("reason", "N/A"))
         logger.warning(
-            f"⚠️ FLAGGING: ID {memory_id} | Confidence: {confidence:.2f} | Reason: {reason}"
+            "flagging_memory",
+            memory_id=memory_id,
+            confidence=confidence,
+            reason=reason
         )
         success = await knowledge_graph.atomic_check_and_flag(
             memory_id, reason, confidence
@@ -105,9 +152,11 @@ async def _perform_action_on_memory(
     return None
 
 
-async def analyze_memory(mem: dict) -> tuple[str, dict] | None:
+async def analyze_memory(
+    mem: Dict[str, Any],
+) -> Optional[Tuple[str, Union[str, Dict[str, Any]]]]:
     """Analyzes a single memory and returns an action if necessary."""
-    memory_id = mem["id"]
+    memory_id = str(mem.get("id", ""))
     try:
         async with await audit_lock.acquire(memory_id, timeout=30):
             if not await _validate_memory_for_analysis(mem):
@@ -116,69 +165,113 @@ async def analyze_memory(mem: dict) -> tuple[str, dict] | None:
             # Check if memory is already flagged or approved before LLM analysis
             if await knowledge_graph.is_memory_flagged(memory_id):
                 logger.debug(
-                    f"Memory {memory_id} already flagged by IA, skipping analysis."
+                    "memory_already_flagged_by_ia", memory_id=memory_id
                 )
                 return None
 
             if await knowledge_graph.is_memory_approved(memory_id):
                 logger.debug(
-                    f"Memory {memory_id} already approved by human, skipping analysis."
+                    "memory_already_approved_by_human", memory_id=memory_id
                 )
                 return None
 
             analysis = await _get_llm_analysis(
-                mem.get("user_query", ""), mem.get("agent_response", "")
+                str(mem.get("user_query", "")), str(mem.get("agent_response", ""))
             )
             if not analysis:
                 return None
 
             return await _perform_action_on_memory(mem, analysis)
 
-    except Exception as e:
+    except LLMError:
+        # Error already logged in _get_llm_analysis, just bubble it up if needed
+        logger.warning("skipping_memory_due_to_llm_failure", memory_id=memory_id)
+        return None
+    except AuditError as e:
+        # Lock acquisition failure
+        logger.warning(
+            "could_not_acquire_lock_for_memory", memory_id=memory_id, error=str(e)
+        )
+        return None
+    except (KnowledgeGraphError, DatabaseError) as e:
+        # Catch specific data access errors
         logger.error(
-            f"IA Auditor: Error analyzing memory {memory_id}: {e}",
+            "database_or_knowledge_graph_error_analyzing_memory",
+            memory_id=memory_id,
+            error=str(e),
             exc_info=True,
         )
         return None
 
 
-async def analyze_and_flag_memories():
-    """
-    Analyzes recent memories, skipping those already reviewed, and flags or
-    removes incorrect ones. Uses atomic operations with distributed locking
-    to prevent race conditions and duplicate flagging.
-    """
-    logger.info("IA Auditor: Analyzing recent memories...")
-
+async def _cleanup_locks() -> None:
+    """Safely cleans up expired audit locks."""
     try:
         await audit_lock.cleanup_expired_locks(max_age=60)
-    except Exception as e:
-        logger.warning(f"IA Auditor: Error cleaning up expired locks: {e}")
+    except Exception:
+        logger.warning("error_cleaning_up_expired_locks", exc_info=True)
 
+
+async def _fetch_recent_memories() -> Optional[List[Dict[str, Any]]]:
+    """Fetches recent conversations from the knowledge graph."""
     try:
-        recent_memories = await knowledge_graph.get_all_recent_conversations(100)
-    except Exception as e:
-        logger.error(f"IA Auditor: Error searching memories: {e}", exc_info=True)
-        return {"deleted": 0, "flagged": 0}
+        return await knowledge_graph.get_all_recent_conversations(
+            RECENT_MEMORIES_FETCH_LIMIT
+        )
+    except (KnowledgeGraphError, DatabaseError) as e:
+        logger.error(
+            "could_not_fetch_memories_from_database",
+            error=str(e),
+            exc_info=True,
+        )
+        return None
 
-    tasks = [analyze_memory(mem) for mem in recent_memories]
-    results = await asyncio.gather(*tasks)
 
-    to_delete = []
-    to_flag = []
+async def _analyze_memories_concurrently(
+    memories: List[Dict[str, Any]],
+) -> List[Optional[Tuple[str, Union[str, Dict[str, Any]]]]]:
+    """Analyzes a list of memories in parallel."""
+    tasks = [analyze_memory(mem) for mem in memories]
+    return await asyncio.gather(*tasks)
+
+
+async def _process_analysis_results(
+    results: List[Optional[Tuple[str, Union[str, Dict[str, Any]]]]],
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """Processes the results from memory analysis, sorting them into actions."""
+    to_delete: List[str] = []
+    to_flag: List[Dict[str, Any]] = []
     for result in results:
         if result:
             action, value = result
-            if action == "delete":
+            if action == "delete" and isinstance(value, str):
                 to_delete.append(value)
-            elif action == "flag":
+            elif action == "flag" and isinstance(value, dict):
                 to_flag.append(value)
                 await audit_queue.add_audit_record(value)
+    return to_delete, to_flag
+
+
+async def analyze_and_flag_memories() -> Dict[str, Union[int, str]]:
+    """
+    Analyzes recent memories, skipping those already reviewed, and flags
+    or removes incorrect ones. Uses atomic operations with distributed locking
+    to prevent race conditions and duplicate flagging.
+    """
+    logger.info("analyzing_recent_memories")
+    await _cleanup_locks()
+
+    recent_memories = await _fetch_recent_memories()
+    if recent_memories is None:
+        return {"deleted": 0, "flagged": 0, "error": "database_fetch_failed"}
+
+    analysis_results = await _analyze_memories_concurrently(recent_memories)
+    to_delete, to_flag = await _process_analysis_results(analysis_results)
 
     for mem_id in to_delete:
         await knowledge_graph.delete_memory(mem_id)
 
     logger.info(
-        f"IA Auditor: Finished. Deleted: {len(to_delete)}, Flagged: {len(to_flag)}"
+        "finished_analyzing_memories", deleted=len(to_delete), flagged=len(to_flag)
     )
     return {"deleted": len(to_delete), "flagged": len(to_flag)}
