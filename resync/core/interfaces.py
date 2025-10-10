@@ -39,7 +39,7 @@ class IKnowledgeGraph(Protocol):
         query: str = "type:conversation",
         limit: int = 100,
         sort_by: str = "created_at",
-        sort_order: str = "desc",
+        _sort_order: str = "desc",
     ) -> list[dict[str, Any]]:
         """Optimized search method for conversations."""
         ...

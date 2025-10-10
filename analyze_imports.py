@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ast
 import sys
-from typing import Any
 
 def analyze_imports(file_path: str) -> None:
     """Analyze imports in a Python file to identify potentially unused ones."""

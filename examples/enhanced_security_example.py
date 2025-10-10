@@ -5,15 +5,13 @@ Example usage of enhanced security features in Resync application.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from resync.api.validation.auth import LoginRequest, UserRegistrationRequest
 from resync.api.validation.enhanced_security import (
     EnhancedSecurityValidator,
-    InputValidationResult,
     SecurityContext,
     SecurityLevel,
     get_security_validator,
@@ -21,7 +19,6 @@ from resync.api.validation.enhanced_security import (
     validate_input,
     validate_password,
 )
-from resync.api.validation.common import BaseValidatedModel
 
 
 # Example models with enhanced security

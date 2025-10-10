@@ -144,8 +144,8 @@ class AsyncKnowledgeGraph:
         self,
         query: str = "type:conversation",
         limit: int = 100,
-        sort_by: str = "created_at",
-        sort_order: str = "desc",
+        _sort_by: str = "created_at",
+        _sort_order: str = "desc",
     ) -> List[Dict[str, Any]]:
         """Optimized search method for conversations."""
         cypher_query = """

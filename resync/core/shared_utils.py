@@ -22,7 +22,6 @@ class TeamsNotification:
 
 class NotificationError(Exception):
     """Exception raised for notification errors."""
-    pass
 
 
 def create_job_status_notification(

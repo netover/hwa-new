@@ -315,24 +315,6 @@ class WriteAheadLog:
                 except Exception as e:
                     logger.error(f"Failed to remove old WAL file {wal_file}: {e}")
     
-    async def cleanup_old_logs(self, retention_hours: int = 24):
-        """
-        Clean up old WAL files based on retention policy.
-        
-        Args:
-            retention_hours: Number of hours to retain WAL files
-        """
-        cutoff_time = time.time() - (retention_hours * 3600)
-        
-        for wal_file in self.log_path.glob("wal_*.log"):
-            if wal_file.stat().st_mtime < cutoff_time:
-                try:
-                    # Use os.remove for file deletion
-                    os.remove(wal_file)
-                    logger.info(f"Removed old WAL file: {wal_file}")
-                except Exception as e:
-                    logger.error(f"Failed to remove old WAL file {wal_file}: {e}")
-
     async def close(self):
         """Close the WAL system and release resources."""
         if self._file_handle and not self._file_handle.closed:

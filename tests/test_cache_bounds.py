@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 from resync.core.async_cache import AsyncTTLCache
 
 

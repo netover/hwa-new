@@ -5,7 +5,7 @@ import secrets
 import hashlib
 import hmac
 from datetime import datetime, timedelta
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status

@@ -5,7 +5,7 @@ from business logic in endpoints.
 """
 import logging
 from functools import wraps
-from typing import Callable, Any
+from typing import Callable
 from fastapi import Request
 from resync.core.metrics import runtime_metrics
 from resync.core.utils.error_utils import create_error_response_from_exception, log_with_correlation

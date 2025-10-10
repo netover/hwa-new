@@ -288,7 +288,7 @@ def update_audit_status(memory_id: str, status: str) -> bool:
             logger.info("Updated memory %s status to %s.", memory_id, status)
             return True
         logger.warning("Memory %s not found for status update.", memory_id)
-        return False
+        
 
 
 def delete_audit_record(memory_id: str) -> bool:
@@ -303,7 +303,7 @@ def delete_audit_record(memory_id: str) -> bool:
             logger.info("Deleted memory %s from audit queue.", memory_id)
             return True
         logger.warning("Memory %s not found for deletion from audit queue.", memory_id)
-        return False
+        
 
 
 def is_memory_approved(memory_id: str) -> bool:
@@ -324,7 +324,7 @@ def is_memory_approved(memory_id: str) -> bool:
         row = cursor.fetchone()
         return row is not None and row["status"] == "approved"
 
-        return False
+        
 
 
 # Initialize the database on module import

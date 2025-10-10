@@ -2,10 +2,7 @@ from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 import secrets
 import hmac
-from typing import Optional
-from datetime import datetime
 
-from resync.settings import settings
 from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)

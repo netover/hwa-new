@@ -15,26 +15,17 @@ This module tests:
 import asyncio
 import pytest
 import time
-import threading
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
+from unittest.mock import Mock, AsyncMock, patch
 
 from resync.core.connection_pool_manager import (
     ConnectionPoolManager,
     DatabaseConnectionPool,
-    RedisConnectionPool,
-    HTTPConnectionPool,
     ConnectionPoolConfig,
-    ConnectionPoolStats,
     PoolExhaustedError,
 )
 from resync.core.websocket_pool_manager import (
     WebSocketPoolManager,
-    WebSocketPoolStats,
-    WebSocketConnectionInfo,
 )
-from resync.core.exceptions import DatabaseError, TWSConnectionError
 
 
 class TestConnectionPoolMetrics:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from resync.csp_validation import validate_csp_report, _is_safe_uri, _is_safe_directive_value
 
 # Test data

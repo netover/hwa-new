@@ -1,7 +1,6 @@
 # resync/api/rag_upload.py
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, BackgroundTasks
@@ -9,7 +8,6 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Backgro
 from resync.core.exceptions import FileProcessingError
 from resync.core.fastapi_di import get_file_ingestor
 from resync.core.interfaces import IFileIngestor
-from resync.core.llm_wrapper import optimized_llm
 from resync.models.validation import DocumentUpload
 
 logger = logging.getLogger(__name__)

@@ -22,7 +22,6 @@ class ICommand(ABC):
     Base interface for command objects in the CQRS pattern.
     Commands represent operations that change the system state.
     """
-    pass
 
 
 @dataclass
@@ -31,7 +30,6 @@ class IQuery(ABC):
     Base interface for query objects in the CQRS pattern.
     Queries represent operations that read data without changing the system state.
     """
-    pass
 
 
 @dataclass
@@ -51,7 +49,6 @@ class ICommandHandler(ABC, Generic[TCommand, TResult]):
         Returns:
             The result of the command execution
         """
-        pass
 
 
 @dataclass
@@ -71,7 +68,6 @@ class IQueryHandler(ABC, Generic[TQuery, TResult]):
         Returns:
             The result of the query execution
         """
-        pass
 
 
 class CommandResult(BaseModel):

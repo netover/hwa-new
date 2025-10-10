@@ -1,40 +1,29 @@
 """Enhanced security validation with async context managers and improved type hints."""
 
-import asyncio
-import hashlib
 import hmac
 import ipaddress
-import json
-import logging
 import re
 import secrets
 import time
 import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from typing import (
     Any,
     AsyncGenerator,
-    Awaitable,
-    Callable,
     Dict,
     List,
     Optional,
     Pattern,
-    Set,
     Tuple,
-    Type,
     TypeVar,
     Union,
-    cast,
 )
-from urllib.parse import urlparse
 
 import structlog
-from fastapi import Depends, HTTPException, Request, Response, status
 from jose import JWTError, jwt
 try:
     from passlib.context import CryptContext
@@ -45,18 +34,12 @@ except ImportError:
     pwd_context = None
     HAS_PASSLIB = False
 
-from pydantic import BaseModel, EmailStr, Field, ValidationError, validator
-from starlette.datastructures import Headers
+from pydantic import BaseModel, Field
 
 from resync.api.validation.common import (
-    BaseValidatedModel,
-    NumericConstraints,
     SanitizationLevel,
-    StringConstraints,
-    ValidationPatterns,
     sanitize_input,
 )
-from resync.core.exceptions_enhanced import ResyncException
 from resync.settings import settings
 
 # Type aliases for better readability
@@ -227,7 +210,6 @@ class SecurityValidator(ABC):
     @abstractmethod
     async def validate(self, data: Any, context: SecurityContext) -> ValidationResult:
         """Validate data with security context."""
-        pass
 
 
 class AsyncSecurityContextManager:
@@ -582,7 +564,7 @@ class EnhancedSecurityValidator:
         self, 
         input_data: str, 
         security_level: SecurityLevel = SecurityLevel.MEDIUM,
-        allowed_patterns: Optional[List[Pattern]] = None
+        _allowed_patterns: Optional[List[Pattern]] = None
     ) -> InputValidationResult:
         """
         Comprehensive input validation with threat detection.

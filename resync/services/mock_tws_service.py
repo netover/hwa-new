@@ -367,7 +367,7 @@ class MockTWSClient:
         if validation_success:
             return {
                 "valid": True,
-                "message": f"Successfully validated connection to mock TWS server",
+                "message": "Successfully validated connection to mock TWS server",
                 "host": host or "mock-tws-server",
                 "port": port or 31111
             }

@@ -1,8 +1,9 @@
 """Validation configuration for the resync application."""
 
+import re
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, List, Optional, Union
 
 from pydantic import BaseModel, Field, validator
 

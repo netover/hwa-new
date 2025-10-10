@@ -22,17 +22,14 @@ class ResourceManager(ABC, Generic[T]):
     @abstractmethod
     async def acquire(self) -> T:
         """Acquire a resource."""
-        pass
 
     @abstractmethod
     async def release(self, resource: T) -> None:
         """Release a resource."""
-        pass
 
     @abstractmethod
     async def health_check(self, resource: T) -> bool:
         """Check if resource is healthy."""
-        pass
 
 
 class LLMResourceManager(ResourceManager):
@@ -204,7 +201,6 @@ class ResourcePoolManager:
     async def initialize(self) -> None:
         """Initialize the resource pool."""
         # Pre-populate pool if needed
-        pass
 
     @asynccontextmanager
     async def acquire(self) -> AsyncIterator[T]:

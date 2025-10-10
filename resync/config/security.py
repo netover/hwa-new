@@ -2,12 +2,10 @@
 Additional security headers and configuration for Resync application.
 """
 import logging
-from typing import Optional
 
 from fastapi import FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
 
 from .enhanced_security import configure_enhanced_security
 

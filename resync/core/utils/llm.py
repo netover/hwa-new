@@ -2,7 +2,6 @@
 import asyncio
 import time
 
-from litellm import acompletion
 from litellm.exceptions import (
     AuthenticationError,
     ContentPolicyViolationError,
@@ -46,7 +45,7 @@ async def call_llm(
     max_tokens: int = 200,
     temperature: float = 0.1,
     max_retries: int = 3,
-    initial_backoff: float = 1.0,
+    _initial_backoff: float = 1.0,
     api_base: str = None,
     api_key: str = None,
     timeout: float = 30.0,

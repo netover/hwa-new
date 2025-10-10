@@ -5,7 +5,6 @@ This script tests the performance monitoring API endpoints.
 """
 import requests
 import json
-from typing import Dict, Any
 
 BASE_URL = "http://localhost:8000"
 

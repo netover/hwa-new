@@ -1,21 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
-import logging
-from datetime import datetime
-from enum import Enum, auto
+from enum import Enum
 from typing import (
     Any,
     Callable,
     Dict,
-    Generic,
-    Optional,
-    Protocol,
-    Type,
     TypeVar,
-    cast,
-    get_type_hints,
 )
 
 # --- Logging Setup ---
@@ -36,6 +27,27 @@ class ServiceLifetime(Enum):
     TRANSIENT = "transient"
     SCOPED = "scoped"
 
+
+class ServiceScope:
+    """Context manager for scoped service lifetimes."""
+
+    def __init__(self):
+        self._services: Dict[type, Any] = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # Clean up scoped services
+        self._services.clear()
+
+    def get_service(self, interface: type[T]) -> T | None:
+        """Get service from current scope."""
+        return self._services.get(interface)
+
+    def set_service(self, interface: type[T], instance: T):
+        """Set service in current scope."""
+        self._services[interface] = instance
 
 class DIContainer:
     """Thread-safe DI container with proper lifecycle management."""

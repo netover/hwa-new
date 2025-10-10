@@ -10,22 +10,23 @@ import subprocess
 import sys
 import json
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
-
-def run_command(cmd: List[str]) -> Tuple[str, str, int]:
-    """Run a command and return (stdout, stderr, returncode)."""
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return result.stdout, result.stderr, result.returncode
+from typing import Dict, List
 
 def get_installed_packages() -> Dict[str, str]:
     """Get dict of installed packages {name: version}."""
-    stdout, stderr, code = run_command([sys.executable, "-m", "pip", "list", "--format=json"])
-    if code != 0:
-        print(f"Error getting installed packages: {stderr}")
+    # Comando específico e seguro - elimina risco de command injection
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "list", "--format=json"],
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        print(f"Error getting installed packages: {result.stderr}")
         return {}
 
     try:
-        packages = json.loads(stdout)
+        packages = json.loads(result.stdout)
         return {pkg["name"].lower(): pkg["version"] for pkg in packages}
     except json.JSONDecodeError:
         print("Error parsing pip list output")
@@ -55,9 +56,9 @@ def check_requirements_match(installed: Dict[str, str], required: Dict[str, str]
 
     for name, required_version in required.items():
         if name not in installed:
-            issues.append(f"❌ MISSING: {name}=={required_version}")
+            issues.append(f"[X] MISSING: {name}=={required_version}")
         elif installed[name] != required_version:
-            issues.append(f"⚠️  VERSION MISMATCH: {name} (installed: {installed[name]}, required: {required_version})")
+            issues.append(f"[!] VERSION MISMATCH: {name} (installed: {installed[name]}, required: {required_version})")
 
     return issues
 
@@ -65,33 +66,39 @@ def check_security_issues() -> List[str]:
     """Check for security issues using safety."""
     issues = []
 
-    stdout, stderr, code = run_command([sys.executable, "-m", "safety", "check", "--json"])
-    if code == 0:
+    # Comando específico e seguro - elimina risco de command injection
+    result = subprocess.run(
+        [sys.executable, "-m", "safety", "check", "--json"],
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode == 0:
         try:
-            results = json.loads(stdout)
+            results = json.loads(result.stdout)
             if results:
-                issues.append("🚨 SECURITY ISSUES FOUND:")
+                issues.append("[!] SECURITY ISSUES FOUND:")
                 for issue in results:
                     issues.append(f"   {issue['package']} {issue['vulnerable_spec']} - {issue['advisory']}")
         except json.JSONDecodeError:
             issues.append("Error parsing safety output")
     else:
-        issues.append(f"Safety check failed: {stderr}")
+        issues.append(f"Safety check failed: {result.stderr}")
 
     return issues
 
 def main():
     """Main validation function."""
-    print("🔍 Validating Requirements Installation")
+    print("[*] Validating Requirements Installation")
     print("=" * 50)
 
     # Get installed packages
     installed = get_installed_packages()
     if not installed:
-        print("❌ Could not get installed packages")
+        print("[X] Could not get installed packages")
         return 1
 
-    print(f"📦 Found {len(installed)} installed packages")
+    print(f"[+] Found {len(installed)} installed packages")
 
     # Check different requirement files
     requirement_files = [
@@ -104,14 +111,14 @@ def main():
 
     for req_file, description in requirement_files:
         if not Path(req_file).exists():
-            print(f"⚠️  {description} file missing: {req_file}")
+            print(f"[!] {description} file missing: {req_file}")
             continue
 
-        print(f"\n🔍 Checking {description} ({req_file})")
+        print(f"\n[*] Checking {description} ({req_file})")
 
         required = parse_requirements_file(req_file)
         if not required:
-            print(f"⚠️  No requirements found in {req_file}")
+            print(f"[!] No requirements found in {req_file}")
             continue
 
         issues = check_requirements_match(installed, required)
@@ -120,25 +127,25 @@ def main():
             for issue in issues:
                 print(f"   {issue}")
         else:
-            print(f"✅ All {len(required)} {description.lower()} satisfied")
+            print(f"[OK] All {len(required)} {description.lower()} satisfied")
 
     # Security check
-    print("\n🔒 Checking Security Issues")
+    print("\n[*] Checking Security Issues")
     security_issues = check_security_issues()
     if security_issues:
         all_issues.extend(security_issues)
         for issue in security_issues:
             print(issue)
     else:
-        print("✅ No security issues found")
+        print("[OK] No security issues found")
 
     # Summary
     print("\n" + "=" * 50)
     if all_issues:
-        print(f"❌ Found {len(all_issues)} issues")
+        print(f"[X] Found {len(all_issues)} issues")
         return 1
     else:
-        print("✅ All requirements validated successfully!")
+        print("[OK] All requirements validated successfully!")
         return 0
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ across multiple modules in the application.
 """
 import logging
 import time
-from typing import Any, Callable, Type, Union, TypeVar, cast, Optional
+from typing import Any, Callable, Type, TypeVar, cast, Optional
 import asyncio
 from functools import wraps
 

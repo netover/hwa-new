@@ -1,11 +1,10 @@
 """
 Alerting system for Resync with multiple notification channels
 """
-import asyncio
 import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Callable
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from enum import Enum
 
 from resync.core.teams_integration import get_teams_integration, TeamsNotification

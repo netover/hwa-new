@@ -1,12 +1,8 @@
 """
 Unit tests for new features without importing the main application modules
 """
-import pytest
-from pydantic import ValidationError
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 import sys
-import os
-import tempfile
 
 # Create a mock for settings to avoid loading the real settings module
 import unittest.mock
@@ -23,10 +19,7 @@ with unittest.mock.patch.dict('sys.modules', {
     # Import modules after mocking the dependencies
     from resync.api.cache import ConnectionPoolValidator
     from resync.api.middleware.cors_monitoring import CORSMonitor, CORSOperation
-    from resync.api.audit import AuditAction, AuditLogger, generate_audit_log, AuditRecordResponse
-    from pydantic import BaseModel, Field
-    from typing import Optional
-    from datetime import datetime
+    from resync.api.audit import AuditAction, AuditLogger, AuditRecordResponse
 
 
 def test_connection_pool_validator():
@@ -91,7 +84,6 @@ def test_audit_action_enum():
 def test_audit_logger_functionality():
     """Test the AuditLogger functionality."""
     # Mock the logger
-    import logging
     mock_logger = Mock()
     
     with patch('resync.api.audit.logger', mock_logger):
@@ -115,7 +107,6 @@ def test_redis_connection_functionality():
     # Mock Redis separately to test connection functions
     with patch.dict('sys.modules', {'redis': Mock()}):
         # Reimport cache module after mocking redis
-        import importlib
         if 'resync.api.cache' in sys.modules:
             del sys.modules['resync.api.cache']
         
@@ -155,7 +146,6 @@ def test_redis_connection_functionality():
 def test_error_handling_function():
     """Test the error handling function."""
     # Create the function inline since it's in endpoints module which has import issues
-    import logging
     from fastapi import HTTPException
     
     def handle_error(e: Exception, operation: str):

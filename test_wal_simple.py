@@ -1,7 +1,6 @@
 import tempfile
 from pathlib import Path
 from resync.core.async_cache import AsyncTTLCache
-from resync.core.write_ahead_log import WriteAheadLog, WalOperationType, WalEntry
 import asyncio
 
 

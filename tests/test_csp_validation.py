@@ -7,7 +7,6 @@ from resync.csp_validation import (
     _is_safe_uri, 
     _is_safe_directive_value,
     sanitize_csp_report,
-    process_csp_report,
     CSPValidationError,
     validate_csp_report_legacy
 )
@@ -219,7 +218,6 @@ class TestCSPProcessing:
         """Test processing of a valid CSP report."""
         # This would require mocking a Request object, which is complex
         # We'll test the validation functions directly instead
-        pass
 
     def test_csp_validation_error_exception(self):
         """Test CSPValidationError exception."""

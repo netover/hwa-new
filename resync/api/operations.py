@@ -8,7 +8,7 @@ from typing import Optional, Annotated
 from datetime import datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field, StringConstraints
 
 from resync.api.dependencies import (
@@ -18,7 +18,6 @@ from resync.api.dependencies import (
 )
 from resync.core.idempotency import IdempotencyManager
 from resync.core.structured_logger import get_logger
-from resync.core.exceptions import ValidationError, ResourceConflictError
 
 logger = get_logger(__name__)
 

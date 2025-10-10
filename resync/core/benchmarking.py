@@ -4,7 +4,7 @@ Performance benchmarking for Resync system
 import asyncio
 import time
 import statistics
-from typing import Dict, List, Tuple, Callable, Any
+from typing import Dict, List, Callable, Any
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging

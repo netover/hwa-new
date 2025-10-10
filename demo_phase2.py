@@ -5,7 +5,6 @@ Este script demonstra que todos os componentes da Fase 2 funcionam corretamente,
 mesmo que o servidor principal tenha problemas de importação circular.
 """
 
-import asyncio
 import sys
 from pathlib import Path
 
@@ -54,7 +53,7 @@ try:
     
     efficiency = metrics.calculate_efficiency_score()
     
-    print(f"✓ CachePerformanceMetrics criado com sucesso")
+    print("✓ CachePerformanceMetrics criado com sucesso")
     print(f"  - Hit Rate: {metrics.hit_rate:.1%}")
     print(f"  - Total Accesses: {metrics.total_accesses:,}")
     print(f"  - Cache Size: {metrics.cache_size:,} items")
@@ -98,7 +97,7 @@ try:
     # Get stats
     stats = pool.get_stats()
     
-    print(f"✓ ResourcePool criado com sucesso")
+    print("✓ ResourcePool criado com sucesso")
     print(f"  - Max Resources: {stats['max_resources']}")
     print(f"  - Active Resources: {stats['active_resources']}")
     print(f"  - Utilization: {stats['utilization_percentage']:.1f}%")
@@ -138,7 +137,7 @@ try:
         if endpoint in api_content:
             found_endpoints.append(endpoint)
     
-    print(f"✓ Performance API analisada")
+    print("✓ Performance API analisada")
     print(f"  - Endpoints encontrados: {len(found_endpoints)}/{len(endpoints)}")
     for ep in found_endpoints:
         print(f"    • /api/performance{ep}")

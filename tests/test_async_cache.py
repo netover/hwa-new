@@ -1,10 +1,8 @@
 import asyncio
 import pytest
 import time
-from unittest.mock import patch, MagicMock
-import psutil
 
-from resync.core.async_cache import AsyncTTLCache, CacheError
+from resync.core.async_cache import AsyncTTLCache
 
 
 @pytest.fixture

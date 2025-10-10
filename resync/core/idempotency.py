@@ -21,11 +21,10 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 from redis.asyncio import Redis
 
-from resync.core.exceptions import BusinessError
 from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)

@@ -5,7 +5,6 @@ Demonstração da Migração Gradual - Projeto Resync
 from __future__ import annotations
 
 import asyncio
-import time
 import os
 import sys
 

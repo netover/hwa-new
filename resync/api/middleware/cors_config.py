@@ -200,7 +200,6 @@ class CORSPolicy(BaseModel):
 
         # Extract host and port
         host = parsed.hostname
-        port = parsed.port
         
         if host:
             # Special case: localhost is always valid

@@ -21,17 +21,14 @@ class IContainer(Protocol):  # type: ignore
     @abstractmethod
     def register(self, interface: type, implementation: Any) -> None:  # type: ignore
         """Register an implementation for an interface."""  # type: ignore
-        pass
     
     @abstractmethod
     def resolve(self, interface: type) -> Any:  # type: ignore
         """Resolve an implementation for an interface."""  # type: ignore
-        pass
     
     @abstractmethod
     async def dispose(self) -> None:  # type: ignore
         """Dispose of all managed resources."""  # type: ignore
-        pass
 
 
 class Container:  # type: ignore

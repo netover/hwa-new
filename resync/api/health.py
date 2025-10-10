@@ -533,4 +533,32 @@ async def shutdown_health_service():
         await shutdown_health_check_service()
         logger.info("Health service shutdown completed")
     except Exception as e:
+
+
+async def health_check() -> Dict[str, Any]:
+    """
+    Basic health check function for external use.
+
+    Returns:
+        Dict[str, Any]: Basic health status information
+    """
+    try:
+        health_service = await get_health_check_service()
+        health_result = await health_service.perform_comprehensive_health_check()
+
+        return {
+            "status": health_result.overall_status.value,
+            "timestamp": health_result.timestamp.isoformat(),
+            "correlation_id": health_result.correlation_id,
+            "healthy": health_result.overall_status == HealthStatus.HEALTHY,
+            "message": get_status_description(health_result.overall_status)
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "timestamp": datetime.now().isoformat(),
+            "healthy": False,
+            "error": str(e)
+        }
         logger.error(f"Error during health service shutdown: {e}")

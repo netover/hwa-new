@@ -13,13 +13,13 @@ Características:
 
 import logging
 import sys
-from typing import Any, Dict, Optional, Union, Tuple
+from typing import Any, Dict, Optional
 from datetime import datetime
 from contextvars import ContextVar
 
 import structlog
 from structlog.types import EventDict, WrappedLogger
-from fastapi import Request, Response
+from fastapi import Request
 
 from resync.settings import settings
 

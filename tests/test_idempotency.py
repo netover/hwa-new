@@ -8,9 +8,8 @@ Date: October 2025
 """
 
 import json
-import time
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, ANY
+from unittest.mock import AsyncMock, MagicMock, ANY
 
 import pytest
 from redis.asyncio import Redis
@@ -23,8 +22,7 @@ from resync.core.idempotency import (
     validate_idempotency_key
 )
 from resync.api.middleware.idempotency import (
-    IdempotencyMiddleware,
-    IdempotencyConfig as MiddlewareConfig
+    IdempotencyMiddleware
 )
 
 

@@ -1,9 +1,9 @@
 import asyncio
+import logging
 import os
 import random
 import socket
 import sys
-from contextlib import asynccontextmanager
 from typing import Optional
 
 import redis.asyncio as redis
@@ -15,10 +15,7 @@ from redis.exceptions import (
     RedisError
 )
 
-from resync.core.metrics import runtime_metrics
 from resync.settings import settings
-from resync.core.container import app_container
-from resync.core.idempotency import IdempotencyManager
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +146,7 @@ class RedisInitializer:
                     
                 except Exception as e:
                     logger.critical(
-                        f"CRITICAL: Unexpected error during Redis initialization",
+                        "CRITICAL: Unexpected error during Redis initialization",
                         exc_info=True
                     )
                     sys.exit(1)

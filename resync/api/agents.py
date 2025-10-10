@@ -1,12 +1,7 @@
-from typing import List
-
 from fastapi import APIRouter, Depends, Request
 
-from resync.core.agent_manager import AgentConfig
 from resync.core.exceptions_enhanced import NotFoundError
 from resync.core.fastapi_di import get_agent_manager
-from resync.core.interfaces import IAgentManager
-from resync.core.rate_limiter import critical_rate_limit
 from resync.core.security import SafeAgentID
 
 # Module-level dependency for agent manager to avoid B008 error

@@ -1,7 +1,6 @@
 """
 Command handlers for TWS operations in the CQRS pattern.
 """
-from typing import List
 from resync.cqrs.base import ICommandHandler, CommandResult
 from resync.cqrs.commands import (
     GetSystemStatusCommand, GetWorkstationsStatusCommand, GetJobsStatusCommand,
@@ -9,8 +8,6 @@ from resync.cqrs.commands import (
     ExecuteJobCommand, GetSystemHealthCommand
 )
 from resync.core.interfaces import ITWSClient
-from resync.services.tws_service import OptimizedTWSClient
-from resync.models.tws import SystemStatus
 
 
 class GetSystemStatusCommandHandler(ICommandHandler[GetSystemStatusCommand, CommandResult]):

@@ -12,13 +12,11 @@ This module provides a comprehensive cache implementation with:
 import asyncio
 import logging
 import sys
-import time
 import weakref
 from collections import OrderedDict
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, TypeVar
+from typing import Any, Dict, Optional, TypeVar
 
-from resync.core.metrics import runtime_metrics
 from resync.core.write_ahead_log import WriteAheadLog, WalOperationType, WalEntry
 
 logger = logging.getLogger(__name__)

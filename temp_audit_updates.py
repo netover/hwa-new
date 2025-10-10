@@ -8,11 +8,9 @@ from typing import (
 from pydantic import field_validator, BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.security import HTTPBearer
 
 from resync.core.fastapi_di import get_audit_queue, get_knowledge_graph
 from resync.core.interfaces import IAuditQueue, IKnowledgeGraph
-from resync.models.validation import AuditRecord
 from resync.core.logger import log_audit_event
 
 # Module-level dependencies to avoid B008 errors

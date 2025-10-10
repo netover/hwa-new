@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from pydantic.types import constr
 
@@ -81,7 +80,6 @@ async def admin_dashboard(request: Request) -> HTMLResponse:
         # Create a new Jinja2Templates instance to avoid CSP/asyncio issues
         from fastapi.templating import Jinja2Templates
         from pathlib import Path
-        import os
 
         templates_dir = Path(settings.BASE_DIR) / "templates"
         templates = Jinja2Templates(directory=str(templates_dir))

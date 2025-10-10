@@ -5,7 +5,6 @@ Separated to follow Single Responsibility Principle.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -14,7 +13,6 @@ from typing import Any, AsyncIterator, Optional
 import httpx
 
 from resync.core.exceptions import TWSConnectionError
-from resync.core.metrics import runtime_metrics
 from resync.core.pools.base_pool import ConnectionPool, ConnectionPoolConfig
 
 # --- Logging Setup ---

@@ -5,7 +5,6 @@ Separated to follow Single Responsibility Principle.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -17,7 +16,6 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import RedisError
 
 from resync.core.exceptions import DatabaseError
-from resync.core.metrics import runtime_metrics
 from resync.core.pools.base_pool import ConnectionPool, ConnectionPoolConfig
 
 # --- Logging Setup ---
@@ -73,7 +71,6 @@ class RedisConnectionPool(ConnectionPool[AsyncRedis]):
             raise DatabaseError("Redis client not available")
 
         start_time = time.time()
-        connection = None
 
         try:
             # Record pool request

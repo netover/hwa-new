@@ -171,7 +171,7 @@ def create_validation_middleware():
     Returns:
         FastAPI middleware function
     """
-    from fastapi import Request, HTTPException
+    from fastapi import Request
     from fastapi.responses import JSONResponse
 
     async def validation_middleware(request: Request, call_next):

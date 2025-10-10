@@ -9,17 +9,13 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, AsyncIterator, Optional
+from typing import AsyncIterator, Optional
 
-import sqlalchemy as sa
-from sqlalchemy import Engine, create_engine
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.pool import QueuePool, StaticPool
+from sqlalchemy.pool import QueuePool
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine, async_sessionmaker
 
 from resync.core.exceptions import DatabaseError
-from resync.core.metrics import runtime_metrics
-from resync.settings import settings
 from resync.core.pools.base_pool import ConnectionPool, ConnectionPoolConfig
 
 # --- Logging Setup ---

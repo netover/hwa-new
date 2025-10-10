@@ -2,13 +2,13 @@
 
 import json
 import re
-from typing import Any, Dict, List, Union, Optional, TYPE_CHECKING
+from typing import Any, Dict, Union, Optional, TYPE_CHECKING
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing_extensions import Literal
 
 if TYPE_CHECKING:
-    from fastapi import Request, Response
+    from fastapi import Request
 
 # Maximum allowed size for CSP reports (8KB)
 MAX_REPORT_SIZE = 8192
@@ -164,7 +164,6 @@ class CSPReport:
 
 class CSPValidationError(Exception):
     """Custom exception for CSP validation errors."""
-    pass
 
 
 def validate_csp_report(body: bytes) -> bool:

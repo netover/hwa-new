@@ -589,8 +589,7 @@ class AsyncTTLCache:
             async with lock:
                 # Check bounds before adding - if we're already at the limit, we need to evict BEFORE adding
                 # to ensure we never exceed the bounds, but avoid infinite loops
-                bounds_ok = self._check_cache_bounds()
-                
+
                 # Add the entry first to avoid an empty cache scenario
                 shard[key] = entry
 

@@ -6,8 +6,6 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi.templating import Jinja2Templates
-from fastapi import Request
-from starlette.testclient import TestClient
 
 def test_template_rendering():
     """Test if admin.html template can be rendered."""
@@ -18,8 +16,6 @@ def test_template_rendering():
 
         # Create a mock request
         from starlette.requests import Request as StarletteRequest
-        from starlette.datastructures import URL
-        from unittest.mock import Mock
 
         mock_scope = {
             'type': 'http',

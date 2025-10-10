@@ -1,5 +1,8 @@
 """
 Distributed tracing implementation for Resync using OpenTelemetry
+import asyncio
+import os
+from typing import Optional, Dict, Any
 """
 import os
 from typing import Optional, Dict, Any
@@ -11,7 +14,6 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import Span, Status, StatusCode
 from fastapi import Request
-from fastapi.responses import Response
 from contextlib import contextmanager
 
 from resync.settings import settings
@@ -112,4 +114,56 @@ def get_tracer() -> DistributedTracer:
     """
     Get the global tracer instance
     """
+
+
+def setup_tracing(service_name: str = None, service_version: str = None, environment: str = None) -> DistributedTracer:
+    """
+    Setup distributed tracing for the application.
+
+    Args:
+        service_name: Name of the service (optional)
+        service_version: Version of the service (optional)
+        environment: Environment name (optional)
+
+    Returns:
+        Configured tracer instance
+    """
+    global tracer
+
+    # Update settings if provided
+    if service_name:
+        settings.PROJECT_NAME = service_name
+    if service_version:
+        settings.PROJECT_VERSION = service_version
+    if environment:
+        settings.environment = environment
+
+    # Reinitialize tracer with new settings
+    tracer = DistributedTracer()
+    return tracer
+
+
+def traced(operation_name: str = None, attributes: Optional[Dict[str, Any]] = None):
+    """
+    Decorator to trace function execution.
+
+    Args:
+        operation_name: Name of the operation (defaults to function name)
+        attributes: Additional attributes to add to the span
+    """
+    def decorator(func):
+        span_name = operation_name or f"{func.__module__}.{func.__name__}"
+
+        if asyncio.iscoroutinefunction(func):
+            async def async_wrapper(*args, **kwargs):
+                with tracer.trace_operation(span_name, attributes):
+                    return await func(*args, **kwargs)
+        else:
+            def sync_wrapper(*args, **kwargs):
+                with tracer.trace_operation(span_name, attributes):
+                    return func(*args, **kwargs)
+
+        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+
+    return decorator
     return tracer

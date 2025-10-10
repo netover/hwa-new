@@ -3,7 +3,6 @@
 import base64
 import logging
 import secrets
-from typing import Optional, Dict, List, Any
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint

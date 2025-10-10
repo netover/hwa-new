@@ -13,13 +13,8 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import Any
-import pytest
 
 from resync.core.async_cache import AsyncTTLCache
-from resync.services.tws_service import OptimizedTWSClient
-from resync.core.agent_manager import AgentManager
-from resync.core.connection_pool_manager import get_connection_pool_manager
-from resync.settings import settings
 
 
 class PerformanceBenchmarkSuite:

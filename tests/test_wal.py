@@ -1,7 +1,6 @@
 import pytest
 import tempfile
 import asyncio
-import json
 from pathlib import Path
 from resync.core.write_ahead_log import WriteAheadLog, WalEntry, WalOperationType
 

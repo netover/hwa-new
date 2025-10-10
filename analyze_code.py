@@ -3,13 +3,10 @@
 
 from __future__ import annotations
 
-import os
 import ast
 import json
 from pathlib import Path
 from typing import Any
-from collections import defaultdict
-import radon.complexity as radon_cc
 from radon.visitors import ComplexityVisitor
 
 
@@ -31,7 +28,7 @@ def analyze_file(filepath: Path) -> dict[str, Any]:
                     'col_offset': item.col_offset,
                     'endline': item.endline
                 })
-        except Exception as e:
+        except Exception:
             complexities = []
         
         # Análise AST
@@ -54,7 +51,7 @@ def analyze_file(filepath: Path) -> dict[str, Any]:
             
             type_hint_coverage = (functions_with_hints / total_functions * 100) if total_functions > 0 else 0
             
-        except Exception as e:
+        except Exception:
             functions = classes = imports = 0
             type_hint_coverage = 0
         
@@ -257,7 +254,7 @@ if __name__ == '__main__':
     print("Iniciando analise do codigo...")
     results = analyze_project('resync')
     
-    print(f"\nAnalise concluida!")
+    print("\nAnalise concluida!")
     print(f"   - Arquivos analisados: {results['summary']['total_files']}")
     print(f"   - Funcoes complexas: {len(results['summary']['high_complexity_functions'])}")
     print(f"   - Cobertura de type hints: {results['summary']['avg_type_hint_coverage']}%")

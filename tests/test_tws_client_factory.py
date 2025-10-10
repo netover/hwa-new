@@ -9,8 +9,7 @@ from resync.services.tws_client_factory import (
     TWSClientFactory,
     TWSConfig,
     ProductionTWSClient,
-    TestTWSClient,
-    BaseTWSClient
+    TestTWSClient
 )
 
 

@@ -16,18 +16,13 @@ from resync.core.llm_wrapper import optimized_llm  # type: ignore[attr-defined]
 from resync.core.metrics import runtime_metrics  # type: ignore[attr-defined]
 from resync.core.rate_limiter import authenticated_rate_limit, public_rate_limit  # type: ignore[attr-defined]
 from resync.core.tws_monitor import tws_monitor  # type: ignore[attr-defined]
-from resync.models.tws import SystemStatus
 from resync.settings import settings
 
 # Import CQRS components
-from resync.cqrs.dispatcher import dispatcher, initialize_dispatcher
-from resync.cqrs.commands import GetSystemStatusCommand, GetWorkstationsStatusCommand, GetJobsStatusCommand
-from resync.cqrs.queries import GetSystemStatusQuery, GetWorkstationsStatusQuery, GetJobsStatusQuery, CheckTWSConnectionQuery
-from resync.api_gateway.container import container, setup_dependencies
-from resync.api_gateway.services import ITWSService, IAgentService, IKnowledgeService
+from resync.cqrs.dispatcher import dispatcher
+from resync.cqrs.queries import GetWorkstationsStatusQuery, GetJobsStatusQuery, CheckTWSConnectionQuery
 
 # Import endpoint utilities for cross-cutting concerns
-from resync.api.middleware.endpoint_utils import with_monitoring, handle_endpoint_errors, with_security_validation
 
 # Import new monitoring and observability components
 from resync.core.runbooks import runbook_registry
@@ -879,9 +874,8 @@ async def add_alert_rule(request: Request, rule_data: AddAlertRuleRequest) -> di
 
 
 # --- Benchmarking Endpoints ---
-from resync.core.benchmarking import SystemBenchmarkRunner, create_benchmark_runner
+from resync.core.benchmarking import create_benchmark_runner
 from resync.core.container import app_container
-from resync.core.interfaces import ITWSClient, IAgentManager
 from pydantic import BaseModel
 from typing import Optional
 

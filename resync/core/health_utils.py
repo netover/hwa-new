@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from typing import Any, Dict
 
-from .exceptions import HealthCheckError
 from .health_models import HealthCheckResult, HealthStatus
 
 

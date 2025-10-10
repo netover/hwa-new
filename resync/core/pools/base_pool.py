@@ -7,15 +7,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, AsyncIterator, Dict, Generic, List, Optional, TypeVar
+from typing import AsyncIterator, Generic, Optional, TypeVar
 from collections import deque
 
-from resync.core.metrics import runtime_metrics
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -86,13 +84,11 @@ class ConnectionPool(ABC, Generic[T]):
 
     async def _setup_pool(self) -> None:
         """Setup the connection pool - to be implemented by subclasses."""
-        pass
 
     @asynccontextmanager
     @abstractmethod
     async def get_connection(self) -> AsyncIterator[T]:  # type: ignore[misc]
         """Get a connection from the pool."""
-        pass
 
     async def close(self) -> None:
         """Close the connection pool."""
@@ -113,7 +109,6 @@ class ConnectionPool(ABC, Generic[T]):
 
     async def _close_pool(self) -> None:
         """Close the connection pool - to be implemented by subclasses."""
-        pass
 
     async def update_wait_time(self, wait_time: float) -> None:
         """Update wait time statistics."""
@@ -136,7 +131,7 @@ class ConnectionPool(ABC, Generic[T]):
 
         try:
             # Try to get and use a connection briefly
-            async with self.get_connection() as conn:  # type: ignore[var-annotated]
+            async with self.get_connection():  # type: ignore[var-annotated]
                 # The actual health check depends on the connection type
                 # This is a basic check that just tries to acquire a connection
                 pass

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from typing import Any
 
@@ -9,10 +8,8 @@ from agno.agent import Agent
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from resync.core.exceptions import (
-    AgentError,
     AgentExecutionError,
     AuditError,
-    ConfigurationError,
     DatabaseError,
     KnowledgeGraphError,
     LLMError,
@@ -20,13 +17,11 @@ from resync.core.exceptions import (
 )
 from resync.core.fastapi_di import (
     get_agent_manager,
-    get_connection_manager,
     get_knowledge_graph,
 )
 from resync.core.ia_auditor import analyze_and_flag_memories
-from resync.core.interfaces import IAgentManager, IConnectionManager, IKnowledgeGraph
+from resync.core.interfaces import IAgentManager, IKnowledgeGraph
 from resync.core.llm_wrapper import optimized_llm
-from resync.core.rate_limiter import websocket_rate_limit
 from resync.core.security import SafeAgentID, sanitize_input
 
 # --- Logging Setup ---
@@ -34,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 # Module-level dependencies to avoid B008 errors
 agent_manager_dependency = Depends(get_agent_manager)
-connection_manager_dependency = Depends(get_connection_manager)
 knowledge_graph_dependency = Depends(get_knowledge_graph)
 
 # --- APIRouter Initialization ---

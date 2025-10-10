@@ -4,10 +4,9 @@ Data validation models for the Resync application
 from __future__ import annotations
 
 import re
-from typing import Any, Dict
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator, field_serializer, ConfigDict, EmailStr
+from pydantic import BaseModel, field_validator, field_serializer, ConfigDict
 
 
 class SyncItem(BaseModel):

@@ -1,7 +1,5 @@
-import asyncio
 import pytest
-from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from resync.api.auth import SecureAuthenticator
 from resync.settings import settings

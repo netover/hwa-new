@@ -6,7 +6,7 @@ This module tests the log_audit_event function and its integration with the audi
 import json
 import tempfile
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import pytest
 
 from resync.core.logger import log_audit_event, _sanitize_audit_details

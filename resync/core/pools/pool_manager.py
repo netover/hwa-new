@@ -22,9 +22,7 @@ from resync.settings import settings
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncEngine
-    import redis.asyncio as redis
-    import httpx
+    pass
 
 
 # Global lock and instance for thread-safe singleton

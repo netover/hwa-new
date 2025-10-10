@@ -23,106 +23,235 @@ from resync.api_gateway.container import setup_dependencies
 from resync.core.redis_init import RedisInitializer
 
 from resync.core.structured_logger import get_logger
+from resync.core.exceptions import (
+    RedisConnectionError,
+    RedisAuthError,
+    RedisTimeoutError,
+    RedisInitializationError,
+    ConfigurationError,
+)
 
 logger = get_logger(__name__)
-
-class RedisStartupError(Exception):
-    """Critical error during Redis initialization."""
-    pass
 
 # Create a global RedisInitializer instance
 redis_initializer = RedisInitializer()
 
+
+@asynccontextmanager
+async def redis_connection_manager() -> AsyncIterator:
+    """
+    Context manager para Redis com cleanup automático.
+
+    Yields:
+        Redis client validado
+
+    Raises:
+        RedisConnectionError: Falha de conexão
+        RedisAuthError: Falha de autenticação
+    """
+    from resync.core.async_cache import get_redis_client
+
+    client = None
+    try:
+        client = await get_redis_client()
+
+        # Validar conexão antes de usar
+        await client.ping()
+        logger.info("redis_connection_validated")
+
+        yield client
+
+    except ConnectionError as e:
+        logger.error(
+            "redis_connection_failed",
+            error=str(e),
+            redis_url=settings.REDIS_URL.split("@")[-1]  # Sem senha no log
+        )
+        raise RedisConnectionError(
+            "Não foi possível conectar ao Redis",
+            details={
+                "redis_url": settings.REDIS_URL.split("@")[-1],
+                "error": str(e),
+                "hint": "Verifique se Redis está rodando: redis-cli ping"
+            }
+        ) from e
+
+    except AuthenticationError as e:
+        logger.error("redis_auth_failed", error=str(e))
+        raise RedisAuthError(
+            "Falha de autenticação no Redis",
+            details={
+                "error": str(e),
+                "hint": "Verifique REDIS_URL no .env"
+            }
+        ) from e
+
+    except TimeoutError as e:
+        logger.error("redis_timeout", error=str(e))
+        raise RedisTimeoutError(
+            "Timeout ao conectar ao Redis",
+            details={
+                "error": str(e),
+                "hint": "Redis pode estar sobrecarregado ou rede lenta"
+            }
+        ) from e
+
+    finally:
+        if client:
+            try:
+                await client.close()
+                await client.connection_pool.disconnect()
+                logger.debug("redis_connection_closed")
+            except Exception as e:
+                logger.warning(
+                    "redis_cleanup_warning",
+                    error=type(e).__name__,
+                    message=str(e)
+                )
+
 async def initialize_redis_with_retry(
     max_retries: int = 3,
-    base_backoff: float = 0.1,
-    max_backoff: float = 10.0
+    base_backoff: float = 0.5,
+    max_backoff: float = 5.0
 ) -> None:
     """
-    Initialize Redis with the robust RedisInitializer.
-    
-    Args:
-        max_retries: Maximum number of attempts
-        base_backoff: Base backoff time in seconds
-        max_backoff: Maximum backoff time in seconds
-        
-    Raises:
-        RedisStartupError: If failed after all attempts
-    """
-    # Environment validation
-    redis_url = getattr(settings, 'REDIS_URL', None)
-    if not redis_url:
-        logger.critical("redis_url_not_configured")
-        raise RedisStartupError("REDIS_URL environment variable not set")
+    Inicializa Redis com retry exponencial.
 
-    # Skip Redis initialization in development if Redis is not available
-    environment = getattr(settings, 'APP_ENV', 'development')
-    if environment == 'development':
+    Args:
+        max_retries: Máximo de tentativas
+        base_backoff: Tempo base de espera (segundos)
+        max_backoff: Tempo máximo de espera (segundos)
+
+    Raises:
+        RedisConnectionError: Redis inacessível após retries
+        RedisAuthError: Credenciais inválidas
+        RedisTimeoutError: Timeout persistente
+    """
+
+    # Validar configuração
+    if not settings.REDIS_URL:
+        logger.critical("redis_url_missing")
+        raise ConfigurationError(
+            "REDIS_URL não configurado",
+            details={"hint": "Adicione REDIS_URL ao arquivo .env"}
+        )
+
+    logger.info(
+        "redis_initialization_started",
+        max_retries=max_retries,
+        redis_url=settings.REDIS_URL.split("@")[-1]
+    )
+
+    last_error = None
+
+    for attempt in range(max_retries):
         try:
-            import redis
-            # Quick test to see if Redis is available
-            sync_client = redis.Redis.from_url(redis_url, socket_timeout=2)
-            sync_client.ping()
-            sync_client.close()
-        except Exception as e:
+            async with redis_connection_manager() as redis_client:
+                # Inicializar idempotency manager
+                from resync.api.dependencies import initialize_idempotency_manager
+                await initialize_idempotency_manager(redis_client)
+
+                logger.info(
+                    "redis_initialized",
+                    attempt=attempt + 1,
+                    max_retries=max_retries
+                )
+                return
+
+        except RedisAuthError:
+            # Não faz retry em erro de auth
+            logger.critical("redis_auth_failed_no_retry")
+            raise
+
+        except (RedisConnectionError, RedisTimeoutError) as e:
+            last_error = e
+
+            if attempt >= max_retries - 1:
+                # Última tentativa falhou
+                logger.critical(
+                    "redis_initialization_failed",
+                    attempts=max_retries,
+                    error=str(e)
+                )
+                raise
+
+            # Calcular backoff exponencial
+            backoff = min(max_backoff, base_backoff * (2 ** attempt))
+
             logger.warning(
-                "redis_not_available_in_development",
-                error=str(e),
-                message="Redis not available, skipping Redis-dependent features for development"
+                "redis_retry_attempt",
+                attempt=attempt + 1,
+                max_retries=max_retries,
+                next_retry_seconds=backoff,
+                error=str(e)
             )
-            return
-    
-    # Startup metrics
-    startup_metrics = {
-        "attempts": 0,
-        "connection_failures": 0,
-        "auth_failures": 0,
-        "duration_seconds": 0.0
-    }
-    
-    start_time = asyncio.get_event_loop().time()
-    
-    try:
-        # Use the robust RedisInitializer
-        redis_client = await redis_initializer.initialize(
-            max_retries=max_retries,
-            base_backoff=base_backoff,
-            max_backoff=max_backoff
-        )
-        
-        # Initialize idempotency manager
-        from resync.api.dependencies import initialize_idempotency_manager
-        await initialize_idempotency_manager(redis_client)
-        
-        # Success
-        startup_metrics["duration_seconds"] = (
-            asyncio.get_event_loop().time() - start_time
-        )
-        
-        logger.info(
-            "redis_initialized_successfully",
-            metrics=startup_metrics,
-            duration_ms=int(startup_metrics["duration_seconds"] * 1000)
-        )
-        
-    except (ConnectionError, TimeoutError, BusyLoadingError, AuthenticationError) as e:
-        startup_metrics["connection_failures"] += 1
-        logger.critical(
-            "redis_initialization_failed",
-            reason="initialization_failed",
-            metrics=startup_metrics,
-            error_type=type(e).__name__
-        )
-        raise RedisStartupError(
-            f"Redis initialization failed: {str(e)}"
-        ) from e
-    except Exception as e:
-        logger.critical(
-            "redis_unexpected_error",
-            error_type=type(e).__name__,
-            message=str(e) if settings.ENVIRONMENT != "production" else None
-        )
-        raise RedisStartupError(f"Unexpected error during Redis initialization: {type(e).__name__}") from e
+
+            await asyncio.sleep(backoff)
+
+        except ResponseError as e:
+            error_msg = str(e).upper()
+
+            # Verificar se é erro de autenticação disfarçado
+            if "NOAUTH" in error_msg or "WRONGPASS" in error_msg:
+                logger.critical("redis_access_denied", error=str(e))
+                raise RedisAuthError(
+                    "Redis requer autenticação",
+                    details={
+                        "error": str(e),
+                        "hint": "Adicione senha ao REDIS_URL: redis://:senha@localhost:6379"
+                    }
+                ) from e
+
+            # Outros erros de resposta
+            if attempt >= max_retries - 1:
+                logger.critical("redis_response_error", error=str(e))
+                raise RedisInitializationError(
+                    f"Erro Redis: {str(e)}",
+                    details={"error": str(e)}
+                ) from e
+
+            backoff = min(max_backoff, base_backoff * (2 ** attempt))
+            await asyncio.sleep(backoff)
+
+        except BusyLoadingError as e:
+            # Redis ainda carregando
+            if attempt >= max_retries - 1:
+                logger.critical("redis_busy_loading", error=str(e))
+                raise RedisConnectionError(
+                    "Redis ocupado carregando dados",
+                    details={
+                        "error": str(e),
+                        "hint": "Aguarde Redis finalizar carga inicial"
+                    }
+                ) from e
+
+            backoff = min(max_backoff, base_backoff * (2 ** attempt))
+            logger.warning(
+                "redis_busy_retry",
+                attempt=attempt + 1,
+                backoff_seconds=backoff
+            )
+            await asyncio.sleep(backoff)
+
+        except Exception as e:
+            # Erro inesperado - fail fast
+            logger.critical(
+                "redis_unexpected_error",
+                error_type=type(e).__name__,
+                error=str(e)
+            )
+            raise RedisInitializationError(
+                f"Erro inesperado ao inicializar Redis: {type(e).__name__}",
+                details={
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "hint": "Verifique logs para detalhes"
+                }
+            ) from e
+
+    # Se chegou aqui, todas as tentativas falharam
+    if last_error:
+        raise last_error
 
 
 @asynccontextmanager
@@ -157,7 +286,7 @@ async def lifespan_with_improvements(app: FastAPI) -> AsyncIterator[None]:
         
         yield  # Application runs here
         
-    except RedisStartupError:
+    except (RedisConnectionError, RedisAuthError, RedisTimeoutError, RedisInitializationError):
         # Error already logged, propagate to FastAPI
         sys.exit(1)
     except Exception as e:

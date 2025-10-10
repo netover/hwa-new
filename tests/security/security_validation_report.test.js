@@ -179,8 +179,23 @@ function generateSecurityReport() {
   console.log('='.repeat(15));
   console.log(securityValidationResults.conclusion);
   
-  // Save report to file
-  const reportPath = path.join(__dirname, 'security_validation_report.json');
+  // Save report to file with security validation
+  const reportFileName = 'security_validation_report.json';
+  const reportPath = path.join(__dirname, reportFileName);
+
+  // Security validation: ensure path is within expected directory
+  const resolvedPath = path.resolve(reportPath);
+  const expectedDir = path.resolve(__dirname);
+
+  if (!resolvedPath.startsWith(expectedDir)) {
+    throw new Error('SECURITY ERROR: Path traversal attempt detected');
+  }
+
+  // Additional validation: ensure filename is safe
+  if (!/^[a-zA-Z0-9._-]+$/.test(reportFileName)) {
+    throw new Error('SECURITY ERROR: Invalid filename characters');
+  }
+
   try {
     fs.writeFileSync(reportPath, JSON.stringify(securityValidationResults, null, 2));
     console.log(`\n📄 Full report saved to: ${reportPath}`);

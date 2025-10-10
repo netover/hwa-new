@@ -11,15 +11,13 @@ from typing import List, Optional, Annotated, Dict, Any
 from datetime import datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Query, Request, status
 from pydantic import BaseModel, Field, StringConstraints
 
 from resync.api.models.responses import (
-    ProblemDetail,
     create_paginated_response,
-    create_success_response,
 )
-from resync.api.models.links import LinkBuilder, add_hateoas_links
+from resync.api.models.links import LinkBuilder
 from resync.core.exceptions import ResourceNotFoundError, ValidationError
 from resync.core.structured_logger import get_logger
 

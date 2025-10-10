@@ -295,7 +295,6 @@ class TeamsIntegration:
         logger.info("learning_from_teams_conversation", message_preview=message[:100])
         # This would integrate with the knowledge graph/learning system
         # For now, just log that we're learning from the conversation
-        pass
 
     async def health_check(self) -> Dict[str, Any]:
         """Perform health check of Teams integration.

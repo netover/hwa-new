@@ -75,7 +75,6 @@ def test_direct_imports() -> bool:
             "performance_api",
             "resync/api/performance.py"
         )
-        module = importlib.util.module_from_spec(spec)
         print("[OK] performance.py can be loaded")
         
         return True

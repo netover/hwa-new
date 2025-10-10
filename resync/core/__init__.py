@@ -21,9 +21,6 @@ from .async_cache import AsyncTTLCache
 from .config_watcher import handle_config_change
 from .metrics import runtime_metrics
 
-# Import from global utilities (to avoid circular imports)
-from .global_utils import get_global_correlation_id, get_environment_tags
-
 # --- Core Component Boot Manager ---
 class CoreBootManager:
     """Hardened boot manager for core components with lifecycle tracking and health validation."""
@@ -168,6 +165,17 @@ except Exception as e:
 # Imported from global_utils.py to avoid circular imports
 
 
+def get_global_correlation_id() -> str:
+    """Get the global correlation ID for distributed tracing."""
+    return boot_manager.get_global_correlation_id()
+
+
+def get_environment_tags() -> Dict[str, Any]:
+    """Get environment tags for mock detection and debugging."""
+    return boot_manager.get_environment_tags()
+
+
+# Validate environment on import
 def add_global_trace_event(event: str, data: Optional[Dict[str, Any]] = None) -> None:
     """Add a trace event to the global correlation context."""
     boot_manager.add_global_event(event, data)

@@ -12,7 +12,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
-from typing import Any, AsyncIterator, Callable, Dict, Iterator, Optional, TypeVar
+from typing import Any, AsyncIterator, Callable, Dict, Iterator, List, Optional, TypeVar
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -99,11 +99,9 @@ class ManagedResource:
     
     async def _cleanup(self) -> None:
         """Override this method to implement async cleanup logic."""
-        pass
     
     def _cleanup_sync(self) -> None:
         """Override this method to implement sync cleanup logic."""
-        pass
 
 
 class DatabaseConnectionResource(ManagedResource):
@@ -170,10 +168,8 @@ async def managed_database_connection(pool: Any) -> AsyncIterator[Any]:
             result = await conn.execute(query)
         # Connection automatically returned to pool
     """
-    connection = None
     try:
         async with pool.get_connection() as conn:
-            connection = conn
             yield conn
     finally:
         # Connection is automatically returned to pool by the pool's context manager

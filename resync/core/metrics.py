@@ -338,7 +338,7 @@ def track_llm_metrics(func):
 
             return result
 
-        except Exception as e:
+        except Exception:
             runtime_metrics.llm_errors.increment()
             raise
 
@@ -362,7 +362,7 @@ def track_llm_metrics(func):
 
             return result
 
-        except Exception as e:
+        except Exception:
             runtime_metrics.llm_errors.increment()
             raise
 

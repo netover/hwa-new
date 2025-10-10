@@ -1,7 +1,6 @@
 """
 Query handlers for TWS operations in the CQRS pattern.
 """
-from typing import List, Dict, Any
 from resync.cqrs.base import IQueryHandler, QueryResult
 from resync.cqrs.queries import (
     GetSystemStatusQuery, GetWorkstationsStatusQuery, GetJobsStatusQuery,
@@ -9,7 +8,6 @@ from resync.cqrs.queries import (
     GetSystemHealthQuery, SearchJobsQuery, GetPerformanceMetricsQuery, CheckTWSConnectionQuery
 )
 from resync.core.interfaces import ITWSClient
-from resync.models.tws import SystemStatus, WorkstationStatus, JobStatus, CriticalJob
 from resync.core.cache_hierarchy import get_cache_hierarchy
 
 

@@ -1,10 +1,9 @@
 import logging
 import secrets
-from typing import Union, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from typing import Union, Optional
+from pydantic import BaseModel
 from redis import Redis
 from redis.exceptions import ConnectionError, TimeoutError
-from resync.core.async_cache import AsyncTTLCache
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials

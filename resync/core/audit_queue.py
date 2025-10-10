@@ -260,11 +260,9 @@ class AsyncAuditQueue(IAuditQueue):
                     except json.JSONDecodeError as e:
                         logger.error("failed_to_decode_json_for_memory", memory_id=memory_id, error=str(e), exc_info=True)
                         # Continue with the update but without updating the data part
-                        pass
                     except UnicodeDecodeError as e:
                         logger.error("failed_to_decode_utf8_for_memory", memory_id=memory_id, error=str(e), exc_info=True)
                         # Continue with the update but without updating the data part
-                        pass
                 await pipe.execute()
 
             logger.info("updated_memory_status", memory_id=memory_id, status=status)
@@ -406,8 +404,6 @@ class AsyncAuditQueue(IAuditQueue):
         except AuditError as e:
             logger.warning("failed_to_release_lock", lock_key=lock_key, error=str(e))
             return False
-            logger.error("redis_error_during_lock_release", lock_key=lock_key, error=str(e))
-            return False
         except ValueError as e:
             logger.warning("value_error_during_lock_release", lock_key=lock_key, error=str(e))
             return False
@@ -425,7 +421,7 @@ class AsyncAuditQueue(IAuditQueue):
         return self.distributed_lock.acquire(lock_key, timeout)
 
     async def cleanup_expired_locks(
-        self, lock_prefix: str = "memory:", max_age: int = 60
+        self, _lock_prefix: str = "memory:", max_age: int = 60
     ) -> int:
         """
         Cleans up expired locks to prevent deadlocks using the new DistributedAuditLock.

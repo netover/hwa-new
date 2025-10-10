@@ -2,9 +2,6 @@
 Comprehensive test suite for CQRS query implementations.
 """
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch
-from typing import List, Dict, Any
 
 from resync.cqrs.queries import (
     GetSystemStatusQuery,

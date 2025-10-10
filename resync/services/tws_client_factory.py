@@ -12,7 +12,6 @@ from dataclasses import dataclass
 import structlog
 
 from resync.services.tws_service import OptimizedTWSClient
-from resync.services.mock_tws_service import MockTWSClient
 
 logger = structlog.get_logger(__name__)
 
@@ -80,17 +79,14 @@ class BaseTWSClient(ABC):
     @abstractmethod
     async def connect(self) -> bool:
         """Estabelece conexão com TWS."""
-        pass
 
     @abstractmethod
     async def execute_command(self, command: str) -> str:
         """Executa comando TWS."""
-        pass
 
     @abstractmethod
     async def get_job_status(self, job_id: str) -> dict[str, any]:
         """Obtém status de job."""
-        pass
 
     async def disconnect(self) -> None:
         """Desconecta do TWS."""

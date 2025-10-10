@@ -1,10 +1,11 @@
 """Módulo para funções de segurança e validação de input."""
 
+import logging
 import os
 import re
 from typing import Annotated, Any, Type
 
-from fastapi import Path, Query
+from fastapi import Path
 
 # Expressão regular para permitir caracteres alfanuméricos, espaços, e pontuação comum.
 # Isso ajuda a prevenir a injeção de caracteres de controle ou scripts complexos.

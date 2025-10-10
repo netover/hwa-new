@@ -2,9 +2,8 @@
 Command implementations for TWS operations in the CQRS pattern.
 """
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 from resync.cqrs.base import ICommand
-from resync.models.tws import JobStatus, WorkstationStatus, CriticalJob
 
 
 @dataclass
@@ -12,7 +11,6 @@ class GetSystemStatusCommand(ICommand):
     """
     Command to retrieve the overall TWS system status.
     """
-    pass
 
 
 @dataclass
@@ -20,7 +18,6 @@ class GetWorkstationsStatusCommand(ICommand):
     """
     Command to retrieve the status of all TWS workstations.
     """
-    pass
 
 
 @dataclass
@@ -28,7 +25,6 @@ class GetJobsStatusCommand(ICommand):
     """
     Command to retrieve the status of all TWS jobs.
     """
-    pass
 
 
 @dataclass
@@ -36,7 +32,6 @@ class GetCriticalPathStatusCommand(ICommand):
     """
     Command to retrieve the status of TWS critical path jobs.
     """
-    pass
 
 
 @dataclass
@@ -69,4 +64,3 @@ class GetSystemHealthCommand(ICommand):
     """
     Command to retrieve system health metrics.
     """
-    pass

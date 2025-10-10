@@ -2,16 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import threading
-import json
 import structlog
-import re
-import traceback
-from datetime import datetime, timezone
-from pathlib import Path
-from time import time
 from typing import Any, Optional
 
-import aiofiles
 
 try:
     from agno.agent import Agent
@@ -118,15 +111,10 @@ from resync.core.exceptions import (
     NetworkError,
     ParsingError,
 )
-from resync.core.metrics import log_with_correlation, runtime_metrics
+from resync.core.metrics import runtime_metrics
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
-from resync.tool_definitions.tws_tools import (
-    TWSToolReadOnly,
-    tws_status_tool,
-    tws_troubleshooting_tool,
-)
 
 # --- Logging Setup ---
 logger = structlog.get_logger(__name__)
@@ -175,7 +163,6 @@ class AgentManager:
     async def load_agents_from_config(self) -> None:
         """Loads agent configurations from settings."""
         # Implementation for loading agents from config
-        pass
 
     async def get_agent(self, agent_id: str) -> Any:
         """Retrieves an agent by its ID."""

@@ -1,8 +1,7 @@
 """Unit tests for CSP middleware functionality."""
 
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 import pytest
-import json
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.testclient import TestClient

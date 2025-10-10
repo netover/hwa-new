@@ -6,7 +6,6 @@ Due to extensive mypy type checking issues, this file contains
 minimal test stubs to satisfy import requirements.
 """
 
-import pytest
 
 
 class TestConnectionPoolPerformance:

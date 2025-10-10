@@ -2,14 +2,9 @@
 Tests for enhanced security validation with async context managers.
 """
 
-import asyncio
 import secrets
-import time
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from fastapi import HTTPException
 
 from resync.api.validation.enhanced_security import (
     EnhancedSecurityValidator,
@@ -17,10 +12,6 @@ from resync.api.validation.enhanced_security import (
     SecurityContext,
     SecurityLevel,
     ThreatType,
-    TokenPayload,
-    validate_email,
-    validate_input,
-    validate_password,
     SecurityEventLog,
     SecurityEventType,
     SecurityEventSeverity

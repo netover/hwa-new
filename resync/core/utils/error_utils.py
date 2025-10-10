@@ -13,7 +13,6 @@ from pydantic import ValidationError
 from functools import lru_cache
 from typing import FrozenSet, Pattern
 
-from resync.core.logger import log_with_correlation
 from resync.models.error_models import (
     AuthenticationErrorResponse,
     AuthorizationErrorResponse,

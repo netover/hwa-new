@@ -3,7 +3,7 @@ Tests for the new features implemented as part of the optimization and refactori
 """
 import pytest
 from pydantic import ValidationError
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 import sys
 import os
 

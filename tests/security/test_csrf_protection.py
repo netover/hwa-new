@@ -1,9 +1,6 @@
-import asyncio
 import pytest
-from unittest.mock import patch, MagicMock
 from fastapi import TestClient
 from resync.api.middleware.csrf_protection import CSRFProtectionMiddleware
-from resync.settings import settings
 
 class TestCSRFProtection:
     """Testes para o CSRFProtectionMiddleware."""

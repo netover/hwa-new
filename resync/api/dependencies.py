@@ -5,7 +5,7 @@ incluindo gerenciamento de idempotência, autenticação, e obtenção de IDs de
 """
 
 from typing import Optional
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from resync.core.container import app_container
@@ -130,7 +130,6 @@ async def initialize_idempotency_manager(redis_client):
             redis_available=False
         )
         # Create in-memory fallback
-        _idempotency_manager = None
 
 
 # ============================================================================
@@ -227,4 +226,3 @@ async def check_rate_limit(request: Request) -> None:
         RateLimitError: Se o limite de taxa for excedido.
     """
     # TODO: Implementar verificação de rate limit
-    pass

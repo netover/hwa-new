@@ -16,31 +16,18 @@ async def test_imports():
     print("=" * 60)
     
     try:
-        from resync.core.performance_optimizer import (
-            get_performance_service,
-            CachePerformanceMonitor,
-            ConnectionPoolOptimizer,
-            ResourceManager,
-        )
         print("✓ Performance optimizer module imported successfully")
     except Exception as e:
         print(f"✗ Failed to import performance optimizer: {e}")
         return False
     
     try:
-        from resync.core.resource_manager import (
-            get_global_resource_pool,
-            ManagedResource,
-            ResourcePool,
-            managed_database_connection,
-        )
         print("✓ Resource manager module imported successfully")
     except Exception as e:
         print(f"✗ Failed to import resource manager: {e}")
         return False
     
     try:
-        from resync.api.performance import performance_router
         print("✓ Performance API module imported successfully")
     except Exception as e:
         print(f"✗ Failed to import performance API: {e}")

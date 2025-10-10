@@ -100,4 +100,3 @@ class TestEncryptionSecurity:
             # we would check that mock_logger.info (or .error etc.) was not called
             # with sensitive data.
             assert "logging" in sys.modules
-        pass

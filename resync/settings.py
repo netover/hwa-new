@@ -5,7 +5,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, ValidationInfo, field_validator, computed_field
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -624,6 +624,26 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator('redis_url')
+    @classmethod
+    def validate_redis_url(cls, v: str) -> str:
+        """Valida formato da URL Redis."""
+        if not v.startswith("redis://"):
+            raise ValueError(
+                "REDIS_URL deve começar com 'redis://'. "
+                "Exemplo: redis://localhost:6379 ou redis://:senha@localhost:6379"
+            )
+        return v
+
+    @field_validator('admin_password')
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        """Valida força mínima da senha."""
+        # Apenas validação básica para ambiente local
+        if len(v) < 8:
+            raise ValueError("Senha deve ter no mínimo 8 caracteres")
+        return v
+
     @field_validator('admin_password')
     @classmethod
     def validate_production_password(cls, v: str, info: ValidationInfo) -> str:
@@ -642,6 +662,7 @@ class Settings(BaseSettings):
                     "Insecure admin password not allowed in production"
                 )
         return v
+
 
     @field_validator('cors_allowed_origins')
     @classmethod
@@ -688,7 +709,7 @@ class Settings(BaseSettings):
                     )
         return v
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, _context: Any) -> None:
         """Validações pós-inicialização."""
         # Validar TWS quando não está em mock mode
         if not self.tws_mock_mode:

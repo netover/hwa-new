@@ -2,7 +2,6 @@
 Unit and integration tests for RedisInitializer.
 """
 
-import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch
 from resync.core.redis_init import RedisInitializer

@@ -1,7 +1,7 @@
 """
 CQRS dispatcher for routing commands and queries to their respective handlers.
 """
-from typing import Dict, Type, Any, Union
+from typing import Dict, Type
 from resync.cqrs.base import ICommand, IQuery, ICommandHandler, IQueryHandler, CommandResult, QueryResult
 from resync.cqrs.commands import *
 from resync.cqrs.queries import *

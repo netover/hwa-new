@@ -7,17 +7,19 @@ initialization logic following the factory pattern.
 
 import hashlib
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator, Optional, Dict, Any
+from typing import AsyncIterator
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.staticfiles import StaticFiles as StarletteStaticFiles
+
 
 from resync.settings import settings
 from resync.core.structured_logger import get_logger
@@ -87,7 +89,14 @@ class ApplicationFactory:
             from resync.core.tws_monitor import get_tws_monitor, shutdown_tws_monitor
             from resync.cqrs.dispatcher import initialize_dispatcher
             from resync.api_gateway.container import setup_dependencies
-            from resync.lifespan import initialize_redis_with_retry, RedisStartupError
+            from resync.lifespan import initialize_redis_with_retry
+            from resync.core.exceptions import (
+                RedisConnectionError,
+                RedisAuthError,
+                RedisTimeoutError,
+                RedisInitializationError,
+                ConfigurationError,
+            )
     
     # Store container reference
             app.state.container = app_container
@@ -116,9 +125,64 @@ class ApplicationFactory:
                 max_backoff=settings.redis_startup_backoff_max
             )
 
+            print("\n🚀 Iniciando Resync HWA Dashboard...")
+
+            # Initialize Redis
+            print("🔌 Conectando ao Redis...")
+            await initialize_redis_with_retry()
+            print("✅ Redis conectado com sucesso!\n")
+
+            # Outras inicializações...
+
             logger.info("application_startup_completed")
 
             yield  # Application runs here
+
+        except ConfigurationError as e:
+            print("\n❌ ERRO DE CONFIGURAÇÃO:")
+            print(f"   {str(e)}")
+            if e.details.get("hint"):
+                print(f"   💡 Dica: {e.details['hint']}")
+            print()
+            sys.exit(2)
+
+        except RedisAuthError as e:
+            print("\n❌ ERRO DE AUTENTICAÇÃO REDIS:")
+            print(f"   {str(e)}")
+            if e.details.get("hint"):
+                print(f"   💡 Dica: {e.details['hint']}")
+            print("\n   Exemplo de .env correto:")
+            print("   REDIS_URL=redis://:suasenha@localhost:6379")
+            print()
+            sys.exit(3)
+
+        except RedisConnectionError as e:
+            print("\n❌ ERRO DE CONEXÃO REDIS:")
+            print(f"   {str(e)}")
+            if e.details.get("hint"):
+                print(f"   💡 Dica: {e.details['hint']}")
+            print("\n   Como iniciar Redis localmente:")
+            print("   1. Instalar: brew install redis (macOS) ou apt install redis (Linux)")
+            print("   2. Iniciar: redis-server")
+            print("   3. Testar: redis-cli ping (deve retornar 'PONG')")
+            print()
+            sys.exit(4)
+
+        except RedisTimeoutError as e:
+            print("\n❌ TIMEOUT REDIS:")
+            print(f"   {str(e)}")
+            if e.details.get("hint"):
+                print(f"   💡 Dica: {e.details['hint']}")
+            print()
+            sys.exit(5)
+
+        except RedisInitializationError as e:
+            print("\n❌ ERRO AO INICIALIZAR REDIS:")
+            print(f"   {str(e)}")
+            if e.details.get("hint"):
+                print(f"   💡 Dica: {e.details['hint']}")
+            print()
+            sys.exit(6)
 
         except Exception as e:
             logger.critical(
@@ -126,21 +190,16 @@ class ApplicationFactory:
                 error=str(e),
                 exc_info=True
             )
-            # If Redis fails to start in a production environment, it's a critical failure.
-            if isinstance(e, RedisStartupError) and settings.is_production:
-                logger.critical("redis_startup_failed_in_production_shutting_down")
-                # In a real scenario, you might want to exit or prevent the app from serving traffic.
-                # For now, we re-raise to let FastAPI handle the shutdown.
-                raise
-
             raise
         finally:
             # Shutdown
+            print("\n🛑 Encerrando Resync...")
             logger.info("application_shutdown_initiated")
 
             try:
                 await shutdown_tws_monitor()
                 logger.info("application_shutdown_completed")
+                print("✅ Encerrado com sucesso!\n")
             except Exception as e:
                 logger.error(
                     "application_shutdown_error",
@@ -466,7 +525,7 @@ class ApplicationFactory:
             JSON response acknowledging receipt
         """
         try:
-            from resync.csp_validation import process_csp_report, CSPValidationError
+            from resync.csp_validation import process_csp_report
 
             result = await process_csp_report(request)
             

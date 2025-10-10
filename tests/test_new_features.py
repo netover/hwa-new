@@ -4,7 +4,7 @@ Tests for the new features implemented as part of the optimization and refactori
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 
 from resync.main import app
 from resync.api.cache import ConnectionPoolValidator, get_redis_connection, RedisCacheManager

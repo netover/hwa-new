@@ -13,13 +13,14 @@ import random
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Dict
 from unittest.mock import patch
 
 from resync.core import get_environment_tags, get_global_correlation_id  # type: ignore
 from resync.core.agent_manager import AgentManager
 from resync.core.async_cache import AsyncTTLCache
 from resync.core.audit_db import add_audit_records_batch  # type: ignore
+from resync.core.audit_log import get_audit_log_manager  # type: ignore
 from resync.core.metrics import log_with_correlation, runtime_metrics
 
 logger = logging.getLogger(__name__)
@@ -339,7 +340,8 @@ class ChaosEngineer:
 
             # Test metrics retrieval
             try:
-                metrics = get_audit_metrics()  # type: ignore
+                audit_manager = get_audit_log_manager()
+                metrics = audit_manager.get_audit_metrics()
                 if "total_records" not in metrics:
                     anomalies.append("Audit metrics missing total_records")
                 operations += 1
@@ -569,7 +571,8 @@ class ChaosEngineer:
                             try:
                                 from resync.core.audit_db import get_audit_metrics
 
-                                metrics = get_audit_metrics()  # type: ignore
+                                audit_manager = get_audit_log_manager()
+                                metrics = audit_manager.get_audit_metrics()
                                 if "error" not in metrics:
                                     anomalies.append(
                                         "Audit DB should have reported error"

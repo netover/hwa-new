@@ -7,21 +7,17 @@ This module includes tests for:
 - Audit event logging functionality
 - Audit queue integration with audit logs
 """
-import asyncio
 import json
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch, MagicMock
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from resync.core.audit_log import AuditLogManager, AuditLogEntry, get_audit_log_manager
+from resync.core.audit_log import AuditLogManager
 from resync.core.logger import log_audit_event, _sanitize_audit_details
 from resync.core.audit_queue import AsyncAuditQueue
 from resync.core.connection_pool_manager import ConnectionPoolManager, DatabaseConnectionPool, RedisConnectionPool
-from resync.core.audit_db import add_audit_record, get_pending_audits, update_audit_status, delete_audit_record, is_memory_approved, initialize_database
 
 
 @pytest.fixture
@@ -243,7 +239,6 @@ class TestConnectionPoolInitialization:
     async def test_redis_connection_pool(self):
         """Test the Redis connection pool."""
         from resync.core.connection_pool_manager import ConnectionPoolConfig
-        import redis.asyncio as redis
         
         config = ConnectionPoolConfig(
             pool_name="test_redis_pool",
@@ -280,7 +275,7 @@ class TestAuditQueueIntegration:
     @pytest.mark.asyncio
     async def test_audit_api_logging(self, temp_db_path):
         """Test that audit API calls properly log to the audit log database."""
-        from resync.api.audit import get_flagged_memories, get_audit_metrics, review_memory
+        from resync.api.audit import get_flagged_memories, get_audit_metrics
         from fastapi import Request
         from unittest.mock import AsyncMock
         import uuid

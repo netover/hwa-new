@@ -92,7 +92,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             if self._requires_idempotency(request):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Idempotency-Key header required for this operation"
+                    detail="Idempotency-Key header required for this operation"
                 )
             else:
                 # Para endpoints opcionais, continua sem idempotency

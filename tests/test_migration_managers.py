@@ -3,8 +3,7 @@ Testes para os Migration Managers.
 """
 
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 from resync.core.migration_managers import (
     CacheMigrationManager,

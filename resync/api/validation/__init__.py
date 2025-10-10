@@ -4,7 +4,6 @@ from .agents import (
     AgentBulkActionRequest,
     AgentConfig,
     AgentCreateRequest,
-    AgentQueryParams,
     AgentUpdateRequest,
 )
 from .auth import (

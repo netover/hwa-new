@@ -1,6 +1,5 @@
-import asyncio
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 from datetime import datetime, timedelta
 from resync.core.cache_with_stampede_protection import CacheWithStampedeProtection, CacheEntry
 

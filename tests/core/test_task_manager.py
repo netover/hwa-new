@@ -1,8 +1,6 @@
 import asyncio
 import pytest
-from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
-from resync.core.task_manager import TaskManager, TaskResult
+from resync.core.task_manager import TaskManager
 
 class TestTaskManager:
     """Testes para o TaskManager."""

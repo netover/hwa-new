@@ -10,9 +10,8 @@ from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse
 from enum import Enum
 
-from fastapi import Request, Response
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from fastapi import Request
+from pydantic import BaseModel
 
 from resync.core.logger import log_with_correlation
 
