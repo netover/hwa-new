@@ -21,7 +21,6 @@ from resync.core.app_context import AppContext
 from resync.settings import settings
 
 from .health_utils import initialize_health_result, get_health_checks_dict
->>>>>>> REPLACE
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +80,6 @@ class HealthCheckService:
         
         # Perform all health checks in parallel
         health_checks = get_health_checks_dict(self)
->>>>>>> REPLACE
         
         # Execute all checks
         check_results = await asyncio.gather(*health_checks.values(), return_exceptions=True)

@@ -70,7 +70,8 @@ def check_security_issues() -> List[str]:
         try:
             results = json.loads(stdout)
             if results:
-                issues.append("🚨 SECURITY ISSUES FOUND:"                for issue in results:
+                issues.append("🚨 SECURITY ISSUES FOUND:")
+                for issue in results:
                     issues.append(f"   {issue['package']} {issue['vulnerable_spec']} - {issue['advisory']}")
         except json.JSONDecodeError:
             issues.append("Error parsing safety output")

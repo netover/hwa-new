@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi import status
 from pydantic import BaseModel, Field
 
 from resync.core.agent_manager import AgentConfig
 from resync.core.fastapi_di import get_agent_manager, get_tws_client
 from resync.core.interfaces import IAgentManager, ITWSClient
-from resync.core.llm_wrapper import optimized_llm
-from resync.core.metrics import runtime_metrics
-from resync.core.rate_limiter import authenticated_rate_limit, public_rate_limit
-from resync.core.tws_monitor import tws_monitor
+from resync.core.llm_wrapper import optimized_llm  # type: ignore[attr-defined]
+from resync.core.metrics import runtime_metrics  # type: ignore[attr-defined]
+from resync.core.rate_limiter import authenticated_rate_limit, public_rate_limit  # type: ignore[attr-defined]
+from resync.core.tws_monitor import tws_monitor  # type: ignore[attr-defined]
 from resync.models.tws import SystemStatus
 from resync.settings import settings
 
@@ -67,7 +67,7 @@ class FilesResponse(BaseModel):
 
 class LLMQueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
-    context: Dict[str, Any] = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)
     use_cache: bool = Field(default=True)
     stream: bool = Field(default=False)
 
@@ -89,10 +89,10 @@ class TWSMetricsResponse(BaseModel):
 class APIRouterEnhanced:
     """Enhanced API router with improved routing and error handling."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.router = APIRouter()
-    
-    def handle_error(self, e: Exception, operation: str):
+
+    def handle_error(self, e: Exception, operation: str) -> HTTPException:
         """
         Enhanced error handling for API operations.
         
@@ -135,7 +135,7 @@ class APIRouterEnhanced:
         return HTTPException(status_code=status_code, detail=detail)
 
 
-def handle_error(e: Exception, operation: str):
+def handle_error(e: Exception, operation: str) -> HTTPException:
     """
     Global error handling function for API operations.
     
@@ -198,28 +198,28 @@ async def get_dashboard(request: Request) -> HTMLResponse:
 # --- Agent Endpoints ---
 @api_router.get(
     "/agents",
-    response_model=List[AgentConfig],
+    response_model=list[AgentConfig],
     summary="Get All Agent Configurations",
 )
 @public_rate_limit
 async def get_all_agents(
     request: Request,
     agent_manager: IAgentManager = agent_manager_dependency,
-) -> List[AgentConfig]:
+) -> list[AgentConfig]:
     """
     Returns the full configuration for all loaded agents.
     """
-    return await agent_manager.get_all_agents()
+    return await agent_manager.get_all_agents()  # type: ignore[no-untyped-call]
 
 
 # --- Test endpoint ---
 @api_router.get("/test")
-async def test_endpoint(request: Request):
+async def test_endpoint(request: Request) -> dict[str, str]:
     return {"message": "Test endpoint working"}
 
 # --- System Status Endpoints ---
 @api_router.get("/status")
-async def get_system_status(request: Request):
+async def get_system_status(request: Request) -> dict[str, list[dict[str, str]]]:
     """
     Provides a comprehensive status of the TWS environment, including
     workstations, jobs, and critical path information.
@@ -246,21 +246,21 @@ async def get_system_status(request: Request):
 async def get_workstations_status_cqrs(
     request: Request,
     tws_client: ITWSClient = tws_client_dependency,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Get workstation statuses using CQRS pattern.
     """
     try:
         query = GetWorkstationsStatusQuery()
-        result = await dispatcher.execute_query(query)
+        result = await dispatcher.execute_query(query)  # type: ignore[no-untyped-call]
         
         if not result.success:
             raise HTTPException(status_code=500, detail=result.error or "Failed to retrieve workstation statuses")
         
-        return result.data
+        return result.data  # type: ignore[no-any-return]
     except Exception as e:
         logger.error("Failed to get TWS workstation statuses: %s", e, exc_info=True)
-        return handle_error(e, "TWS workstation statuses retrieval")
+        raise handle_error(e, "TWS workstation statuses retrieval")
 
 
 @api_router.get("/status/jobs")
@@ -268,27 +268,27 @@ async def get_workstations_status_cqrs(
 async def get_jobs_status_cqrs(
     request: Request,
     tws_client: ITWSClient = tws_client_dependency,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Get job statuses using CQRS pattern.
     """
     try:
         query = GetJobsStatusQuery()
-        result = await dispatcher.execute_query(query)
+        result = await dispatcher.execute_query(query)  # type: ignore[no-untyped-call]
         
         if not result.success:
             raise HTTPException(status_code=500, detail=result.error or "Failed to retrieve job statuses")
         
-        return result.data
+        return result.data  # type: ignore[no-any-return]
     except Exception as e:
         logger.error("Failed to get TWS job statuses: %s", e, exc_info=True)
-        return handle_error(e, "TWS job statuses retrieval")
+        raise handle_error(e, "TWS job statuses retrieval")
 
 
 # --- Health Check Endpoints ---
 @api_router.get("/health/app", summary="Check Application Health")
 @public_rate_limit
-def get_app_health(request: Request) -> Dict[str, str]:
+def get_app_health(request: Request) -> dict[str, str]:
     """Returns a simple 'ok' to indicate the FastAPI application is running."""
     return {"status": "ok"}
 
@@ -299,7 +299,7 @@ async def get_tws_health(
     request: Request,
     auto_enable: bool = Query(default=False, description="Auto-enable connection if valid"),
     tws_client: ITWSClient = tws_client_dependency,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Performs a quick check to verify the connection to the TWS server is active.
     
@@ -308,7 +308,7 @@ async def get_tws_health(
     """
     try:
         query = CheckTWSConnectionQuery()
-        result = await dispatcher.execute_query(query)
+        result = await dispatcher.execute_query(query)  # type: ignore[no-untyped-call]
         
         if not result.success:
             logger.error("TWS connection check failed: %s", result.error)
@@ -327,7 +327,7 @@ async def get_tws_health(
                 logger.info("TWS connection validation successful with auto_enable: %s", auto_enable)
             
             # Record TWS status success metrics
-            runtime_metrics.tws_status_requests_success.increment()
+            runtime_metrics.tws_status_requests_success.increment()  # type: ignore[no-untyped-call]
             
             return {
                 "status": "ok",
@@ -348,7 +348,7 @@ async def get_tws_health(
         logger.error("TWS health check failed: %s", e, exc_info=True)
         # Record TWS status failure metrics on exception
         runtime_metrics.tws_status_requests_failed.increment()
-        return handle_error(e, "TWS health check")
+        raise handle_error(e, "TWS health check")
 
 
 # --- Connection Validation Endpoint ---
@@ -365,7 +365,7 @@ class ConnectionValidationRequest(BaseModel):
 async def validate_connection(
     request: ConnectionValidationRequest,
     tws_client: ITWSClient = tws_client_dependency,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Validates TWS connection parameters with optional auto-enable feature.
     
@@ -378,7 +378,7 @@ async def validate_connection(
     """
     try:
         # Perform connection validation
-        validation_result = await tws_client.validate_connection(
+        validation_result = await tws_client.validate_connection(  # type: ignore[no-untyped-call]
             host=request.tws_host,
             port=request.tws_port,
             user=request.tws_user,
@@ -450,7 +450,7 @@ async def chat_endpoint(request: Request, data: ChatRequest) -> ChatResponse:
 
 @api_router.post("/sensitive")
 @authenticated_rate_limit
-async def sensitive_endpoint(request: Request, data: Dict[str, Any]) -> Dict[str, str]:
+async def sensitive_endpoint(request: Request, data: dict[str, Any]) -> dict[str, str]:
     """Sensitive endpoint for testing encryption."""
     from resync.core.encryption_service import encryption_service
 
@@ -463,14 +463,14 @@ async def sensitive_endpoint(request: Request, data: Dict[str, Any]) -> Dict[str
 
 @api_router.get("/protected")
 @authenticated_rate_limit
-async def protected_endpoint(request: Request):
+async def protected_endpoint(request: Request) -> None:
     """Protected endpoint for testing authentication."""
     raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 @api_router.get("/admin/users")
 @authenticated_rate_limit
-async def admin_users_endpoint(request: Request):
+async def admin_users_endpoint(request: Request) -> None:
     """Admin endpoint for testing authorization."""
     raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -481,7 +481,7 @@ class ReviewRequest(BaseModel):
 
 @api_router.post("/review")
 @public_rate_limit
-async def review_endpoint(request: Request, data: ReviewRequest):
+async def review_endpoint(request: Request, data: ReviewRequest) -> dict[str, str]:
     """Review endpoint for testing input validation."""
     if "<script>" in data.content:
         raise HTTPException(status_code=400, detail="XSS detected")
@@ -665,13 +665,13 @@ async def login_page(request: Request) -> HTMLResponse:
 # Token endpoint for JWT authentication
 @api_router.post("/token", include_in_schema=False)
 @public_rate_limit
-async def login_for_access_token(request: Request, 
-                                username: str = Form(...), 
-                                password: str = Form(...)):
+async def login_for_access_token(request: Request,
+                                username: str = Form(...),
+                                password: str = Form(...)) -> Response:
     """
     OAuth2 compatible token login, get an access token for future requests.
     """
-    from resync.api.auth import authenticate_admin, create_access_token
+    from resync.api.auth import authenticate_admin, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
     user = await authenticate_admin(username, password)
     if not user:
         raise HTTPException(
@@ -702,7 +702,7 @@ async def optimize_llm_query(
     with caching, model selection, and TWS-specific template matching.
     """
     try:
-        response = await optimized_llm.get_response(
+        response = await optimized_llm.get_response(  # type: ignore[no-untyped-call]
             query=query_data.query,
             context=query_data.context,
             use_cache=query_data.use_cache,
@@ -725,14 +725,14 @@ async def optimize_llm_query(
 
 # Redirect root to login page
 @api_router.get("/", include_in_schema=False)
-async def root_redirect():
+async def root_redirect() -> RedirectResponse:
     return RedirectResponse(url="/login")
 
 
 # --- TWS Monitoring Endpoints ---
 @api_router.get("/monitoring/metrics", summary="Get TWS Performance Metrics")
 @authenticated_rate_limit
-async def get_tws_metrics(request: Request) -> Dict[str, Any]:
+async def get_tws_metrics(request: Request) -> dict[str, Any]:
     """
     Returns comprehensive TWS performance metrics including:
     - API performance
@@ -746,7 +746,7 @@ async def get_tws_metrics(request: Request) -> Dict[str, Any]:
 
 @api_router.get("/monitoring/alerts", summary="Get Recent System Alerts")
 @authenticated_rate_limit
-async def get_tws_alerts(request: Request, limit: int = 10) -> List[Dict[str, Any]]:
+async def get_tws_alerts(request: Request, limit: int = 10) -> list[dict[str, Any]]:
     """
     Returns recent system alerts and warnings.
 
@@ -795,7 +795,7 @@ async def get_tws_health_monitoring(request: Request) -> TWSMetricsResponse:  # 
 # --- Runbook and Alerting Endpoints ---
 @api_router.get("/runbooks", summary="Get Available Runbooks")
 @authenticated_rate_limit
-async def list_runbooks(request: Request) -> List[str]:
+async def list_runbooks(request: Request) -> list[str]:
     """
     Returns a list of available incident response runbooks.
     """
@@ -804,12 +804,12 @@ async def list_runbooks(request: Request) -> List[str]:
 
 class ExecuteRunbookRequest(BaseModel):
     runbook_name: str
-    context: Dict[str, Any] = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 @api_router.post("/runbooks/execute", summary="Execute an Incident Response Runbook")
 @authenticated_rate_limit
-async def execute_runbook(request: Request, runbook_data: ExecuteRunbookRequest) -> Dict[str, Any]:
+async def execute_runbook(request: Request, runbook_data: ExecuteRunbookRequest) -> dict[str, Any]:
     """
     Executes an incident response runbook with the provided context.
     """
@@ -821,7 +821,7 @@ async def execute_runbook(request: Request, runbook_data: ExecuteRunbookRequest)
 
 @api_router.get("/alerts/active", summary="Get Active Alerts")
 @authenticated_rate_limit
-async def get_active_alerts(request: Request) -> List[Dict[str, Any]]:
+async def get_active_alerts(request: Request) -> list[dict[str, Any]]:
     """
     Returns a list of currently active (non-acknowledged) alerts.
     """
@@ -831,7 +831,7 @@ async def get_active_alerts(request: Request) -> List[Dict[str, Any]]:
 
 @api_router.post("/alerts/acknowledge/{alert_id}", summary="Acknowledge an Alert")
 @authenticated_rate_limit
-async def acknowledge_alert(request: Request, alert_id: str) -> Dict[str, bool]:
+async def acknowledge_alert(request: Request, alert_id: str) -> dict[str, bool]:
     """
     Acknowledges an active alert by ID.
     """
@@ -850,7 +850,7 @@ class AddAlertRuleRequest(BaseModel):
 
 @api_router.post("/alerts/rules", summary="Add an Alert Rule")
 @authenticated_rate_limit
-async def add_alert_rule(request: Request, rule_data: AddAlertRuleRequest) -> Dict[str, str]:
+async def add_alert_rule(request: Request, rule_data: AddAlertRuleRequest) -> dict[str, str]:
     """
     Adds a new alert rule to the system.
     """
@@ -894,7 +894,7 @@ class RunBenchmarkRequest(BaseModel):
 
 @api_router.post("/benchmark/run", summary="Run a performance benchmark")
 @authenticated_rate_limit
-async def run_benchmark(request: Request, benchmark_data: RunBenchmarkRequest) -> Dict[str, Any]:
+async def run_benchmark(request: Request, benchmark_data: RunBenchmarkRequest) -> dict[str, Any]:
     """
     Run a performance benchmark for the system.
     
@@ -943,7 +943,7 @@ async def run_benchmark(request: Request, benchmark_data: RunBenchmarkRequest) -
 
 @api_router.get("/benchmark/results", summary="Get benchmark results history")
 @authenticated_rate_limit
-async def get_benchmark_results(request: Request, operation: Optional[str] = None) -> Dict[str, Any]:
+async def get_benchmark_results(request: Request, operation: Optional[str] = None) -> dict[str, Any]:
     """
     Get historical benchmark results.
     

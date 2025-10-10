@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
+
+from __future__ import annotations
+
 import ast
 import sys
+from typing import Any
 
-def analyze_imports(file_path):
+def analyze_imports(file_path: str) -> None:
     """Analyze imports in a Python file to identify potentially unused ones."""
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()

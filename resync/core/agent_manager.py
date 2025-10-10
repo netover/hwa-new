@@ -9,7 +9,7 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from time import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import aiofiles
 
@@ -141,7 +141,7 @@ class AgentConfig(BaseModel):
     role: str
     goal: str
     backstory: str
-    tools: List[str]
+    tools: list[str]
     model_name: str = "llama3:latest"
     memory: bool = True
     verbose: bool = False
@@ -152,7 +152,7 @@ class AgentsConfig(BaseModel):
     Represents the top-level structure of the agent configuration file.
     """
 
-    agents: List[AgentConfig]
+    agents: list[AgentConfig]
 
 
 # --- Agent Manager Class ---
@@ -162,7 +162,7 @@ class AgentManager:
     Implements the Borg pattern for thread-safe singleton behavior.
     """
     
-    _shared_state: Dict[str, Any] = {}
+    _shared_state: dict[str, Any] = {}
     _lock = threading.RLock()
     _initialized = False
     
@@ -242,11 +242,11 @@ class AgentManager:
             logger.error(f"Failed to create agent '{agent_id}': {e}")
             return None
 
-    async def get_all_agents(self) -> List[AgentConfig]:
+    async def get_all_agents(self) -> list[AgentConfig]:
         """Returns the configuration of all loaded agents."""
         return self.agent_configs
 
-    def _discover_tools(self) -> Dict[str, Any]:
+    def _discover_tools(self) -> dict[str, Any]:
         """Discover available tools for agents."""
         try:
             from resync.tool_definitions.tws_tools import (
@@ -311,9 +311,9 @@ class AgentManager:
                     runtime_metrics.record_health_check("agent_manager", "initializing")
 
                     self.settings = settings_module
-                    self.agents: Dict[str, Any] = {}
+                    self.agents: dict[str, Any] = {}
                     # Load default agent configurations
-                    self.agent_configs: List[AgentConfig] = [
+                    self.agent_configs: list[AgentConfig] = [
                         AgentConfig(
                             id="tws-troubleshooting",
                             name="TWS Troubleshooting Agent",
@@ -339,7 +339,7 @@ class AgentManager:
                             verbose=False
                         )
                     ]
-                    self.tools: Dict[str, Any] = self._discover_tools()
+                    self.tools: dict[str, Any] = self._discover_tools()
                     self.tws_client: Optional[OptimizedTWSClient] = None
                     self._mock_tws_client: Optional[MockTWSClient] = None
                     # Async lock to prevent race conditions during TWS client initialization

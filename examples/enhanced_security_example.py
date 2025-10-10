@@ -2,8 +2,10 @@
 Example usage of enhanced security features in Resync application.
 """
 
+from __future__ import annotations
+
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -89,7 +91,7 @@ app = FastAPI(title="Resync Enhanced Security Example")
 
 
 @app.post("/register", response_model=dict)
-async def register_user(
+async def register_user(  # type: ignore[no-untyped-def]
     request: SecureUserRegistration,
     security_validator: EnhancedSecurityValidator = Depends(get_security_validator)
 ):
@@ -144,7 +146,7 @@ async def register_user(
         metadata={
             "action": "user_registration",
             "username": username_result.sanitized_value,
-            "email_domain": email_result.sanitized_value.split("@")[1] if "@" in email_result.sanitized_value else "unknown"
+            "email_domain": email_result.sanitized_value.split("@")[1] if email_result.sanitized_value and "@" in email_result.sanitized_value else "unknown"
         }
     )
     
@@ -163,7 +165,7 @@ async def register_user(
 
 
 @app.post("/login", response_model=dict)
-async def login_user(
+async def login_user(  # type: ignore[no-untyped-def]
     request: SecureLoginRequest,
     security_validator: EnhancedSecurityValidator = Depends(get_security_validator)
 ):
@@ -220,9 +222,10 @@ async def login_user(
     )
     
     # Store session context (would go to database/session store in real app)
-    await security_validator.session_store.setdefault(
-        security_context.session_id, security_context
-    )
+    if security_context.session_id:
+        security_validator.session_store.setdefault(
+            security_context.session_id, security_context
+        )
     
     return {
         "message": "Login successful",
@@ -234,7 +237,7 @@ async def login_user(
 
 
 @app.post("/validate-input", response_model=dict)
-async def validate_user_input(
+async def validate_user_input(  # type: ignore[no-untyped-def]
     input_text: str,
     security_validator: EnhancedSecurityValidator = Depends(get_security_validator)
 ):
@@ -261,7 +264,7 @@ async def validate_user_input(
 
 
 @app.get("/security-status", response_model=dict)
-async def get_security_status(
+async def get_security_status(  # type: ignore[no-untyped-def]
     request: Request,
     security_validator: EnhancedSecurityValidator = Depends(get_security_validator)
 ):
@@ -296,7 +299,7 @@ async def get_security_status(
 
 
 # Example of using async context managers for security operations
-async def example_secure_operation(user_id: str, operation: str):
+async def example_secure_operation(user_id: str, operation: str) -> dict[str, str]:
     """
     Example of a secure operation using async context managers.
     
@@ -336,7 +339,7 @@ async def example_secure_operation(user_id: str, operation: str):
 
 
 # Example usage
-async def main():
+async def main() -> None:
     """Example usage of enhanced security features."""
     print("=== Enhanced Security Example ===")
     
@@ -375,6 +378,8 @@ async def main():
     # Example 6: Secure operation with context manager
     result = await example_secure_operation("test_user", "data_access")
     print(f"Secure operation result: {result}")
+
+    return None
 
 
 if __name__ == "__main__":

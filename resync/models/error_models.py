@@ -83,10 +83,15 @@ class ValidationErrorResponse(BaseErrorResponse):
         return cls(
             error_code="VALIDATION_ERROR",
             message=context_message,
-            details=details,
             correlation_id=correlation_id or str(uuid4()),
+            category=ErrorCategory.VALIDATION,
+            details=details,
+            path=path,
+            method=method,
             severity=ErrorSeverity.LOW,
-            user_friendly_message="Please check your input and try again."
+            user_friendly_message="Please check your input and try again.",
+            troubleshooting_hints=["Check field requirements", "Verify data types"],
+            stack_trace=None
         )
 
 
@@ -106,9 +111,13 @@ class AuthenticationErrorResponse(BaseErrorResponse):
             error_code="UNAUTHORIZED",
             message=message,
             correlation_id=correlation_id or str(uuid4()),
+            category=ErrorCategory.AUTHENTICATION,
+            path=path,
+            method=method,
             severity=ErrorSeverity.MEDIUM,
             user_friendly_message="Please authenticate to access this resource.",
-            troubleshooting_hints=["Check your credentials", "Ensure your session hasn't expired"]
+            troubleshooting_hints=["Check your credentials", "Ensure your session hasn't expired"],
+            stack_trace=None
         )
 
     @classmethod
@@ -123,9 +132,13 @@ class AuthenticationErrorResponse(BaseErrorResponse):
             error_code="INVALID_CREDENTIALS",
             message=message,
             correlation_id=correlation_id or str(uuid4()),
+            category=ErrorCategory.AUTHENTICATION,
+            path=path,
+            method=method,
             severity=ErrorSeverity.MEDIUM,
             user_friendly_message="The provided credentials are invalid. Please check and try again.",
-            troubleshooting_hints=["Verify your username and password", "Check for typos"]
+            troubleshooting_hints=["Verify your username and password", "Check for typos"],
+            stack_trace=None
         )
 
 
@@ -147,38 +160,50 @@ class AuthorizationErrorResponse(BaseErrorResponse):
             error_code="FORBIDDEN",
             message=message,
             correlation_id=correlation_id or str(uuid4()),
+            category=ErrorCategory.AUTHORIZATION,
+            path=path,
+            method=method,
             severity=ErrorSeverity.MEDIUM,
             user_friendly_message="You don't have permission to access this resource.",
-            troubleshooting_hints=["Contact your administrator for access", "Check if you have the required permissions"]
+            troubleshooting_hints=["Contact your administrator for access", "Check if you have the required permissions"],
+            required_permissions=["access"],
+            user_permissions=["basic"],
+            stack_trace=None
         )
 
     @classmethod
-    def insufficient_permissions(cls, required: List[str] = None, user: List[str] = None, resource: str = None, correlation_id: Optional[str] = None, path: Optional[str] = None, method: Optional[str] = None) -> "AuthorizationErrorResponse":
+    def insufficient_permissions(cls, required: Optional[List[str]] = None, user: Optional[List[str]] = None, resource: Optional[str] = None, correlation_id: Optional[str] = None, path: Optional[str] = None, method: Optional[str] = None) -> "AuthorizationErrorResponse":
         """Create insufficient permissions error response."""
         # Handle case where resource is provided instead of required/user permissions
         if resource is not None and required is None and user is None:
             required = [f"access_{resource}"]
             user = ["basic"]
-        
+
         # Ensure we have valid required and user permissions
         required = required or ["unknown"]
         user = user or ["none"]
-        
+
         # Build contextual message with request information
         message = f"Insufficient permissions. Required: {', '.join(required)}"
         if path and method:
             message = f"Insufficient permissions for {method} {path}. Required: {', '.join(required)}"
-            
+
         return cls(
             error_code="INSUFFICIENT_PERMISSIONS",
             message=message,
             correlation_id=correlation_id or str(uuid4()),
+            category=ErrorCategory.AUTHORIZATION,
+            path=path,
+            method=method,
             severity=ErrorSeverity.MEDIUM,
             user_friendly_message="You don't have the required permissions to perform this action.",
             troubleshooting_hints=["Contact your administrator to request additional permissions"],
             required_permissions=required,
-            user_permissions=user
+            user_permissions=user,
+            stack_trace=None
         )
+
+
 
 
 class BusinessLogicErrorResponse(BaseErrorResponse):
@@ -187,7 +212,7 @@ class BusinessLogicErrorResponse(BaseErrorResponse):
     business_rule: Optional[str] = Field(None, description="Business rule that was violated")
 
     @classmethod
-    def resource_not_found(cls, resource_type: str = None, resource_id: str = None, resource: str = None, identifier: str = None, correlation_id: Optional[str] = None, path: Optional[str] = None, method: Optional[str] = None) -> "BusinessLogicErrorResponse":
+    def resource_not_found(cls, resource_type: Optional[str] = None, resource_id: Optional[str] = None, resource: Optional[str] = None, identifier: Optional[str] = None, correlation_id: Optional[str] = None, path: Optional[str] = None, method: Optional[str] = None) -> "BusinessLogicErrorResponse":
         """Create resource not found error response."""
         # Handle case where resource and identifier are provided instead of resource_type and resource_id
         if resource is not None:
@@ -209,20 +234,25 @@ class BusinessLogicErrorResponse(BaseErrorResponse):
             method=method,
             user_friendly_message=f"The requested {resource_type} could not be found.",
             troubleshooting_hints=["Check the resource ID", "Verify the resource exists"],
-            business_rule="Resource existence check"
+            business_rule="Resource existence check",
+            stack_trace=None
         )
 
     @classmethod
-    def business_rule_violation(cls, rule: str, details: str, correlation_id: Optional[str] = None) -> "BusinessLogicErrorResponse":
+    def business_rule_violation(cls, rule: str, details: str, correlation_id: Optional[str] = None, path: Optional[str] = None, method: Optional[str] = None) -> "BusinessLogicErrorResponse":
         """Create business rule violation error response."""
         return cls(
             error_code="BUSINESS_RULE_VIOLATION",
             message=f"Business rule violation: {rule} - {details}",
             correlation_id=correlation_id or str(uuid4()),
+            category=ErrorCategory.BUSINESS_LOGIC,
+            path=path,
+            method=method,
             severity=ErrorSeverity.MEDIUM,
             user_friendly_message="A business rule was violated. Please check your request.",
             troubleshooting_hints=["Review the business rules", "Modify your request accordingly"],
-            business_rule=rule
+            business_rule=rule,
+            stack_trace=None
         )
 
 
@@ -248,7 +278,8 @@ class SystemErrorResponse(BaseErrorResponse):
             method=method,
             user_friendly_message="Something went wrong on our end. Please try again later.",
             troubleshooting_hints=["Try again in a few minutes", "Contact support if the problem persists"],
-            error_details=error_details
+            error_details=error_details,
+            stack_trace=None
         )
 
     @classmethod
@@ -268,7 +299,8 @@ class SystemErrorResponse(BaseErrorResponse):
             method=method,
             user_friendly_message=f"The {service} service is currently unavailable. Please try again later.",
             troubleshooting_hints=[f"Try again in a few minutes", "Check service status"],
-            error_details={"service": service}
+            error_details={"service": service},
+            stack_trace=None
         )
 
 
@@ -279,17 +311,21 @@ class ExternalServiceErrorResponse(BaseErrorResponse):
     http_status: Optional[int] = Field(None, description="HTTP status code from external service")
 
     @classmethod
-    def external_service_error(cls, service_name: str, http_status: int, error_message: str, correlation_id: Optional[str] = None) -> "ExternalServiceErrorResponse":
+    def external_service_error(cls, service_name: str, http_status: int, error_message: str, correlation_id: Optional[str] = None, path: Optional[str] = None, method: Optional[str] = None) -> "ExternalServiceErrorResponse":
         """Create external service error response."""
         return cls(
             error_code="EXTERNAL_SERVICE_ERROR",
             message=f"External service error from {service_name}: {error_message}",
             correlation_id=correlation_id or str(uuid4()),
+            category=ErrorCategory.EXTERNAL_SERVICE,
+            path=path,
+            method=method,
             severity=ErrorSeverity.MEDIUM,
             user_friendly_message=f"An error occurred while communicating with {service_name}. Please try again later.",
             troubleshooting_hints=[f"Try again in a few minutes", "Check if {service_name} is operational"],
             service_name=service_name,
-            http_status=http_status
+            http_status=http_status,
+            stack_trace=None
         )
 
 
@@ -300,7 +336,7 @@ class RateLimitErrorResponse(BaseErrorResponse):
     reset_time: Optional[datetime] = Field(None, description="When the rate limit resets")
 
     @classmethod
-    def rate_limit_exceeded(cls, limit: int, reset_time: datetime = None, window: str = None, correlation_id: Optional[str] = None, path: Optional[str] = None, method: Optional[str] = None) -> "RateLimitErrorResponse":
+    def rate_limit_exceeded(cls, limit: int, reset_time: Optional[datetime] = None, window: Optional[str] = None, correlation_id: Optional[str] = None, path: Optional[str] = None, method: Optional[str] = None) -> "RateLimitErrorResponse":
         """Create rate limit exceeded error response."""
         # Handle case where window is provided instead of reset_time
         if window is not None and reset_time is None:
@@ -308,21 +344,25 @@ class RateLimitErrorResponse(BaseErrorResponse):
             from datetime import datetime, timedelta
             # This is a simplified implementation - in a real scenario, you'd calculate the actual reset time
             reset_time = datetime.utcnow() + timedelta(seconds=60)  # Default to 1 minute
-            
+
         # Build contextual message with request information
         message = f"Rate limit exceeded. Limit: {limit} requests"
         if path and method:
             message = f"Rate limit exceeded for {method} {path}. Limit: {limit} requests"
-            
+
         return cls(
             error_code="RATE_LIMIT_EXCEEDED",
             message=message,
             correlation_id=correlation_id or str(uuid4()),
+            category=ErrorCategory.RATE_LIMIT,
+            path=path,
+            method=method,
             severity=ErrorSeverity.MEDIUM,
             user_friendly_message="You've made too many requests recently. Please wait before trying again.",
             troubleshooting_hints=[f"Wait until {reset_time.isoformat()} to retry" if reset_time else "Try again later", "Consider implementing request batching"],
             limit=limit,
-            reset_time=reset_time
+            reset_time=reset_time,
+            stack_trace=None
         )
 
 

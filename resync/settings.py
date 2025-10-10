@@ -3,9 +3,9 @@ from __future__ import annotations
 import os
 from enum import Enum
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field, field_validator, computed_field
+from pydantic import Field, ValidationInfo, field_validator, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -216,12 +216,12 @@ class Settings(BaseSettings):
 
     tws_host: str | None = Field(default=None)
     tws_port: int | None = Field(default=None, ge=1, le=65535)
-    tws_user: str | None = Field(
+    tws_user: str | None = Field(  # type: ignore[call-overload]
         default=None,
         env="TWS_USER",
         description="Usuário do TWS (obrigatório se não estiver em modo mock)"
     )
-    tws_password: str | None = Field(
+    tws_password: str | None = Field(  # type: ignore[call-overload]
         default=None,
         env="TWS_PASSWORD",
         description="Senha do TWS (obrigatório se não estiver em modo mock)",
@@ -308,13 +308,11 @@ class Settings(BaseSettings):
         description="Protected directories that should not be modified"
     )
 
-    @computed_field
     @property
     def is_production(self) -> bool:
         """Verifica se está em produção."""
         return self.environment == Environment.PRODUCTION
 
-    @computed_field
     @property
     def is_development(self) -> bool:
         """Verifica se está em desenvolvimento."""
@@ -325,158 +323,158 @@ class Settings(BaseSettings):
     # ============================================================================
 
     @property
-    def BASE_DIR(self):
+    def BASE_DIR(self) -> Path:
         """Backward compatibility property for dynaconf-style access."""
         return self.base_dir
 
     @property
-    def PROJECT_NAME(self):
+    def PROJECT_NAME(self) -> str:
         """Backward compatibility property for dynaconf-style access."""
         return self.project_name
 
     @property
-    def PROJECT_VERSION(self):
+    def PROJECT_VERSION(self) -> str:
         """Backward compatibility property for dynaconf-style access."""
         return self.project_version
 
     @property
-    def DESCRIPTION(self):
+    def DESCRIPTION(self) -> str:
         """Backward compatibility property for dynaconf-style access."""
         return self.description
 
     @property
-    def LOG_LEVEL(self):
+    def LOG_LEVEL(self) -> str:
         """Backward compatibility property for dynaconf-style access."""
         return self.log_level
 
     @property
-    def ENVIRONMENT(self):
+    def ENVIRONMENT(self) -> str:
         """Backward compatibility property for dynaconf-style access."""
         return self.environment.value
 
     @property
-    def DEBUG(self):
+    def DEBUG(self) -> bool:
         """Backward compatibility property for dynaconf-style access."""
         return self.environment == Environment.DEVELOPMENT
 
     @property
-    def NEO4J_URI(self):
+    def NEO4J_URI(self) -> str:
         return self.neo4j_uri
 
     @property
-    def NEO4J_USER(self):
+    def NEO4J_USER(self) -> str | None:
         return self.neo4j_user
 
     @property
-    def NEO4J_PASSWORD(self):
+    def NEO4J_PASSWORD(self) -> str | None:
         return self.neo4j_password
 
     @property
-    def REDIS_URL(self):
+    def REDIS_URL(self) -> str:
         return self.redis_url
 
     @property
-    def LLM_ENDPOINT(self):
+    def LLM_ENDPOINT(self) -> str | None:
         return self.llm_endpoint
 
     @property
-    def LLM_API_KEY(self):
+    def LLM_API_KEY(self) -> str | None:
         return self.llm_api_key
 
     @property
-    def LLM_TIMEOUT(self):
+    def LLM_TIMEOUT(self) -> float:
         return self.llm_timeout
 
     @property
-    def ADMIN_USERNAME(self):
+    def ADMIN_USERNAME(self) -> str:
         return self.admin_username
 
     @property
-    def ADMIN_PASSWORD(self):
+    def ADMIN_PASSWORD(self) -> str:
         return self.admin_password
 
     @property
-    def TWS_MOCK_MODE(self):
+    def TWS_MOCK_MODE(self) -> bool:
         return self.tws_mock_mode
 
     @property
-    def TWS_HOST(self):
+    def TWS_HOST(self) -> str | None:
         return self.tws_host
 
     @property
-    def TWS_PORT(self):
+    def TWS_PORT(self) -> int | None:
         return self.tws_port
 
     @property
-    def TWS_USER(self):
+    def TWS_USER(self) -> str | None:
         return self.tws_user
 
     @property
-    def TWS_PASSWORD(self):
+    def TWS_PASSWORD(self) -> str | None:
         return self.tws_password
 
     @property
-    def SERVER_HOST(self):
+    def SERVER_HOST(self) -> str:
         return self.server_host
 
     @property
-    def SERVER_PORT(self):
+    def SERVER_PORT(self) -> int:
         return self.server_port
 
     @property
-    def CORS_ALLOWED_ORIGINS(self):
+    def CORS_ALLOWED_ORIGINS(self) -> list[str]:
         return self.cors_allowed_origins
 
     @property
-    def CORS_ALLOW_CREDENTIALS(self):
+    def CORS_ALLOW_CREDENTIALS(self) -> bool:
         return self.cors_allow_credentials
 
     @property
-    def CORS_ALLOW_METHODS(self):
+    def CORS_ALLOW_METHODS(self) -> list[str]:
         return self.cors_allow_methods
 
     @property
-    def CORS_ALLOW_HEADERS(self):
+    def CORS_ALLOW_HEADERS(self) -> list[str]:
         return self.cors_allow_headers
 
     @property
-    def STATIC_CACHE_MAX_AGE(self):
+    def STATIC_CACHE_MAX_AGE(self) -> int:
         return self.static_cache_max_age
 
     @property
-    def JINJA2_TEMPLATE_CACHE_SIZE(self):
+    def JINJA2_TEMPLATE_CACHE_SIZE(self) -> int:
         return 400 if self.environment == Environment.PRODUCTION else 0
 
     @property
-    def AGENT_CONFIG_PATH(self):
+    def AGENT_CONFIG_PATH(self) -> Path:
         return self.base_dir / "config" / "agents.json"
 
     @property
-    def MAX_CONCURRENT_AGENT_CREATIONS(self):
+    def MAX_CONCURRENT_AGENT_CREATIONS(self) -> int:
         return 5
 
     @property
-    def TWS_ENGINE_NAME(self):
+    def TWS_ENGINE_NAME(self) -> str:
         return "TWS"
 
     @property
-    def TWS_ENGINE_OWNER(self):
+    def TWS_ENGINE_OWNER(self) -> str:
         return "twsuser"
 
     @property
-    def TWS_REQUEST_TIMEOUT(self):
+    def TWS_REQUEST_TIMEOUT(self) -> float:
         return self.tws_request_timeout
 
     @property
-    def AUDITOR_MODEL_NAME(self):
+    def AUDITOR_MODEL_NAME(self) -> str:
         return self.auditor_model_name
 
     @property
-    def AGENT_MODEL_NAME(self):
+    def AGENT_MODEL_NAME(self) -> str:
         return self.agent_model_name
 
     @property
-    def CACHE_HIERARCHY(self):
+    def CACHE_HIERARCHY(self) -> Any:
         """Cache hierarchy configuration object."""
         return CacheHierarchyConfig(
             l1_max_size=self.cache_hierarchy_l1_max_size,
@@ -488,75 +486,75 @@ class Settings(BaseSettings):
 
     # Connection pool properties
     @property
-    def DB_POOL_MIN_SIZE(self):
+    def DB_POOL_MIN_SIZE(self) -> int:
         return self.db_pool_min_size
 
     @property
-    def DB_POOL_MAX_SIZE(self):
+    def DB_POOL_MAX_SIZE(self) -> int:
         return self.db_pool_max_size
 
     @property
-    def DB_POOL_IDLE_TIMEOUT(self):
+    def DB_POOL_IDLE_TIMEOUT(self) -> int:
         return self.db_pool_idle_timeout
 
     @property
-    def DB_POOL_CONNECT_TIMEOUT(self):
+    def DB_POOL_CONNECT_TIMEOUT(self) -> int:
         return self.db_pool_connect_timeout
 
     @property
-    def DB_POOL_HEALTH_CHECK_INTERVAL(self):
+    def DB_POOL_HEALTH_CHECK_INTERVAL(self) -> int:
         return self.db_pool_health_check_interval
 
     @property
-    def DB_POOL_MAX_LIFETIME(self):
+    def DB_POOL_MAX_LIFETIME(self) -> int:
         return self.db_pool_max_lifetime
 
     @property
-    def REDIS_POOL_MIN_SIZE(self):
+    def REDIS_POOL_MIN_SIZE(self) -> int:
         return self.redis_pool_min_size
 
     @property
-    def REDIS_POOL_MAX_SIZE(self):
+    def REDIS_POOL_MAX_SIZE(self) -> int:
         return self.redis_pool_max_size
 
     @property
-    def REDIS_POOL_IDLE_TIMEOUT(self):
+    def REDIS_POOL_IDLE_TIMEOUT(self) -> int:
         return self.redis_pool_idle_timeout
 
     @property
-    def REDIS_POOL_CONNECT_TIMEOUT(self):
+    def REDIS_POOL_CONNECT_TIMEOUT(self) -> int:
         return self.redis_pool_connect_timeout
 
     @property
-    def REDIS_POOL_HEALTH_CHECK_INTERVAL(self):
+    def REDIS_POOL_HEALTH_CHECK_INTERVAL(self) -> int:
         return self.redis_pool_health_check_interval
 
     @property
-    def REDIS_POOL_MAX_LIFETIME(self):
+    def REDIS_POOL_MAX_LIFETIME(self) -> int:
         return self.redis_pool_max_lifetime
 
     @property
-    def HTTP_POOL_MIN_SIZE(self):
+    def HTTP_POOL_MIN_SIZE(self) -> int:
         return self.http_pool_min_size
 
     @property
-    def HTTP_POOL_MAX_SIZE(self):
+    def HTTP_POOL_MAX_SIZE(self) -> int:
         return self.http_pool_max_size
 
     @property
-    def HTTP_POOL_IDLE_TIMEOUT(self):
+    def HTTP_POOL_IDLE_TIMEOUT(self) -> int:
         return self.http_pool_idle_timeout
 
     @property
-    def HTTP_POOL_CONNECT_TIMEOUT(self):
+    def HTTP_POOL_CONNECT_TIMEOUT(self) -> int:
         return self.http_pool_connect_timeout
 
     @property
-    def HTTP_POOL_HEALTH_CHECK_INTERVAL(self):
+    def HTTP_POOL_HEALTH_CHECK_INTERVAL(self) -> int:
         return self.http_pool_health_check_interval
 
     @property
-    def HTTP_POOL_MAX_LIFETIME(self):
+    def HTTP_POOL_MAX_LIFETIME(self) -> int:
         return self.http_pool_max_lifetime
 
     # ============================================================================
@@ -589,12 +587,12 @@ class Settings(BaseSettings):
     # ============================================================================
 
     @property
-    def KNOWLEDGE_BASE_DIRS(self):
+    def KNOWLEDGE_BASE_DIRS(self) -> list[Path]:
         """Backward compatibility property for KNOWLEDGE_BASE_DIRS."""
         return self.knowledge_base_dirs
-    
+
     @property
-    def PROTECTED_DIRECTORIES(self):
+    def PROTECTED_DIRECTORIES(self) -> list[Path]:
         """Backward compatibility property for PROTECTED_DIRECTORIES."""
         return self.protected_directories
 
@@ -606,7 +604,7 @@ class Settings(BaseSettings):
 
     @field_validator('db_pool_max_size')
     @classmethod
-    def validate_db_pool_sizes(cls, v: int, info) -> int:
+    def validate_db_pool_sizes(cls, v: int, info: ValidationInfo) -> int:
         """Valida que max_size >= min_size."""
         min_size = info.data.get('db_pool_min_size', 0)
         if v < min_size:
@@ -617,7 +615,7 @@ class Settings(BaseSettings):
 
     @field_validator('redis_pool_max_size')
     @classmethod
-    def validate_redis_pool_sizes(cls, v: int, info) -> int:
+    def validate_redis_pool_sizes(cls, v: int, info: ValidationInfo) -> int:
         """Valida que max_size >= min_size."""
         min_size = info.data.get('redis_pool_min_size', 0)
         if v < min_size:
@@ -628,7 +626,7 @@ class Settings(BaseSettings):
 
     @field_validator('admin_password')
     @classmethod
-    def validate_production_password(cls, v: str, info) -> str:
+    def validate_production_password(cls, v: str, info: ValidationInfo) -> str:
         """Valida senha em produção."""
         env = info.data.get('environment')
         if env == Environment.PRODUCTION:
@@ -647,7 +645,7 @@ class Settings(BaseSettings):
 
     @field_validator('cors_allowed_origins')
     @classmethod
-    def validate_production_cors(cls, v: list[str], info) -> list[str]:
+    def validate_production_cors(cls, v: list[str], info: ValidationInfo) -> list[str]:
         """Valida CORS em produção."""
         env = info.data.get('environment')
         if env == Environment.PRODUCTION and "*" in v:
@@ -658,7 +656,7 @@ class Settings(BaseSettings):
 
     @field_validator('llm_api_key')
     @classmethod
-    def validate_llm_api_key(cls, v: str, info) -> str:
+    def validate_llm_api_key(cls, v: str, info: ValidationInfo) -> str:
         """Valida chave da API em produção."""
         env = info.data.get('environment')
         if env == Environment.PRODUCTION:
@@ -670,7 +668,7 @@ class Settings(BaseSettings):
 
     @field_validator('tws_user', 'tws_password')
     @classmethod
-    def validate_tws_credentials(cls, v: str | None, info) -> str | None:
+    def validate_tws_credentials(cls, v: str | None, info: ValidationInfo) -> str | None:
         """Valida credenciais TWS quando não está em modo mock."""
         if info.field_name == "tws_password" and v:
             # Validar força da senha em produção
@@ -690,7 +688,7 @@ class Settings(BaseSettings):
                     )
         return v
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """Validações pós-inicialização."""
         # Validar TWS quando não está em mock mode
         if not self.tws_mock_mode:

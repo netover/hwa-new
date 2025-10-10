@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 class ErrorResponseBuilder:
     """Builder class for creating standardized error responses."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._correlation_id: Optional[str] = None
         self._path: Optional[str] = None
         self._method: Optional[str] = None
@@ -68,7 +68,7 @@ class ErrorResponseBuilder:
             response.message = message
         return response
 
-    def build_authentication_error(self, error_type: str, **kwargs) -> AuthenticationErrorResponse:
+    def build_authentication_error(self, error_type: str, **kwargs: Any) -> AuthenticationErrorResponse:
         """Build authentication error response."""
         if error_type == "unauthorized":
             return AuthenticationErrorResponse.unauthorized(
@@ -102,7 +102,7 @@ class ErrorResponseBuilder:
                 **kwargs
             )
 
-    def build_authorization_error(self, error_type: str, **kwargs) -> AuthorizationErrorResponse:
+    def build_authorization_error(self, error_type: str, **kwargs: Any) -> AuthorizationErrorResponse:
         """Build authorization error response."""
         if error_type == "forbidden":
             return AuthorizationErrorResponse.forbidden(
@@ -120,7 +120,7 @@ class ErrorResponseBuilder:
                 **kwargs
             )
 
-    def build_business_logic_error(self, error_type: str, **kwargs) -> BusinessLogicErrorResponse:
+    def build_business_logic_error(self, error_type: str, **kwargs: Any) -> BusinessLogicErrorResponse:
         """Build business logic error response."""
         if error_type == "resource_not_found":
             return BusinessLogicErrorResponse.resource_not_found(
@@ -160,7 +160,7 @@ class ErrorResponseBuilder:
                 **kwargs
             )
 
-    def build_system_error(self, error_type: str, exception: Optional[Exception] = None, **kwargs) -> SystemErrorResponse:
+    def build_system_error(self, error_type: str, exception: Optional[Exception] = None, **kwargs: Any) -> SystemErrorResponse:
         """Build system error response."""
         if self._include_stack_trace and exception:
             kwargs["details"] = kwargs.get("details", {})
@@ -198,7 +198,7 @@ class ErrorResponseBuilder:
                 **kwargs
             )
 
-    def build_external_service_error(self, service: str, error_type: str = "service_error", **kwargs) -> ExternalServiceErrorResponse:
+    def build_external_service_error(self, service: str, error_type: str = "service_error", **kwargs: Any) -> ExternalServiceErrorResponse:
         """Build external service error response."""
         if error_type == "timeout":
             return ExternalServiceErrorResponse.timeout(
@@ -529,7 +529,7 @@ def create_json_response_from_error(error_response: BaseErrorResponse) -> JSONRe
     )
 
 
-def register_exception_handlers(app):
+def register_exception_handlers(app):  # type: ignore
     """Register standardized exception handlers for the FastAPI application."""
     from fastapi.exceptions import RequestValidationError
     from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -537,40 +537,42 @@ def register_exception_handlers(app):
     from resync.core.exceptions_enhanced import ResyncException as EnhancedResyncException
 
     # Register handler for validation errors
-    @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    @app.exception_handler(RequestValidationError)  # type: ignore
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):  # type: ignore
         correlation_id = generate_correlation_id()
-        error_response = ErrorResponseBuilder() \
-            .with_correlation_id(correlation_id) \
-            .with_request_context(request) \
+        error_response = (
+            ErrorResponseBuilder()
+            .with_correlation_id(correlation_id)
+            .with_request_context(request)
             .build_validation_error(extract_validation_errors(exc))
+        )  # type: ignore
 
         log_error_response(error_response, exc)
 
         return create_json_response_from_error(error_response)
 
     # Register handler for standard HTTP exceptions
-    @app.exception_handler(StarletteHTTPException)
-    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    @app.exception_handler(StarletteHTTPException)  # type: ignore
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):  # type: ignore
         correlation_id = generate_correlation_id()
         builder = ErrorResponseBuilder().with_correlation_id(correlation_id).with_request_context(request)
 
         # Map HTTP status codes to appropriate error types
         if exc.status_code == 404:
             error_response = builder.build_business_logic_error(
-                "resource_not_found", 
+                "resource_not_found",
                 resource="Resource"
-            )
+            )  # type: ignore[assignment]
         elif exc.status_code == 401:
-            error_response = builder.build_authentication_error("unauthorized")
+            error_response = builder.build_authentication_error("unauthorized")  # type: ignore[assignment]
         elif exc.status_code == 403:
-            error_response = builder.build_authorization_error("forbidden")
+            error_response = builder.build_authorization_error("forbidden")  # type: ignore[assignment]
         elif exc.status_code == 429:
             error_response = builder.build_rate_limit_error(
                 limit=getattr(request.state, 'rate_limit', {}).get('limit', 0)
-            )
+            )  # type: ignore[assignment]
         else:
-            error_response = builder.build_system_error("internal_server_error")
+            error_response = builder.build_system_error("internal_server_error")  # type: ignore[assignment]
 
         error_response.error_code = f"HTTP_{exc.status_code}"
         error_response.message = exc.detail if exc.detail else f"HTTP Error {exc.status_code}"
@@ -580,20 +582,20 @@ def register_exception_handlers(app):
         return create_json_response_from_error(error_response)
 
     # Register handler for enhanced Resync custom exceptions first
-    @app.exception_handler(EnhancedResyncException)
-    async def enhanced_resync_exception_handler(request: Request, exc: EnhancedResyncException):
+    @app.exception_handler(EnhancedResyncException)  # type: ignore
+    async def enhanced_resync_exception_handler(request: Request, exc: EnhancedResyncException):  # type: ignore
         correlation_id = generate_correlation_id()
-        error_response = create_error_response_from_exception(exc, request, correlation_id)
+        error_response = create_error_response_from_exception(exc, request, correlation_id)  # type: ignore[assignment]
 
         log_error_response(error_response, exc)
 
         return create_json_response_from_error(error_response)
 
     # Register handler for base Resync custom exceptions
-    @app.exception_handler(BaseResyncException)
-    async def base_resync_exception_handler(request: Request, exc: BaseResyncException):
+    @app.exception_handler(BaseResyncException)  # type: ignore
+    async def base_resync_exception_handler(request: Request, exc: BaseResyncException):  # type: ignore
         correlation_id = generate_correlation_id()
-        error_response = create_error_response_from_exception(exc, request, correlation_id)
+        error_response = create_error_response_from_exception(exc, request, correlation_id)  # type: ignore[assignment]
 
         log_error_response(error_response, exc)
 

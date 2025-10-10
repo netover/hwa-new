@@ -12,7 +12,6 @@ from ...tool_definitions.tws_tools import (
     tws_status_tool,
     tws_troubleshooting_tool,
 )
->>>>>>> REPLACE
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio

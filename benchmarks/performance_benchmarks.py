@@ -8,9 +8,11 @@ This module includes benchmarks for:
 4. WebSocket connection handling
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
-from typing import List, Dict
+from typing import Any
 import pytest
 
 from resync.core.async_cache import AsyncTTLCache
@@ -25,10 +27,10 @@ class PerformanceBenchmarkSuite:
     A comprehensive performance benchmarking suite for the Resync application.
     """
     
-    def __init__(self):
-        self.results = {}
+    def __init__(self) -> None:
+        self.results: dict[str, Any] = {}
         
-    async def benchmark_async_cache_cleanup(self):
+    async def benchmark_async_cache_cleanup(self) -> None:
         """
         Benchmark the async cache cleanup operation with parallel vs sequential implementation.
         """
@@ -55,7 +57,7 @@ class PerformanceBenchmarkSuite:
         
         await cache.stop()
         
-    async def benchmark_tws_batch_operations(self):
+    async def benchmark_tws_batch_operations(self) -> None:
         """
         Benchmark TWS batch operations with parallel vs sequential implementation.
         """
@@ -68,7 +70,7 @@ class PerformanceBenchmarkSuite:
         job_ids = [f"job_{i}" for i in range(50)]
         
         # Simulate parallel vs sequential processing
-        async def simulate_sequential_processing():
+        async def simulate_sequential_processing() -> float:
             results = {}
             start_time = time.time()
             for job_id in job_ids:
@@ -78,10 +80,10 @@ class PerformanceBenchmarkSuite:
             end_time = time.time()
             return end_time - start_time
         
-        async def simulate_parallel_processing():
+        async def simulate_parallel_processing() -> float:
             start_time = time.time()
             
-            async def fetch_job_status(job_id):
+            async def fetch_job_status(job_id: str) -> tuple[str, str]:
                 # Simulate API call taking 0.1 seconds
                 await asyncio.sleep(0.1)
                 return job_id, f"status_{job_id}"
@@ -105,7 +107,7 @@ class PerformanceBenchmarkSuite:
         print(f"TWS parallel time: {parallel_time:.4f}s")
         print(f"Improvement factor: {self.results['tws_improvement_factor']:.2f}x")
         
-    async def benchmark_agent_initialization(self):
+    async def benchmark_agent_initialization(self) -> None:
         """
         Benchmark agent initialization with parallel vs sequential implementation.
         """
@@ -134,10 +136,10 @@ class PerformanceBenchmarkSuite:
         start_time = time.time()
         
         # Simulate parallel agent creation
-        async def create_mock_agent(config):
+        async def create_mock_agent(config: Any) -> str:
             # Simulate agent initialization with some async work
             await asyncio.sleep(0.05)  # Simulate initialization time
-            return config.id
+            return str(config.get('id', 'mock_agent'))
         
         tasks = [create_mock_agent(config) for config in agent_configs]
         results = await asyncio.gather(*tasks)
@@ -160,7 +162,7 @@ class PerformanceBenchmarkSuite:
         print(f"Agent parallel time: {parallel_time:.4f}s")
         print(f"Improvement factor: {self.results['agent_improvement_factor']:.2f}x")
     
-    async def benchmark_websocket_concurrent_connections(self):
+    async def benchmark_websocket_concurrent_connections(self) -> None:
         """
         Benchmark WebSocket concurrent connection handling.
         """
@@ -169,7 +171,7 @@ class PerformanceBenchmarkSuite:
         # This would simulate multiple concurrent WebSocket connections
         # For now, simulating the connection handling process
         
-        async def simulate_websocket_interaction(connection_id: int):
+        async def simulate_websocket_interaction(connection_id: int) -> int:
             # Simulate connection processing time
             await asyncio.sleep(0.01)
             # Simulate message processing
@@ -194,7 +196,7 @@ class PerformanceBenchmarkSuite:
         print(f"Processed {num_connections} concurrent WebSocket connections in {total_time:.4f}s")
         print(f"Connections per second: {self.results['websocket_connections_per_second']:.2f}")
     
-    async def run_all_benchmarks(self):
+    async def run_all_benchmarks(self) -> dict[str, Any]:
         """
         Run all performance benchmarks and return the results.
         """
@@ -217,7 +219,7 @@ class PerformanceBenchmarkSuite:
 
 
 # Run benchmarks when executed as a script
-async def run_benchmarks():
+async def run_benchmarks() -> dict[str, Any]:
     benchmark_suite = PerformanceBenchmarkSuite()
     return await benchmark_suite.run_all_benchmarks()
 

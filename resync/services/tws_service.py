@@ -63,7 +63,7 @@ class OptimizedTWSClient:
         self.base_url = f"http://{hostname}:{port}/twsd"
         self.auth = (username, password)
         self.use_connection_pool = use_connection_pool
-        self._pool_manager = None
+        self._pool_manager: Any = None
 
         if use_connection_pool:
             # Use connection pool manager for enhanced connection management
@@ -75,14 +75,14 @@ class OptimizedTWSClient:
                 auth=self.auth,
                 verify=True,  # Development: TWS often uses self-signed certs
                 timeout=httpx.Timeout(
-                    connect=settings.TWS_CONNECT_TIMEOUT,
-                    read=settings.TWS_READ_TIMEOUT,
-                    write=settings.TWS_WRITE_TIMEOUT,
-                    pool=settings.TWS_POOL_TIMEOUT,
+                    connect=getattr(settings, "TWS_CONNECT_TIMEOUT", 10.0),
+                    read=getattr(settings, "TWS_READ_TIMEOUT", 30.0),
+                    write=getattr(settings, "TWS_WRITE_TIMEOUT", 30.0),
+                    pool=getattr(settings, "TWS_POOL_TIMEOUT", 5.0),
                 ),
                 limits=httpx.Limits(
-                    max_connections=settings.TWS_MAX_CONNECTIONS,
-                    max_keepalive_connections=settings.TWS_MAX_KEEPALIVE,
+                    max_connections=getattr(settings, "TWS_MAX_CONNECTIONS", 100),
+                    max_keepalive_connections=getattr(settings, "TWS_MAX_KEEPALIVE", 20),
                 ),
             )
 
@@ -90,7 +90,7 @@ class OptimizedTWSClient:
         self.cache = get_cache_hierarchy()
         logger.info("OptimizedTWSClient initialized for base URL: %s", self.base_url)
 
-    async def _get_http_client(self):
+    async def _get_http_client(self) -> Any:
         """Get HTTP client from connection pool or use direct client."""
         if self.use_connection_pool:
             if self._pool_manager is None:
@@ -107,32 +107,32 @@ class OptimizedTWSClient:
                         auth=self.auth,
                         verify=True,
                         timeout=httpx.Timeout(
-                            connect=settings.TWS_CONNECT_TIMEOUT,
-                            read=settings.TWS_READ_TIMEOUT,
-                            write=settings.TWS_WRITE_TIMEOUT,
-                            pool=settings.TWS_POOL_TIMEOUT,
+                            connect=getattr(settings, "TWS_CONNECT_TIMEOUT", 10.0),
+                            read=getattr(settings, "TWS_READ_TIMEOUT", 30.0),
+                            write=getattr(settings, "TWS_WRITE_TIMEOUT", 30.0),
+                            pool=getattr(settings, "TWS_POOL_TIMEOUT", 5.0),
                         ),
                         limits=httpx.Limits(
-                            max_connections=settings.TWS_MAX_CONNECTIONS,
-                            max_keepalive_connections=settings.TWS_MAX_KEEPALIVE,
+                            max_connections=getattr(settings, "TWS_MAX_CONNECTIONS", 100),
+                            max_keepalive_connections=getattr(settings, "TWS_MAX_KEEPALIVE", 20),
                         ),
                     )
                 return self.client
         else:
             return self.client if hasattr(self, 'client') else None
 
-    @circuit_breaker(
+    @circuit_breaker(  # type: ignore
         failure_threshold=3,
         recovery_timeout=30,
         name="tws_http_client"
     )
-    @retry_with_backoff(
+    @retry_with_backoff(  # type: ignore
         max_retries=3,
         base_delay=1.0,
         max_delay=10.0,
         jitter=True
     )
-    @with_timeout(settings.TWS_REQUEST_TIMEOUT)
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
     async def _make_request(
         self, method: str, url: str, **kwargs: Any
     ) -> httpx.Response:
@@ -147,7 +147,7 @@ class OptimizedTWSClient:
         try:
             response = await client.request(method, url, **kwargs)
             response.raise_for_status()
-            return response
+            return response  # type: ignore[no-any-return]
         except Exception as e:
             logger.error(f"HTTP request failed: {method} {url} - {e}")
             raise
@@ -184,18 +184,18 @@ class OptimizedTWSClient:
             # Wrap unexpected errors for consistent error handling
             raise TWSConnectionError("An unexpected error occurred", original_exception=e)
 
-    @circuit_breaker(
+    @circuit_breaker(  # type: ignore
         failure_threshold=5,
         recovery_timeout=60,
         name="tws_ping"
     )
-    @retry_with_backoff(
+    @retry_with_backoff(  # type: ignore
         max_retries=2,
         base_delay=0.5,
         max_delay=3.0,
         jitter=True
     )
-    @with_timeout(5.0)
+    @with_timeout(5.0)  # type: ignore
     async def ping(self) -> None:
         """
         Performs a lightweight connectivity test to the TWS server.
@@ -227,12 +227,12 @@ class OptimizedTWSClient:
             logger.error(f"Unexpected error during TWS ping: {e}")
             raise TWSConnectionError("TWS ping failed unexpectedly", original_exception=e)
 
-    @circuit_breaker(
+    @circuit_breaker(  # type: ignore
         failure_threshold=3,
         recovery_timeout=30,
         name="tws_check_connection"
     )
-    @with_timeout(10.0)
+    @with_timeout(10.0)  # type: ignore
     async def check_connection(self) -> bool:
         """Verifies the connection to the TWS server is active."""
         try:
@@ -241,18 +241,18 @@ class OptimizedTWSClient:
         except TWSConnectionError:
             return False
 
-    @circuit_breaker(
+    @circuit_breaker(  # type: ignore
         failure_threshold=3,
         recovery_timeout=30,
         name="tws_workstations"
     )
-    @retry_with_backoff(
+    @retry_with_backoff(  # type: ignore
         max_retries=2,
         base_delay=1.0,
         max_delay=5.0,
         jitter=True
     )
-    @with_timeout(settings.TWS_REQUEST_TIMEOUT)
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
     async def get_workstations_status(self) -> List[WorkstationStatus]:
         """Retrieves the status of all workstations, utilizing the cache."""
         cache_key = "workstations_status"
@@ -267,21 +267,21 @@ class OptimizedTWSClient:
                 if isinstance(data, list)
                 else []
             )
-            await self.cache.set(cache_key, workstations, ttl=settings.TWS_CACHE_TTL)
+            await self.cache.set(cache_key, workstations)  # ttl not supported in current cache implementation
             return workstations
 
-    @circuit_breaker(
+    @circuit_breaker(  # type: ignore
         failure_threshold=3,
         recovery_timeout=30,
         name="tws_jobs_status"
     )
-    @retry_with_backoff(
+    @retry_with_backoff(  # type: ignore
         max_retries=2,
         base_delay=1.0,
         max_delay=5.0,
         jitter=True
     )
-    @with_timeout(settings.TWS_REQUEST_TIMEOUT)
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
     async def get_jobs_status(self) -> List[JobStatus]:
         """Retrieves the status of all jobs, utilizing the cache."""
         cache_key = "jobs_status"
@@ -292,7 +292,7 @@ class OptimizedTWSClient:
         url = f"/model/jobdefinition?engineName={self.engine_name}&engineOwner={self.engine_owner}"
         async with self._api_request("GET", url) as data:
             jobs = [JobStatus(**job) for job in data] if isinstance(data, list) else []
-            await self.cache.set(cache_key, jobs, ttl=settings.TWS_CACHE_TTL)
+            await self.cache.set(cache_key, jobs)  # ttl not supported in current cache implementation
             return jobs
 
     async def get_critical_path_status(self) -> List[CriticalJob]:
@@ -310,21 +310,21 @@ class OptimizedTWSClient:
                 if isinstance(jobs_data, list)
                 else []
             )
-            await self.cache.set(cache_key, critical_jobs, ttl=settings.TWS_CACHE_TTL)
+            await self.cache.set(cache_key, critical_jobs)  # ttl not supported in current cache implementation
             return critical_jobs
 
-    @circuit_breaker(
+    @circuit_breaker(  # type: ignore
         failure_threshold=2,
         recovery_timeout=60,
         name="tws_system_status"
     )
-    @retry_with_backoff(
+    @retry_with_backoff(  # type: ignore
         max_retries=3,
         base_delay=1.0,
         max_delay=8.0,
         jitter=True
     )
-    @with_timeout(settings.TWS_REQUEST_TIMEOUT)
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
     async def get_system_status(self) -> SystemStatus:
         """Retrieves a comprehensive system status with parallel execution."""
         # Execute all three calls concurrently
@@ -332,22 +332,25 @@ class OptimizedTWSClient:
         jobs_task = asyncio.create_task(self.get_jobs_status())
         critical_jobs_task = asyncio.create_task(self.get_critical_path_status())
         
+        workstations: List[WorkstationStatus] | Exception
+        jobs: List[JobStatus] | Exception
+        critical_jobs: List[CriticalJob] | Exception
         workstations, jobs, critical_jobs = await asyncio.gather(
-            workstations_task, 
-            jobs_task, 
+            workstations_task,
+            jobs_task,
             critical_jobs_task,
             return_exceptions=True
         )
-        
+
         # Handle potential exceptions
         if isinstance(workstations, Exception):
             logger.error(f"Failed to get workstations status: {workstations}")
             workstations = []
-        
+
         if isinstance(jobs, Exception):
             logger.error(f"Failed to get jobs status: {jobs}")
             jobs = []
-        
+
         if isinstance(critical_jobs, Exception):
             logger.error(f"Failed to get critical path status: {critical_jobs}")
             critical_jobs = []
@@ -368,7 +371,7 @@ class OptimizedTWSClient:
         Returns:
             Dictionary mapping job_id to JobStatus
         """
-        results = {}
+        results: dict[str, JobStatus] = {}
         
         # Separate cached and uncached jobs
         uncached_jobs = []
@@ -376,7 +379,6 @@ class OptimizedTWSClient:
             # Validação de segurança para prevenir Path Traversal ou injeção de URL
             if not SAFE_JOB_ID_PATTERN.match(job_id):
                 logger.warning(f"Skipping invalid job_id format: {job_id}")
-                results[job_id] = None
                 continue
 
             cache_key = f"job_status:{job_id}"
@@ -389,9 +391,9 @@ class OptimizedTWSClient:
         # Process uncached jobs in parallel with concurrency control
         if uncached_jobs:
             # Limit concurrent requests to prevent overwhelming the server
-            semaphore = asyncio.Semaphore(settings.TWS_MAX_CONCURRENT_REQUESTS or 10)
+            semaphore = asyncio.Semaphore(getattr(settings, "TWS_MAX_CONCURRENT_REQUESTS", 10))
             
-            async def fetch_single_job(job_id: str) -> tuple[str, JobStatus]:
+            async def fetch_single_job(job_id: str) -> tuple[str, JobStatus | None]:
                 async with semaphore:
                     try:
                         url = f"/model/jobdefinition/{job_id}?engineName={self.engine_name}&engineOwner={self.engine_owner}"
@@ -401,9 +403,8 @@ class OptimizedTWSClient:
                                 # Cache the result
                                 await self.cache.set(
                                     f"job_status:{job_id}",
-                                    job_status,
-                                    ttl=settings.TWS_CACHE_TTL,
-                                )
+                                    job_status
+                                )  # ttl not supported in current cache implementation
                                 return job_id, job_status
                             else:
                                 logger.warning(
@@ -422,18 +423,19 @@ class OptimizedTWSClient:
             for result in parallel_results:
                 if isinstance(result, Exception):
                     logger.error(f"Error in parallel job status fetch: {result}")
-                else:
+                elif isinstance(result, tuple) and len(result) == 2:
                     job_id, job_status = result
-                    results[job_id] = job_status
+                    if job_status is not None:
+                        results[job_id] = job_status
 
         return results
 
     async def validate_connection(
-        self, 
-        host: str = None, 
-        port: int = None, 
-        user: str = None, 
-        password: str = None
+        self,
+        host: str | None = None,
+        port: int | None = None,
+        user: str | None = None,
+        password: str | None = None
     ) -> dict[str, Any]:
         """
         Validates TWS connection parameters without changing the current connection.

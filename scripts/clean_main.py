@@ -1,6 +1,8 @@
 """Script para limpar duplicações no main.py"""
 
-def clean_main_py():
+from __future__ import annotations
+
+def clean_main_py() -> None:
     with open('resync/main.py', 'r', encoding='utf-8') as f:
         lines = f.readlines()
     

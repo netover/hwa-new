@@ -2,7 +2,9 @@
 Script to fix websocket_pool_manager.py by removing duplicate function blocks
 """
 
-def fix_websocket_file():
+from __future__ import annotations
+
+def fix_websocket_file() -> None:
     file_path = "resync/core/websocket_pool_manager.py"
     
     with open(file_path, 'r', encoding='utf-8') as f:

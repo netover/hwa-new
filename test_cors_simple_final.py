@@ -3,6 +3,8 @@
 Final comprehensive CORS testing focusing on core functionality.
 """
 
+from __future__ import annotations
+
 import os
 import sys
 
@@ -13,7 +15,7 @@ from fastapi.testclient import TestClient
 os.environ['ADMIN_USERNAME'] = 'admin'
 os.environ['ADMIN_PASSWORD'] = 'test123'
 
-def test_cors_development():
+def test_cors_development() -> None:
     """Test CORS in development environment."""
     print("🧪 Testing Development Environment...")
 
@@ -21,18 +23,18 @@ def test_cors_development():
     os.environ['APP_ENV'] = 'development'
     os.environ['CORS_ENVIRONMENT'] = 'development'
 
-    from resync.api.middleware.cors_config import get_development_cors_config
+    from resync.api.middleware.cors_config import get_development_cors_config  # type: ignore[attr-defined]
     from resync.api.middleware.cors_middleware import create_cors_middleware
 
     app = FastAPI()
 
     # Create development CORS middleware
-    dev_config = get_development_cors_config()
+    dev_config = get_development_cors_config()  # type: ignore[attr-defined]
     cors_middleware = create_cors_middleware(dev_config)
-    app.add_middleware(**cors_middleware)
+    app.add_middleware(cors_middleware)  # type: ignore[call-arg,arg-type]
 
     @app.get("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello from development"}
 
     client = TestClient(app)
@@ -54,7 +56,7 @@ def test_cors_development():
     print("✅ Development environment CORS works correctly")
 
 
-def test_cors_production():
+def test_cors_production() -> None:
     """Test CORS in production environment."""
     print("🧪 Testing Production Environment...")
 
@@ -62,21 +64,21 @@ def test_cors_production():
     os.environ['APP_ENV'] = 'production'
     os.environ['CORS_ENVIRONMENT'] = 'production'
 
-    from resync.api.middleware.cors_config import get_production_cors_config
+    from resync.api.middleware.cors_config import get_production_cors_config  # type: ignore[attr-defined]
     from resync.api.middleware.cors_middleware import create_cors_middleware
 
     app = FastAPI()
 
     # Create production CORS middleware with specific allowed origins
-    prod_config = get_production_cors_config(
+    prod_config = get_production_cors_config(  # type: ignore[attr-defined]
         allowed_origins=['https://app.example.com', 'https://api.example.com'],
         allow_credentials=False
     )
     cors_middleware = create_cors_middleware(prod_config)
-    app.add_middleware(**cors_middleware)
+    app.add_middleware(cors_middleware)  # type: ignore[call-arg,arg-type]
 
     @app.get("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello from production"}
 
     client = TestClient(app)
@@ -96,7 +98,7 @@ def test_cors_production():
     print("✅ Production environment CORS works correctly")
 
 
-def test_cors_test_environment():
+def test_cors_test_environment() -> None:
     """Test CORS in test environment."""
     print("🧪 Testing Test Environment...")
 
@@ -104,7 +106,7 @@ def test_cors_test_environment():
     os.environ['APP_ENV'] = 'test'
     os.environ['CORS_ENVIRONMENT'] = 'test'
 
-    from resync.api.middleware.cors_config import get_test_cors_config
+    from resync.api.middleware.cors_config import get_test_cors_config  # type: ignore[attr-defined]
     from resync.api.middleware.cors_middleware import create_cors_middleware
 
     app = FastAPI()
@@ -112,10 +114,10 @@ def test_cors_test_environment():
     # Create test CORS middleware
     test_config = get_test_cors_config()
     cors_middleware = create_cors_middleware(test_config)
-    app.add_middleware(**cors_middleware)
+    app.add_middleware(cors_middleware)  # type: ignore[call-arg,arg-type]
 
     @app.get("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello from test"}
 
     client = TestClient(app)
@@ -132,7 +134,7 @@ def test_cors_test_environment():
     print("✅ Test environment CORS works correctly")
 
 
-def test_cors_headers_validation():
+def test_cors_headers_validation() -> None:
     """Test CORS headers validation."""
     print("🧪 Testing CORS Headers Validation...")
 
@@ -159,11 +161,11 @@ def test_cors_headers_validation():
     print("✅ CORS headers validation works correctly")
 
 
-def test_cors_violation_detection():
+def test_cors_violation_detection() -> None:
     """Test CORS violation detection."""
     print("🧪 Testing CORS Violation Detection...")
 
-    from resync.api.middleware.cors_config import get_production_cors_config
+    from resync.api.middleware.cors_config import get_production_cors_config  # type: ignore[attr-defined]
     from resync.api.middleware.cors_middleware import (
         create_cors_middleware,
     )
@@ -171,17 +173,17 @@ def test_cors_violation_detection():
     app = FastAPI()
 
     # Create production policy with logging
-    prod_config = get_production_cors_config(
+    prod_config = get_production_cors_config(  # type: ignore[attr-defined]
         allowed_origins=["https://app.example.com"],
         allow_credentials=False
     )
     prod_config.log_violations = True
 
     cors_middleware = create_cors_middleware(prod_config)
-    app.add_middleware(**cors_middleware)
+    app.add_middleware(cors_middleware)  # type: ignore[call-arg,arg-type]
 
     @app.get("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello from production"}
 
     client = TestClient(app)
@@ -198,7 +200,7 @@ def test_cors_violation_detection():
     print("✅ CORS violation detection works correctly")
 
 
-def test_dynamic_origin_patterns():
+def test_dynamic_origin_patterns() -> None:
     """Test dynamic origin patterns with regex."""
     print("🧪 Testing Dynamic Origin Patterns...")
 
@@ -230,21 +232,21 @@ def test_dynamic_origin_patterns():
     print("✅ Dynamic origin patterns work correctly")
 
 
-def test_preflight_request_handling():
+def test_preflight_request_handling() -> None:
     """Test preflight request handling."""
     print("🧪 Testing Preflight Request Handling...")
 
-    from resync.api.middleware.cors_config import get_development_cors_config
+    from resync.api.middleware.cors_config import get_development_cors_config  # type: ignore[attr-defined]
     from resync.api.middleware.cors_middleware import create_cors_middleware
 
     app = FastAPI()
 
-    dev_config = get_development_cors_config()
+    dev_config = get_development_cors_config()  # type: ignore[attr-defined]
     cors_middleware = create_cors_middleware(dev_config)
-    app.add_middleware(**cors_middleware)
+    app.add_middleware(cors_middleware)  # type: ignore[call-arg,arg-type]
 
     @app.post("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello from POST"}
 
     client = TestClient(app)
@@ -265,7 +267,7 @@ def test_preflight_request_handling():
     print("✅ Preflight request handling works correctly")
 
 
-def main():
+def main() -> None:
     """Run all CORS tests."""
     print("🚀 Starting comprehensive CORS functionality tests...\n")
 

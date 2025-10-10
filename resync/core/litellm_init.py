@@ -1,19 +1,22 @@
 """
 LiteLLM initialization for Resync TWS application.
 
-This module sets up LiteLLM with the proper configuration for 
+This module sets up LiteLLM with the proper configuration for
 TWS-specific use cases, including local Ollama and remote API models.
 """
+
+from __future__ import annotations
 
 import os
 import logging
 from pathlib import Path
+from typing import Any, Optional
 
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
 
-def initialize_litellm():
+def initialize_litellm() -> Any:
     """
     Initialize LiteLLM with configuration specific to Resync TWS application.
     
@@ -24,19 +27,17 @@ def initialize_litellm():
     4. Defines model routing rules for TWS-specific queries
     """
     try:
-        from litellm import Router, completion_cost
-        from litellm.router.client import Router
-        
+        # Import with type ignore for litellm-specific issues
+        from litellm import Router as LiteLLMRouter  # type: ignore
+        from litellm import completion_cost  # type: ignore
+
         # Get configuration path
         config_path = Path(__file__).parent / "litellm_config.yaml"
-        
+
         # Initialize LiteLLM router with configuration
         # The router will handle model selection and fallbacks
-        global router
-        router = Router(
+        litellm_router = LiteLLMRouter(
             model_list=None,  # Will be loaded from config
-            config_path=str(config_path),
-            set_default_bucket_to_max_tokens=True,
             enable_pre_call_checks=True,
         )
         
@@ -51,8 +52,8 @@ def initialize_litellm():
         os.environ["OPENROUTER_API_KEY"] = settings.LLM_API_KEY if hasattr(settings, 'LLM_API_KEY') and settings.LLM_API_KEY else ""
         
         logger.info("LiteLLM initialized successfully with TWS-specific configuration")
-        
-        return router
+
+        return litellm_router
         
     except ImportError:
         logger.warning("LiteLLM not installed, using fallback LLM implementation")
@@ -66,28 +67,28 @@ def initialize_litellm():
 litellm_router = initialize_litellm()
 
 
-def get_litellm_router():
+def get_litellm_router() -> Any:
     """
     Get the initialized LiteLLM router instance.
-    
+
     Returns:
         Router: LiteLLM router instance or None if initialization failed
     """
     return litellm_router
 
 
-def calculate_completion_cost(completion_response):
+def calculate_completion_cost(completion_response: Any) -> float:
     """
     Calculate the cost of a completion response using LiteLLM's cost calculation.
-    
+
     Args:
         completion_response: The completion response object from LiteLLM
-        
+
     Returns:
         float: The cost of the completion in USD, or 0.0 if calculation fails
     """
     try:
-        from litellm import completion_cost
+        from litellm import completion_cost  # type: ignore
         return completion_cost(completion_response=completion_response)
     except Exception as e:
         logger.warning(f"Could not calculate completion cost: {e}")

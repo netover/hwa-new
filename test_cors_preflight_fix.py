@@ -3,6 +3,8 @@
 Test preflight request handling specifically.
 """
 
+from __future__ import annotations
+
 import os
 
 from fastapi import FastAPI
@@ -12,7 +14,7 @@ from fastapi.testclient import TestClient
 os.environ['ADMIN_USERNAME'] = 'admin'
 os.environ['ADMIN_PASSWORD'] = 'test123'
 
-def test_preflight_request_handling():
+def test_preflight_request_handling() -> None:
     """Test preflight request handling."""
     print("🧪 Testing Preflight Request Handling...")
 
@@ -27,7 +29,7 @@ def test_preflight_request_handling():
     add_cors_middleware(app, environment='development', custom_policy=dev_policy)
 
     @app.post("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello from POST"}
 
     client = TestClient(app)
@@ -52,7 +54,7 @@ def test_preflight_request_handling():
     print("✅ Preflight request handling works correctly")
 
 
-def test_regular_request():
+def test_regular_request() -> None:
     """Test regular request to compare."""
     print("🧪 Testing Regular Request...")
 
@@ -67,7 +69,7 @@ def test_regular_request():
     add_cors_middleware(app, environment='development', custom_policy=dev_policy)
 
     @app.post("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello from POST"}
 
     client = TestClient(app)

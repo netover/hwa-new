@@ -1,13 +1,15 @@
+from __future__ import annotations
+
 import asyncio
 import random
 import time
-from typing import List
+from typing import Any, List
 
-from resync.core.enhanced_async_cache import EnhancedAsyncTTLCache
+from resync.core.enhanced_async_cache import EnhancedAsyncTTLCache  # type: ignore[attr-defined]
 
 
 async def simulate_high_concurrency(
-    cache: EnhancedAsyncTTLCache,
+    cache: Any,
     num_tasks: int = 100,
     operations_per_task: int = 1000,
     read_ratio: float = 0.8,
@@ -69,7 +71,7 @@ async def simulate_high_concurrency(
             print(f"  {key}: {value}")
 
 
-async def demonstrate_key_level_locking(cache: EnhancedAsyncTTLCache) -> None:
+async def demonstrate_key_level_locking(cache: EnhancedAsyncTTLCache) -> None:  # type: ignore[no-any-unimported]
     """
     Demonstrate the benefits of key-level locking.
 
@@ -121,7 +123,7 @@ async def demonstrate_key_level_locking(cache: EnhancedAsyncTTLCache) -> None:
     )
 
 
-async def demonstrate_parallel_cleanup(cache: EnhancedAsyncTTLCache) -> None:
+async def demonstrate_parallel_cleanup(cache: EnhancedAsyncTTLCache) -> None:  # type: ignore[no-any-unimported]
     """
     Demonstrate the benefits of parallel cleanup.
 

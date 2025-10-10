@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 import json
 import logging
 import sys
@@ -9,7 +10,7 @@ from pathlib import Path
 import structlog
 
 
-def setup_logging():
+def setup_logging() -> None:
     """
     Configures structured logging for the application with JSON format.
     """
@@ -17,8 +18,8 @@ def setup_logging():
     import os
     
     # Get log level from environment or settings
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-    log_level = getattr(logging, log_level, logging.INFO)
+    log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_str, logging.INFO)
     
     # Configure structlog
     structlog.configure(
@@ -71,7 +72,7 @@ def log_with_correlation(
     component: str = "main",
     operation: str | None = None,
     error: Exception | None = None,
-    **extra_fields,
+    **extra_fields: Any,
 ) -> None:
     """
     Structured logging with correlation ID and contextual information.
@@ -116,7 +117,7 @@ def log_with_correlation(
         logger.critical("LOG_EVENT", **log_entry)
 
 
-def log_audit_event(action: str, user_id: str, details: dict, correlation_id: str = None, severity: str = "INFO"):
+def log_audit_event(action: str, user_id: str, details: dict[str, Any], correlation_id: str | None = None, severity: str = "INFO") -> None:
     """
     Structured logging function for audit events.
     
@@ -158,7 +159,7 @@ def log_audit_event(action: str, user_id: str, details: dict, correlation_id: st
         logger.error(f"Failed to persist audit event to database: {e}", exc_info=True)
 
 
-def _sanitize_audit_details(details: dict) -> dict:
+def _sanitize_audit_details(details: dict[str, Any]) -> dict[str, Any]:
     """
     Sanitize audit details by redacting sensitive information.
     
@@ -171,7 +172,7 @@ def _sanitize_audit_details(details: dict) -> dict:
     if not isinstance(details, dict):
         return details
         
-    sanitized = {}
+    sanitized: dict[str, Any] = {}
     # Fields that should be redacted
     sensitive_fields = {
         'password', 'secret', 'key', 'token', 'api_key', 'auth', 

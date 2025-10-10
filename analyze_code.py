@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Script para análise detalhada do código."""
 
+from __future__ import annotations
+
 import os
 import ast
 import json
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any
 from collections import defaultdict
 import radon.complexity as radon_cc
 from radon.visitors import ComplexityVisitor
 
 
-def analyze_file(filepath: Path) -> Dict[str, Any]:
+def analyze_file(filepath: Path) -> dict[str, Any]:
     """Analisa um arquivo Python."""
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
@@ -79,11 +81,11 @@ def analyze_file(filepath: Path) -> Dict[str, Any]:
         }
 
 
-def analyze_project(root_dir: str = 'resync') -> Dict[str, Any]:
+def analyze_project(root_dir: str = 'resync') -> dict[str, Any]:
     """Analisa todo o projeto."""
     root_path = Path(root_dir)
-    
-    results = {
+
+    results: dict[str, Any] = {
         'files': [],
         'summary': {
             'total_files': 0,
@@ -146,7 +148,7 @@ def analyze_project(root_dir: str = 'resync') -> Dict[str, Any]:
     return results
 
 
-def generate_report(results: Dict[str, Any], output_file: str = 'AUDIT_REPORT.md'):
+def generate_report(results: dict[str, Any], output_file: str = 'AUDIT_REPORT.md') -> None:
     """Gera relatório em Markdown."""
     
     report = f"""# Relatório de Auditoria de Código

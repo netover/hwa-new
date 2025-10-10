@@ -16,6 +16,8 @@ Como usar:
    `python -m scripts.populate_knowledge_base`
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 
@@ -36,7 +38,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def main():
+async def main() -> None:
     """
     Função principal que inicializa os serviços e inicia o processo de ingestão.
     """
@@ -44,7 +46,7 @@ async def main():
     knowledge_graph: IKnowledgeGraph | None = None
     try:
         # 1. Inicializa o Knowledge Graph
-        knowledge_graph = AsyncKnowledgeGraph()
+        knowledge_graph = AsyncKnowledgeGraph()  # type: ignore[no-untyped-call]
         logger.info("Knowledge Graph inicializado.")
 
         # 2. Inicializa o File Ingestor com a dependência do Knowledge Graph
@@ -58,7 +60,7 @@ async def main():
     finally:
         # 4. Garante que a conexão com o banco de dados seja fechada
         if knowledge_graph and hasattr(knowledge_graph, "close"):
-            await knowledge_graph.close()
+            await knowledge_graph.close()  # type: ignore[no-untyped-call]
             logger.info("Conexão com o Knowledge Graph fechada.")
 
 

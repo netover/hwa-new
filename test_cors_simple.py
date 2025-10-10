@@ -10,6 +10,8 @@ This test file addresses the following issues from the code review:
 5. Hardcoded origins that should be configurable
 """
 
+from __future__ import annotations
+
 import os
 import sys
 
@@ -21,7 +23,7 @@ os.environ['ADMIN_USERNAME'] = 'admin'
 os.environ['ADMIN_PASSWORD'] = 'test123'
 
 
-def test_environment_parameter_handling():
+def test_environment_parameter_handling() -> None:
     """Test that environment parameters are properly handled (string vs enum)."""
     print("[TEST] Testing Environment Parameter Handling...")
 
@@ -33,7 +35,7 @@ def test_environment_parameter_handling():
     app = FastAPI()
 
     # Test 1: String parameter should be converted to enum
-    policy = CORSPolicy(environment="development")
+    policy = CORSPolicy(environment="development")  # type: ignore[arg-type]
     assert policy.environment == Environment.DEVELOPMENT
 
     # Test 2: Enum parameter should work directly
@@ -41,7 +43,7 @@ def test_environment_parameter_handling():
     assert policy.environment == Environment.DEVELOPMENT
 
     # Test 3: Case insensitive string conversion
-    policy = CORSPolicy(environment="DEVELOPMENT")
+    policy = CORSPolicy(environment="DEVELOPMENT")  # type: ignore[arg-type]
     assert policy.environment == Environment.DEVELOPMENT
 
     # Test 4: Create middleware with string environment
@@ -60,7 +62,7 @@ def test_environment_parameter_handling():
     print("[PASS] Environment parameter handling works correctly")
 
 
-def test_production_regex_security():
+def test_production_regex_security() -> None:
     """Test that regex patterns are not allowed in production environment."""
     print("[TEST] Testing Production Regex Security...")
 
@@ -91,7 +93,7 @@ def test_production_regex_security():
     print("[PASS] Production regex security works correctly")
 
 
-def test_cors_header_validation():
+def test_cors_header_validation() -> None:
     """Test detailed CORS header validation in preflight responses."""
     print("[TEST] Testing CORS Header Validation...")
 
@@ -116,18 +118,18 @@ def test_cors_header_validation():
     middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
                       if k not in ['app', 'dispatch_func', '_cors_middleware',
                                    '_cors_violations', '_cors_requests', '_preflight_requests']}
-    app.add_middleware(type(cors_middleware), **middleware_dict)
+    app.add_middleware(type(cors_middleware), **middleware_dict)  # type: ignore[arg-type]
 
     @app.get("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello"}
 
     @app.post("/test")
-    def post_endpoint():
+    def post_endpoint() -> dict[str, str]:
         return {"message": "Posted"}
 
     @app.put("/test")
-    def put_endpoint():
+    def put_endpoint() -> dict[str, str]:
         return {"message": "Updated"}
 
     client = TestClient(app)
@@ -166,7 +168,7 @@ def test_cors_header_validation():
     print("[PASS] CORS header validation works correctly")
 
 
-def test_cors_test_environment():
+def test_cors_test_environment() -> None:
     """Test CORS in test environment."""
     print("[TEST] Testing Test Environment...")
 
@@ -196,18 +198,18 @@ def test_cors_test_environment():
     middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
                       if k not in ['app', 'dispatch_func', '_cors_middleware',
                                    '_cors_violations', '_cors_requests', '_preflight_requests']}
-    app.add_middleware(type(cors_middleware), **middleware_dict)
+    app.add_middleware(type(cors_middleware), **middleware_dict)  # type: ignore[arg-type]
 
     @app.get("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello from test"}
 
     @app.post("/test")
-    def post_endpoint():
+    def post_endpoint() -> dict[str, str]:
         return {"message": "Posted"}
 
     @app.put("/test")
-    def put_endpoint():
+    def put_endpoint() -> dict[str, str]:
         return {"message": "Updated"}
 
     client = TestClient(app)
@@ -224,7 +226,7 @@ def test_cors_test_environment():
     print("[PASS] Test environment CORS works correctly")
 
 
-def test_cors_edge_cases():
+def test_cors_edge_cases() -> None:
     """Test CORS edge cases including DNS rebinding and credentials."""
     print("[TEST] Testing CORS Edge Cases...")
 
@@ -253,18 +255,18 @@ def test_cors_edge_cases():
     middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
                       if k not in ['app', 'dispatch_func', '_cors_middleware',
                                    '_cors_violations', '_cors_requests', '_preflight_requests']}
-    app.add_middleware(type(cors_middleware), **middleware_dict)
+    app.add_middleware(type(cors_middleware), **middleware_dict)  # type: ignore[arg-type]
 
     @app.get("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello"}
 
     @app.post("/test")
-    def post_endpoint():
+    def post_endpoint() -> dict[str, str]:
         return {"message": "Posted"}
 
     @app.put("/test")
-    def put_endpoint():
+    def put_endpoint() -> dict[str, str]:
         return {"message": "Updated"}
 
     client = TestClient(app)
@@ -308,7 +310,7 @@ def test_cors_edge_cases():
     print("[PASS] CORS edge cases handled correctly")
 
 
-def test_configurable_origins():
+def test_configurable_origins() -> None:
     """Test that origins can be configured via environment variables."""
     print("[TEST] Testing Configurable Origins...")
 
@@ -341,10 +343,10 @@ def test_configurable_origins():
     middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
                       if k not in ['app', 'dispatch_func', '_cors_middleware',
                                    '_cors_violations', '_cors_requests', '_preflight_requests']}
-    app.add_middleware(type(cors_middleware), **middleware_dict)
+    app.add_middleware(type(cors_middleware), **middleware_dict)  # type: ignore[arg-type]
 
     @app.get("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello"}
 
     client = TestClient(app)
@@ -363,7 +365,7 @@ def test_configurable_origins():
     print("[PASS] Configurable origins work correctly")
 
 
-def test_cors_violation_logging():
+def test_cors_violation_logging() -> None:
     """Test CORS violation detection and logging."""
     print("[TEST] Testing CORS Violation Logging...")
 
@@ -394,10 +396,10 @@ def test_cors_violation_logging():
     middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
                       if k not in ['app', 'dispatch_func', '_cors_middleware',
                                    '_cors_violations', '_cors_requests', '_preflight_requests']}
-    app.add_middleware(type(cors_middleware), **middleware_dict)
+    app.add_middleware(type(cors_middleware), **middleware_dict)  # type: ignore[arg-type]
 
     @app.get("/test")
-    def test_endpoint():
+    def test_endpoint() -> dict[str, str]:
         return {"message": "Hello"}
 
     client = TestClient(app)
@@ -420,7 +422,7 @@ def test_cors_violation_logging():
     print("[PASS] CORS violation logging works correctly")
 
 
-def main():
+def main() -> None:
     """Run all enhanced CORS tests."""
     print("[START] Starting enhanced CORS functionality tests...\n")
 

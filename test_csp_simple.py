@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import re
 import secrets
 from pathlib import Path
+from typing import Any, Generator
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
@@ -10,7 +13,7 @@ from resync.core.header_parser import CSPParser
 
 # Create a simple CSP middleware for testing
 class SimpleCSPMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
+    async def dispatch(self, request: Request, call_next: Any) -> Any:
         response = await call_next(request)
         nonce = secrets.token_hex(16)
         request.state.csp_nonce = nonce
@@ -48,15 +51,15 @@ with open(templates_dir / "test.html", "w") as f:
 templates = Jinja2Templates(directory=templates_dir)
 
 @app.get("/test")
-async def test_page(request: Request):
+async def test_page(request: Request) -> Any:
     return templates.TemplateResponse("test.html", {"request": request})
 
 @app.get("/api/test")
-async def api_test():
+async def api_test() -> dict[str, str]:
     return {"message": "API test"}
 
 @pytest.fixture(scope="module")
-def client():
+def client() -> Generator[TestClient, None, None]:
     with TestClient(app) as test_client:
         yield test_client
         # Cleanup template directory after test
@@ -64,7 +67,7 @@ def client():
             import shutil
             shutil.rmtree(templates_dir)
 
-def _check_security_headers(response_headers):
+def _check_security_headers(response_headers: Any) -> None:
     """Helper to check for standard security headers."""
     security_headers = {
         "X-Content-Type-Options": "nosniff",
@@ -75,7 +78,7 @@ def _check_security_headers(response_headers):
         assert header in response_headers, f"{header} header is missing"
         assert response_headers[header] == expected_value, f"{header} header has incorrect value"
 
-def _check_csp_policy(csp_header):
+def _check_csp_policy(csp_header: str) -> None:
     """Helper to check the structure of the CSP policy."""
     assert csp_header is not None
     required_directives = [
@@ -90,14 +93,14 @@ def _check_csp_policy(csp_header):
     for directive in required_directives:
         assert directive in csp_header
 
-def test_html_endpoint_headers(client):
+def test_html_endpoint_headers(client: TestClient) -> None:
     """Test that the HTML endpoint returns correct security headers."""
     response = client.get("/test")
     assert response.status_code == 200
     _check_security_headers(response.headers)
     _check_csp_policy(response.headers.get("Content-Security-Policy"))
 
-def test_nonce_functionality(client):
+def test_nonce_functionality(client: TestClient) -> None:
     """Test that the nonce is correctly generated and included."""
     response = client.get("/test")
     assert response.status_code == 200
@@ -116,14 +119,14 @@ def test_nonce_functionality(client):
     assert nonce_in_html
     assert any(nonce_in_html in value for value in csp_directives['script-src'])
 
-def test_api_endpoint_headers(client):
+def test_api_endpoint_headers(client: TestClient) -> None:
     """Test that API endpoints also receive security headers."""
     response = client.get("/api/test")
     assert response.status_code == 200
     assert "Content-Security-Policy" in response.headers
     _check_security_headers(response.headers)
 
-def test_nonce_uniqueness(client):
+def test_nonce_uniqueness(client: TestClient) -> None:
     """Test that nonces are unique across multiple requests."""
     responses = [client.get("/test") for _ in range(3)]
     nonces = []
@@ -137,7 +140,7 @@ def test_nonce_uniqueness(client):
     assert len(nonces) == 3
     assert len(set(nonces)) == len(nonces)
 
-def test_csp_directives(client):
+def test_csp_directives(client: TestClient) -> None:
     """Test additional CSP directives (base-uri, form-action)"""
     response = client.get("/test")
     csp_header = response.headers.get("Content-Security-Policy")

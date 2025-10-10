@@ -1,7 +1,9 @@
 """Agent validation models with strict validation rules."""
 
+from __future__ import annotations
+
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator, validator
 from pydantic.types import constr
@@ -76,7 +78,7 @@ class AgentConfig(BaseModel):
         example="An experienced TWS administrator with deep system knowledge"
     )
 
-    tools: List[StringConstraints.TOOL_NAME] = Field(
+    tools: list[StringConstraints.TOOL_NAME] = Field(
         default_factory=list,
         description="List of tools the agent can use",
         max_length=20,
@@ -118,13 +120,13 @@ class AgentConfig(BaseModel):
         description="Detailed agent description"
     )
 
-    configuration: Dict[str, Any] = Field(
+    configuration: dict[str, Any] = Field(
         default_factory=dict,
         description="Additional agent configuration",
         max_length=50
     )
 
-    tags: List[constr(min_length=1, max_length=50)] = Field(
+    tags: list[constr(min_length=1, max_length=50)] = Field(
         default_factory=list,
         description="Agent tags for categorization",
         max_length=10
@@ -151,7 +153,7 @@ class AgentConfig(BaseModel):
         extra = "forbid"
 
     @validator("name")
-    def validate_agent_name(cls, v):
+    def validate_agent_name(cls, v: str) -> str:
         """Validate agent name doesn't contain malicious content."""
         if ValidationPatterns.SCRIPT_PATTERN.search(v):
             raise ValueError("Agent name contains potentially malicious content")
@@ -160,14 +162,14 @@ class AgentConfig(BaseModel):
         return v
 
     @validator("role", "goal", "backstory", "description")
-    def validate_text_content(cls, v):
+    def validate_text_content(cls, v: str | None) -> str | None:
         """Validate text fields for malicious content."""
         if v and ValidationPatterns.SCRIPT_PATTERN.search(v):
             raise ValueError("Text contains potentially malicious content")
         return v
 
     @validator("tools")
-    def validate_tools_list(cls, v):
+    def validate_tools_list(cls, v: list[str] | None) -> list[str] | None:
         """Validate tools list."""
         if not v:
             return v
@@ -184,7 +186,7 @@ class AgentConfig(BaseModel):
         return v
 
     @validator("tags")
-    def validate_tags(cls, v):
+    def validate_tags(cls, v: list[str] | None) -> list[str] | None:
         """Validate tags list."""
         if not v:
             return v
@@ -271,7 +273,7 @@ class AgentUpdateRequest(BaseModel):
         description="Updated agent backstory"
     )
 
-    tools: Optional[List[StringConstraints.TOOL_NAME]] = Field(
+    tools: Optional[list[StringConstraints.TOOL_NAME]] = Field(
         None,
         description="Updated tools list",
         max_length=20
@@ -311,13 +313,13 @@ class AgentUpdateRequest(BaseModel):
         description="Updated agent description"
     )
 
-    configuration: Optional[Dict[str, Any]] = Field(
+    configuration: Optional[dict[str, Any]] = Field(
         None,
         description="Updated configuration",
         max_length=50
     )
 
-    tags: Optional[List[constr(min_length=1, max_length=50)]] = Field(
+    tags: Optional[list[constr(min_length=1, max_length=50)]] = Field(
         None,
         description="Updated tags",
         max_length=10
@@ -413,7 +415,7 @@ class AgentQueryParams(BaseModel):
         description="Filter by agent status"
     )
 
-    tags: Optional[List[constr(min_length=1, max_length=50)]] = Field(
+    tags: Optional[list[constr(min_length=1, max_length=50)]] = Field(
         None,
         description="Filter by tags",
         max_length=5
@@ -456,7 +458,7 @@ class AgentQueryParams(BaseModel):
 class AgentBulkActionRequest(BaseModel):
     """Request model for bulk agent operations."""
 
-    agent_ids: List[StringConstraints.AGENT_ID] = Field(
+    agent_ids: list[StringConstraints.AGENT_ID] = Field(
         ...,
         description="List of agent IDs to perform action on",
         min_length=1,

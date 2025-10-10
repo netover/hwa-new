@@ -8,7 +8,6 @@ from ..exceptions import (
     InvalidConfigError,
     MissingConfigError,
     ParsingError,
->>>>>>> REPLACE
 )
 
 # Marks all tests in this file as async

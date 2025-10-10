@@ -2,6 +2,9 @@
 Simple test script for Phase 2 Performance Optimization features.
 Tests only the new modules without requiring full application configuration.
 """
+
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 
@@ -9,7 +12,7 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-def test_module_syntax():
+def test_module_syntax() -> bool:
     """Test that all new modules have valid Python syntax."""
     print("=" * 60)
     print("Testing Module Syntax")
@@ -39,7 +42,7 @@ def test_module_syntax():
     
     return all_valid
 
-def test_direct_imports():
+def test_direct_imports() -> bool:
     """Test direct imports without triggering settings loading."""
     print("\n" + "=" * 60)
     print("Testing Direct Imports")
@@ -82,7 +85,7 @@ def test_direct_imports():
         traceback.print_exc()
         return False
 
-def test_documentation():
+def test_documentation() -> bool:
     """Test that documentation files exist and are readable."""
     print("\n" + "=" * 60)
     print("Testing Documentation")
@@ -111,7 +114,7 @@ def test_documentation():
     
     return all_exist
 
-def test_configuration():
+def test_configuration() -> bool:
     """Test that configuration files have been updated."""
     print("\n" + "=" * 60)
     print("Testing Configuration Updates")
@@ -142,7 +145,7 @@ def test_configuration():
         print(f"[ERROR] Configuration test failed: {e}")
         return False
 
-def test_main_integration():
+def test_main_integration() -> bool:
     """Test that main.py has been updated with performance router."""
     print("\n" + "=" * 60)
     print("Testing Main Application Integration")
@@ -170,7 +173,7 @@ def test_main_integration():
         print(f"[ERROR] Main integration test failed: {e}")
         return False
 
-def test_file_structure():
+def test_file_structure() -> bool:
     """Test that all new files exist."""
     print("\n" + "=" * 60)
     print("Testing File Structure")
@@ -196,7 +199,7 @@ def test_file_structure():
     
     return all_exist
 
-def main():
+def main() -> int:
     """Run all tests."""
     print("\n" + "=" * 60)
     print("PHASE 2 PERFORMANCE OPTIMIZATION - SIMPLE TEST SUITE")

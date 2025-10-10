@@ -32,7 +32,7 @@ _request_id_ctx: ContextVar[Optional[str]] = ContextVar(
 # CORRELATION ID
 # ============================================================================
 
-def set_correlation_id(correlation_id: str) -> Token:
+def set_correlation_id(correlation_id: str) -> Token[Optional[str]]:
     """Define o Correlation ID para o contexto atual.
     
     Args:
@@ -68,7 +68,7 @@ def get_or_create_correlation_id() -> str:
     return correlation_id
 
 
-def reset_correlation_id(token: Token) -> None:
+def reset_correlation_id(token: Token[Optional[str]]) -> None:
     """Reseta o Correlation ID para o valor anterior.
     
     Args:
@@ -86,7 +86,7 @@ def clear_correlation_id() -> None:
 # USER ID
 # ============================================================================
 
-def set_user_id(user_id: str) -> Token:
+def set_user_id(user_id: str) -> Token[Optional[str]]:
     """Define o User ID para o contexto atual.
     
     Args:
@@ -116,7 +116,7 @@ def clear_user_id() -> None:
 # REQUEST ID
 # ============================================================================
 
-def set_request_id(request_id: str) -> Token:
+def set_request_id(request_id: str) -> Token[Optional[str]]:
     """Define o Request ID para o contexto atual.
     
     Args:

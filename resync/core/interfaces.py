@@ -1,7 +1,7 @@
 """Interfaces for Resync components."""
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Optional, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from resync.core.agent_manager import AgentConfig
@@ -14,7 +14,7 @@ class IKnowledgeGraph(Protocol):
     Defines methods for interacting with the knowledge graph.
     """
 
-    async def add_content(self, content: str, metadata: Dict[str, Any]) -> str:
+    async def add_content(self, content: str, metadata: dict[str, Any]) -> str:
         """Adds a piece of content (e.g., a document chunk) to the knowledge graph."""
         ...
 
@@ -23,14 +23,14 @@ class IKnowledgeGraph(Protocol):
         user_query: str,
         agent_response: str,
         agent_id: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[dict[str, Any]] = None,
     ) -> str:
         """Stores a conversation between a user and an agent."""
         ...
 
     async def search_similar_issues(
         self, query: str, limit: int = 5
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Searches the knowledge graph for similar past issues and solutions."""
         ...
 
@@ -40,7 +40,7 @@ class IKnowledgeGraph(Protocol):
         limit: int = 100,
         sort_by: str = "created_at",
         sort_order: str = "desc",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Optimized search method for conversations."""
         ...
 
@@ -52,7 +52,7 @@ class IKnowledgeGraph(Protocol):
 
     async def get_all_recent_conversations(
         self, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Retrieves all recent conversation-type memories for auditing."""
         ...
 
@@ -72,7 +72,7 @@ class IKnowledgeGraph(Protocol):
         """Deletes a memory from the knowledge graph."""
         ...
 
-    async def add_observations(self, memory_id: str, observations: List[str]) -> None:
+    async def add_observations(self, memory_id: str, observations: list[str]) -> None:
         """Adds observations to a memory in the knowledge graph."""
         ...
 
@@ -119,7 +119,7 @@ class IAgentManager(Protocol):
         """Retrieves an agent by its ID."""
         ...
 
-    async def get_all_agents(self) -> List["AgentConfig"]:
+    async def get_all_agents(self) -> list["AgentConfig"]:
         """Returns the configuration of all loaded agents."""
         ...
 
@@ -149,7 +149,7 @@ class IConnectionManager(Protocol):
 class IAuditQueue(Protocol):
     """Interface for an audit queue."""
 
-    async def add_audit_record(self, record: Dict[str, Any]) -> None:
+    async def add_audit_record(self, record: dict[str, Any]) -> None:
         """Adds an audit record to the queue."""
         ...
 
@@ -158,19 +158,19 @@ class IAuditQueue(Protocol):
 class ITWSClient(Protocol):
     """Interface for the TWS client."""
 
-    async def get_system_status(self) -> Dict[str, Any]:
+    async def get_system_status(self) -> dict[str, Any]:
         """Retrieves the current TWS system status."""
         ...
 
-    async def get_workstations_status(self) -> List[Dict[str, Any]]:
+    async def get_workstations_status(self) -> list[dict[str, Any]]:
         """Retrieves the status of all workstations."""
         ...
 
-    async def get_jobs_status(self) -> List[Dict[str, Any]]:
+    async def get_jobs_status(self) -> list[dict[str, Any]]:
         """Retrieves the status of all jobs."""
         ...
 
-    async def get_critical_path_status(self) -> List[Dict[str, Any]]:
+    async def get_critical_path_status(self) -> list[dict[str, Any]]:
         """Retrieves the status of jobs on the critical path."""
         ...
 

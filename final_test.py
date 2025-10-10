@@ -2,13 +2,15 @@
 """
 Final test of implemented improvements.
 """
+from __future__ import annotations
+
 import asyncio
 
 from resync.core.async_cache import AsyncTTLCache
 from resync.core.audit_db import _validate_audit_record
 
 
-async def main():
+async def main() -> None:
     print("FINAL IMPROVEMENT TEST")
     print("=" * 40)
 
@@ -57,7 +59,7 @@ async def main():
 
         for invalid, desc in invalid_tests:
             try:
-                _validate_audit_record(invalid)
+                _validate_audit_record(invalid)  # type: ignore[arg-type]
                 print(f"   {desc}: FAIL - should have rejected")
             except (ValueError, TypeError):
                 print(f"   {desc}: PASS - correctly rejected")

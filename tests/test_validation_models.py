@@ -48,7 +48,7 @@ from resync.api.validation import (
 class TestCommonValidation:
     """Test common validation utilities."""
 
-    def test_sanitize_input_basic(self):
+    def test_sanitize_input_basic(self) -> None:
         """Test basic input sanitization."""
         # Test XSS removal
         dirty_input = "<script>alert('xss')</script>Hello World"
@@ -56,13 +56,13 @@ class TestCommonValidation:
         assert "<script>" not in clean_input
         assert "Hello World" in clean_input
 
-    def test_sanitize_input_sql_injection(self):
+    def test_sanitize_input_sql_injection(self) -> None:
         """Test SQL injection protection."""
         dirty_input = "'; DROP TABLE users; --"
         clean_input = sanitize_input(dirty_input)
         assert "DROP TABLE" not in clean_input
 
-    def test_validate_string_length(self):
+    def test_validate_string_length(self) -> None:
         """Test string length validation."""
         # Valid length
         result = validate_string_length("hello", min_length=1, max_length=10)
@@ -76,7 +76,7 @@ class TestCommonValidation:
         with pytest.raises(ValueError):
             validate_string_length("hello world", min_length=1, max_length=5)
 
-    def test_validate_numeric_range(self):
+    def test_validate_numeric_range(self) -> None:
         """Test numeric range validation."""
         # Valid range
         result = validate_numeric_range(5, min_value=1, max_value=10)
@@ -90,7 +90,7 @@ class TestCommonValidation:
         with pytest.raises(ValueError):
             validate_numeric_range(11, min_value=1, max_value=10)
 
-    def test_validation_patterns(self):
+    def test_validation_patterns(self) -> None:
         """Test validation patterns."""
         # Test email pattern
         assert ValidationPatterns.EMAIL_PATTERN.match("test@example.com")
@@ -108,7 +108,7 @@ class TestCommonValidation:
 class TestAgentValidationModels:
     """Test agent validation models."""
 
-    def test_agent_create_request_valid(self):
+    def test_agent_create_request_valid(self) -> None:
         """Test valid agent creation request."""
         data = {
             "id": "test-agent-01",
@@ -124,12 +124,12 @@ class TestAgentValidationModels:
             "tags": ["test", "assistant"]
         }
 
-        agent = AgentCreateRequest(**data)
+        agent = AgentCreateRequest(**data)  # type: ignore
         assert agent.name == "Test Agent"
         assert agent.type == "tws_specialist"
-        assert len(agent.tools) == 2
+        assert len(agent.tools or []) == 2  # type: ignore
 
-    def test_agent_create_request_invalid_name(self):
+    def test_agent_create_request_invalid_name(self) -> None:
         """Test agent creation with invalid name."""
         data = {
             "name": "<script>alert('xss')</script>",
@@ -138,9 +138,9 @@ class TestAgentValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            AgentCreateRequest(**data)
+            AgentCreateRequest(**data)  # type: ignore
 
-    def test_agent_create_request_empty_name(self):
+    def test_agent_create_request_empty_name(self) -> None:
         """Test agent creation with empty name."""
         data = {
             "name": "",
@@ -149,9 +149,9 @@ class TestAgentValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            AgentCreateRequest(**data)
+            AgentCreateRequest(**data)  # type: ignore
 
-    def test_agent_create_request_long_description(self):
+    def test_agent_create_request_long_description(self) -> None:
         """Test agent creation with too long description."""
         data = {
             "name": "Test Agent",
@@ -161,9 +161,9 @@ class TestAgentValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            AgentCreateRequest(**data)
+            AgentCreateRequest(**data)  # type: ignore
 
-    def test_agent_create_request_invalid_model(self):
+    def test_agent_create_request_invalid_model(self) -> None:
         """Test agent creation with invalid model name."""
         data = {
             "name": "Test Agent",
@@ -172,9 +172,9 @@ class TestAgentValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            AgentCreateRequest(**data)
+            AgentCreateRequest(**data)  # type: ignore
 
-    def test_agent_update_request_valid(self):
+    def test_agent_update_request_valid(self) -> None:
         """Test valid agent update request."""
         data = {
             "name": "Updated Agent",
@@ -182,11 +182,11 @@ class TestAgentValidationModels:
             "tools": ["new_tool"]
         }
 
-        agent = AgentUpdateRequest(**data)
+        agent = AgentUpdateRequest(**data)  # type: ignore
         assert agent.name == "Updated Agent"
         assert len(agent.tools) == 1
 
-    def test_agent_query_params_valid(self):
+    def test_agent_query_params_valid(self) -> None:
         """Test valid agent query parameters."""
         data = {
             "name": "Test",
@@ -195,12 +195,12 @@ class TestAgentValidationModels:
             "include_inactive": True
         }
 
-        params = AgentQueryParams(**data)
+        params = AgentQueryParams(**data)  # type: ignore
         assert params.name == "Test"
         assert params.type == "assistant"
         assert params.include_inactive is True
 
-    def test_agent_query_params_xss_injection(self):
+    def test_agent_query_params_xss_injection(self) -> None:
         """Test agent query parameters with XSS injection."""
         data = {
             "name": "<script>alert('xss')</script>",
@@ -208,13 +208,13 @@ class TestAgentValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            AgentQueryParams(**data)
+            AgentQueryParams(**data)  # type: ignore
 
 
 class TestAuthValidationModels:
     """Test authentication validation models."""
 
-    def test_login_request_valid(self):
+    def test_login_request_valid(self) -> None:
         """Test valid login request."""
         data = {
             "username": "testuser",
@@ -222,11 +222,11 @@ class TestAuthValidationModels:
             "remember_me": True
         }
 
-        login = LoginRequest(**data)
+        login = LoginRequest(**data)  # type: ignore
         assert login.username == "testuser"
         assert login.remember_me is True
 
-    def test_login_request_invalid_username(self):
+    def test_login_request_invalid_username(self) -> None:
         """Test login request with invalid username."""
         data = {
             "username": "user<script>alert('xss')</script>",
@@ -234,9 +234,9 @@ class TestAuthValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            LoginRequest(**data)
+            LoginRequest(**data)  # type: ignore
 
-    def test_login_request_weak_password(self):
+    def test_login_request_weak_password(self) -> None:
         """Test login request with weak password."""
         data = {
             "username": "testuser",
@@ -244,9 +244,9 @@ class TestAuthValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            LoginRequest(**data)
+            LoginRequest(**data)  # type: ignore
 
-    def test_password_change_request_valid(self):
+    def test_password_change_request_valid(self) -> None:
         """Test valid password change request."""
         data = {
             "current_password": "OldPass123!",
@@ -257,7 +257,7 @@ class TestAuthValidationModels:
         password_change = PasswordChangeRequest(**data)
         assert password_change.new_password == "NewSecurePass456!"
 
-    def test_password_change_request_mismatch(self):
+    def test_password_change_request_mismatch(self) -> None:
         """Test password change with mismatched confirmation."""
         data = {
             "current_password": "OldPass123!",
@@ -267,7 +267,7 @@ class TestAuthValidationModels:
 
         with pytest.raises(ValidationError):
             PasswordChangeRequest(**data)
-    def test_user_registration_request_valid(self):
+    def test_user_registration_request_valid(self) -> None:
         """Test valid user registration request."""
         data = {
             "username": "newuser",
@@ -276,13 +276,13 @@ class TestAuthValidationModels:
             "confirm_password": "SecureP@ssw0rd!"
         }
 
-        registration = UserRegistrationRequest(**data)
+        registration = UserRegistrationRequest(**data)  # type: ignore
 
         assert registration.username == "newuser"
         assert registration.email == "newuser@example.com"
         assert registration.accept_terms is True
 
-    def test_user_registration_request_invalid_email(self):
+    def test_user_registration_request_invalid_email(self) -> None:
         """Test user registration with invalid email."""
         data = {
             "username": "newuser",
@@ -293,13 +293,13 @@ class TestAuthValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            UserRegistrationRequest(**data)
+            UserRegistrationRequest(**data)  # type: ignore
 
 
 class TestChatValidationModels:
     """Test chat validation models."""
 
-    def test_chat_message_valid(self):
+    def test_chat_message_valid(self) -> None:
         """Test valid chat message."""
         data = {
             "content": "Hello, how are you?",
@@ -309,11 +309,11 @@ class TestChatValidationModels:
             "timestamp": datetime.utcnow()
         }
 
-        message = ChatMessage(**data)
+        message = ChatMessage(**data)  # type: ignore
 
         assert message.content == "Hello, how are you?"
         assert message.message_type == "text"
-    def test_chat_message_xss_content(self):
+    def test_chat_message_xss_content(self) -> None:
         """Test chat message with XSS content."""
         data = {
             "content": "<script>alert('xss')</script>",
@@ -323,9 +323,9 @@ class TestChatValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            ChatMessage(**data)
+            ChatMessage(**data)  # type: ignore
 
-    def test_chat_message_too_long(self):
+    def test_chat_message_too_long(self) -> None:
         """Test chat message that is too long."""
         data = {
             "content": "x" * 10001,  # Exceeds max length
@@ -335,9 +335,9 @@ class TestChatValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            ChatMessage(**data)
+            ChatMessage(**data)  # type: ignore
 
-    def test_chat_session_valid(self):
+    def test_chat_session_valid(self) -> None:
         """Test valid chat session."""
         data = {
             "session_id": "session123",
@@ -348,11 +348,11 @@ class TestChatValidationModels:
             "config": {"max_tokens": 1000}
         }
 
-        session = ChatSession(**data)
+        session = ChatSession(**data)  # type: ignore
         assert session.session_id == "session123"
         assert session.title == "Test Chat Session"
         assert len(session.context) == 2
-    def test_websocket_message_valid(self):
+    def test_websocket_message_valid(self) -> None:
         """Test valid WebSocket message."""
         data = {
             "type": "message",
@@ -361,12 +361,12 @@ class TestChatValidationModels:
             "timestamp": datetime.utcnow()
         }
 
-        ws_message = WebSocketMessage(**data)
+        ws_message = WebSocketMessage(**data)  # type: ignore
 
         assert ws_message.type == "message"
         assert ws_message.payload["text"] == "Hello"
 
-    def test_chat_history_request_valid(self):
+    def test_chat_history_request_valid(self) -> None:
         """Test valid chat history request."""
         data = {
             "session_id": "session123",
@@ -374,7 +374,7 @@ class TestChatValidationModels:
             "offset": 0
         }
 
-        history = ChatHistoryRequest(**data)
+        history = ChatHistoryRequest(**data)  # type: ignore
         assert history.session_id == "session123"
         assert history.limit == 50
         assert history.offset == 0
@@ -383,7 +383,7 @@ class TestChatValidationModels:
 class TestQueryParamValidationModels:
     """Test query parameter validation models."""
 
-    def test_pagination_params_valid(self):
+    def test_pagination_params_valid(self) -> None:
         """Test valid pagination parameters."""
         data = {
             "page": 2,
@@ -395,7 +395,7 @@ class TestQueryParamValidationModels:
         assert pagination.page_size == 25
         assert pagination.get_offset() == 25  # (2-1) * 25
 
-    def test_pagination_params_invalid_page(self):
+    def test_pagination_params_invalid_page(self) -> None:
         """Test pagination parameters with invalid page number."""
         data = {
             "page": 0,  # Invalid - must be >= 1
@@ -405,7 +405,7 @@ class TestQueryParamValidationModels:
         with pytest.raises(ValidationError):
             PaginationParams(**data)
 
-    def test_search_params_valid(self):
+    def test_search_params_valid(self) -> None:
         """Test valid search parameters."""
         data = {
             "query": "test search",
@@ -414,12 +414,12 @@ class TestQueryParamValidationModels:
             "case_sensitive": False
         }
 
-        search = SearchParams(**data)
+        search = SearchParams(**data)  # type: ignore
         assert search.query == "test search"
         assert len(search.search_fields) == 2
         assert search.fuzzy is True
 
-    def test_search_params_xss_query(self):
+    def test_search_params_xss_query(self) -> None:
         """Test search parameters with XSS in query."""
         data = {
             "query": "<script>alert('xss')</script>",
@@ -427,9 +427,9 @@ class TestQueryParamValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            SearchParams(**data)
+            SearchParams(**data)  # type: ignore
 
-    def test_filter_params_valid(self):
+    def test_filter_params_valid(self) -> None:
         """Test valid filter parameters."""
         data = {
             "filters": [
@@ -447,11 +447,11 @@ class TestQueryParamValidationModels:
             "filter_logic": "and"
         }
 
-        filters = FilterParams(**data)
+        filters = FilterParams(**data)  # type: ignore
         assert len(filters.filters) == 2
         assert filters.filter_logic == "and"
 
-    def test_filter_params_invalid_operator(self):
+    def test_filter_params_invalid_operator(self) -> None:
         """Test filter parameters with invalid operator."""
         data = {
             "filters": [
@@ -464,16 +464,16 @@ class TestQueryParamValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            FilterParams(**data)
+            FilterParams(**data)  # type: ignore
 
-    def test_sort_params_valid(self):
+    def test_sort_params_valid(self) -> None:
         """Test valid sort parameters."""
         data = {
             "sort_by": ["created_at", "name"],
             "sort_order": ["desc", "asc"]
         }
 
-        sort = SortParams(**data)
+        sort = SortParams(**data)  # type: ignore
         assert sort.sort_by == ["created_at", "name"]
         assert sort.sort_order == ["desc", "asc"]
 
@@ -481,7 +481,7 @@ class TestQueryParamValidationModels:
 class TestFileValidationModels:
     """Test file validation models."""
 
-    def test_file_upload_request_valid(self):
+    def test_file_upload_request_valid(self) -> None:
         """Test valid file upload request."""
         data = {
             "filename": "test_document.pdf",
@@ -492,12 +492,12 @@ class TestFileValidationModels:
             "metadata": {"author": "Test User", "version": "1.0"}
         }
 
-        file_upload = FileUploadRequest(**data)
+        file_upload = FileUploadRequest(**data)  # type: ignore
         assert file_upload.filename == "test_document.pdf"
         assert file_upload.file_size == 1024 * 1024
         assert file_upload.file_type == FileType.DOCUMENT
 
-    def test_file_upload_request_dangerous_filename(self):
+    def test_file_upload_request_dangerous_filename(self) -> None:
         """Test file upload with dangerous filename."""
         data = {
             "filename": "../../../etc/passwd",
@@ -507,9 +507,9 @@ class TestFileValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            FileUploadRequest(**data)
+            FileUploadRequest(**data)  # type: ignore
 
-    def test_file_upload_request_dangerous_content_type(self):
+    def test_file_upload_request_dangerous_content_type(self) -> None:
         """Test file upload with dangerous content type."""
         data = {
             "filename": "test.php",
@@ -519,9 +519,9 @@ class TestFileValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            FileUploadRequest(**data)
+            FileUploadRequest(**data)  # type: ignore
 
-    def test_file_upload_request_too_large(self):
+    def test_file_upload_request_too_large(self) -> None:
         """Test file upload that is too large."""
         data = {
             "filename": "large_file.zip",
@@ -531,9 +531,9 @@ class TestFileValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            FileUploadRequest(**data)
+            FileUploadRequest(**data)  # type: ignore
 
-    def test_file_upload_request_xss_in_purpose(self):
+    def test_file_upload_request_xss_in_purpose(self) -> None:
         """Test file upload with XSS in purpose field."""
         data = {
             "filename": "test.txt",
@@ -543,8 +543,8 @@ class TestFileValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            FileUploadRequest(**data)
-    def test_rag_upload_request_valid(self):
+            FileUploadRequest(**data)  # type: ignore
+    def test_rag_upload_request_valid(self) -> None:
         """Test valid RAG upload request."""
         files = [
             {
@@ -571,7 +571,7 @@ class TestFileValidationModels:
 class TestMonitoringValidationModels:
     """Test monitoring validation models."""
 
-    def test_system_metric_request_valid(self):
+    def test_system_metric_request_valid(self) -> None:
         """Test valid system metric request."""
         data = {
             "metric_types": [MetricType.CPU, MetricType.MEMORY],
@@ -581,12 +581,12 @@ class TestMonitoringValidationModels:
             "format": "json"
         }
 
-        metrics = SystemMetricRequest(**data)
+        metrics = SystemMetricRequest(**data)  # type: ignore
         assert len(metrics.metric_types) == 2
         assert metrics.time_range == "1h"
         assert metrics.aggregation == "avg"
 
-    def test_system_metric_request_duplicate_types(self):
+    def test_system_metric_request_duplicate_types(self) -> None:
         """Test system metric request with duplicate types."""
         data = {
             "metric_types": [MetricType.CPU, MetricType.CPU, MetricType.MEMORY],
@@ -594,8 +594,8 @@ class TestMonitoringValidationModels:
         }
 
         with pytest.raises(ValidationError):
-            SystemMetricRequest(**data)
-    def test_custom_metric_request_valid(self):
+            SystemMetricRequest(**data)  # type: ignore
+    def test_custom_metric_request_valid(self) -> None:
         """Test valid custom metric request."""
         data = {
             "metric_name": "custom_requests_total",
@@ -605,19 +605,19 @@ class TestMonitoringValidationModels:
         }
 
         # Use SystemMetricRequest instead since CustomMetricRequest doesn't exist
-        metric = SystemMetricRequest(**data)
+        metric = SystemMetricRequest(**data)  # type: ignore
 
         assert len(metric.metric_types) == 2  # Default values
         assert metric.labels["method"] == "GET"
 
-    def test_custom_metric_request_invalid_name(self):
+    def test_custom_metric_request_invalid_name(self) -> None:
         """Test custom metric request with invalid name."""
 
         # Test with a different model since CustomMetricRequest doesn't exist
         with pytest.raises(ValidationError):
             SystemMetricRequest(metric_types=[])  # Empty metric types should fail
 
-    def test_alert_request_valid(self):
+    def test_alert_request_valid(self) -> None:
         """Test valid alert request."""
         data = {
             "alert_name": "high_cpu_usage",
@@ -633,7 +633,7 @@ class TestMonitoringValidationModels:
         assert alert.severity == AlertSeverity.WARNING
         assert alert.threshold_value == 80.0
 
-    def test_alert_request_xss_in_description(self):
+    def test_alert_request_xss_in_description(self) -> None:
         """Test alert request with XSS in description."""
         data = {
             "alert_name": "test_alert",
@@ -644,7 +644,7 @@ class TestMonitoringValidationModels:
         with pytest.raises(ValidationError):
             AlertRequest(**data)
 
-    def test_health_check_request_valid(self):
+    def test_health_check_request_valid(self) -> None:
         """Test valid health check request."""
         data = {
             "component": "database",
@@ -653,7 +653,7 @@ class TestMonitoringValidationModels:
             "include_dependencies": True
         }
 
-        health_check = HealthCheckRequest(**data)
+        health_check = HealthCheckRequest(**data)  # type: ignore
         assert health_check.component == "database"
         assert health_check.depth == "detailed"
         assert health_check.timeout == 60
@@ -662,7 +662,7 @@ class TestMonitoringValidationModels:
 class TestConfigurationModels:
     """Test configuration models."""
 
-    def test_validation_config_model_valid(self):
+    def test_validation_config_model_valid(self) -> None:
         """Test valid validation configuration."""
         data = {
             "enabled": True,
@@ -674,13 +674,13 @@ class TestConfigurationModels:
             "skip_paths": ["/health", "/docs", "/static"]
         }
 
-        config = ValidationConfigModel(**data)
+        config = ValidationConfigModel(**data)  # type: ignore
         assert config.enabled is True
         assert config.mode == ValidationMode.STRICT
         assert config.sanitization_level == SanitizationLevel.MODERATE
         assert config.max_validation_errors == 25
 
-    def test_validation_config_model_invalid_skip_paths(self):
+    def test_validation_config_model_invalid_skip_paths(self) -> None:
         """Test validation config with invalid skip paths."""
         data = {
             "enabled": True,
@@ -688,9 +688,9 @@ class TestConfigurationModels:
         }
 
         with pytest.raises(ValidationError):
-            ValidationConfigModel(**data)
+            ValidationConfigModel(**data)  # type: ignore
 
-    def test_validation_config_model_invalid_file_size(self):
+    def test_validation_config_model_invalid_file_size(self) -> None:
         """Test validation config with invalid file size."""
         data = {
             "enabled": True,
@@ -698,13 +698,13 @@ class TestConfigurationModels:
         }
 
         with pytest.raises(ValidationError):
-            ValidationConfigModel(**data)
+            ValidationConfigModel(**data)  # type: ignore
 
 
 class TestValidationErrorHandling:
     """Test validation error handling."""
 
-    def test_validation_error_response_creation(self):
+    def test_validation_error_response_creation(self) -> None:
         """Test validation error response creation."""
         error_details = [
             {
@@ -735,7 +735,7 @@ class TestValidationErrorHandling:
         assert error_response.path == "/api/login"
         assert error_response.method == "POST"
 
-    def test_validation_error_response_with_warnings(self):
+    def test_validation_error_response_with_warnings(self) -> None:
         """Test validation error response with warnings."""
         error_details = [
             {
@@ -760,7 +760,7 @@ class TestValidationErrorHandling:
 class TestEdgeCases:
     """Test edge cases and boundary conditions."""
 
-    def test_string_constraints_exact_length(self):
+    def test_string_constraints_exact_length(self) -> None:
         """Test string constraints at exact length limits."""
         # Test at minimum length
         min_string = "a" * 1  # Minimum SAFE_TEXT length
@@ -777,7 +777,7 @@ class TestEdgeCases:
         result = sanitize_input(too_long_string)
         assert len(result) <= 200
 
-    def test_numeric_constraints_boundary_values(self):
+    def test_numeric_constraints_boundary_values(self) -> None:
         """Test numeric constraints at boundary values."""
         # Test minimum values
         with pytest.raises(ValueError):
@@ -794,7 +794,7 @@ class TestEdgeCases:
         result = validate_numeric_range(100, min_value=1, max_value=100)
         assert result == 100
 
-    def test_empty_and_whitespace_strings(self):
+    def test_empty_and_whitespace_strings(self) -> None:
         """Test validation with empty and whitespace-only strings."""
         # Test empty strings
         with pytest.raises(ValueError):
@@ -808,7 +808,7 @@ class TestEdgeCases:
         with pytest.raises(ValueError):
             validate_string_length("  \t\n  ", min_length=1, max_length=100)
 
-    def test_unicode_and_special_characters(self):
+    def test_unicode_and_special_characters(self) -> None:
         """Test validation with unicode and special characters."""
         # Test unicode characters
         unicode_text = "Hello 世界 🌍"
@@ -826,7 +826,7 @@ class TestEdgeCases:
         result = sanitize_input(dangerous_unicode)
         assert "<script>" not in result
 
-    def test_nested_object_validation(self):
+    def test_nested_object_validation(self) -> None:
         """Test validation with deeply nested objects."""
         # Test deeply nested data
         nested_data = {
@@ -847,10 +847,10 @@ class TestEdgeCases:
         result = sanitize_input(str(nested_data))
         assert "test" in result
 
-    def test_array_validation_edge_cases(self):
+    def test_array_validation_edge_cases(self) -> None:
         """Test array validation edge cases."""
         # Test empty arrays
-        empty_data = {
+        empty_data: dict[str, Any] = {
             "tools": [],
             "tags": []
         }
@@ -878,7 +878,7 @@ class TestEdgeCases:
                 **duplicate_data
             )
 
-    def test_concurrent_validation_safety(self):
+    def test_concurrent_validation_safety(self) -> None:
         """Test that validation is safe for concurrent use."""
         import threading
 
@@ -926,7 +926,7 @@ class TestEdgeCases:
 class TestPerformanceAndScalability:
     """Test validation performance and scalability."""
 
-    def test_large_data_validation_performance(self):
+    def test_large_data_validation_performance(self) -> None:
         """Test validation performance with large data."""
         import time
 
@@ -943,7 +943,7 @@ class TestPerformanceAndScalability:
         assert "<script>" not in result
         assert end_time - start_time < 1.0  # Should complete within 1 second
 
-    def test_many_validation_operations(self):
+    def test_many_validation_operations(self) -> None:
         """Test many validation operations in sequence."""
         import time
 
@@ -972,7 +972,7 @@ class TestPerformanceAndScalability:
         # Verify performance is reasonable
         assert end_time - start_time < 5.0  # Should complete within 5 seconds
 
-    def test_memory_efficiency(self):
+    def test_memory_efficiency(self) -> None:
         """Test that validation doesn't cause memory leaks."""
         import gc
         import os

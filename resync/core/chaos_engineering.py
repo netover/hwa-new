@@ -13,13 +13,13 @@ import random
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable
 from unittest.mock import patch
 
-from resync.core import get_environment_tags, get_global_correlation_id
+from resync.core import get_environment_tags, get_global_correlation_id  # type: ignore
 from resync.core.agent_manager import AgentManager
 from resync.core.async_cache import AsyncTTLCache
-from resync.core.audit_db import add_audit_records_batch, get_audit_metrics
+from resync.core.audit_db import add_audit_records_batch  # type: ignore
 from resync.core.metrics import log_with_correlation, runtime_metrics
 
 logger = logging.getLogger(__name__)
@@ -35,9 +35,9 @@ class ChaosTestResult:
     success: bool
     error_count: int = 0
     operations_performed: int = 0
-    anomalies_detected: List[str] = field(default_factory=list)
+    anomalies_detected: list[str] = field(default_factory=list)
     correlation_id: str = ""
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -47,7 +47,7 @@ class FuzzingScenario:
     name: str
     description: str
     fuzz_function: Callable[[], Any]
-    expected_failures: List[str] = field(default_factory=list)
+    expected_failures: list[str] = field(default_factory=list)
     max_duration: float = 30.0
 
 
@@ -56,15 +56,15 @@ class ChaosEngineer:
     Chaos Engineering orchestrator for systematic system testing.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.correlation_id = get_global_correlation_id()
-        self.results: List[ChaosTestResult] = []
-        self.active_tests: Dict[str, asyncio.Task] = {}
+        self.results: list[ChaosTestResult] = []
+        self.active_tests: Dict[str, asyncio.Task[Any]] = {}
         self._lock = threading.RLock()
 
     async def run_full_chaos_suite(
         self, duration_minutes: float = 5.0
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Run the complete chaos engineering test suite.
         """
@@ -117,10 +117,11 @@ class ChaosEngineer:
                         )
                     )
                 else:
-                    self.results.append(result)
-                    if result.success:
-                        successful_tests += 1
-                    total_anomalies += len(result.anomalies_detected)
+                    if isinstance(result, ChaosTestResult):
+                        self.results.append(result)
+                        if result.success:
+                            successful_tests += 1
+                        total_anomalies += len(result.anomalies_detected)
 
             suite_duration = time.time() - start_time
 
@@ -165,7 +166,7 @@ class ChaosEngineer:
             errors = 0
 
             # Create multiple concurrent operations
-            async def worker(worker_id: int):
+            async def worker(worker_id: int) -> None:
                 nonlocal operations, errors
                 for i in range(100):
                     try:
@@ -230,7 +231,7 @@ class ChaosEngineer:
 
         try:
 
-            async def init_worker(worker_id: int):
+            async def init_worker(worker_id: int) -> None:
                 nonlocal operations, errors
                 try:
                     # Try to initialize agent manager concurrently
@@ -287,7 +288,7 @@ class ChaosEngineer:
 
         # Simulate getting agent details
         try:
-            metrics = manager.get_detailed_metrics()
+            metrics = manager.get_detailed_metrics()  # type: ignore
             if "total_agents" not in metrics:
                 raise ValueError("Metrics missing total_agents")
         except Exception as e:
@@ -338,7 +339,7 @@ class ChaosEngineer:
 
             # Test metrics retrieval
             try:
-                metrics = get_audit_metrics()
+                metrics = get_audit_metrics()  # type: ignore
                 if "total_records" not in metrics:
                     anomalies.append("Audit metrics missing total_records")
                 operations += 1
@@ -464,7 +465,7 @@ class ChaosEngineer:
             # Simulate network issues using mock patches
             original_import = __import__
 
-            def failing_import(name, *args, **kwargs):
+            def failing_import(name: str, *args: Any, **kwargs: Any) -> Any:
                 # Randomly fail some imports to simulate network issues
                 if (
                     random.random() < 0.1 and "agent" in name
@@ -480,7 +481,7 @@ class ChaosEngineer:
                         operations += 1
 
                         # Try to get metrics
-                        metrics = manager.get_detailed_metrics()
+                        metrics = manager.get_detailed_metrics()  # type: ignore
                         if not isinstance(metrics, dict):
                             anomalies.append(f"Metrics not dict at iteration {i}")
 
@@ -551,7 +552,7 @@ class ChaosEngineer:
                         ):
                             try:
                                 manager = AgentManager()
-                                metrics = manager.get_detailed_metrics()
+                                metrics = manager.get_detailed_metrics()  # type: ignore
                                 operations += 1
                             except Exception as e:
                                 if "import failure" not in str(e):
@@ -568,7 +569,7 @@ class ChaosEngineer:
                             try:
                                 from resync.core.audit_db import get_audit_metrics
 
-                                metrics = get_audit_metrics()
+                                metrics = get_audit_metrics()  # type: ignore
                                 if "error" not in metrics:
                                     anomalies.append(
                                         "Audit DB should have reported error"
@@ -608,12 +609,12 @@ class FuzzingEngine:
     Automated fuzzing engine for input validation and edge case testing.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.correlation_id = get_global_correlation_id()
-        self.scenarios: List[FuzzingScenario] = []
+        self.scenarios: list[FuzzingScenario] = []
         self._setup_fuzzing_scenarios()
 
-    def _setup_fuzzing_scenarios(self):
+    def _setup_fuzzing_scenarios(self) -> None:
         """Setup fuzzing scenarios for different components."""
 
         # Cache fuzzing scenarios
@@ -664,7 +665,7 @@ class FuzzingEngine:
             ]
         )
 
-    async def run_fuzzing_campaign(self, max_duration: float = 60.0) -> Dict[str, Any]:
+    async def run_fuzzing_campaign(self, max_duration: float = 60.0) -> dict[str, Any]:
         """
         Run a complete fuzzing campaign on all scenarios.
         """
@@ -751,13 +752,13 @@ class FuzzingEngine:
         finally:
             runtime_metrics.close_correlation_id(correlation_id)
 
-    def _fuzz_cache_keys(self) -> Dict[str, Any]:
+    def _fuzz_cache_keys(self) -> dict[str, Any]:
         """Fuzz cache keys with various edge cases."""
         import asyncio
 
         cache = AsyncTTLCache()
 
-        async def fuzz_keys():
+        async def fuzz_keys() -> dict[str, Any]:
             test_cases = [
                 # Valid keys
                 "normal_key",
@@ -808,13 +809,13 @@ class FuzzingEngine:
         finally:
             loop.close()
 
-    def _fuzz_cache_values(self) -> Dict[str, Any]:
+    def _fuzz_cache_values(self) -> dict[str, Any]:
         """Fuzz cache values with complex objects."""
         import asyncio
 
         cache = AsyncTTLCache()
 
-        async def fuzz_values():
+        async def fuzz_values() -> dict[str, Any]:
             test_cases = [
                 # Simple values
                 "string_value",
@@ -874,13 +875,13 @@ class FuzzingEngine:
         finally:
             loop.close()
 
-    def _fuzz_cache_ttl(self) -> Dict[str, Any]:
+    def _fuzz_cache_ttl(self) -> dict[str, Any]:
         """Fuzz TTL values."""
         import asyncio
 
         cache = AsyncTTLCache()
 
-        async def fuzz_ttl():
+        async def fuzz_ttl() -> dict[str, Any]:
             test_cases = [
                 # Valid TTLs
                 1,
@@ -926,7 +927,7 @@ class FuzzingEngine:
         finally:
             loop.close()
 
-    def _fuzz_agent_configs(self) -> Dict[str, Any]:
+    def _fuzz_agent_configs(self) -> dict[str, Any]:
         """Fuzz agent configurations."""
         from resync.core.agent_manager import AgentConfig
 
@@ -997,7 +998,7 @@ class FuzzingEngine:
 
         return results
 
-    def _fuzz_audit_records(self) -> Dict[str, Any]:
+    def _fuzz_audit_records(self) -> dict[str, Any]:
         """Fuzz audit record structures."""
         test_cases = [
             # Valid record
@@ -1061,11 +1062,11 @@ chaos_engineer = ChaosEngineer()
 fuzzing_engine = FuzzingEngine()
 
 
-async def run_chaos_engineering_suite(duration_minutes: float = 5.0) -> Dict[str, Any]:
+async def run_chaos_engineering_suite(duration_minutes: float = 5.0) -> dict[str, Any]:
     """Convenience function to run chaos engineering suite."""
     return await chaos_engineer.run_full_chaos_suite(duration_minutes)
 
 
-async def run_fuzzing_campaign(max_duration: float = 60.0) -> Dict[str, Any]:
+async def run_fuzzing_campaign(max_duration: float = 60.0) -> dict[str, Any]:
     """Convenience function to run fuzzing campaign."""
     return await fuzzing_engine.run_fuzzing_campaign(max_duration)

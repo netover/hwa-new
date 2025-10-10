@@ -5,7 +5,7 @@ import secrets
 import hashlib
 import hmac
 from datetime import datetime, timedelta
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -28,7 +28,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 class SecureAuthenticator:
     """Authenticator resistente a timing attacks."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self._failed_attempts: dict[str, list[datetime]] = {}
         self._lockout_duration = timedelta(minutes=15)
         self._max_attempts = 5
@@ -113,14 +113,14 @@ class SecureAuthenticator:
     def _hash_credential(self, credential: str) -> bytes:
         """Hash credential for constant-time comparison."""
         # Use HMAC with secret key to prevent rainbow table attacks
-        secret_key = settings.secret_key.encode('utf-8')
+        secret_key = getattr(settings, "secret_key", SECRET_KEY).encode('utf-8')
         return hmac.new(
             secret_key,
             credential.encode('utf-8'),
             hashlib.sha256
         ).digest()
     
-    async def _record_failed_attempt(self, ip: str):
+    async def _record_failed_attempt(self, ip: str) -> None:
         """Record failed authentication attempt."""
         async with self._lockout_lock:
             now = datetime.utcnow()
@@ -179,7 +179,7 @@ authenticator = SecureAuthenticator()
 def verify_admin_credentials(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
-):
+) -> Optional[str]:
     """
     Verify admin credentials for protected endpoints using JWT tokens.
     """
@@ -226,7 +226,7 @@ def verify_admin_credentials(
         )
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """
     Create a new JWT access token.
     """
@@ -241,7 +241,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 
-async def authenticate_admin(username: str, password: str):
+async def authenticate_admin(username: str, password: str) -> bool:
     """
     Authenticate admin user credentials with enhanced security validation.
     """

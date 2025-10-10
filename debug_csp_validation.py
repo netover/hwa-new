@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import re
 from resync.csp_validation import validate_csp_report, _is_safe_uri, _is_safe_directive_value
@@ -51,14 +53,14 @@ for field in uri_fields:
     if field in csp_report:
         # Pass the correct flag for blocked-uri
         is_blocked_uri = field == 'blocked-uri'
-        result = _is_safe_uri(csp_report[field], is_blocked_uri)
+        result = _is_safe_uri(str(csp_report[field]), is_blocked_uri)
         print(f"URI validation for {field} ({csp_report[field]}): {result}")
 
 # Test directive validation
 directive_fields = ['violated-directive', 'effective-directive', 'original-policy']
 for field in directive_fields:
     if field in csp_report:
-        result = _is_safe_directive_value(csp_report[field])
+        result = _is_safe_directive_value(str(csp_report[field]))
         print(f"Directive validation for {field} ({csp_report[field]}): {result}")
 
 # Test numeric fields

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from typing import Any
 
 from agno.agent import Agent
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
@@ -67,7 +68,7 @@ async def send_error_message(websocket: WebSocket, message: str) -> None:
         )
 
 
-async def run_auditor_safely():
+async def run_auditor_safely() -> None:
     """
     Executes the IA auditor in a safe context, catching and logging any exceptions
     to prevent the background task from dying silently.
@@ -94,7 +95,9 @@ async def _get_enhanced_query(
 ) -> str:
     """Retrieves RAG context and constructs the enhanced query for the agent."""
     context = await knowledge_graph.get_relevant_context(sanitized_data)
-    logger.debug(f"Retrieved knowledge graph context: {context[:200]}...")
+    # Use %-formatting for lazy evaluation, preventing crashes if context is not sliceable
+    # and improving performance when DEBUG level is not active.
+    logger.debug("Retrieved knowledge graph context: %s...", str(context)[:200])
     return f"""
 Contexto de soluções anteriores:
 {context}
@@ -106,7 +109,7 @@ Pergunta do usuário:
 
 async def _get_optimized_response(
     query: str,
-    context: dict = None,
+    context: dict[str, Any] | None = None,
     use_cache: bool = True,
     stream: bool = False
 ) -> str:
@@ -135,11 +138,25 @@ async def _stream_agent_response(
 ) -> str:
     """Streams the agent's response to the WebSocket and returns the full message."""
     response_message = ""
-    async for chunk in agent.stream(query):
-        response_message += chunk
-        await websocket.send_json(
-            {"type": "stream", "sender": "agent", "message": chunk}
-        )
+    try:
+        # Try to use stream method if available
+        stream_method = getattr(agent, 'stream', None)
+        if stream_method is not None and callable(stream_method):
+            async for chunk in stream_method(query):
+                response_message += chunk
+                await websocket.send_json(
+                    {"type": "stream", "sender": "agent", "message": chunk}
+                )
+        else:
+            # Fallback to regular run method
+            response = await agent.arun(query)
+            response_message = str(response)
+            await websocket.send_json(
+                {"type": "stream", "sender": "agent", "message": response_message}
+            )
+    except Exception as e:
+        logger.error(f"Error streaming agent response: {e}")
+        raise
     return response_message
 
 
@@ -147,10 +164,10 @@ async def _finalize_and_store_interaction(
     websocket: WebSocket,
     knowledge_graph: IKnowledgeGraph,
     agent: Agent,
-    agent_id: str,
+    agent_id: SafeAgentID,
     sanitized_query: str,
     full_response: str,
-):
+) -> None:
     """Sends the final message, stores the conversation, and schedules the auditor."""
     # Send a final message indicating the stream has ended
     await websocket.send_json(
@@ -188,7 +205,7 @@ async def _finalize_and_store_interaction(
 async def _handle_agent_interaction(
     websocket: WebSocket,
     agent: Agent,
-    agent_id: str,
+    agent_id: SafeAgentID,
     knowledge_graph: IKnowledgeGraph,
     data: str,
 ) -> None:
@@ -260,116 +277,73 @@ def _should_use_llm_optimization(query: str) -> bool:
     return any(indicator in query_lower for indicator in tws_indicators)
 
 
+async def _setup_websocket_session(websocket: WebSocket, agent_id: SafeAgentID) -> Agent:
+    """Handles WebSocket connection setup and agent retrieval."""
+    await websocket.accept()
+    logger.info(f"WebSocket connection established for agent {agent_id}")
+
+    agent_manager: IAgentManager = get_agent_manager()
+    agent = await agent_manager.get_agent(agent_id)
+
+    if not agent:
+        logger.warning(f"Agent '{agent_id}' not found.")
+        await send_error_message(websocket, f"Agente '{agent_id}' não encontrado.")
+        raise WebSocketDisconnect(code=1008, reason=f"Agent '{agent_id}' not found")
+
+    welcome_data = {
+        "type": "info",
+        "sender": "system",
+        "message": f"Conectado ao agente: {getattr(agent, 'name', 'Unknown Agent')}. Digite sua mensagem...",
+    }
+    await websocket.send_json(welcome_data)
+    logger.info(f"Agent '{getattr(agent, 'name', 'Unknown Agent')}' ready for WebSocket communication")
+    return agent  # type: ignore[no-any-return]
+
+
+async def _message_processing_loop(
+    websocket: WebSocket,
+    agent: Agent,
+    agent_id: SafeAgentID,
+    knowledge_graph: IKnowledgeGraph,
+) -> None:
+    """Main loop for receiving and processing messages from the client."""
+    while True:
+        raw_data = await websocket.receive_text()
+        logger.info(f"Received message for agent '{agent_id}': {raw_data[:200]}...")
+
+        validation = await _validate_input(raw_data, agent_id, websocket)
+        if not validation["is_valid"]:
+            continue
+
+        await _handle_agent_interaction(
+            websocket, agent, agent_id, knowledge_graph, raw_data
+        )
+
+
 @chat_router.websocket("/ws/{agent_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
     agent_id: SafeAgentID,
-):
-    # Accept WebSocket connection
-    await websocket.accept()
-    logger.info(f"WebSocket connection established for agent {agent_id}")
-
-    # Send welcome message
-    welcome_data = {
-        "type": "info",
-        "sender": "system",
-        "message": f"Conectado ao agente: {agent_id}. Digite sua mensagem...",
-    }
-    await websocket.send_text(json.dumps(welcome_data))
-
-    # Get agent manager and agent
-    from resync.core.fastapi_di import get_service
-    from resync.core.interfaces import IAgentManager
-
-    agent_manager = await get_service(IAgentManager)()
-    agent = await agent_manager.get_agent(agent_id)
-
-    if not agent:
-        error_data = {"type": "error", "sender": "system", "message": f"Agente '{agent_id}' não encontrado."}
-        await websocket.send_text(json.dumps(error_data))
-        await websocket.close(code=1008)
-        return
-
-    logger.info(f"Agent '{agent_id}' ready for WebSocket communication")
-
-    # Multi-message conversation model
+    knowledge_graph: IKnowledgeGraph = knowledge_graph_dependency,
+) -> None:
+    """Main WebSocket endpoint for real-time chat with an agent."""
     try:
-        # Initialize conversation history
-        conversation_history = []
-        
-        # Continuous message processing loop
-        while True:
-            # Receive message from client
-            raw_data = await websocket.receive_text()
-            logger.info(f"Received message for agent '{agent_id}': {raw_data}")
-            
-            # Add user message to history
-            conversation_history.append({"role": "user", "content": raw_data})
-            
-            try:
-                # Process message with agent
-                logger.info(f"Processing message with agent: {raw_data}")
-                
-                # Use direct string responses with context from conversation history
-                msg = raw_data.lower()
-                
-                # Generate contextual response based on conversation history
-                if len(conversation_history) > 1:
-                    # This is a follow-up question
-                    logger.info(f"Follow-up question detected. History length: {len(conversation_history)}")
-                
-                # Generate responses based on keywords
-                if "job" in msg and ("abend" in msg or "erro" in msg):
-                    response = "Jobs em estado ABEND encontrados:\n- Data Processing (ID: JOB002) na workstation TWS_AGENT2\n\nRecomendo investigar o log do job e verificar dependências."
-                elif "status" in msg or "workstation" in msg:
-                    response = "Status atual do ambiente TWS:\n\nWorkstations:\n- TWS_MASTER: ONLINE\n- TWS_AGENT1: ONLINE\n- TWS_AGENT2: OFFLINE\n\nJobs:\n- Daily Backup: SUCC (TWS_AGENT1)\n- Data Processing: ABEND (TWS_AGENT2)\n- Report Generation: SUCC (TWS_AGENT1)"
-                elif "tws" in msg:
-                    response = f"Como {agent_id}, posso ajudar com questões relacionadas ao TWS. Que informações você precisa?"
-                elif "obrigado" in msg or "valeu" in msg:
-                    response = "Disponível para ajudar! Se precisar de mais informações sobre o TWS, é só perguntar."
-                else:
-                    response = f"Entendi sua mensagem: '{raw_data}'. Como {agent_id}, estou aqui para ajudar com questões do TWS."
-                
-                # Add agent response to history
-                conversation_history.append({"role": "assistant", "content": response})
-                logger.info(f"Generated response: {response}")
-                
-                # Send response back to client
-                response_data = {
-                    "type": "message",
-                    "sender": "agent",
-                    "message": response,
-                }
-                logger.info(f"Sending response_data: {response_data}")
-                await websocket.send_text(json.dumps(response_data))
-                logger.info(f"Response sent to client for agent '{agent_id}'")
-                
-            except Exception as agent_error:
-                logger.error(f"Error processing message with agent '{agent_id}': {agent_error}")
-                import traceback
-                logger.error(f"Traceback: {traceback.format_exc()}")
-                error_data = {
-                    "type": "error",
-                    "sender": "agent",
-                    "message": f"Erro ao processar mensagem: {str(agent_error)}",
-                }
-                await websocket.send_text(json.dumps(error_data))
-        
+        agent = await _setup_websocket_session(websocket, agent_id)
+        await _message_processing_loop(websocket, agent, agent_id, knowledge_graph)
     except WebSocketDisconnect:
-        logger.info(f"Client disconnected from agent '{agent_id}'.")
-    except Exception as e:
-        logger.error(f"Unexpected error in WebSocket for agent '{agent_id}': {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.info(f"Client disconnected from agent '{agent_id}'. Reason: {websocket.state.reason} (Code: {websocket.state.code})")
+    except (LLMError, ToolExecutionError, AgentExecutionError) as e:
+        logger.error(f"Agent-related error in WebSocket for agent '{agent_id}': {e}", exc_info=True)
+        await send_error_message(websocket, f"Ocorreu um erro com o agente: {e.message}")
+    except Exception:
+        logger.critical(f"Unhandled exception in WebSocket for agent '{agent_id}'", exc_info=True)
         try:
-            await websocket.close(code=1011)
-        except:
+            await send_error_message(websocket, "Ocorreu um erro inesperado no servidor.")
+        finally:
             pass
 
-    # Removed duplicate code
 
-
-async def _validate_input(raw_data: str, agent_id: str, websocket: WebSocket) -> dict:
+async def _validate_input(raw_data: str, agent_id: SafeAgentID, websocket: WebSocket) -> dict[str, bool]:
     """Validate input data for size and potential injection attempts."""
     # Input validation and size check
     if len(raw_data) > 10000:  # Limit message size to 10KB

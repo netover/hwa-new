@@ -29,6 +29,8 @@ try:
         "performance_optimizer",
         "resync/core/performance_optimizer.py"
     )
+    if spec is None:
+        raise ImportError("Could not load performance_optimizer module")
     perf_module = importlib.util.module_from_spec(spec)
     
     # Execute with isolated namespace
@@ -79,6 +81,8 @@ try:
         "resource_manager",
         "resync/core/resource_manager.py"
     )
+    if spec is None:
+        raise ImportError("Could not load resource_manager module")
     res_module = importlib.util.module_from_spec(spec)
     
     # Execute with isolated namespace

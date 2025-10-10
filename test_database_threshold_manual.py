@@ -5,6 +5,8 @@ Manual test script to verify database connection threshold functionality.
 This script tests the core logic without complex mocking.
 """
 
+from __future__ import annotations
+
 import asyncio
 
 from resync.core.connection_pool_manager import ConnectionPoolStats
@@ -12,7 +14,7 @@ from resync.core.health_models import HealthCheckConfig
 from resync.core.health_service import HealthCheckService
 
 
-async def test_threshold_logic():
+async def test_threshold_logic() -> None:
     """Test the threshold calculation logic directly."""
     print("Testing database connection threshold functionality...")
 
@@ -88,7 +90,7 @@ async def test_threshold_logic():
     return True
 
 
-async def test_configurable_values():
+async def test_configurable_values() -> None:
     """Test different threshold configurations."""
     print("\n" + "="*60)
     print("Testing configurable threshold values...")
@@ -102,7 +104,7 @@ async def test_configurable_values():
     print("All threshold values accepted successfully!")
 
 
-async def main():
+async def main() -> None:
     """Run all manual tests."""
     print("Database Connection Threshold Testing")
     print("=" * 50)

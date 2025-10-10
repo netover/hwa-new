@@ -3,9 +3,11 @@ Direct validation of connection pooling implementation.
 Tests core classes without full application dependencies.
 """
 
+from __future__ import annotations
+
 import asyncio
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from unittest.mock import Mock
 
 
@@ -52,21 +54,21 @@ class ConnectionPool:
         self._initialized = False
         self._shutdown = False
 
-    async def initialize(self):
+    async def initialize(self) -> bool:
         """Initialize the connection pool."""
         self._initialized = True
         return True
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         """Shutdown the connection pool."""
         self._shutdown = True
         self._initialized = False
 
-    def get_stats(self):
+    def get_stats(self) -> ConnectionPoolStats:
         """Get pool statistics."""
         return self.stats
 
-    async def health_check(self):
+    async def health_check(self) -> bool:
         """Perform health check on the pool."""
         self.stats.last_health_check = "now"
         return True
@@ -78,16 +80,16 @@ class DatabaseConnectionPool(ConnectionPool):
     def __init__(self, config: ConnectionPoolConfig, database_url: str):
         super().__init__(config)
         self.database_url = database_url
-        self._engine = None
+        self._engine: Any = None
 
-    async def initialize(self):
+    async def initialize(self) -> bool:
         """Initialize database connection pool."""
         await super().initialize()
         # Mock database engine creation
         self._engine = Mock()
         return True
 
-    async def get_connection(self):
+    async def get_connection(self) -> Any:
         """Get database connection from pool."""
         self.stats.pool_hits += 1
         self.stats.active_connections += 1
@@ -104,16 +106,16 @@ class RedisConnectionPool(ConnectionPool):
     def __init__(self, config: ConnectionPoolConfig, redis_url: str):
         super().__init__(config)
         self.redis_url = redis_url
-        self._connection_pool = None
+        self._connection_pool: Any = None
 
-    async def initialize(self):
+    async def initialize(self) -> bool:
         """Initialize Redis connection pool."""
         await super().initialize()
         # Mock Redis connection pool creation
         self._connection_pool = Mock()
         return True
 
-    async def get_connection(self):
+    async def get_connection(self) -> Any:
         """Get Redis connection from pool."""
         self.stats.pool_hits += 1
         self.stats.active_connections += 1
@@ -129,16 +131,16 @@ class HTTPConnectionPool(ConnectionPool):
     def __init__(self, config: ConnectionPoolConfig, base_url: str):
         super().__init__(config)
         self.base_url = base_url
-        self._client = None
+        self._client: Any = None
 
-    async def initialize(self):
+    async def initialize(self) -> bool:
         """Initialize HTTP connection pool."""
         await super().initialize()
         # Mock HTTP client creation
         self._client = Mock()
         return True
 
-    async def get_connection(self):
+    async def get_connection(self) -> Any:
         """Get HTTP connection from pool."""
         self.stats.pool_hits += 1
         self.stats.active_connections += 1
@@ -151,28 +153,28 @@ class HTTPConnectionPool(ConnectionPool):
 class ConnectionPoolManager:
     """Central connection pool manager."""
 
-    def __init__(self):
-        self.pools: Dict[str, ConnectionPool] = {}
+    def __init__(self) -> None:
+        self.pools: dict[str, ConnectionPool] = {}
         self._initialized = False
         self._shutdown = False
 
-    async def initialize(self):
+    async def initialize(self) -> bool:
         """Initialize the connection pool manager."""
         self._initialized = True
         return True
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         """Shutdown the connection pool manager."""
         for pool in self.pools.values():
             await pool.shutdown()
         self._shutdown = True
         self._initialized = False
 
-    def get_pool(self, pool_name: str) -> Optional[ConnectionPool]:
+    def get_pool(self, pool_name: str) -> ConnectionPool | None:
         """Get a specific pool by name."""
         return self.pools.get(pool_name)
 
-    def get_all_pools(self) -> Dict[str, ConnectionPool]:
+    def get_all_pools(self) -> dict[str, ConnectionPool]:
         """Get all pools."""
         return self.pools.copy()
 
@@ -181,7 +183,7 @@ class ConnectionPoolManager:
         return self._initialized and not self._shutdown
 
 
-async def test_connection_pool_config():
+async def test_connection_pool_config() -> bool:
     """Test connection pool configuration."""
     print("Testing ConnectionPoolConfig...")
 
@@ -201,7 +203,7 @@ async def test_connection_pool_config():
     return True
 
 
-async def test_connection_pool_stats():
+async def test_connection_pool_stats() -> bool:
     """Test connection pool statistics."""
     print("Testing ConnectionPoolStats...")
 
@@ -226,7 +228,7 @@ async def test_connection_pool_stats():
     return True
 
 
-async def test_database_connection_pool():
+async def test_database_connection_pool() -> bool:
     """Test database connection pool."""
     print("Testing DatabaseConnectionPool...")
 
@@ -252,7 +254,7 @@ async def test_database_connection_pool():
     return True
 
 
-async def test_redis_connection_pool():
+async def test_redis_connection_pool() -> bool:
     """Test Redis connection pool."""
     print("Testing RedisConnectionPool...")
 
@@ -277,7 +279,7 @@ async def test_redis_connection_pool():
     return True
 
 
-async def test_http_connection_pool():
+async def test_http_connection_pool() -> bool:
     """Test HTTP connection pool."""
     print("Testing HTTPConnectionPool...")
 
@@ -302,7 +304,7 @@ async def test_http_connection_pool():
     return True
 
 
-async def test_connection_pool_manager():
+async def test_connection_pool_manager() -> bool:
     """Test connection pool manager."""
     print("Testing ConnectionPoolManager...")
 
@@ -348,7 +350,7 @@ async def test_connection_pool_manager():
     return True
 
 
-async def test_concurrent_access():
+async def test_concurrent_access() -> bool:
     """Test concurrent access to connection pools."""
     print("Testing concurrent access...")
 
@@ -364,7 +366,7 @@ async def test_concurrent_access():
 
     results = []
 
-    async def concurrent_operation(op_id):
+    async def concurrent_operation(op_id: int) -> bool:
         try:
             async with pool.get_connection():
                 await asyncio.sleep(0.001)  # Simulate work
@@ -387,7 +389,7 @@ async def test_concurrent_access():
     return True
 
 
-async def main():
+async def main() -> int:
     """Run all validation tests."""
     print("Running connection pooling validation tests...")
     print("=" * 60)

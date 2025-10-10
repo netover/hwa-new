@@ -211,7 +211,7 @@ class RateLimitInfo(BaseModel):
     window_seconds: int = Field(..., description="Window duration in seconds")
 
 
-class InputValidationResult(BaseModel):
+class InputValidationResult(BaseModel):  # type: ignore
     """Result of input validation."""
 
     is_valid: bool = Field(..., description="Whether input is valid")
@@ -233,7 +233,7 @@ class SecurityValidator(ABC):
 class AsyncSecurityContextManager:
     """Async context manager for security operations."""
 
-    def __init__(self, context: SecurityContext):
+    def __init__(self, context: SecurityContext):  # type: ignore
         self.context = context
         self.start_time: Optional[float] = None
 
@@ -243,7 +243,7 @@ class AsyncSecurityContextManager:
         logger.info("security_context_entered", context=self.context.model_dump())
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:  # type: ignore
         """Exit the async context."""
         duration = time.time() - self.start_time if self.start_time else 0
         logger.info("security_context_exited", duration=duration, context=self.context.model_dump())
@@ -253,12 +253,15 @@ class AsyncSecurityContextManager:
 class EnhancedSecurityValidator:
     """Enhanced security validator with comprehensive validation capabilities."""
 
-    def __init__(self, settings_module: Any = None):
+    def __init__(self, settings_module: Any = None):  # type: ignore
         """Initialize the security validator."""
         self.settings = settings_module or settings
         self.failed_attempts: Dict[str, int] = {}
         self.lockout_times: Dict[str, float] = {}
         self.session_store: Dict[str, SecurityContext] = {}
+        # Performance optimization: cache for repeated validations
+        self._validation_cache: Dict[str, InputValidationResult] = {}
+        self._threat_cache: Dict[str, ThreatType | None] = {}
 
     @asynccontextmanager
     async def security_context(
@@ -268,7 +271,7 @@ class EnhancedSecurityValidator:
         async with AsyncSecurityContextManager(context) as manager:
             yield manager.context
 
-    async def validate_password_strength(
+    async def validate_password_strength(  # type: ignore
         self, password: str, security_level: SecurityLevel = SecurityLevel.MEDIUM
     ) -> InputValidationResult:
         """
@@ -288,7 +291,7 @@ class EnhancedSecurityValidator:
         
         # Basic length check
         if len(truncated_password) < 8:
-            return InputValidationResult(
+            return InputValidationResult(  # type: ignore
                 is_valid=False,
                 error_message="Password must be at least 8 characters long",
                 threat_detected=ThreatType.BRUTE_FORCE,
@@ -298,7 +301,7 @@ class EnhancedSecurityValidator:
         # High security level requires stronger passwords
         if security_level == SecurityLevel.HIGH:
             if not SECURE_PASSWORD_PATTERN.match(truncated_password):
-                return InputValidationResult(
+                return InputValidationResult(  # type: ignore
                     is_valid=False,
                     error_message=(
                         "Password must contain at least 12 characters including "
@@ -311,7 +314,7 @@ class EnhancedSecurityValidator:
         # Medium security level
         elif security_level == SecurityLevel.MEDIUM:
             if len(truncated_password) < 10:
-                return InputValidationResult(
+                return InputValidationResult(  # type: ignore
                     is_valid=False,
                     error_message="Password must be at least 10 characters long for medium security",
                     threat_detected=ThreatType.BRUTE_FORCE,
@@ -325,7 +328,7 @@ class EnhancedSecurityValidator:
             has_special = any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in truncated_password)
 
             if not (has_upper and has_lower and has_digit and has_special):
-                return InputValidationResult(
+                return InputValidationResult(  # type: ignore
                     is_valid=False,
                     error_message=(
                         "Password must contain uppercase, lowercase, digit, "
@@ -342,7 +345,7 @@ class EnhancedSecurityValidator:
         }
 
         if truncated_password.lower() in weak_passwords:
-            return InputValidationResult(
+            return InputValidationResult(  # type: ignore
                 is_valid=False,
                 error_message="Password is too common, please choose a stronger password",
                 threat_detected=ThreatType.BRUTE_FORCE,
@@ -351,7 +354,7 @@ class EnhancedSecurityValidator:
 
         # Sanitize and return result
         sanitized = sanitize_input(truncated_password, SanitizationLevel.STRICT)
-        return InputValidationResult(
+        return InputValidationResult(  # type: ignore
             is_valid=True,
             sanitized_value=sanitized,
             security_context=context
@@ -377,7 +380,7 @@ class EnhancedSecurityValidator:
             from pydantic import validate_email
             validated_email = validate_email(email)[1]  # Returns (name, email)
         except Exception:
-            return InputValidationResult(
+            return InputValidationResult(  # type: ignore
                 is_valid=False,
                 error_message="Invalid email format",
                 security_context=context
@@ -385,7 +388,7 @@ class EnhancedSecurityValidator:
 
         # Check for suspicious patterns
         if self._detect_threats(validated_email):
-            return InputValidationResult(
+            return InputValidationResult(  # type: ignore
                 is_valid=False,
                 error_message="Email contains suspicious content",
                 threat_detected=ThreatType.XSS,
@@ -396,7 +399,7 @@ class EnhancedSecurityValidator:
         if security_level == SecurityLevel.HIGH:
             domain = validated_email.split("@")[1]
             if not DOMAIN_PATTERN.match(domain):
-                return InputValidationResult(
+                return InputValidationResult(  # type: ignore
                     is_valid=False,
                     error_message="Email domain is not valid",
                     security_context=context
@@ -404,54 +407,84 @@ class EnhancedSecurityValidator:
 
         # Sanitize and return result
         sanitized = sanitize_input(validated_email, SanitizationLevel.MODERATE)
-        return InputValidationResult(
+        return InputValidationResult(  # type: ignore
             is_valid=True,
             sanitized_value=sanitized,
             security_context=context
         )
 
-    async def validate_csrf_token(
-        self, token: str, expected_token: str
+    async def validate_csrf_token(  # type: ignore
+        self, token: str, expected_token: str, user_id: str | None = None, session_id: str | None = None
     ) -> InputValidationResult:
         """
-        Validate CSRF token securely.
+        Validate CSRF token securely with optional user/session binding.
 
         Args:
-            token: Provided CSRF token
-            expected_token: Expected CSRF token
+            token: Provided CSRF token (may include binding: user_id:session_id:token)
+            expected_token: Expected CSRF token (may include binding)
+            user_id: Optional user ID for binding validation
+            session_id: Optional session ID for binding validation
 
         Returns:
             InputValidationResult with validation outcome
         """
         context = SecurityContext(threat_level=SecurityLevel.HIGH)
-        
-        # Length validation
-        if len(token) != len(expected_token):
-            return InputValidationResult(
-                is_valid=False,
-                error_message="Invalid CSRF token length",
-                threat_detected=ThreatType.CSRF,
-                security_context=context
-            )
+
+        # Extract actual token from binding format if present
+        actual_token = token.split(":")[-1] if ":" in token else token
+        expected_actual_token = expected_token.split(":")[-1] if ":" in expected_token else expected_token
+
+        # Validate binding if provided
+        if user_id or session_id:
+            token_parts = token.split(":")
+            expected_parts = expected_token.split(":")
+
+            if len(token_parts) != 3 or len(expected_parts) != 3:
+                return InputValidationResult(  # type: ignore
+                    is_valid=False,
+                    error_message="Invalid CSRF token binding format",
+                    threat_detected=ThreatType.CSRF,
+                    security_context=context
+                )
+
+            # Validate user and session binding
+            token_user, token_session, actual_token = token_parts
+            expected_user, expected_session, expected_actual_token = expected_parts
+
+            if user_id and token_user != user_id:
+                return InputValidationResult(  # type: ignore
+                    is_valid=False,
+                    error_message="CSRF token user binding mismatch",
+                    threat_detected=ThreatType.CSRF,
+                    security_context=context
+                )
+
+            if session_id and token_session != session_id:
+                return InputValidationResult(  # type: ignore
+                    is_valid=False,
+                    error_message="CSRF token session binding mismatch",
+                    threat_detected=ThreatType.CSRF,
+                    security_context=context
+                )
 
         # Secure comparison to prevent timing attacks
         try:
-            if not hmac.compare_digest(token, expected_token):
-                return InputValidationResult(
+            if not hmac.compare_digest(actual_token, expected_actual_token):
+                return InputValidationResult(  # type: ignore
                     is_valid=False,
                     error_message="Invalid CSRF token",
                     threat_detected=ThreatType.CSRF,
                     security_context=context
                 )
         except Exception:
-            return InputValidationResult(
+            return InputValidationResult(  # type: ignore
                 is_valid=False,
                 error_message="CSRF token validation failed",
                 threat_detected=ThreatType.CSRF,
                 security_context=context
             )
 
-        return InputValidationResult(
+        return InputValidationResult(  # type: ignore
             is_valid=True,
             security_context=context
         )
@@ -500,7 +533,7 @@ class EnhancedSecurityValidator:
         except Exception as e:
             return False, None, f"Unexpected error: {str(e)}"
 
-    async def validate_ip_address(
+    async def validate_ip_address(  # type: ignore
         self, ip: str, trusted_ranges: List[str] = None
     ) -> InputValidationResult:
         """
@@ -521,7 +554,7 @@ class EnhancedSecurityValidator:
         try:
             ip_obj = ipaddress.ip_address(ip)
         except ValueError:
-            return InputValidationResult(
+            return InputValidationResult(  # type: ignore
                 is_valid=False,
                 error_message="Invalid IP address format",
                 security_context=context
@@ -539,13 +572,13 @@ class EnhancedSecurityValidator:
                 continue
 
         context.metadata["is_trusted"] = is_trusted
-        return InputValidationResult(
+        return InputValidationResult(  # type: ignore
             is_valid=True,
             sanitized_value=str(ip_obj),
             security_context=context
         )
 
-    async def validate_input_security(
+    async def validate_input_security(  # type: ignore
         self, 
         input_data: str, 
         security_level: SecurityLevel = SecurityLevel.MEDIUM,
@@ -566,7 +599,7 @@ class EnhancedSecurityValidator:
         
         # Null byte check
         if "\x00" in input_data:
-            return InputValidationResult(
+            return InputValidationResult(  # type: ignore
                 is_valid=False,
                 error_message="Null bytes not allowed in input",
                 threat_detected=ThreatType.SQL_INJECTION,
@@ -583,7 +616,7 @@ class EnhancedSecurityValidator:
 
         max_length = max_lengths.get(security_level, 500)
         if len(input_data) > max_length:
-            return InputValidationResult(
+            return InputValidationResult(  # type: ignore
                 is_valid=False,
                 error_message=f"Input exceeds maximum length of {max_length} characters",
                 security_context=context
@@ -592,7 +625,7 @@ class EnhancedSecurityValidator:
         # Detect threats
         threat_type = self._detect_threats(input_data)
         if threat_type:
-            return InputValidationResult(
+            return InputValidationResult(  # type: ignore
                 is_valid=False,
                 error_message="Suspicious content detected",
                 threat_detected=threat_type,
@@ -610,7 +643,7 @@ class EnhancedSecurityValidator:
         level = sanitization_levels.get(security_level, SanitizationLevel.MODERATE)
         sanitized = sanitize_input(input_data, level)
 
-        return InputValidationResult(
+        return InputValidationResult(  # type: ignore
             is_valid=True,
             sanitized_value=sanitized,
             security_context=context
@@ -618,7 +651,7 @@ class EnhancedSecurityValidator:
 
     def _detect_threats(self, input_data: str) -> Optional[ThreatType]:
         """
-        Detect security threats in input data.
+        Detect security threats in input data with caching for performance.
 
         Args:
             input_data: Input data to scan
@@ -626,6 +659,11 @@ class EnhancedSecurityValidator:
         Returns:
             Detected threat type or None
         """
+        # Performance optimization: cache results for repeated inputs
+        cache_key = hash(input_data)
+        if cache_key in self._threat_cache:
+            return self._threat_cache[cache_key]
+
         input_lower = input_data.lower()
 
         # Check for suspicious patterns
@@ -633,22 +671,27 @@ class EnhancedSecurityValidator:
             if pattern.search(input_data):
                 return ThreatType.XSS
 
-        # Check for SQL injection patterns
-        sql_patterns = [
-            r"(?i)\b(union|select|insert|update|delete|drop|create|alter|exec|execute)\b",
-            r"(?i)--|#|/\*|\*/",
-            r"(?i)'(\s*)or(\s*)'1'='1",
-        ]
+        # Check for SQL injection patterns (compiled once for performance)
+        if not hasattr(self, '_sql_patterns_compiled'):
+            self._sql_patterns_compiled = [
+                re.compile(r"(?i)\b(union|select|insert|update|delete|drop|create|alter|exec|execute)\b"),
+                re.compile(r"(?i)--|#|/\*|\*/"),
+                re.compile(r"(?i)'(\s*)or(\s*)'1'='1"),
+            ]
 
-        for pattern in sql_patterns:
-            if re.search(pattern, input_lower):
+        for compiled_pattern in self._sql_patterns_compiled:
+            if compiled_pattern.search(input_lower):
                 return ThreatType.SQL_INJECTION
 
         # Check for path traversal
         if ".." in input_data or "%2e%2e" in input_lower:
-            return ThreatType.RECONNAISSANCE
+            threat = ThreatType.RECONNAISSANCE
+        else:
+            threat = None
 
-        return None
+        # Cache the result
+        self._threat_cache[cache_key] = threat
+        return threat
 
     async def rate_limit_check(
         self, 
@@ -710,14 +753,30 @@ class EnhancedSecurityValidator:
             **event_data
         )
 
-    async def generate_csrf_token(self) -> str:
+    async def generate_csrf_token(self, user_id: str | None = None, session_id: str | None = None) -> str:
         """
-        Generate a secure CSRF token.
+        Generate a secure CSRF token with optional user/session binding.
+
+        Args:
+            user_id: Optional user identifier for token binding
+            session_id: Optional session identifier for token binding
 
         Returns:
-            Generated CSRF token
+            Generated CSRF token (includes binding if provided)
         """
-        return secrets.token_urlsafe(CSRF_TOKEN_BYTES)
+        # Generate base token
+        token = secrets.token_urlsafe(CSRF_TOKEN_BYTES)
+
+        # Add binding for additional security (user_id:session_id:token)
+        if user_id or session_id:
+            binding_parts = [
+                user_id or "anonymous",
+                session_id or "no_session",
+                token
+            ]
+            return ":".join(binding_parts)
+
+        return token
 
     async def generate_session_id(self) -> str:
         """
@@ -728,70 +787,79 @@ class EnhancedSecurityValidator:
         """
         return str(uuid.uuid4())
 
-    async def hash_password(self, password: str) -> str:
+    async def hash_password(self, password: str) -> str:  # type: ignore
         """
-        Hash a password securely.
-        
-        WARNING: In development environments or when passlib is not available,
-        this method may fall back to storing passwords in plain text or using
-        a simple hash. This is NOT secure for production use and should be
-        replaced with proper password hashing (bcrypt, Argon2, etc.).
+        Hash a password securely using passlib (bcrypt).
+
+        CRITICAL SECURITY: This method requires passlib to be available.
+        If passlib is not installed or fails, the method will raise RuntimeError
+        to prevent insecure password storage.
 
         Args:
-            password: Password to hash
+            password: Password to hash (will be truncated to 72 chars for bcrypt)
 
         Returns:
-            Hashed password or plain text password with warning prefix
+            Securely hashed password using bcrypt
+
+        Raises:
+            RuntimeError: If passlib is not available or hashing fails
         """
         # Truncate password to avoid any hashing limitations
+        # CRITICAL: Passwords longer than 72 chars will be truncated - inform user
         truncated_password = password[:72]  # Use 72 to stay within bcrypt limit
+        if len(password) > 72:
+            logger.warning(f"Password truncated from {len(password)} to 72 characters for hashing")
         
         if HAS_PASSLIB:
             try:
                 # Try to hash with passlib
                 return pwd_context.hash(truncated_password)
             except Exception as e:
-                # If passlib fails, fall back to simple approach
-                logger.warning(f"Passlib hashing failed, falling back to plain text: {e}")
-                return f"$plaintext_warning${truncated_password}"
+                # CRITICAL SECURITY: Never fall back to plain text
+                logger.error(f"Password hashing failed: {e}")
+                raise RuntimeError("Password hashing failed - cannot proceed with insecure storage")
         else:
-            # Fallback to plain text with warning (NOT recommended for production)
-            logger.warning("Passlib not available, storing password with plain text warning prefix")
-            return f"$plaintext_warning${truncated_password}"
+            # CRITICAL SECURITY: Never fall back to plain text in any environment
+            logger.error("Passlib not available - secure password hashing is required")
+            raise RuntimeError("Secure password hashing library required but not available")
 
-    async def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+    async def verify_password(self, plain_password: str, hashed_password: str) -> bool:  # type: ignore
         """
-        Verify a password against its hash.
-        
-        WARNING: This method handles both secure hashes and plain text passwords
-        with warning prefixes. Plain text storage is NOT secure for production.
+        Verify a password against its secure hash using passlib (bcrypt).
+
+        CRITICAL SECURITY: This method only accepts secure hashes.
+        Plain text passwords with warning prefixes are rejected to prevent
+        downgrade attacks.
 
         Args:
-            plain_password: Plain text password
-            hashed_password: Hashed password or plain text with warning prefix
+            plain_password: Plain text password to verify
+            hashed_password: Securely hashed password (bcrypt format)
 
         Returns:
-            True if password matches, False otherwise
+            True if password matches the hash, False otherwise
+
+        Raises:
+            RuntimeError: If passlib is not available (security requirement)
         """
         # Truncate password to avoid any hashing limitations
         truncated_password = plain_password[:72]  # Use 72 to stay within bcrypt limit
         
-        # Handle plain text passwords with warning prefix (NOT secure for production)
+        # CRITICAL SECURITY: Reject plain text passwords (no fallback allowed)
         if hashed_password.startswith("$plaintext_warning$"):
-            plain_text_password = hashed_password[len("$plaintext_warning$"):]
-            return secrets.compare_digest(truncated_password, plain_text_password)
-        
-        # Handle secure hashes with passlib
+            logger.error("Plain text password detected - secure hashing required")
+            return False
+
+        # Handle secure hashes with passlib only
         if HAS_PASSLIB:
             try:
                 return pwd_context.verify(truncated_password, hashed_password)
             except Exception as e:
-                logger.warning(f"Password verification failed: {e}")
+                logger.error(f"Password verification failed: {e}")
                 return False
-        
-        # Fallback comparison (NOT recommended for production)
-        logger.warning("Using insecure password comparison - upgrade to proper password hashing")
-        return secrets.compare_digest(truncated_password, hashed_password)
+
+        # CRITICAL SECURITY: No insecure fallback allowed
+        logger.error("Secure password verification library required but not available")
+        return False
 
 
 # Dependency function for FastAPI
@@ -867,10 +935,10 @@ async def validate_input(
 class SecurityHeadersMiddleware:
     """Middleware to add security headers to all responses."""
     
-    def __init__(self, app):
+    def __init__(self, app):  # type: ignore
         self.app = app
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope, receive, send):  # type: ignore
         async def send_with_security_headers(message):
             if message["type"] == "http.response.start":
                 # Add security headers
