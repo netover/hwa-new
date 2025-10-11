@@ -40,16 +40,16 @@ def create_container() -> DIContainer:
     container.register(IKnowledgeGraph, AsyncKnowledgeGraph, ServiceLifetime.SINGLETON)
 
     # Register TWS client based on settings
-    if settings.tws_mock_mode:
+    if settings.TWS_MOCK_MODE:
         container.register(ITWSClient, MockTWSClient, ServiceLifetime.SINGLETON)
     else:
         # Register factory function for OptimizedTWSClient with proper configuration
         def create_tws_client(container_instance):
             return OptimizedTWSClient(
-                hostname=settings.tws_host or "localhost",
-                port=settings.tws_port or 31111,
-                username=settings.tws_user or "tws_user",
-                password=settings.tws_password or "tws_password",
+                hostname=settings.TWS_HOST or "localhost",
+                port=settings.TWS_PORT or 31111,
+                username=settings.TWS_USER or "tws_user",
+                password=settings.TWS_PASSWORD or "tws_password",
             )
 
         container.register_factory(

@@ -220,19 +220,19 @@ class TWS_LLMOptimizer:
                 # Use streaming for troubleshooting
                 response = await self.stream_llm_response(prompt, model)
             else:
-                async with llm_api_breaker:
-                    response = await call_llm(
-                        prompt,
-                        model=model,
-                        max_tokens=500 if template_key != "troubleshooting" else 1000,
-                        # Pass settings-based configuration to take advantage of LiteLLM features
-                        api_base=getattr(settings, "LLM_ENDPOINT", None),
-                        api_key=(
-                            settings.LLM_API_KEY
-                            if settings.LLM_API_KEY != "your_default_api_key_here"
-                            else None
-                        ),
-                    )
+                response = await llm_api_breaker.async_call(
+                    call_llm,
+                    prompt,
+                    model=model,
+                    max_tokens=500 if template_key != "troubleshooting" else 1000,
+                    # Pass settings-based configuration to take advantage of LiteLLM features
+                    api_base=getattr(settings, "LLM_ENDPOINT", None),
+                    api_key=(
+                        settings.LLM_API_KEY
+                        if settings.LLM_API_KEY != "your_default_api_key_here"
+                        else None
+                    ),
+                )
 
             response_time = time.time() - start_time
 

@@ -24,7 +24,7 @@ class SyncItem(BaseModel):
     id: int
     content: str
     checksum: str
-    created_at: datetime = None
+    created_at: datetime | None = None
 
     @field_validator("checksum")
     @classmethod
@@ -107,7 +107,7 @@ class AuditRecord(BaseModel):
     ia_audit_reason: str | None = None
     ia_audit_confidence: float | None = None
     status: str = "pending"
-    timestamp: datetime = None  # Add timestamp
+    timestamp: datetime | None = None  # Add timestamp
 
     @field_validator("memory_id")
     @classmethod
@@ -324,7 +324,10 @@ class DocumentUpload(BaseModel):
 
         # Check file extension (only allow specific file types)
         allowed_extensions = {".pdf", ".docx", ".xlsx", ".txt", ".csv", ".json"}
-        file_extension = "." + v.lower().split(".")[-1] if "." in v else ""
+        file_extension = ""
+        if "." in v:
+            file_extension = "." + v.lower().split(".")[-1]
+
         if file_extension not in allowed_extensions:
             raise ValueError(
                 f'File type not allowed. Allowed types: {", ".join(allowed_extensions)}'
@@ -382,3 +385,42 @@ class DocumentUpload(BaseModel):
             raise ValueError("File too large. Maximum size is 10MB.")
 
         return v
+
+
+class CorsConfigResponse(BaseModel):
+    """Response model for CORS configuration."""
+
+    allow_origins: list[str]
+    allow_methods: list[str]
+    allow_headers: list[str]
+    allow_credentials: bool
+    expose_headers: list[str]
+    max_age: int
+
+
+class CorsTestParams(BaseModel):
+    """Parameters for testing a CORS policy."""
+
+    origin: str
+    method: str
+    path: str
+
+
+class CorsTestResponse(BaseModel):
+    """Response model for a CORS policy test."""
+
+    is_allowed: bool
+    origin: str
+    method: str
+
+
+class OriginValidationRequest(BaseModel):
+    """Request model for validating a list of origins."""
+
+    origins: list[str]
+
+
+class OriginValidationResponse(BaseModel):
+    """Response model for origin validation."""
+
+    validated_origins: dict[str, str]

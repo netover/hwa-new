@@ -18,6 +18,7 @@ from resync.core.health_service import (
     get_health_check_service,
     shutdown_health_check_service,
 )
+from resync.core.metrics import runtime_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -121,9 +122,6 @@ async def get_health_summary(
             auto_enable and health_result.overall_status != HealthStatus.UNHEALTHY
         )
 
-        # Import runtime_metrics to record metrics
-        from resync.core.metrics import runtime_metrics
-
         runtime_metrics.health_check_with_auto_enable.increment()
 
         return HealthSummaryResponse(
@@ -137,22 +135,20 @@ async def get_health_summary(
             performance_metrics=health_result.performance_metrics,
         )
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        # Import runtime_metrics to record metrics
-        from resync.core.metrics import runtime_metrics
-
+        original_exception = e
+        logger.error(f"Health check failed: {original_exception}")
         # Increment counter for health check failures if we can
         try:
             runtime_metrics.health_check_with_auto_enable.increment()
-        except (AttributeError, ImportError, Exception) as e:
+        except (AttributeError, ImportError, Exception) as metrics_e:
             # Log metrics failure but don't fail the health check
             logger.warning(
-                f"Failed to increment health check metrics: {e}", exc_info=True
+                f"Failed to increment health check metrics: {metrics_e}", exc_info=True
             )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Health check system error: {str(e)}",
-        ) from e
+            detail=f"Health check system error: {str(original_exception)}",
+        ) from original_exception
 
 
 @router.get("/core", response_model=CoreHealthResponse)
@@ -465,8 +461,11 @@ async def recover_component(component_name: str) -> Dict[str, Any]:
 
         return response_data
 
+    except HTTPException as e:
+        # Re-raise HTTPException to preserve the original status code and detail
+        raise e
     except Exception as e:
-        logger.error(f"Component recovery failed: {e}")
+        logger.error(f"Component recovery failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -514,8 +513,8 @@ async def get_redis_health() -> Dict[str, Any]:
                 if redis_component.last_check
                 else None
             ),
-            "response_time": redis_component.response_time,
-            "details": redis_component.details or {},
+            "response_time_ms": redis_component.response_time_ms,
+            "details": redis_component.metadata or {},
         }
 
         # Determine if system can guarantee idempotency
@@ -617,130 +616,4 @@ async def shutdown_health_service():
         await shutdown_health_check_service()
         logger.info("Health service shutdown completed")
     except Exception as e:
-        logger.error(f"Error during health service shutdown: {e}")
-
-
-async def health_check_core(request) -> JSONResponse:
-    """
-    Health check endpoint handler for core components.
-
-    Args:
-        request: FastAPI request object
-
-    Returns:
-        JSONResponse: Core health status response
-    """
-    try:
-        core_health = await get_core_health()
-        return JSONResponse(
-            status_code=status.HTTP_200_OK, content=core_health.model_dump()
-        )
-    except HTTPException as e:
-        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
-    except Exception as e:
-        logger.error(f"Core health check endpoint error: {e}")
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"error": f"Core health check failed: {str(e)}"},
-        )
-
-
-async def health_check_detailed(request) -> JSONResponse:
-    """
-    Health check endpoint handler for detailed health information.
-
-    Args:
-        request: FastAPI request object
-
-    Returns:
-        JSONResponse: Detailed health status response
-    """
-    try:
-        detailed_health = await get_detailed_health()
-        return JSONResponse(
-            status_code=status.HTTP_200_OK, content=detailed_health.model_dump()
-        )
-    except HTTPException as e:
-        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
-    except Exception as e:
-        logger.error(f"Detailed health check endpoint error: {e}")
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"error": f"Detailed health check failed: {str(e)}"},
-        )
-
-
-async def health_check_ready(request) -> JSONResponse:
-    """
-    Readiness probe endpoint handler.
-
-    Args:
-        request: FastAPI request object
-
-    Returns:
-        JSONResponse: Readiness status response
-    """
-    try:
-        ready_status = await readiness_probe()
-        status_code = (
-            status.HTTP_200_OK
-            if ready_status.get("ready", False)
-            else status.HTTP_503_SERVICE_UNAVAILABLE
-        )
-        return JSONResponse(status_code=status_code, content=ready_status)
-    except Exception as e:
-        logger.error(f"Readiness probe endpoint error: {e}")
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"ready": False, "error": str(e)},
-        )
-
-
-async def health_check_live(request) -> JSONResponse:
-    """
-    Liveness probe endpoint handler.
-
-    Args:
-        request: FastAPI request object
-
-    Returns:
-        JSONResponse: Liveness status response
-    """
-    try:
-        live_status = await liveness_probe()
-        return JSONResponse(status_code=status.HTTP_200_OK, content=live_status)
-    except Exception as e:
-        logger.error(f"Liveness probe endpoint error: {e}")
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"alive": False, "error": str(e)},
-        )
-
-
-async def health_check() -> Dict[str, Any]:
-    """
-    Basic health check function for external use.
-
-    Returns:
-        Dict[str, Any]: Basic health status information
-    """
-    try:
-        health_service = await get_health_check_service()
-        health_result = await health_service.perform_comprehensive_health_check()
-
-        return {
-            "status": health_result.overall_status.value,
-            "timestamp": health_result.timestamp.isoformat(),
-            "correlation_id": health_result.correlation_id,
-            "healthy": health_result.overall_status == HealthStatus.HEALTHY,
-            "message": get_status_description(health_result.overall_status),
-        }
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return {
-            "status": "unhealthy",
-            "timestamp": datetime.now().isoformat(),
-            "healthy": False,
-            "error": str(e),
-        }
-        logger.error(f"Error during health service shutdown: {e}")
+        logger.error(f"Error during health service shutdown: {e}", exc_info=True)

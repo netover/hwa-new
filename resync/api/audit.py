@@ -280,7 +280,7 @@ async def review_memory(
                 )
                 raise HTTPException(status_code=404, detail="Audit record not found.")
 
-            await knowledge_graph.client.add_observations(
+            await knowledge_graph.add_observations(
                 review.memory_id, ["MANUALLY_APPROVED_BY_ADMIN"]
             )
 
@@ -319,7 +319,7 @@ async def review_memory(
                 )
                 raise HTTPException(status_code=404, detail="Audit record not found.")
 
-            await knowledge_graph.client.delete(review.memory_id)
+            await knowledge_graph.delete_memory(review.memory_id)
 
             # Log the successful audit event
             log_audit_event(
@@ -447,7 +447,7 @@ def get_audit_logs(
 async def create_audit_log(
     request: Request,
     audit_data: AuditRecordResponse,
-    idempotency_key: Optional[str] = Depends(require_idempotency_key),
+    idempotency_key: str = Depends(require_idempotency_key),
     manager: IdempotencyManager = Depends(get_idempotency_manager),
 ) -> AuditRecordResponse:
     """

@@ -36,6 +36,8 @@ async def get_tws_client() -> AsyncGenerator[OptimizedTWSClient | MockTWSClient,
             client = agent_manager._mock_tws_client
         else:
             # The agent_manager is responsible for lazily initializing the real client
+            if not agent_manager._initialized:
+                await agent_manager.load_agents_from_config()
             client = await agent_manager._get_tws_client()
 
         yield client

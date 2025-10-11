@@ -308,7 +308,7 @@ class TestIdempotencyMiddleware:
         manager_mock.get_cached_response.return_value = cached_response
 
         # Criar request mock
-        request = MagicMock()
+        request = MagicMock(spec=["method", "url", "headers"])
         request.method = "POST"
         request.url.path = "/api/test"
         request.headers = {"X-Idempotency-Key": "test-key"}

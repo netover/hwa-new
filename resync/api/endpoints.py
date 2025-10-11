@@ -5,8 +5,8 @@ from typing import Any
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from starlette.responses import HTMLResponse
 from fastapi.responses import (
-    HTMLResponse,
     PlainTextResponse,
     RedirectResponse,
     Response,
@@ -87,7 +87,7 @@ class TWSMetricsResponse(BaseModel):
     status: str
     critical_alerts: int
     warning_alerts: int
-    last_updated: Optional[str]
+    last_updated: str | None
 
 
 class APIRouterEnhanced:
@@ -183,9 +183,9 @@ def handle_error(e: Exception, operation: str) -> HTTPException:
 
 
 # --- HTML serving endpoint for the main dashboard ---
-@api_router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
+@api_router.get("/dashboard", include_in_schema=False)
 @public_rate_limit
-async def get_dashboard(request: Request) -> HTMLResponse:
+async def get_dashboard(request: Request) -> Response:
     """
     Serves the main `index.html` file for the dashboard.
     """
@@ -213,7 +213,7 @@ async def get_all_agents(
     """
     Returns the full configuration for all loaded agents.
     """
-    return await agent_manager.get_all_agents()  # type: ignore[no-untyped-call]
+    return await agent_manager.get_all_agents()
 
 
 # --- Test endpoint ---
@@ -277,7 +277,7 @@ async def get_workstations_status_cqrs(
     """
     try:
         query = GetWorkstationsStatusQuery()
-        result = await dispatcher.execute_query(query)  # type: ignore[no-untyped-call]
+        result = await dispatcher.execute_query(query)
 
         if not result.success:
             raise HTTPException(
@@ -285,7 +285,7 @@ async def get_workstations_status_cqrs(
                 detail=result.error or "Failed to retrieve workstation statuses",
             )
 
-        return result.data  # type: ignore[no-any-return]
+        return result.data
     except Exception as e:
         logger.error("Failed to get TWS workstation statuses: %s", e, exc_info=True)
         raise handle_error(e, "TWS workstation statuses retrieval")
@@ -302,7 +302,7 @@ async def get_jobs_status_cqrs(
     """
     try:
         query = GetJobsStatusQuery()
-        result = await dispatcher.execute_query(query)  # type: ignore[no-untyped-call]
+        result = await dispatcher.execute_query(query)
 
         if not result.success:
             raise HTTPException(
@@ -310,7 +310,7 @@ async def get_jobs_status_cqrs(
                 detail=result.error or "Failed to retrieve job statuses",
             )
 
-        return result.data  # type: ignore[no-any-return]
+        return result.data
     except Exception as e:
         logger.error("Failed to get TWS job statuses: %s", e, exc_info=True)
         raise handle_error(e, "TWS job statuses retrieval")
@@ -341,7 +341,7 @@ async def get_tws_health(
     """
     try:
         query = CheckTWSConnectionQuery()
-        result = await dispatcher.execute_query(query)  # type: ignore[no-untyped-call]
+        result = await dispatcher.execute_query(query)
 
         if not result.success:
             logger.error("TWS connection check failed: %s", result.error)
@@ -363,7 +363,7 @@ async def get_tws_health(
                 )
 
             # Record TWS status success metrics
-            runtime_metrics.tws_status_requests_success.increment()  # type: ignore[no-untyped-call]
+            runtime_metrics.tws_status_requests_success.increment()
 
             return {
                 "status": "ok",
@@ -390,10 +390,10 @@ async def get_tws_health(
 # --- Connection Validation Endpoint ---
 class ConnectionValidationRequest(BaseModel):
     auto_enable: bool = False
-    tws_host: Optional[str] = None
-    tws_port: Optional[int] = None
-    tws_user: Optional[str] = None
-    tws_password: Optional[str] = None
+    tws_host: str | None = None
+    tws_port: int | None = None
+    tws_user: str | None = None
+    tws_password: str | None = None
 
 
 @api_router.post(
@@ -416,7 +416,7 @@ async def validate_connection(
     """
     try:
         # Perform connection validation
-        validation_result = await tws_client.validate_connection(  # type: ignore[no-untyped-call]
+        validation_result = await tws_client.validate_connection(
             host=request.tws_host,
             port=request.tws_port,
             user=request.tws_user,
@@ -585,9 +585,9 @@ async def files_endpoint(request: Request, path: str) -> FilesResponse:
 
 
 # --- Login Endpoint ---
-@api_router.get("/login", response_class=HTMLResponse, include_in_schema=False)
+@api_router.get("/login", include_in_schema=False)
 @public_rate_limit
-async def login_page(request: Request) -> HTMLResponse:
+async def login_page(request: Request) -> Response:
     """
     Serve the login page for admin authentication.
     """
@@ -770,7 +770,7 @@ async def optimize_llm_query(
     with caching, model selection, and TWS-specific template matching.
     """
     try:
-        response = await optimized_llm.get_response(  # type: ignore[no-untyped-call]
+        response = await optimized_llm.get_response(
             query=query_data.query,
             context=query_data.context,
             use_cache=query_data.use_cache,
@@ -974,8 +974,8 @@ from typing import Optional
 
 class RunBenchmarkRequest(BaseModel):
     benchmark_name: str
-    iterations: Optional[int] = 100
-    warmup_rounds: Optional[int] = 10
+    iterations: int = 100
+    warmup_rounds: int = 10
 
 
 @api_router.post("/benchmark/run", summary="Run a performance benchmark")
@@ -1010,8 +1010,8 @@ async def run_benchmark(
                 name="TWS Status Check",
                 operation="tws_status",
                 func=benchmark_runner._benchmark_tws_status,
-                iterations=benchmark_data.iterations or 100,
-                warmup_rounds=benchmark_data.warmup_rounds or 10,
+                iterations=benchmark_data.iterations,
+                warmup_rounds=benchmark_data.warmup_rounds,
             )
             return {
                 "status": "success",
@@ -1023,8 +1023,8 @@ async def run_benchmark(
                 name="Agent Creation",
                 operation="create_agent",
                 func=benchmark_runner._benchmark_agent_creation,
-                iterations=benchmark_data.iterations or 100,
-                warmup_rounds=benchmark_data.warmup_rounds or 10,
+                iterations=benchmark_data.iterations,
+                warmup_rounds=benchmark_data.warmup_rounds,
             )
             return {
                 "status": "success",
@@ -1046,7 +1046,7 @@ async def run_benchmark(
 @api_router.get("/benchmark/results", summary="Get benchmark results history")
 @authenticated_rate_limit
 async def get_benchmark_results(
-    request: Request, operation: Optional[str] = None
+    request: Request, operation: str | None = None
 ) -> dict[str, Any]:
     """
     Get historical benchmark results.

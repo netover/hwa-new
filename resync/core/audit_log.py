@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Optional, Dict, List, Generator
 
+from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -45,6 +46,24 @@ class AuditLogEntry(Base):  # type: ignore
 
     def __repr__(self) -> str:
         return f"<AuditLogEntry(id={self.id}, action='{self.action}', user_id='{self.user_id}', timestamp='{self.timestamp}')>"
+
+
+class AuditLogResponse(BaseModel):
+    """
+    Pydantic model for audit log responses.
+    """
+
+    id: int
+    action: str
+    user_id: str
+    timestamp: datetime
+    details: str
+    correlation_id: Optional[str]
+    source_component: Optional[str]
+    severity: Optional[str]
+
+    class Config:
+        orm_mode = True
 
 
 class AuditLogManager:
@@ -168,7 +187,7 @@ class AuditLogManager:
         correlation_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[AuditLogResponse]:
         """
         Query audit logs with optional filters.
 
@@ -207,20 +226,7 @@ class AuditLogManager:
                 query = query.offset(offset).limit(limit)
 
                 # Convert to dictionaries to avoid session detachment issues
-                results = []
-                for entry in query.all():
-                    results.append(
-                        {
-                            "id": entry.id,
-                            "action": entry.action,
-                            "user_id": entry.user_id,
-                            "timestamp": entry.timestamp,
-                            "details": entry.details,
-                            "correlation_id": entry.correlation_id,
-                            "source_component": entry.source_component,
-                            "severity": entry.severity,
-                        }
-                    )
+                results = [AuditLogResponse.from_orm(entry) for entry in query.all()]
 
                 logger.debug(f"Queried {len(results)} audit logs")
                 return results

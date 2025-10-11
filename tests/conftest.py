@@ -128,8 +128,6 @@ def mock_knowledge_graph():
     from resync.core.interfaces import IKnowledgeGraph
 
     mock = AsyncMock(spec=IKnowledgeGraph)
-    mock.add_memory = AsyncMock()
-    mock.search = AsyncMock()
     mock.get_all_recent_conversations = AsyncMock(return_value=[])
     # Mock the .session attribute for the async_knowledge_graph fixture
     mock.session = AsyncMock()

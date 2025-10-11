@@ -5,20 +5,6 @@ from fastapi.testclient import TestClient
 
 from resync.core.agent_manager import AgentConfig
 from resync.core.fastapi_di import get_agent_manager
-from resync.main import app
-
-
-# Use the TestClient with our main FastAPI app
-# Patch the rate limit decorator to skip rate limiting during tests
-def mock_rate_limit_decorator(func):
-    return func
-
-
-with (
-    patch("resync.lifespan.initialize_redis_with_retry"),
-    patch("resync.core.rate_limiter.critical_rate_limit", mock_rate_limit_decorator),
-):
-    client = TestClient(app)
 
 # --- Sample Data for Mocking ---
 sample_agent_config_1 = AgentConfig(
@@ -43,20 +29,26 @@ sample_agent_config_2 = AgentConfig(
 
 
 @pytest.fixture
+def client(mock_agent_manager):
+    """Create a TestClient for the FastAPI app."""
+    from resync.api.agents import agents_router
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.include_router(agents_router, prefix="/api/v1/agents")
+    app.dependency_overrides[get_agent_manager] = lambda: mock_agent_manager
+    return TestClient(app)
+
+
+@pytest.fixture
 def mock_agent_manager():
     """
-    Fixture to provide a mock agent manager and override the FastAPI dependency
-    for the duration of a test.
+    Fixture to provide a mock agent manager.
     """
-    mock_manager = AsyncMock()
-    # Override the dependency injection for get_agent_manager
-    app.dependency_overrides[get_agent_manager] = lambda: mock_manager
-    yield mock_manager
-    # Clean up the override after the test is done
-    del app.dependency_overrides[get_agent_manager]
+    return AsyncMock()
 
 
-def test_list_all_agents_success(mock_agent_manager):
+def test_list_all_agents_success(client, mock_agent_manager):
     """
     Tests GET /api/v1/agents/ - successful retrieval of all agent configs.
     """
@@ -77,7 +69,7 @@ def test_list_all_agents_success(mock_agent_manager):
     assert response_data[1]["id"] == "test-agent-2"
 
 
-def test_get_agent_details_success(mock_agent_manager):
+def test_get_agent_details_success(client, mock_agent_manager):
     """
     Tests GET /api/v1/agents/{agent_id} - successful retrieval of a single agent.
     """
@@ -93,7 +85,7 @@ def test_get_agent_details_success(mock_agent_manager):
     mock_agent_manager.get_agent_config.assert_called_once_with("test-agent-1")
 
 
-def test_get_agent_details_not_found(mock_agent_manager):
+def test_get_agent_details_not_found(client, mock_agent_manager):
     """
     Tests GET /api/v1/agents/{agent_id} - when the agent is not found.
     Should return 404 with standardized error response format.

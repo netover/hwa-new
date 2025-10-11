@@ -118,7 +118,9 @@ async def admin_dashboard(request: Request) -> HTMLResponse:
     response_model=AdminConfigResponse,
     dependencies=[Depends(verify_admin_credentials)],
 )
-async def get_admin_config(request: Request) -> AdminConfigResponse:
+async def get_admin_config(
+    request: Request, teams_integration: TeamsIntegration = teams_integration_dependency
+) -> AdminConfigResponse:
     """Get current admin configuration.
 
     Returns the current configuration for all system components
@@ -126,7 +128,6 @@ async def get_admin_config(request: Request) -> AdminConfigResponse:
     """
     try:
         # Get Teams configuration
-        teams_integration = get_teams_integration()
         teams_config = teams_integration.config
 
         teams_config_dict = {
@@ -181,7 +182,9 @@ async def get_admin_config(request: Request) -> AdminConfigResponse:
     dependencies=[Depends(verify_admin_credentials)],
 )
 async def update_teams_config(
-    request: Request, config_update: TeamsConfigUpdate
+    request: Request,
+    config_update: TeamsConfigUpdate,
+    teams_integration: TeamsIntegration = teams_integration_dependency,
 ) -> AdminConfigResponse:
     """Update Microsoft Teams integration configuration.
 
@@ -190,7 +193,6 @@ async def update_teams_config(
     """
     try:
         # Get current Teams integration
-        teams_integration = get_teams_integration()
         current_config = teams_integration.config
 
         # Update configuration with provided values
@@ -334,7 +336,9 @@ async def test_teams_notification(
     dependencies=[Depends(verify_admin_credentials)],
 )
 async def get_admin_status(
-    request: Request, tws_client: ITWSClient = tws_client_dependency
+    request: Request,
+    tws_client: ITWSClient = tws_client_dependency,
+    teams_integration: TeamsIntegration = teams_integration_dependency,
 ) -> Dict[str, Any]:
     """Get overall system status for administration.
 
@@ -349,8 +353,7 @@ async def get_admin_status(
             tws_status = "error"
 
         # Get Teams integration status
-        teams_integration = get_teams_integration()
-        teams_health = teams_integration.health_check()
+        teams_health = await teams_integration.health_check()
 
         return {
             "system": {

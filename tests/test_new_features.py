@@ -8,7 +8,6 @@ from pydantic import ValidationError
 from unittest.mock import Mock, patch
 from pathlib import Path
 
-from resync.main import app
 from resync.api.cache import (
     ConnectionPoolValidator,
     get_redis_connection,
@@ -22,9 +21,6 @@ from resync.api.audit import (
     AuditRecordResponse,
 )
 from resync.settings import Settings as ApplicationSettings, Environment
-
-
-client = TestClient(app)
 
 
 class TestTypeAnnotationsAndDataValidation:
@@ -292,6 +288,16 @@ class TestConfigurationEnhancement:
 class TestErrorHandling:
     """Tests for improved error handling."""
 
+    @pytest.fixture
+    def client(self) -> TestClient:
+        """Create a TestClient for the FastAPI app."""
+        from resync.api.endpoints import api_router
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        app.include_router(api_router)
+        return TestClient(app)
+
     @pytest.mark.asyncio
     async def test_handle_error_function(self):
         """Test the improved handle_error function."""
@@ -328,6 +334,3 @@ class TestErrorHandling:
         assert result.status_code == 500
 
 
-# Run tests with pytest
-if __name__ == "__main__":
-    pytest.main([__file__])

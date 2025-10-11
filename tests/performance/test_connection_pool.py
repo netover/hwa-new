@@ -12,16 +12,25 @@ from unittest.mock import MagicMock, patch
 import psutil
 import pytest
 
-from resync.main import app
 
 
 class TestConnectionPoolPerformance:
     """Test connection pool performance characteristics."""
 
+    @pytest.fixture
+    def client(self):
+        """Create a TestClient for the FastAPI app."""
+        from resync.api.endpoints import api_router
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        app.include_router(api_router)
+        return TestClient(app)
+
     @pytest.mark.asyncio
     @pytest.mark.performance
     @pytest.mark.slow
-    async def test_connection_pool_saturation(self, performance_test_data):
+    async def test_connection_pool_saturation(self, client, performance_test_data):
         """Test connection pool behavior under saturation."""
         # This test verifies that the connection pool handles
         # high concurrency without exhausting resources

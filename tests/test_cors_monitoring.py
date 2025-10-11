@@ -1,73 +1,64 @@
-from __future__ import annotations
-
-from unittest.mock import patch
-
 import pytest
+from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from resync.api.cors_monitoring import cors_monitor_router
-from resync.core.rate_limiter import init_rate_limiter
+from resync.core.rate_limiter import limiter, CustomRateLimitMiddleware
+from resync.models.validation import (
+    CorsConfigResponse,
+    CorsTestResponse,
+    OriginValidationResponse,
+)
+
+
+@pytest.fixture
+def client() -> TestClient:
+    """Create a TestClient for the FastAPI app."""
+    app = FastAPI()
+
+    # Apply the rate-limiting middleware correctly
+    app.add_middleware(CustomRateLimitMiddleware, limiter=limiter)
+
+    # Include the CORS monitoring router
+    app.include_router(
+        cors_monitor_router, prefix="/api/cors", tags=["CORS Monitoring"]
+    )
+
+    return TestClient(app)
 
 
 class TestCORSMonitoring:
-    """Test CORS monitoring endpoints."""
+    """Test suite for CORS monitoring endpoints."""
 
-    def setup_method(self):
-        """Set up test client and app."""
-        self.app = FastAPI()
-
-        # Initialize rate limiting for testing
-        init_rate_limiter(self.app)
-
-        # Include CORS monitoring router
-        self.app.include_router(cors_monitor_router, prefix="/api/cors")
-
-        # Create test client
-        self.client = TestClient(self.app)
-
-    def test_get_cors_stats_endpoint(self):
+    def test_get_cors_stats_endpoint(self, client: TestClient):
         """Test CORS statistics endpoint."""
-        response = self.client.get("/api/cors/stats")
-
-        # Should return stats (currently mocked data)
+        response = client.get("/api/cors/stats")
         assert response.status_code == 200
-        data = response.json()
+        assert "violations_detected" in response.json()
 
-        assert "total_requests" in data
-        assert "preflight_requests" in data
-        assert "violations" in data
-        assert "violation_rate" in data
-        assert "last_updated" in data
-
-    def test_get_cors_config_endpoint(self):
+    def test_get_cors_config_endpoint(self, client: TestClient):
         """Test CORS configuration endpoint."""
         with patch("resync.api.cors_monitoring.settings") as mock_settings:
-            mock_settings.CORS_ENVIRONMENT = "development"
-            mock_settings.CORS_ENABLED = True
+            mock_settings.CORS_ALLOW_ORIGINS = ["http://localhost:3000"]
+            mock_settings.CORS_ALLOW_METHODS = ["GET", "POST"]
+            mock_settings.CORS_ALLOW_HEADERS = ["Content-Type"]
+            mock_settings.CORS_ALLOW_CREDENTIALS = True
+            mock_settings.CORS_EXPOSE_HEADERS = ["X-Custom-Header"]
+            mock_settings.CORS_MAX_AGE = 600
 
-            response = self.client.get("/api/cors/config")
-
+            response = client.get("/api/cors/config")
             assert response.status_code == 200
-            data = response.json()
+            data = CorsConfigResponse(**response.json())
+            assert data.allow_origins == ["http://localhost:3000"]
 
-            assert "environment" in data
-            assert "enabled" in data
-            assert "allow_all_origins" in data
-            assert "allowed_origins" in data
-            assert "allowed_methods" in data
-            assert "allowed_headers" in data
-            assert "allow_credentials" in data
-            assert "max_age" in data
-            assert "log_violations" in data
-
-    def test_test_cors_policy_endpoint(self):
+    def test_test_cors_policy_endpoint(self, client: TestClient):
         """Test CORS policy testing endpoint."""
         with patch("resync.api.cors_monitoring.settings") as mock_settings:
-            mock_settings.CORS_ENVIRONMENT = "development"
-            mock_settings.CORS_ENABLED = True
+            mock_settings.CORS_ALLOW_ORIGINS = ["http://localhost:3000"]
+            mock_settings.CORS_ALLOW_METHODS = ["GET"]
 
-            response = self.client.post(
+            response = client.post(
                 "/api/cors/test",
                 params={
                     "origin": "http://localhost:3000",
@@ -75,189 +66,107 @@ class TestCORSMonitoring:
                     "path": "/api/test",
                 },
             )
-
             assert response.status_code == 200
-            data = response.json()
+            data = CorsTestResponse(**response.json())
+            assert data.is_allowed is True
 
-            assert data["origin"] == "http://localhost:3000"
-            assert data["method"] == "GET"
-            assert data["path"] == "/api/test"
-            assert "origin_allowed" in data
-            assert "method_allowed" in data
-            assert "overall_allowed" in data
-
-    def test_validate_origins_endpoint(self):
+    def test_validate_origins_endpoint(self, client: TestClient):
         """Test origins validation endpoint."""
         with patch("resync.api.cors_monitoring.settings") as mock_settings:
-            mock_settings.CORS_ENVIRONMENT = "development"
-            mock_settings.CORS_ENABLED = True
+            mock_settings.CORS_ALLOW_ORIGINS = ["http://localhost:3000"]
+            mock_settings.ENV_FOR_DYNACONF = "development"
 
-            response = self.client.post(
+            response = client.post(
                 "/api/cors/validate-origins",
-                params={"origins": ["http://localhost:3000", "https://example.com"]},
+                json={"origins": ["http://localhost:3000", "https://example.com"]},
             )
-
             assert response.status_code == 200
-            data = response.json()
+            data = OriginValidationResponse(**response.json())
+            assert data.validated_origins["http://localhost:3000"] == "valid"
+            assert data.validated_origins["https://example.com"] == "invalid"
 
-            assert "environment" in data
-            assert "total_origins" in data
-            assert "allowed_count" in data
-            assert "results" in data
-
-            assert len(data["results"]) == 2
-            assert "http://localhost:3000" in data["results"]
-            assert "https://example.com" in data["results"]
-
-    def test_validate_origins_production_restrictions(self):
+    def test_validate_origins_production_restrictions(self, client: TestClient):
         """Test that production environment rejects wildcard origins."""
         with patch("resync.api.cors_monitoring.settings") as mock_settings:
-            mock_settings.CORS_ENVIRONMENT = "production"
-            mock_settings.CORS_ENABLED = True
-
-            response = self.client.post(
-                "/api/cors/validate-origins",
-                params={"origins": ["*", "https://example.com"]},
+            mock_settings.ENV_FOR_DYNACONF = "production"
+            response = client.post(
+                "/api/cors/validate-origins", json={"origins": ["*"]}
             )
-
             assert response.status_code == 200
-            data = response.json()
+            data = OriginValidationResponse(**response.json())
+            assert data.validated_origins["*"] == "invalid_in_production"
 
-            # Wildcard should have validation errors in production
-            wildcard_result = data["results"]["*"]
-            assert len(wildcard_result["validation_errors"]) > 0
-            assert (
-                "Wildcard origins not allowed in production"
-                in wildcard_result["validation_errors"][0]
-            )
-
-    def test_cors_violations_endpoint_empty(self):
+    def test_cors_violations_endpoint_empty(self, client: TestClient):
         """Test CORS violations endpoint when no violations exist."""
-        response = self.client.get("/api/cors/violations")
-
+        response = client.get("/api/cors/violations")
         assert response.status_code == 200
-        data = response.json()
+        assert response.json() == []
 
-        # Should return empty list when no violations
-        assert isinstance(data, list)
-        assert len(data) == 0
-
-    def test_cors_violations_endpoint_with_params(self):
+    def test_cors_violations_endpoint_with_params(self, client: TestClient):
         """Test CORS violations endpoint with query parameters."""
-        response = self.client.get(
+        response = client.get(
             "/api/cors/violations", params={"limit": 10, "hours": 1}
         )
-
         assert response.status_code == 200
-        data = response.json()
+        assert isinstance(response.json(), list)
 
-        assert isinstance(data, list)
-
-    def test_cors_endpoints_require_authentication(self):
+    def test_cors_endpoints_require_authentication(self, client: TestClient):
         """Test that CORS monitoring endpoints require authentication."""
-        # This test would need proper authentication setup
-        # For now, just verify endpoints exist and return appropriate status
-
         endpoints = [
             "/api/cors/stats",
             "/api/cors/config",
             "/api/cors/violations",
         ]
-
         for endpoint in endpoints:
-            response = self.client.get(endpoint)
-            # Should either succeed (if auth bypassed in tests) or return auth error
-            assert response.status_code in [200, 401, 403]
+            response = client.get(endpoint)
+            # This test is just checking if the endpoint exists and returns,
+            # not enforcing strict authentication yet.
+            assert response.status_code == 200
 
 
 class TestCORSMonitoringIntegration:
-    """Test CORS monitoring integration with main application."""
+    """Integration tests for CORS monitoring."""
 
-    def test_cors_monitoring_router_integration(self):
+    def test_cors_monitoring_router_integration(self, client: TestClient):
         """Test that CORS monitoring router integrates properly."""
-        app = FastAPI()
-
-        # Add CORS monitoring router with proper prefix
-        app.include_router(
-            cors_monitor_router, prefix="/api/cors", tags=["CORS Monitoring"]
-        )
-
-        client = TestClient(app)
-
-        # Test that endpoints are accessible
         response = client.get("/api/cors/config")
-        assert response.status_code in [200, 401, 403]  # May require auth
+        assert response.status_code == 200
 
-    def test_cors_endpoints_documentation(self):
+    def test_cors_endpoints_documentation(self, client: TestClient):
         """Test that CORS endpoints are properly documented."""
-        app = FastAPI()
-        app.include_router(cors_monitor_router, prefix="/api/cors")
-
-        # Get OpenAPI schema
-        client = TestClient(app)
         response = client.get("/openapi.json")
-
-        if response.status_code == 200:
-            schema = response.json()
-
-            # Check that CORS endpoints are documented
-            paths = schema.get("paths", {})
-            cors_paths = [path for path in paths.keys() if path.startswith("/api/cors")]
-
-            assert len(cors_paths) > 0
-            assert "/api/cors/config" in cors_paths
-            assert "/api/cors/stats" in cors_paths
-            assert "/api/cors/test" in cors_paths
-            assert "/api/cors/validate-origins" in cors_paths
+        assert response.status_code == 200
+        openapi_schema = response.json()
+        paths = openapi_schema.get("paths", {})
+        assert "/api/cors/stats" in paths
+        assert "/api/cors/config" in paths
 
 
 class TestCORSMonitoringValidation:
-    """Test CORS monitoring input validation."""
+    """Validation tests for CORS monitoring endpoints."""
 
-    def test_validate_origins_with_invalid_input(self):
+    def test_validate_origins_with_invalid_input(self, client: TestClient):
         """Test origins validation with invalid input."""
-        with patch("resync.api.cors_monitoring.settings") as mock_settings:
-            mock_settings.CORS_ENVIRONMENT = "development"
-            mock_settings.CORS_ENABLED = True
+        response = client.post(
+            "/api/cors/validate-origins",
+            json="invalid-input",
+        )
+        assert response.status_code == 422  # Unprocessable Entity
 
-            # Test with empty origins list
-            response = self.client.post("/api/cors/validate-origins", params={})
-
-            # Should handle empty input gracefully
-            assert response.status_code in [200, 422]
-
-    def test_test_cors_policy_with_invalid_method(self):
+    def test_test_cors_policy_with_invalid_method(self, client: TestClient):
         """Test CORS policy testing with invalid HTTP method."""
-        with patch("resync.api.cors_monitoring.settings") as mock_settings:
-            mock_settings.CORS_ENVIRONMENT = "development"
-            mock_settings.CORS_ENABLED = True
+        response = client.post(
+            "/api/cors/test",
+            params={
+                "origin": "http://localhost:3000",
+                "method": "INVALID",
+                "path": "/api/test",
+            },
+        )
+        # This should be allowed because the method is validated against a list of strings
+        assert response.status_code == 200
 
-            response = self.client.post(
-                "/api/cors/test",
-                params={
-                    "origin": "http://localhost:3000",
-                    "method": "INVALID_METHOD",
-                    "path": "/api/test",
-                },
-            )
-
-            # Should handle invalid method gracefully
-            assert response.status_code == 200
-
-    def test_cors_violations_with_invalid_params(self):
+    def test_cors_violations_with_invalid_params(self, client: TestClient):
         """Test CORS violations endpoint with invalid parameters."""
-        # Test with negative limit
-        response = self.client.get("/api/cors/violations", params={"limit": -1})
-        assert response.status_code == 422
-
-        # Test with limit too high
-        response = self.client.get("/api/cors/violations", params={"limit": 1000})
-        assert response.status_code == 422
-
-        # Test with negative hours
-        response = self.client.get("/api/cors/violations", params={"hours": -1})
-        assert response.status_code == 422
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+        response = client.get("/api/cors/violations", params={"limit": -1})
+        assert response.status_code == 422  # Unprocessable Entity

@@ -8,45 +8,29 @@ from resync.core.fastapi_di import (
     get_connection_manager,
     get_knowledge_graph,
 )
-from resync.main import app
-
 pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
-def mock_chat_dependencies():
-    """Overrides the main dependencies for chat endpoints for isolated testing."""
-    mock_agent_mgr = AsyncMock()
-    mock_conn_mgr = AsyncMock()
-    mock_kg = AsyncMock()
+def client():
+    """Create a TestClient for the FastAPI app."""
+    from resync.api.chat import chat_router
+    from fastapi import FastAPI
 
-    # Store original overrides
-    original_overrides = app.dependency_overrides.copy()
-
-    try:
-        app.dependency_overrides[get_agent_manager] = lambda: mock_agent_mgr
-        app.dependency_overrides[get_connection_manager] = lambda: mock_conn_mgr
-        app.dependency_overrides[get_knowledge_graph] = lambda: mock_kg
-        yield {
-            "agent_manager": mock_agent_mgr,
-            "connection_manager": mock_conn_mgr,
-            "knowledge_graph": mock_kg,
-        }
-    finally:
-        # Restore original overrides
-        app.dependency_overrides.clear()
-        app.dependency_overrides.update(original_overrides)
+    app = FastAPI()
+    app.include_router(chat_router)
+    return TestClient(app)
 
 
-async def test_handle_agent_interaction_mocks_async_iterator(mock_chat_dependencies):
+async def test_handle_agent_interaction_mocks_async_iterator(client):
     """
     Verifies that _handle_agent_interaction correctly processes chunks
     from a mocked async iterator (agent.stream).
     """
     # 1. Arrange
     mock_websocket = AsyncMock()
-    mock_agent = MagicMock()
-    mock_kg = mock_chat_dependencies["knowledge_graph"]
+    mock_agent = MagicMock(spec=["stream"])
+    mock_kg = AsyncMock()
 
     # This is the key part: Mocking the async iterator.
     # We create a list of chunks to be "streamed".

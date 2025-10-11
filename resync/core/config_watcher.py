@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 from typing import cast
 
 from resync.core.di_container import container
@@ -17,8 +18,8 @@ async def handle_config_change() -> None:
     from resync.core.agent_manager import AgentManager
     from resync.core.connection_manager import ConnectionManager
 
-    agent_manager = cast(AgentManager, container.get(IAgentManager))  # type: ignore[type-abstract]
-    connection_manager = cast(ConnectionManager, container.get(IConnectionManager))  # type: ignore[type-abstract]
+    agent_manager = cast(AgentManager, container.get(IAgentManager))
+    connection_manager = cast(ConnectionManager, container.get(IConnectionManager))
 
     logger.info("Configuration change detected. Reloading agents...")
     try:
@@ -27,16 +28,18 @@ async def handle_config_change() -> None:
         logger.info("Agent configurations reloaded successfully.")
 
         # Get the updated list of agents
-        agents = agent_manager.get_all_agents()
+        agents = await agent_manager.get_all_agents()
         agent_list = [{"id": agent.id, "name": agent.name} for agent in agents]
 
         # Notify all connected WebSocket clients about the change
-        await connection_manager.broadcast_json(
-            {
-                "type": "config_update",
-                "message": "A configuração do agente foi atualizada. A lista de agentes foi recarregada.",
-                "agents": agent_list,
-            }
+        await connection_manager.broadcast(
+            json.dumps(
+                {
+                    "type": "config_update",
+                    "message": "A configuração do agente foi atualizada. A lista de agentes foi recarregada.",
+                    "agents": agent_list,
+                }
+            )
         )
         logger.info("Broadcasted config update to all clients.")
 

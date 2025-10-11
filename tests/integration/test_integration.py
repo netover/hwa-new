@@ -163,9 +163,9 @@ class TestIaAuditorIntegration:
 
             assert result["deleted"] == 1
             assert result["flagged"] == 0
-            mock_kg.atomic_check_and_delete.assert_called_once_with("mem_3")
-            mock_kg.atomic_check_and_flag.assert_not_called()
-            mock_aq.add_audit_record.assert_not_called()
+            mock_kg.delete_memory.assert_called_once_with("mem_3")
+            mock_kg.add_observations.assert_not_called()
+            mock_aq.add_audit_record_sync.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_ia_auditor_flag_flow(self, mock_kg, mock_aq, mock_lock):
@@ -185,9 +185,9 @@ class TestIaAuditorIntegration:
 
             assert result["deleted"] == 0
             assert result["flagged"] == 2
-            mock_kg.atomic_check_and_delete.assert_not_called()
-            assert mock_kg.atomic_check_and_flag.call_count == 2
-            assert mock_aq.add_audit_record.call_count == 2
+            mock_kg.delete_memory.assert_not_called()
+            assert mock_kg.add_observations.call_count == 2
+            assert mock_aq.add_audit_record_sync.call_count == 2
 
     @pytest.mark.asyncio
     async def test_knowledge_graph_failure(self, mock_aq, mock_lock):
@@ -302,7 +302,7 @@ class TestEndToEndIntegration:
             # Each connection needs its own TestClient instance to be isolated
             with TestClient(test_app) as local_client:
                 with local_client.websocket_connect(
-                    f"/ws/test-agent?user_id={user_id}"
+                    f"/ws/test-agent"
                 ) as websocket:
                     websocket.send_text(f"Question from {user_id}")
                     data = websocket.receive_text()

@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 from resync.api.middleware.cors_config import (
@@ -15,7 +16,6 @@ from resync.api.middleware.cors_config import (
 from resync.api.middleware.cors_middleware import (
     LoggingCORSMiddleware,
     add_cors_middleware,
-    create_cors_middleware,
     get_development_cors_config,
     get_production_cors_config,
     get_test_cors_config,
@@ -180,7 +180,7 @@ class TestCORSConfig:
         """Test that invalid environment raises error."""
         config = CORSConfig()
 
-        with pytest.raises(ValueError, match="Unknown environment"):
+        with pytest.raises(ValueError, match="'invalid' is not a valid Environment"):
             config.get_policy("invalid")
 
     def test_update_policy(self):
@@ -199,7 +199,7 @@ class TestCORSConfig:
         """Test that updating invalid environment raises error."""
         config = CORSConfig()
 
-        with pytest.raises(ValueError, match="Unknown environment"):
+        with pytest.raises(ValueError, match="'invalid' is not a valid Environment"):
             config.update_policy(
                 "invalid", CORSPolicy(environment=Environment.DEVELOPMENT)
             )
@@ -360,14 +360,6 @@ class TestCORSHelpers:
 class TestCORSIntegration:
     """Test CORS integration with FastAPI application."""
 
-    def test_create_cors_middleware_integration(self):
-        """Test creating CORS middleware for FastAPI app."""
-        app = FastAPI()
-
-        middleware = create_cors_middleware(app=app, environment="development")
-
-        assert isinstance(middleware, LoggingCORSMiddleware)
-        assert middleware.policy.environment == Environment.DEVELOPMENT
 
     def test_add_cors_middleware_integration(self):
         """Test adding CORS middleware to FastAPI app."""
@@ -377,8 +369,11 @@ class TestCORSIntegration:
         add_cors_middleware(app, environment="development")
 
         # Check that middleware was added
-        middleware_classes = [type(m) for m in app.user_middleware]
-        assert LoggingCORSMiddleware in middleware_classes
+        from starlette.middleware.cors import CORSMiddleware as StarletteCORSMiddleware
+
+        assert any(
+            m.cls == StarletteCORSMiddleware for m in app.user_middleware
+        )
 
     def test_fastapi_app_with_cors_middleware(self):
         """Test complete FastAPI app with CORS middleware."""
@@ -406,19 +401,21 @@ class TestCORSIntegration:
 
         assert response.status_code == 200
         # Should have CORS headers for development environment
-        assert "access-control-allow-origin" in response.headers
+        assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
 
     def test_cors_policy_environment_from_settings(self):
         """Test CORS policy loaded from settings."""
         with patch("resync.api.middleware.cors_middleware.settings") as mock_settings:
-            mock_settings.CORS_ENVIRONMENT = "production"
-            mock_settings.CORS_ENABLED = True
+            mock_settings.ENVIRONMENT = "production"
 
             app = FastAPI()
-            middleware = create_cors_middleware(app)
+            add_cors_middleware(app)
 
-            assert middleware.policy.environment == Environment.PRODUCTION
-            assert middleware.policy.allow_all_origins is False
+            # To verify, we need to inspect the middleware added to the app
+            # This is a bit of an integration test
+            added_middleware = app.user_middleware[-1]
+            assert added_middleware.cls == CORSMiddleware
+            assert added_middleware.kwargs["allow_origins"] == []
 
 
 class TestCORSSecurity:

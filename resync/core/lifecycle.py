@@ -186,12 +186,12 @@ async def lifespan(app: FastAPI):
 
     # Initialize TWS client and register with resource manager
     tws_client = await app_container.get(ITWSClient)
-    resource_manager.register_resource("tws_client", tws_client, lambda r: r.close())
+    resource_manager.register_resource("tws_client", tws_client)
 
     # Initialize knowledge graph and register with resource manager
     knowledge_graph = await app_container.get(IKnowledgeGraph)
     resource_manager.register_resource(
-        "knowledge_graph", knowledge_graph, lambda r: r.close()
+        "knowledge_graph", knowledge_graph
     )
 
     logger.info("Application startup complete.")
