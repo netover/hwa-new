@@ -9,10 +9,10 @@ from .health_models import HealthCheckResult, HealthStatus
 def initialize_health_result(correlation_id: str) -> HealthCheckResult:
     """
     Initialize a standard health check result object.
-    
+
     Args:
         correlation_id: Unique identifier for tracking this health check
-        
+
     Returns:
         HealthCheckResult: Initialized health check result object
     """
@@ -30,10 +30,10 @@ def initialize_health_result(correlation_id: str) -> HealthCheckResult:
 def get_health_checks_dict(health_service_instance: Any) -> Dict[str, Any]:
     """
     Get dictionary of all health check coroutines.
-    
+
     Args:
         health_service_instance: Instance of health service with check methods
-        
+
     Returns:
         Dict[str, Any]: Dictionary mapping check names to coroutine objects
     """

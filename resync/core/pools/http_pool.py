@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 class HTTPConnectionPool(ConnectionPool[httpx.AsyncClient]):
     """HTTP connection pool for external API calls."""
 
-    def __init__(self, config: ConnectionPoolConfig, base_url: str, **client_kwargs: Any) -> None:
+    def __init__(
+        self, config: ConnectionPoolConfig, base_url: str, **client_kwargs: Any
+    ) -> None:
         super().__init__(config)
         self.base_url = base_url
         self.client_kwargs = client_kwargs
@@ -37,31 +39,32 @@ class HTTPConnectionPool(ConnectionPool[httpx.AsyncClient]):
                 max_keepalive_connections=max(self.config.min_size, 10),
                 keepalive_expiry=self.config.idle_timeout,
             )
-            
+
             timeout = httpx.Timeout(
                 connect=self.config.connection_timeout,
                 read=self.config.connection_timeout,
                 write=self.config.connection_timeout,
-                pool=self.config.connection_timeout
+                pool=self.config.connection_timeout,
             )
 
-            transport = httpx.AsyncHTTPTransport(
-                limits=limits,
-                trust_env=True
-            )
+            transport = httpx.AsyncHTTPTransport(limits=limits, trust_env=True)
 
             # Create the httpx client with connection pooling
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 timeout=timeout,
                 transport=transport,
-                **self.client_kwargs
+                **self.client_kwargs,
             )
 
-            logger.info(f"HTTP connection pool '{self.config.pool_name}' initialized with {self.config.min_size}-{self.config.max_size} connections")
+            logger.info(
+                f"HTTP connection pool '{self.config.pool_name}' initialized with {self.config.min_size}-{self.config.max_size} connections"
+            )
         except Exception as e:
             logger.error(f"Failed to setup HTTP connection pool: {e}")
-            raise TWSConnectionError(f"Failed to setup HTTP connection pool: {e}") from e
+            raise TWSConnectionError(
+                f"Failed to setup HTTP connection pool: {e}"
+            ) from e
 
     @asynccontextmanager
     async def get_connection(self) -> AsyncIterator[httpx.AsyncClient]:
@@ -73,7 +76,7 @@ class HTTPConnectionPool(ConnectionPool[httpx.AsyncClient]):
 
         try:
             # Record pool request
-            await self.increment_stat('pool_hits')
+            await self.increment_stat("pool_hits")
 
             # Get connection (httpx handles pooling)
             if not self._client:
@@ -82,7 +85,7 @@ class HTTPConnectionPool(ConnectionPool[httpx.AsyncClient]):
             yield self._client
 
         except Exception as e:
-            await self.increment_stat('pool_misses')
+            await self.increment_stat("pool_misses")
             logger.error(f"Failed to get HTTP connection: {e}")
             raise TWSConnectionError(f"Failed to acquire HTTP connection: {e}") from e
         finally:
@@ -90,7 +93,9 @@ class HTTPConnectionPool(ConnectionPool[httpx.AsyncClient]):
             await self.update_wait_time(wait_time)
 
             # Record connection metrics
-            logger.debug(f"HTTP connection acquired in {wait_time:.3f}s for pool {self.config.pool_name}")
+            logger.debug(
+                f"HTTP connection acquired in {wait_time:.3f}s for pool {self.config.pool_name}"
+            )
 
     async def _close_pool(self) -> None:
         """Close the HTTP connection pool."""

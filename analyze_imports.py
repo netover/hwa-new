@@ -5,9 +5,10 @@ from __future__ import annotations
 import ast
 import sys
 
+
 def analyze_imports(file_path: str) -> None:
     """Analyze imports in a Python file to identify potentially unused ones."""
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
     tree = ast.parse(content)
@@ -17,11 +18,25 @@ def analyze_imports(file_path: str) -> None:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                imports.append((node.lineno, f"import {alias.name}" + (f" as {alias.asname}" if alias.asname else ""), alias.name))
+                imports.append(
+                    (
+                        node.lineno,
+                        f"import {alias.name}"
+                        + (f" as {alias.asname}" if alias.asname else ""),
+                        alias.name,
+                    )
+                )
         elif isinstance(node, ast.ImportFrom):
-            module = node.module or ''
+            module = node.module or ""
             for alias in node.names:
-                imports.append((node.lineno, f"from {module} import {alias.name}" + (f" as {alias.asname}" if alias.asname else ""), alias.name))
+                imports.append(
+                    (
+                        node.lineno,
+                        f"from {module} import {alias.name}"
+                        + (f" as {alias.asname}" if alias.asname else ""),
+                        alias.name,
+                    )
+                )
 
     # Find usage in the code
     used_names = set()
@@ -38,8 +53,9 @@ def analyze_imports(file_path: str) -> None:
     print("Potentially unused imports:")
 
     for lineno, import_stmt, name in imports:
-        if name not in used_names and name != '*':
+        if name not in used_names and name != "*":
             print(f"  Line {lineno}: {import_stmt}")
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -47,4 +63,3 @@ if __name__ == "__main__":
         sys.exit(1)
 
     analyze_imports(sys.argv[1])
-

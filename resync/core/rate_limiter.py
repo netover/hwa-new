@@ -59,16 +59,13 @@ class TieredRateLimitConfig:
             self.critical = RateLimitConfig(requests_per_minute=50)
 
 
-
-
-
 def get_user_identifier(request: Request) -> str:
     """
     Get user identifier for rate limiting.
     Falls back to IP address if no user authentication is available.
     """
     # Try to get user from request state (if authentication is implemented)
-    if hasattr(request.state, 'user') and request.state.user:
+    if hasattr(request.state, "user") and request.state.user:
         return f"user:{request.state.user}"
 
     # Fall back to IP address
@@ -80,7 +77,7 @@ def get_authenticated_user_identifier(request: Request) -> str:
     Get authenticated user identifier for rate limiting.
     This should be used for endpoints that require authentication.
     """
-    if hasattr(request.state, 'user') and request.state.user:
+    if hasattr(request.state, "user") and request.state.user:
         return f"auth_user:{request.state.user}"
 
     # For unauthenticated requests, still use IP but with different prefix
@@ -90,17 +87,19 @@ def get_authenticated_user_identifier(request: Request) -> str:
 # Initialize the main rate limiter with Redis storage
 limiter = Limiter(
     key_func=get_remote_address,
-    storage_uri=getattr(settings, 'RATE_LIMIT_STORAGE_URI', 'redis://localhost:6379'),
-    key_prefix=getattr(settings, 'RATE_LIMIT_KEY_PREFIX', 'resync:ratelimit:'),
+    storage_uri=getattr(settings, "RATE_LIMIT_STORAGE_URI", "redis://localhost:6379"),
+    key_prefix=getattr(settings, "RATE_LIMIT_KEY_PREFIX", "resync:ratelimit:"),
     headers_enabled=True,
-    strategy="moving-window" if getattr(settings, 'rate_limit_sliding_window', True) else "fixed-window"
+    strategy=(
+        "moving-window"
+        if getattr(settings, "rate_limit_sliding_window", True)
+        else "fixed-window"
+    ),
 )
 
 
 def create_rate_limit_exceeded_response(
-    request: Request,
-    exc: RateLimitExceeded,
-    retry_after: Optional[int] = None
+    request: Request, exc: RateLimitExceeded, retry_after: Optional[int] = None
 ) -> Response:
     """
     Create a custom response for rate limit exceeded errors.
@@ -121,16 +120,18 @@ def create_rate_limit_exceeded_response(
     import json
 
     response = Response(
-        content=json.dumps({
-            "error": "Rate limit exceeded",
-            "message": f"Too many requests. Please try again in {retry_after} seconds.",
-            "retry_after": retry_after,
-            "retry_after_datetime": reset_time.isoformat() + "Z",
-            "limit": exc.limit,
-            "window": exc.window,
-        }),
+        content=json.dumps(
+            {
+                "error": "Rate limit exceeded",
+                "message": f"Too many requests. Please try again in {retry_after} seconds.",
+                "retry_after": retry_after,
+                "retry_after_datetime": reset_time.isoformat() + "Z",
+                "limit": exc.limit,
+                "window": exc.window,
+            }
+        ),
         status_code=429,
-        media_type="application/json"
+        media_type="application/json",
     )
 
     # Add rate limit headers
@@ -146,7 +147,7 @@ def create_rate_limit_exceeded_response(
         path=request.url.path,
         limit=exc.limit,
         window=exc.window,
-        retry_after=retry_after
+        retry_after=retry_after,
     )
 
     return response
@@ -155,14 +156,16 @@ def create_rate_limit_exceeded_response(
 # Decorator functions for different endpoint categories
 def public_rate_limit(func: Callable) -> Callable:
     """Decorator for public endpoints with standard rate limiting."""
-    return limiter.limit(f"{getattr(settings, 'RATE_LIMIT_PUBLIC_PER_MINUTE', 100)}/minute")(func)
+    return limiter.limit(
+        f"{getattr(settings, 'RATE_LIMIT_PUBLIC_PER_MINUTE', 100)}/minute"
+    )(func)
 
 
 def authenticated_rate_limit(func: Callable) -> Callable:
     """Decorator for authenticated endpoints with higher rate limiting."""
     return limiter.limit(
         f"{getattr(settings, 'RATE_LIMIT_AUTHENTICATED_PER_MINUTE', 1000)}/minute",
-        key_func=get_authenticated_user_identifier
+        key_func=get_authenticated_user_identifier,
     )(func)
 
 
@@ -170,23 +173,29 @@ def critical_rate_limit(func: Callable) -> Callable:
     """Decorator for critical endpoints (agents, chat) with strict rate limiting."""
     return limiter.limit(
         f"{getattr(settings, 'RATE_LIMIT_CRITICAL_PER_MINUTE', 50)}/minute",
-        key_func=get_authenticated_user_identifier
+        key_func=get_authenticated_user_identifier,
     )(func)
 
 
 def error_handler_rate_limit(func: Callable) -> Callable:
     """Decorator for error handler endpoints."""
-    return limiter.limit(f"{getattr(settings, 'RATE_LIMIT_ERROR_HANDLER_PER_MINUTE', 15)}/minute")(func)
+    return limiter.limit(
+        f"{getattr(settings, 'RATE_LIMIT_ERROR_HANDLER_PER_MINUTE', 15)}/minute"
+    )(func)
 
 
 def websocket_rate_limit(func: Callable) -> Callable:
     """Decorator for WebSocket endpoints."""
-    return limiter.limit(f"{getattr(settings, 'RATE_LIMIT_WEBSOCKET_PER_MINUTE', 30)}/minute")(func)
+    return limiter.limit(
+        f"{getattr(settings, 'RATE_LIMIT_WEBSOCKET_PER_MINUTE', 30)}/minute"
+    )(func)
 
 
 def dashboard_rate_limit(func: Callable) -> Callable:
     """Decorator for dashboard endpoints."""
-    return limiter.limit(f"{getattr(settings, 'RATE_LIMIT_DASHBOARD_PER_MINUTE', 10)}/minute")(func)
+    return limiter.limit(
+        f"{getattr(settings, 'RATE_LIMIT_DASHBOARD_PER_MINUTE', 10)}/minute"
+    )(func)
 
 
 # Custom rate limit middleware for adding headers to all responses
@@ -201,15 +210,23 @@ class CustomRateLimitMiddleware:
         response = await call_next(request)
 
         # Add rate limit headers if available
-        if hasattr(request.state, 'rate_limit'):
+        if hasattr(request.state, "rate_limit"):
             rate_limit_info = request.state.rate_limit
 
-            response.headers["X-RateLimit-Limit"] = str(rate_limit_info.get('limit', ''))
-            response.headers["X-RateLimit-Remaining"] = str(rate_limit_info.get('remaining', ''))
-            response.headers["X-RateLimit-Reset"] = str(rate_limit_info.get('reset', ''))
+            response.headers["X-RateLimit-Limit"] = str(
+                rate_limit_info.get("limit", "")
+            )
+            response.headers["X-RateLimit-Remaining"] = str(
+                rate_limit_info.get("remaining", "")
+            )
+            response.headers["X-RateLimit-Reset"] = str(
+                rate_limit_info.get("reset", "")
+            )
 
             # Add custom headers for better client visibility
-            response.headers["X-RateLimit-Policy"] = rate_limit_info.get('policy', 'default')
+            response.headers["X-RateLimit-Policy"] = rate_limit_info.get(
+                "policy", "default"
+            )
 
         return response
 
@@ -235,5 +252,5 @@ def init_rate_limiter(app):
         "rate_limit_configurations",
         public=f"{getattr(settings, 'RATE_LIMIT_PUBLIC_PER_MINUTE', 100)}/minute",
         authenticated=f"{getattr(settings, 'RATE_LIMIT_AUTHENTICATED_PER_MINUTE', 1000)}/minute",
-        critical=f"{getattr(settings, 'RATE_LIMIT_CRITICAL_PER_MINUTE', 50)}/minute"
+        critical=f"{getattr(settings, 'RATE_LIMIT_CRITICAL_PER_MINUTE', 50)}/minute",
     )

@@ -16,10 +16,12 @@ from typing import List, Tuple
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+
 def get_memory_usage() -> float:
     """Get current memory usage in MB."""
     process = psutil.Process(os.getpid())
     return process.memory_info().rss / 1024 / 1024
+
 
 def run_single_test() -> Tuple[float, float]:
     """Run a single test iteration and return (execution_time, peak_memory)."""
@@ -32,8 +34,9 @@ def run_single_test() -> Tuple[float, float]:
     start_time = time.time()
 
     # Run the test as a subprocess to avoid event loop issues
-    result = subprocess.run([sys.executable, "test_env.py"],
-                          capture_output=True, text=True, cwd=os.getcwd())
+    result = subprocess.run(
+        [sys.executable, "test_env.py"], capture_output=True, text=True, cwd=os.getcwd()
+    )
 
     end_time = time.time()
     end_memory = get_memory_usage()
@@ -45,6 +48,7 @@ def run_single_test() -> Tuple[float, float]:
         print(f"Warning: Test failed with exit code {result.returncode}")
 
     return execution_time, memory_used
+
 
 async def run_benchmark(iterations: int = 5) -> None:
     """Run benchmark with multiple iterations."""
@@ -110,13 +114,14 @@ async def run_benchmark(iterations: int = 5) -> None:
     else:
         print("WARNING: Slow execution detected")
 
+
 async def main() -> None:
     """Main benchmark function."""
     # Set environment for testing
-    os.environ['ADMIN_USERNAME'] = 'test_admin'
-    os.environ['ADMIN_PASSWORD'] = 'test_password'
-    os.environ['ENVIRONMENT'] = 'test'
-    os.environ['PYTHONASYNCIODEBUG'] = '0'
+    os.environ["ADMIN_USERNAME"] = "test_admin"
+    os.environ["ADMIN_PASSWORD"] = "test_password"
+    os.environ["ENVIRONMENT"] = "test"
+    os.environ["PYTHONASYNCIODEBUG"] = "0"
 
     iterations = 5
 
@@ -127,6 +132,7 @@ async def main() -> None:
             print("Invalid number of iterations. Using default (5).")
 
     await run_benchmark(iterations)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

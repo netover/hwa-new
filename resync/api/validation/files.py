@@ -1,4 +1,3 @@
-
 """File upload validation models for API endpoints."""
 
 import os
@@ -20,6 +19,7 @@ from .common import (
 
 class FileType(str, Enum):
     """Allowed file types."""
+
     DOCUMENT = "document"
     IMAGE = "image"
     VIDEO = "video"
@@ -32,6 +32,7 @@ class FileType(str, Enum):
 
 class ProcessingStatus(str, Enum):
     """File processing status."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -42,60 +43,39 @@ class ProcessingStatus(str, Enum):
 class FileUploadRequest(BaseValidatedModel):
     """File upload request validation."""
 
-    filename: StringConstraints.FILENAME = Field(
-        ...,
-        description="Original filename"
-    )
+    filename: StringConstraints.FILENAME = Field(..., description="Original filename")
 
     file_size: int = Field(
-        ...,
-        ge=1,
-        le=NumericConstraints.MAX_FILE_SIZE,
-        description="File size in bytes"
+        ..., ge=1, le=NumericConstraints.MAX_FILE_SIZE, description="File size in bytes"
     )
 
-    content_type: str = Field(
-        ...,
-        description="MIME content type"
-    )
+    content_type: str = Field(..., description="MIME content type")
 
-    file_type: Optional[FileType] = Field(
-        None,
-        description="Categorized file type"
-    )
+    file_type: Optional[FileType] = Field(None, description="Categorized file type")
 
-    purpose: constr(
-        min_length=1,
-        max_length=100,
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="Purpose of file upload"
+    purpose: constr(min_length=1, max_length=100, strip_whitespace=True) = Field(
+        ..., description="Purpose of file upload"
     )
 
     metadata: Optional[Dict[str, Any]] = Field(
-        default_factory=dict,
-        description="Additional file metadata",
-        max_length=50
+        default_factory=dict, description="Additional file metadata", max_length=50
     )
 
     sanitize_content: bool = Field(
-        default=True,
-        description="Whether to sanitize file content"
+        default=True, description="Whether to sanitize file content"
     )
 
     extract_text: bool = Field(
-        default=False,
-        description="Whether to extract text content"
+        default=False, description="Whether to extract text content"
     )
 
     generate_thumbnail: bool = Field(
-        default=False,
-        description="Whether to generate thumbnail"
+        default=False, description="Whether to generate thumbnail"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("filename")
@@ -153,7 +133,7 @@ class FileUploadRequest(BaseValidatedModel):
             "application/vnd.microsoft.portable-executable",
             "application/x-executable",
             "application/x-sharedlib",
-            "application/x-dosexec"
+            "application/x-dosexec",
         }
 
         base_type = v.split(";")[0].lower()
@@ -166,10 +146,13 @@ class FileUploadRequest(BaseValidatedModel):
     def validate_file_size(cls, v):
         """Validate file size limits."""
         if v > NumericConstraints.MAX_FILE_SIZE:
-            raise ValueError(f"File size exceeds maximum allowed: {NumericConstraints.MAX_FILE_SIZE} bytes")
+            raise ValueError(
+                f"File size exceeds maximum allowed: {NumericConstraints.MAX_FILE_SIZE} bytes"
+            )
 
         if v > NumericConstraints.MAX_FILE_SIZE // 2:
             import logging
+
             logging.warning(f"Large file upload detected: {v} bytes")
 
         return v
@@ -203,7 +186,9 @@ class FileUploadRequest(BaseValidatedModel):
                 if len(value) > 1000:  # Max metadata value length
                     raise ValueError(f"Metadata value too long for key '{key}'")
                 if ValidationPatterns.SCRIPT_PATTERN.search(value):
-                    raise ValueError(f"Metadata value contains malicious content for key '{key}'")
+                    raise ValueError(
+                        f"Metadata value contains malicious content for key '{key}'"
+                    )
 
             # Validate nested dictionaries
             elif isinstance(value, dict):
@@ -212,12 +197,16 @@ class FileUploadRequest(BaseValidatedModel):
                 for nested_key, nested_value in value.items():
                     if not nested_key.replace("_", "").isalnum():
                         raise ValueError(f"Invalid nested metadata key: {nested_key}")
-                    if isinstance(nested_value, str) and ValidationPatterns.SCRIPT_PATTERN.search(nested_value):
-                        raise ValueError("Nested metadata value contains malicious content")
+                    if isinstance(
+                        nested_value, str
+                    ) and ValidationPatterns.SCRIPT_PATTERN.search(nested_value):
+                        raise ValueError(
+                            "Nested metadata value contains malicious content"
+                        )
 
         return v
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     def validate_type_consistency(cls, values):
         """Validate consistency between content type and file type."""
         if isinstance(values, dict):
@@ -233,14 +222,17 @@ class FileUploadRequest(BaseValidatedModel):
                     "image": FileType.IMAGE,
                     "video": FileType.VIDEO,
                     "audio": FileType.AUDIO,
-                    "application": FileType.DOCUMENT  # Default for application types
+                    "application": FileType.DOCUMENT,  # Default for application types
                 }
 
                 expected_type = type_mapping.get(main_type, FileType.OTHER)
 
                 if file_type != expected_type:
                     import logging
-                    logging.warning(f"File type '{file_type}' doesn't match content type '{content_type}'")
+
+                    logging.warning(
+                        f"File type '{file_type}' doesn't match content type '{content_type}'"
+                    )
 
         return values
 
@@ -249,55 +241,38 @@ class FileChunkUploadRequest(BaseValidatedModel):
     """Chunked file upload request validation."""
 
     upload_id: StringConstraints.SAFE_TEXT = Field(
-        ...,
-        description="Unique upload session ID"
+        ..., description="Unique upload session ID"
     )
 
-    chunk_index: int = Field(
-        ...,
-        ge=0,
-        description="Chunk index (0-based)"
-    )
+    chunk_index: int = Field(..., ge=0, description="Chunk index (0-based)")
 
-    total_chunks: int = Field(
-        ...,
-        ge=1,
-        le=1000,
-        description="Total number of chunks"
-    )
+    total_chunks: int = Field(..., ge=1, le=1000, description="Total number of chunks")
 
     chunk_size: int = Field(
         ...,
         ge=1,
         le=NumericConstraints.MAX_CHUNK_SIZE,
-        description="Size of this chunk in bytes"
+        description="Size of this chunk in bytes",
     )
 
     file_size: int = Field(
         ...,
         ge=1,
         le=NumericConstraints.MAX_FILE_SIZE,
-        description="Total file size in bytes"
+        description="Total file size in bytes",
     )
 
-    filename: StringConstraints.FILENAME = Field(
-        ...,
-        description="Original filename"
-    )
+    filename: StringConstraints.FILENAME = Field(..., description="Original filename")
 
-    content_type: str = Field(
-        ...,
-        description="MIME content type"
-    )
+    content_type: str = Field(..., description="MIME content type")
 
     checksum: Optional[str] = Field(
-        None,
-        description="MD5 hash of chunk data",
-        pattern=r"^[a-fA-F0-9]{32}$"
+        None, description="MD5 hash of chunk data", pattern=r"^[a-fA-F0-9]{32}$"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("chunk_index", "total_chunks")
@@ -331,33 +306,24 @@ class FileUpdateRequest(BaseValidatedModel):
     """File update request validation."""
 
     filename: Optional[StringConstraints.FILENAME] = Field(
-        None,
-        description="New filename"
+        None, description="New filename"
     )
 
-    purpose: Optional[constr(
-        min_length=1,
-        max_length=100,
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="New purpose"
+    purpose: Optional[constr(min_length=1, max_length=100, strip_whitespace=True)] = (
+        Field(None, description="New purpose")
     )
 
     metadata: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Updated metadata",
-        max_length=50
+        None, description="Updated metadata", max_length=50
     )
 
     tags: Optional[List[constr(min_length=1, max_length=50)]] = Field(
-        None,
-        description="File tags",
-        max_length=10
+        None, description="File tags", max_length=10
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("filename")
@@ -409,7 +375,9 @@ class FileUpdateRequest(BaseValidatedModel):
                 if len(value) > 1000:
                     raise ValueError(f"Metadata value too long for key '{key}'")
                 if ValidationPatterns.SCRIPT_PATTERN.search(value):
-                    raise ValueError(f"Metadata value contains malicious content for key '{key}'")
+                    raise ValueError(
+                        f"Metadata value contains malicious content for key '{key}'"
+                    )
 
         return v
 
@@ -435,40 +403,47 @@ class FileProcessingRequest(BaseValidatedModel):
     """File processing request validation."""
 
     operations: List[str] = Field(
-        ...,
-        description="Processing operations to perform",
-        min_length=1,
-        max_length=10
+        ..., description="Processing operations to perform", min_length=1, max_length=10
     )
 
     configuration: Optional[Dict[str, Any]] = Field(
-        default_factory=dict,
-        description="Processing configuration",
-        max_length=20
+        default_factory=dict, description="Processing configuration", max_length=20
     )
 
     priority: str = Field(
         default="normal",
         pattern=r"^(low|normal|high|urgent)$",
-        description="Processing priority"
+        description="Processing priority",
     )
 
     callback_url: Optional[str] = Field(
-        None,
-        description="Callback URL for processing completion"
+        None, description="Callback URL for processing completion"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("operations")
     def validate_operations(cls, v):
         """Validate processing operations."""
         valid_operations = {
-            "extract_text", "ocr", "thumbnail", "metadata", "virus_scan",
-            "convert_format", "compress", "resize", "crop", "rotate",
-            "watermark", "encrypt", "decrypt", "sign", "validate"
+            "extract_text",
+            "ocr",
+            "thumbnail",
+            "metadata",
+            "virus_scan",
+            "convert_format",
+            "compress",
+            "resize",
+            "crop",
+            "rotate",
+            "watermark",
+            "encrypt",
+            "decrypt",
+            "sign",
+            "validate",
         }
 
         # Check for valid operations
@@ -511,7 +486,9 @@ class FileProcessingRequest(BaseValidatedModel):
                 if len(value) > 500:
                     raise ValueError(f"Configuration value too long for key '{key}'")
                 if ValidationPatterns.SCRIPT_PATTERN.search(value):
-                    raise ValueError(f"Configuration value contains malicious content for key '{key}'")
+                    raise ValueError(
+                        f"Configuration value contains malicious content for key '{key}'"
+                    )
 
         return v
 
@@ -520,48 +497,34 @@ class RAGUploadRequest(BaseValidatedModel):
     """RAG (Retrieval-Augmented Generation) file upload request."""
 
     files: List[FileUploadRequest] = Field(
-        ...,
-        description="Files to process for RAG",
-        min_length=1,
-        max_length=10
+        ..., description="Files to process for RAG", min_length=1, max_length=10
     )
 
-    collection_name: constr(
-        min_length=1,
-        max_length=100,
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="RAG collection name"
+    collection_name: constr(min_length=1, max_length=100, strip_whitespace=True) = (
+        Field(..., description="RAG collection name")
     )
 
     chunk_size: int = Field(
-        default=1000,
-        ge=100,
-        le=10000,
-        description="Text chunk size for processing"
+        default=1000, ge=100, le=10000, description="Text chunk size for processing"
     )
 
     chunk_overlap: int = Field(
-        default=200,
-        ge=0,
-        le=1000,
-        description="Overlap between chunks"
+        default=200, ge=0, le=1000, description="Overlap between chunks"
     )
 
     embedding_model: Optional[StringConstraints.MODEL_NAME] = Field(
-        None,
-        description="Embedding model to use"
+        None, description="Embedding model to use"
     )
 
     metadata_template: Optional[Dict[str, str]] = Field(
         default_factory=dict,
         description="Template for document metadata",
-        max_length=20
+        max_length=20,
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("files")
@@ -596,7 +559,7 @@ class RAGUploadRequest(BaseValidatedModel):
 
         return v
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     def validate_chunk_configuration(cls, values):
         """Validate chunk size and overlap relationship."""
         if isinstance(values, dict):
@@ -619,7 +582,9 @@ class RAGUploadRequest(BaseValidatedModel):
                 raise ValueError(f"Invalid metadata template key: {key}")
 
             if ValidationPatterns.SCRIPT_PATTERN.search(template):
-                raise ValueError(f"Metadata template contains malicious content for key '{key}'")
+                raise ValueError(
+                    f"Metadata template contains malicious content for key '{key}'"
+                )
 
         return v
 
@@ -641,6 +606,7 @@ class FileInfo(BaseValidatedModel):
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
 
@@ -652,5 +618,5 @@ __all__ = [
     "RAGUploadRequest",
     "FileInfo",
     "FileType",
-    "ProcessingStatus"
+    "ProcessingStatus",
 ]

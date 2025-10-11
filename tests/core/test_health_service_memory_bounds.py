@@ -22,7 +22,7 @@ class TestHealthServiceMemoryBounds:
             history_cleanup_batch_size=10,
             history_retention_days=1,
             enable_memory_monitoring=True,
-            memory_usage_threshold_mb=5
+            memory_usage_threshold_mb=5,
         )
 
     @pytest.fixture
@@ -45,7 +45,7 @@ class TestHealthServiceMemoryBounds:
         for i in range(60):  # 60 > 50 * 0.8 = 40
             result = HealthCheckResult(
                 overall_status=HealthStatus.HEALTHY,
-                timestamp=datetime.now() - timedelta(minutes=i)
+                timestamp=datetime.now() - timedelta(minutes=i),
             )
             service._update_health_history(result)
 
@@ -66,7 +66,7 @@ class TestHealthServiceMemoryBounds:
             service.health_history.append(
                 HealthStatusHistory(
                     timestamp=old_time - timedelta(hours=i),
-                    overall_status=HealthStatus.HEALTHY
+                    overall_status=HealthStatus.HEALTHY,
                 )
             )
 
@@ -75,7 +75,7 @@ class TestHealthServiceMemoryBounds:
             service.health_history.append(
                 HealthStatusHistory(
                     timestamp=datetime.now() - timedelta(minutes=i),
-                    overall_status=HealthStatus.HEALTHY
+                    overall_status=HealthStatus.HEALTHY,
                 )
             )
 
@@ -96,7 +96,7 @@ class TestHealthServiceMemoryBounds:
         for i in range(20):
             result = HealthCheckResult(
                 overall_status=HealthStatus.HEALTHY,
-                timestamp=datetime.now() - timedelta(minutes=i)
+                timestamp=datetime.now() - timedelta(minutes=i),
             )
             service._update_health_history(result)
 
@@ -118,7 +118,7 @@ class TestHealthServiceMemoryBounds:
             service.health_history.append(
                 HealthStatusHistory(
                     timestamp=datetime.now() - timedelta(hours=i),
-                    overall_status=HealthStatus.HEALTHY
+                    overall_status=HealthStatus.HEALTHY,
                 )
             )
 
@@ -140,7 +140,7 @@ class TestHealthServiceMemoryBounds:
             service.health_history.append(
                 HealthStatusHistory(
                     timestamp=datetime.now() - timedelta(minutes=i),
-                    overall_status=HealthStatus.HEALTHY
+                    overall_status=HealthStatus.HEALTHY,
                 )
             )
 
@@ -158,9 +158,9 @@ class TestHealthServiceMemoryBounds:
         from resync.settings import settings
 
         # Check if new settings are available
-        assert hasattr(settings, 'HEALTH_CHECK_MAX_HISTORY_ENTRIES')
-        assert hasattr(settings, 'HEALTH_CHECK_HISTORY_CLEANUP_THRESHOLD')
-        assert hasattr(settings, 'HEALTH_CHECK_ENABLE_MEMORY_MONITORING')
+        assert hasattr(settings, "HEALTH_CHECK_MAX_HISTORY_ENTRIES")
+        assert hasattr(settings, "HEALTH_CHECK_HISTORY_CLEANUP_THRESHOLD")
+        assert hasattr(settings, "HEALTH_CHECK_ENABLE_MEMORY_MONITORING")
 
     @pytest.mark.asyncio
     async def test_concurrent_cleanup_safety(self, service):
@@ -169,7 +169,7 @@ class TestHealthServiceMemoryBounds:
         for i in range(60):
             result = HealthCheckResult(
                 overall_status=HealthStatus.HEALTHY,
-                timestamp=datetime.now() - timedelta(minutes=i)
+                timestamp=datetime.now() - timedelta(minutes=i),
             )
             service._update_health_history(result)
 
@@ -186,19 +186,19 @@ class TestHealthServiceMemoryBounds:
         # Mock component cache
         service.component_cache = {
             "database": MagicMock(status=HealthStatus.HEALTHY),
-            "redis": MagicMock(status=HealthStatus.HEALTHY)
+            "redis": MagicMock(status=HealthStatus.HEALTHY),
         }
 
         # Create result with changed status
         components = {
             "database": MagicMock(status=HealthStatus.UNHEALTHY),
-            "redis": MagicMock(status=HealthStatus.HEALTHY)
+            "redis": MagicMock(status=HealthStatus.HEALTHY),
         }
 
         HealthCheckResult(
             overall_status=HealthStatus.DEGRADED,
             timestamp=datetime.now(),
-            components=components
+            components=components,
         )
 
         changes = service._get_component_changes(components)
@@ -215,7 +215,7 @@ class TestHealthServiceMemoryBounds:
             service.health_history.append(
                 HealthStatusHistory(
                     timestamp=datetime.now() - timedelta(minutes=i),
-                    overall_status=HealthStatus.HEALTHY
+                    overall_status=HealthStatus.HEALTHY,
                 )
             )
 
@@ -228,16 +228,16 @@ class TestHealthServiceMemoryBounds:
     def _create_history_entry(self, result):
         """Helper to create history entry."""
         from resync.core.health_models import HealthStatusHistory
+
         return HealthStatusHistory(
-            timestamp=result.timestamp,
-            overall_status=result.overall_status
+            timestamp=result.timestamp, overall_status=result.overall_status
         )
 
     @pytest.mark.asyncio
     async def test_memory_usage_alert_threshold(self, service):
         """Test memory usage alert threshold."""
         # Mock high memory usage
-        with patch.object(service, '_memory_usage_mb', 10.0):
+        with patch.object(service, "_memory_usage_mb", 10.0):
             # Should trigger warning
             await service._update_memory_usage()
 

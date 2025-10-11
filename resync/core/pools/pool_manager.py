@@ -10,12 +10,20 @@ import logging
 from typing import Dict, Optional, TYPE_CHECKING
 
 from resync.core.exceptions import TWSConnectionError
-from resync.core.pools.base_pool import ConnectionPool, ConnectionPoolConfig, ConnectionPoolStats
+from resync.core.pools.base_pool import (
+    ConnectionPool,
+    ConnectionPoolConfig,
+    ConnectionPoolStats,
+)
 from resync.settings import settings
 from resync.core.pools.db_pool import DatabaseConnectionPool
 from resync.core.pools.redis_pool import RedisConnectionPool
 from resync.core.pools.http_pool import HTTPConnectionPool
-from resync.core.pools.base_pool import ConnectionPool, ConnectionPoolConfig, ConnectionPoolStats
+from resync.core.pools.base_pool import (
+    ConnectionPool,
+    ConnectionPoolConfig,
+    ConnectionPoolStats,
+)
 from resync.settings import settings
 
 # --- Logging Setup ---
@@ -36,35 +44,35 @@ async def get_connection_pool_manager() -> ConnectionPoolManager:
     This ensures the manager is properly initialized before use.
     """
     global _manager_instance
-    
+
     # Fast path: if already initialized, return immediately
     if _manager_instance is not None and _manager_instance._initialized:
         return _manager_instance
-    
+
     # Slow path: need to initialize
     async with _manager_lock:
         # Double-check after acquiring lock
         if _manager_instance is not None and _manager_instance._initialized:
             return _manager_instance
-            
+
         # Create and initialize new instance
         if _manager_instance is None:
             _manager_instance = ConnectionPoolManager()
-            
+
         if not _manager_instance._initialized:
             await _manager_instance.initialize()
-            
+
         return _manager_instance
 
 
 async def reset_connection_pool_manager() -> None:
     """
     Reset the singleton instance (useful for testing).
-    
+
     Warning: This should only be called in test environments.
     """
     global _manager_instance
-    
+
     async with _manager_lock:
         if _manager_instance is not None:
             try:
@@ -100,13 +108,15 @@ class ConnectionPoolManager:
                     db_pool_min_size = settings.DB_POOL_MIN_SIZE
                 except AttributeError:
                     db_pool_min_size = 0
-                    
+
                 if db_pool_min_size > 0:
                     try:
-                        db_url = getattr(settings, 'DATABASE_URL', "sqlite+aiosqlite:///:memory:")
+                        db_url = getattr(
+                            settings, "DATABASE_URL", "sqlite+aiosqlite:///:memory:"
+                        )
                     except AttributeError:
                         db_url = "sqlite+aiosqlite:///:memory:"
-                        
+
                     db_config = ConnectionPoolConfig(
                         pool_name="database",
                         min_size=db_pool_min_size,
@@ -114,7 +124,7 @@ class ConnectionPoolManager:
                         idle_timeout=settings.DB_POOL_IDLE_TIMEOUT,
                         connection_timeout=settings.DB_POOL_CONNECT_TIMEOUT,
                         health_check_interval=settings.DB_POOL_HEALTH_CHECK_INTERVAL,
-                        max_lifetime=settings.DB_POOL_MAX_LIFETIME
+                        max_lifetime=settings.DB_POOL_MAX_LIFETIME,
                     )
                     db_pool = DatabaseConnectionPool(db_config, db_url)
                     await db_pool.initialize()
@@ -125,13 +135,13 @@ class ConnectionPoolManager:
                     redis_pool_min_size = settings.REDIS_POOL_MIN_SIZE
                 except AttributeError:
                     redis_pool_min_size = 0
-                    
+
                 if redis_pool_min_size > 0:
                     try:
                         redis_url = settings.REDIS_URL
                     except AttributeError:
                         redis_url = "redis://localhost:6379"
-                        
+
                     redis_config = ConnectionPoolConfig(
                         pool_name="redis",
                         min_size=redis_pool_min_size,
@@ -139,7 +149,7 @@ class ConnectionPoolManager:
                         idle_timeout=settings.REDIS_POOL_IDLE_TIMEOUT,
                         connection_timeout=settings.REDIS_POOL_CONNECT_TIMEOUT,
                         health_check_interval=settings.REDIS_POOL_HEALTH_CHECK_INTERVAL,
-                        max_lifetime=settings.REDIS_POOL_MAX_LIFETIME
+                        max_lifetime=settings.REDIS_POOL_MAX_LIFETIME,
                     )
                     redis_pool = RedisConnectionPool(redis_config, redis_url)
                     await redis_pool.initialize()
@@ -150,13 +160,15 @@ class ConnectionPoolManager:
                     http_pool_min_size = settings.HTTP_POOL_MIN_SIZE
                 except AttributeError:
                     http_pool_min_size = 0
-                    
+
                 if http_pool_min_size > 0:
                     try:
-                        tws_base_url = getattr(settings, 'TWS_BASE_URL', "http://localhost:8000")
+                        tws_base_url = getattr(
+                            settings, "TWS_BASE_URL", "http://localhost:8000"
+                        )
                     except AttributeError:
                         tws_base_url = "http://localhost:8000"
-                        
+
                     http_config = ConnectionPoolConfig(
                         pool_name="tws_http",
                         min_size=http_pool_min_size,
@@ -164,17 +176,21 @@ class ConnectionPoolManager:
                         idle_timeout=settings.HTTP_POOL_IDLE_TIMEOUT,
                         connection_timeout=settings.HTTP_POOL_CONNECT_TIMEOUT,
                         health_check_interval=settings.HTTP_POOL_HEALTH_CHECK_INTERVAL,
-                        max_lifetime=settings.HTTP_POOL_MAX_LIFETIME
+                        max_lifetime=settings.HTTP_POOL_MAX_LIFETIME,
                     )
                     http_pool = HTTPConnectionPool(http_config, tws_base_url)
                     await http_pool.initialize()
                     self.pools["tws_http"] = http_pool
 
                 self._initialized = True
-                logger.info("Connection pool manager initialized with %d pools", len(self.pools))
+                logger.info(
+                    "Connection pool manager initialized with %d pools", len(self.pools)
+                )
             except Exception as e:
                 logger.error("Failed to initialize connection pool manager: %s", e)
-                raise TWSConnectionError(f"Failed to initialize connection pool manager: {e}") from e
+                raise TWSConnectionError(
+                    f"Failed to initialize connection pool manager: {e}"
+                ) from e
 
     async def get_pool(self, pool_name: str) -> Optional[ConnectionPool]:  # type: ignore[type-arg]
         """Get a specific connection pool by name."""

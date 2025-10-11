@@ -24,17 +24,23 @@ class TestDependencyInjection:
         # This is a robust way to reset the singleton used by the dependency injector
         if "resync.core.dependencies" in __import__("sys").modules:
             # Re-importing won't work due to caching, so we directly manipulate the singleton
-            __import__("sys").modules["resync.core.dependencies"].agent_manager = AgentManager()
+            __import__("sys").modules[
+                "resync.core.dependencies"
+            ].agent_manager = AgentManager()
             AgentManager._instance = None
-
 
     @pytest.mark.asyncio
     async def test_tws_client_dependency_injection_real(self):
         """Test REAL TWS client dependency injection when TWS_MOCK_MODE is False."""
         mock_tws_client_instance = AsyncMock()
 
-        with patch("resync.core.dependencies.settings") as mock_settings, \
-             patch("resync.core.dependencies.agent_manager._get_tws_client", return_value=mock_tws_client_instance) as mock_get_client:
+        with (
+            patch("resync.core.dependencies.settings") as mock_settings,
+            patch(
+                "resync.core.dependencies.agent_manager._get_tws_client",
+                return_value=mock_tws_client_instance,
+            ) as mock_get_client,
+        ):
 
             mock_settings.TWS_MOCK_MODE = False
 
@@ -48,8 +54,12 @@ class TestDependencyInjection:
         """Test MOCK TWS client dependency injection when TWS_MOCK_MODE is True."""
         mock_tws_client_instance = MagicMock(spec=MockTWSClient)
 
-        with patch("resync.core.dependencies.settings") as mock_settings, \
-             patch("resync.core.dependencies.agent_manager") as mock_agent_manager_module:
+        with (
+            patch("resync.core.dependencies.settings") as mock_settings,
+            patch(
+                "resync.core.dependencies.agent_manager"
+            ) as mock_agent_manager_module,
+        ):
 
             mock_settings.TWS_MOCK_MODE = True
             mock_agent_manager_module._mock_tws_client = mock_tws_client_instance
@@ -61,8 +71,13 @@ class TestDependencyInjection:
     @pytest.mark.asyncio
     async def test_dependency_error_handling(self):
         """Test error handling in dependency injection."""
-        with patch("resync.core.dependencies.settings") as mock_settings, \
-             patch("resync.core.dependencies.agent_manager._get_tws_client", new_callable=AsyncMock) as mock_get_client:
+        with (
+            patch("resync.core.dependencies.settings") as mock_settings,
+            patch(
+                "resync.core.dependencies.agent_manager._get_tws_client",
+                new_callable=AsyncMock,
+            ) as mock_get_client,
+        ):
 
             mock_settings.TWS_MOCK_MODE = False
             mock_get_client.side_effect = Exception("TWS client unavailable")
@@ -77,9 +92,13 @@ class TestDependencyInjection:
             mock_settings.TWS_MOCK_MODE = False
 
             # Since get_tws_client uses the global agent_manager, we need to reset its client
-            __import__("sys").modules["resync.core.dependencies"].agent_manager.tws_client = None
+            __import__("sys").modules[
+                "resync.core.dependencies"
+            ].agent_manager.tws_client = None
 
-            with patch("resync.core.agent_manager.OptimizedTWSClient") as MockClientClass:
+            with patch(
+                "resync.core.agent_manager.OptimizedTWSClient"
+            ) as MockClientClass:
                 mock_instance = MagicMock()
                 MockClientClass.return_value = mock_instance
 
@@ -103,7 +122,7 @@ class TestAgentManagerDI:
         """Fixture to provide a clean instance of AgentManager for each test."""
         AgentManager._instance = None
         manager = AgentManager()
-        with patch.object(manager, 'load_agents_from_config', new_callable=AsyncMock):
+        with patch.object(manager, "load_agents_from_config", new_callable=AsyncMock):
             yield manager
 
     @pytest.mark.asyncio

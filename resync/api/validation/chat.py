@@ -17,6 +17,7 @@ from .common import (
 
 class MessageType(str, Enum):
     """Valid message types."""
+
     TEXT = "text"
     IMAGE = "image"
     FILE = "file"
@@ -28,6 +29,7 @@ class MessageType(str, Enum):
 
 class MessageStatus(str, Enum):
     """Message status values."""
+
     SENT = "sent"
     DELIVERED = "delivered"
     READ = "read"
@@ -41,65 +43,48 @@ class ChatMessage(BaseValidatedModel):
     content: constr(
         min_length=NumericConstraints.MIN_MESSAGE_LENGTH,
         max_length=NumericConstraints.MAX_MESSAGE_LENGTH,
-        strip_whitespace=True
+        strip_whitespace=True,
     ) = Field(
-        ...,
-        description="Message content",
-        example="Hello, how can I help you today?"
+        ..., description="Message content", example="Hello, how can I help you today?"
     )
 
     message_type: MessageType = Field(
-        default=MessageType.TEXT,
-        description="Type of message"
+        default=MessageType.TEXT, description="Type of message"
     )
 
     sender: StringConstraints.SAFE_TEXT = Field(
-        ...,
-        description="Message sender identifier",
-        example="user123"
+        ..., description="Message sender identifier", example="user123"
     )
 
     recipient: Optional[StringConstraints.SAFE_TEXT] = Field(
-        None,
-        description="Message recipient identifier",
-        example="agent_tws_specialist"
+        None, description="Message recipient identifier", example="agent_tws_specialist"
     )
 
     session_id: Optional[StringConstraints.AGENT_ID] = Field(
-        None,
-        description="Chat session identifier"
+        None, description="Chat session identifier"
     )
 
     parent_message_id: Optional[str] = Field(
-        None,
-        description="ID of the parent message (for threading)"
+        None, description="ID of the parent message (for threading)"
     )
 
     metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional message metadata",
-        max_length=20
+        default_factory=dict, description="Additional message metadata", max_length=20
     )
 
-    priority: int = Field(
-        default=0,
-        ge=0,
-        le=10,
-        description="Message priority (0-10)"
-    )
+    priority: int = Field(default=0, ge=0, le=10, description="Message priority (0-10)")
 
     status: MessageStatus = Field(
-        default=MessageStatus.PENDING,
-        description="Message status"
+        default=MessageStatus.PENDING, description="Message status"
     )
 
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="Message timestamp"
+        default_factory=datetime.utcnow, description="Message timestamp"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
         validate_assignment = True
 
@@ -151,7 +136,9 @@ class ChatMessage(BaseValidatedModel):
 
             if isinstance(value, str):
                 if ValidationPatterns.SCRIPT_PATTERN.search(value):
-                    raise ValueError(f"Metadata value for '{key}' contains malicious content")
+                    raise ValueError(
+                        f"Metadata value for '{key}' contains malicious content"
+                    )
                 sanitized_metadata[key] = value.strip()
             else:
                 sanitized_metadata[key] = value
@@ -165,56 +152,44 @@ class WebSocketMessage(BaseValidatedModel):
     type: str = Field(
         ...,
         pattern=r"^(message|stream|error|info|system)$",
-        description="WebSocket message type"
+        description="WebSocket message type",
     )
 
-    sender: StringConstraints.SAFE_TEXT = Field(
-        ...,
-        description="Message sender"
-    )
+    sender: StringConstraints.SAFE_TEXT = Field(..., description="Message sender")
 
-    message: Optional[constr(
-        min_length=1,
-        max_length=NumericConstraints.MAX_MESSAGE_LENGTH,
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="Message content"
-    )
+    message: Optional[
+        constr(
+            min_length=1,
+            max_length=NumericConstraints.MAX_MESSAGE_LENGTH,
+            strip_whitespace=True,
+        )
+    ] = Field(None, description="Message content")
 
-    agent_id: StringConstraints.AGENT_ID = Field(
-        ...,
-        description="Target agent ID"
-    )
+    agent_id: StringConstraints.AGENT_ID = Field(..., description="Target agent ID")
 
     session_id: Optional[StringConstraints.AGENT_ID] = Field(
-        None,
-        description="WebSocket session ID"
+        None, description="WebSocket session ID"
     )
 
     correlation_id: Optional[str] = Field(
-        None,
-        description="Correlation ID for request tracking"
+        None, description="Correlation ID for request tracking"
     )
 
     is_final: bool = Field(
-        default=False,
-        description="Whether this is the final message in a stream"
+        default=False, description="Whether this is the final message in a stream"
     )
 
     metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional message metadata",
-        max_length=10
+        default_factory=dict, description="Additional message metadata", max_length=10
     )
 
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="Message timestamp"
+        default_factory=datetime.utcnow, description="Message timestamp"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
         validate_assignment = True
 
@@ -259,55 +234,44 @@ class ChatSession(BaseValidatedModel):
     """Chat session validation model."""
 
     session_id: StringConstraints.AGENT_ID = Field(
-        ...,
-        description="Unique session identifier"
+        ..., description="Unique session identifier"
     )
 
     user_id: StringConstraints.SAFE_TEXT = Field(
-        ...,
-        description="User ID who owns the session"
+        ..., description="User ID who owns the session"
     )
 
     agent_id: StringConstraints.AGENT_ID = Field(
-        ...,
-        description="Agent ID participating in the session"
+        ..., description="Agent ID participating in the session"
     )
 
     status: str = Field(
         default="active",
         pattern=r"^(active|paused|ended|expired)$",
-        description="Session status"
+        description="Session status",
     )
 
     context: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Session context",
-        max_length=10
+        default_factory=dict, description="Session context", max_length=10
     )
 
     metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Session metadata",
-        max_length=10
+        default_factory=dict, description="Session metadata", max_length=10
     )
 
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="Session creation timestamp"
+        default_factory=datetime.utcnow, description="Session creation timestamp"
     )
 
-    updated_at: Optional[datetime] = Field(
-        None,
-        description="Last update timestamp"
-    )
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 
     expires_at: Optional[datetime] = Field(
-        None,
-        description="Session expiration timestamp"
+        None, description="Session expiration timestamp"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
         validate_assignment = True
 
@@ -316,72 +280,50 @@ class ChatHistoryRequest(BaseValidatedModel):
     """Chat history request validation model."""
 
     session_id: Optional[StringConstraints.AGENT_ID] = Field(
-        None,
-        description="Filter by session ID"
+        None, description="Filter by session ID"
     )
 
     user_id: Optional[StringConstraints.SAFE_TEXT] = Field(
-        None,
-        description="Filter by user ID"
+        None, description="Filter by user ID"
     )
 
     agent_id: Optional[StringConstraints.AGENT_ID] = Field(
-        None,
-        description="Filter by agent ID"
+        None, description="Filter by agent ID"
     )
 
     start_date: Optional[datetime] = Field(
-        None,
-        description="Start date for history range"
+        None, description="Start date for history range"
     )
 
-    end_date: Optional[datetime] = Field(
-        None,
-        description="End date for history range"
-    )
+    end_date: Optional[datetime] = Field(None, description="End date for history range")
 
     message_types: Optional[List[MessageType]] = Field(
-        None,
-        description="Filter by message types",
-        max_length=5
+        None, description="Filter by message types", max_length=5
     )
 
-    search_query: Optional[constr(
-        min_length=1,
-        max_length=100,
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="Search query for message content"
-    )
+    search_query: Optional[
+        constr(min_length=1, max_length=100, strip_whitespace=True)
+    ] = Field(None, description="Search query for message content")
 
     limit: int = Field(
-        default=50,
-        ge=1,
-        le=500,
-        description="Maximum number of messages to return"
+        default=50, ge=1, le=500, description="Maximum number of messages to return"
     )
 
     offset: int = Field(
-        default=0,
-        ge=0,
-        le=10000,
-        description="Number of messages to skip"
+        default=0, ge=0, le=10000, description="Number of messages to skip"
     )
 
     sort_order: str = Field(
-        default="desc",
-        pattern=r"^(asc|desc)$",
-        description="Sort order for messages"
+        default="desc", pattern=r"^(asc|desc)$", description="Sort order for messages"
     )
 
     include_metadata: bool = Field(
-        default=False,
-        description="Whether to include message metadata"
+        default=False, description="Whether to include message metadata"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("end_date")
@@ -405,32 +347,23 @@ class ChatHistoryRequest(BaseValidatedModel):
 class MessageReaction(BaseValidatedModel):
     """Message reaction validation model."""
 
-    message_id: str = Field(
-        ...,
-        description="ID of the message being reacted to"
-    )
+    message_id: str = Field(..., description="ID of the message being reacted to")
 
-    reaction: constr(
-        min_length=1,
-        max_length=10,
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="Reaction emoji or text"
+    reaction: constr(min_length=1, max_length=10, strip_whitespace=True) = Field(
+        ..., description="Reaction emoji or text"
     )
 
     user_id: StringConstraints.SAFE_TEXT = Field(
-        ...,
-        description="User ID who added the reaction"
+        ..., description="User ID who added the reaction"
     )
 
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="Reaction timestamp"
+        default_factory=datetime.utcnow, description="Reaction timestamp"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("reaction")
@@ -453,28 +386,24 @@ class ChatExportRequest(BaseValidatedModel):
     """Chat export request validation model."""
 
     session_id: StringConstraints.AGENT_ID = Field(
-        ...,
-        description="Session ID to export"
+        ..., description="Session ID to export"
     )
 
     format: str = Field(
-        default="json",
-        pattern=r"^(json|csv|txt|pdf)$",
-        description="Export format"
+        default="json", pattern=r"^(json|csv|txt|pdf)$", description="Export format"
     )
 
     include_metadata: bool = Field(
-        default=True,
-        description="Whether to include message metadata"
+        default=True, description="Whether to include message metadata"
     )
 
     date_range: Optional[Dict[str, datetime]] = Field(
-        None,
-        description="Date range for export"
+        None, description="Date range for export"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("date_range")

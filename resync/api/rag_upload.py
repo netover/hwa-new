@@ -32,7 +32,9 @@ async def upload_document(
         # Check file size by reading and limiting
         contents = await file.read()
         if len(contents) > 10 * 1024 * 1024:  # 10MB limit
-            raise HTTPException(status_code=400, detail="File too large. Maximum size is 10MB.")
+            raise HTTPException(
+                status_code=400, detail="File too large. Maximum size is 10MB."
+            )
 
         # Reset file pointer for saving
         await file.seek(0)
@@ -42,7 +44,7 @@ async def upload_document(
             document_upload = DocumentUpload(
                 filename=file.filename or "",
                 content_type=file.content_type or "application/octet-stream",
-                size=len(contents)
+                size=len(contents),
             )
         except ValueError as ve:
             raise HTTPException(status_code=400, detail=str(ve))

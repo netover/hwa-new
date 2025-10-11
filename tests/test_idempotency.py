@@ -19,11 +19,9 @@ from resync.core.idempotency import (
     IdempotencyManager,
     IdempotencyRecord,
     generate_idempotency_key,
-    validate_idempotency_key
+    validate_idempotency_key,
 )
-from resync.api.middleware.idempotency import (
-    IdempotencyMiddleware
-)
+from resync.api.middleware.idempotency import IdempotencyMiddleware
 
 
 class TestIdempotencyManager:
@@ -44,7 +42,7 @@ class TestIdempotencyManager:
         return IdempotencyConfig(
             ttl_hours=1,  # TTL curto para testes
             key_prefix="test:idempotency",
-            processing_prefix="test:processing"
+            processing_prefix="test:processing",
         )
 
     @pytest.fixture
@@ -62,7 +60,7 @@ class TestIdempotencyManager:
             response_data={"result": "cached"},
             status_code=200,
             created_at=datetime.utcnow(),
-            expires_at=datetime.utcnow() + timedelta(hours=1)
+            expires_at=datetime.utcnow() + timedelta(hours=1),
         )
 
         redis_mock.get.return_value = json.dumps(cached_record.to_dict())
@@ -99,7 +97,7 @@ class TestIdempotencyManager:
             response_data={"result": "expired"},
             status_code=200,
             created_at=datetime.utcnow() - timedelta(hours=2),
-            expires_at=datetime.utcnow() - timedelta(hours=1)
+            expires_at=datetime.utcnow() - timedelta(hours=1),
         )
 
         redis_mock.get.return_value = json.dumps(expired_record.to_dict())
@@ -119,7 +117,7 @@ class TestIdempotencyManager:
         success = await manager.cache_response(
             idempotency_key="test-key",
             response_data={"result": "success"},
-            status_code=201
+            status_code=201,
         )
 
         assert success is True
@@ -148,9 +146,7 @@ class TestIdempotencyManager:
         large_data = {"data": "x" * (65 * 1024)}  # Maior que 64KB
 
         success = await manager.cache_response(
-            idempotency_key="test-key",
-            response_data=large_data,
-            status_code=200
+            idempotency_key="test-key", response_data=large_data, status_code=200
         )
 
         assert success is False
@@ -211,8 +207,7 @@ class TestIdempotencyManager:
 
         assert success is True
         redis_mock.delete.assert_called_once_with(
-            "test:idempotency:test-key",
-            "test:processing:test-key"
+            "test:idempotency:test-key", "test:processing:test-key"
         )
 
     def test_get_metrics(self, manager):
@@ -221,8 +216,13 @@ class TestIdempotencyManager:
         metrics = manager.get_metrics()
 
         expected_keys = [
-            "total_requests", "cache_hits", "cache_misses", "hit_rate",
-            "concurrent_blocks", "storage_errors", "expired_cleanups"
+            "total_requests",
+            "cache_hits",
+            "cache_misses",
+            "hit_rate",
+            "concurrent_blocks",
+            "storage_errors",
+            "expired_cleanups",
         ]
 
         for key in expected_keys:
@@ -243,7 +243,7 @@ class TestIdempotencyRecord:
             status_code=200,
             created_at=datetime.utcnow(),
             expires_at=datetime.utcnow() + timedelta(hours=1),
-            request_metadata={"user_id": "123"}
+            request_metadata={"user_id": "123"},
         )
 
         # Serializar
@@ -260,8 +260,12 @@ class TestIdempotencyRecord:
         assert restored.request_metadata == original.request_metadata
 
         # Verificar timestamps (aproximadamente)
-        time_diff_created = abs((restored.created_at - original.created_at).total_seconds())
-        time_diff_expires = abs((restored.expires_at - original.expires_at).total_seconds())
+        time_diff_created = abs(
+            (restored.created_at - original.created_at).total_seconds()
+        )
+        time_diff_expires = abs(
+            (restored.expires_at - original.expires_at).total_seconds()
+        )
 
         assert time_diff_created < 1  # Menos de 1 segundo de diferença
         assert time_diff_expires < 1
@@ -287,7 +291,7 @@ class TestIdempotencyMiddleware:
         return IdempotencyMiddleware(
             app=None,
             idempotency_manager=manager_mock,
-            idempotency_header="X-Idempotency-Key"
+            idempotency_header="X-Idempotency-Key",
         )
 
     @pytest.mark.asyncio
@@ -299,7 +303,7 @@ class TestIdempotencyMiddleware:
             "status_code": 200,
             "data": {"result": "cached"},
             "cached_at": datetime.utcnow().isoformat(),
-            "expires_at": (datetime.utcnow() + timedelta(hours=1)).isoformat()
+            "expires_at": (datetime.utcnow() + timedelta(hours=1)).isoformat(),
         }
         manager_mock.get_cached_response.return_value = cached_response
 
@@ -399,7 +403,9 @@ class TestIdempotencyMiddleware:
         manager_mock.get_cached_response.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_dispatch_requires_idempotency_key_for_post(self, middleware, manager_mock):
+    async def test_dispatch_requires_idempotency_key_for_post(
+        self, middleware, manager_mock
+    ):
         """Testa que POST requer idempotency key"""
 
         request = MagicMock()
@@ -437,6 +443,7 @@ class TestUtilityFunctions:
         """Testa validação de chave válida"""
 
         import uuid
+
         valid_key = str(uuid.uuid4())
 
         assert validate_idempotency_key(valid_key)
@@ -447,7 +454,7 @@ class TestUtilityFunctions:
         invalid_keys = [
             "not-a-uuid",
             "12345678-1234-1234-1234-1234567890123",  # Muito longo
-            "12345678-1234-1234-1234-12345678901",   # Muito curto
+            "12345678-1234-1234-1234-12345678901",  # Muito curto
             "12345678-1234-1234-g234-123456789012",  # Caractere inválido
         ]
 
@@ -477,7 +484,7 @@ class TestMiddlewareIntegration:
         middleware = IdempotencyMiddleware(
             app=None,
             idempotency_manager=manager,
-            idempotency_header="X-Idempotency-Key"
+            idempotency_header="X-Idempotency-Key",
         )
 
         # Criar request
@@ -506,6 +513,7 @@ class TestMiddlewareIntegration:
 
 # Fixtures compartilhados
 
+
 @pytest.fixture(autouse=True)
 def reset_mocks():
     """Reseta mocks entre testes"""
@@ -516,6 +524,7 @@ def reset_mocks():
 def event_loop():
     """Event loop para testes assíncronos"""
     import asyncio
+
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()

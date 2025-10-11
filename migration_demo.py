@@ -12,9 +12,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from resync.core.migration_managers import CacheMigrationManager
 
+
 async def demo() -> None:
     print("🚀 DEMONSTRAÇÃO: Migração Gradual do Cache")
-    print("="*50)
+    print("=" * 50)
 
     cache_mgr = CacheMigrationManager()  # type: ignore[no-untyped-call]
     await cache_mgr.initialize()  # type: ignore[no-untyped-call]
@@ -35,6 +36,7 @@ async def demo() -> None:
     # Simular falha no novo cache
     if cache_mgr.new_cache is not None:
         original_get = cache_mgr.new_cache.get
+
         async def failing_get(key: str) -> None:
             raise Exception("Cache failure")
 
@@ -48,6 +50,7 @@ async def demo() -> None:
 
     await cache_mgr.shutdown()  # type: ignore[no-untyped-call]
     print("\n✅ Migração demonstrada com sucesso!")
+
 
 if __name__ == "__main__":
     asyncio.run(demo())

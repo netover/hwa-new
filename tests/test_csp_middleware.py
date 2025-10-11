@@ -44,17 +44,21 @@ def app_with_csp():
         """Handle CSP violation reports with enhanced validation and security."""
         try:
             from resync.csp_validation import process_csp_report, CSPValidationError
-            
+
             # Process the CSP report with enhanced validation
             result = await process_csp_report(request)
-            
+
             # Log specific violation details from sanitized data
             report = result.get("report", {})
-            csp_report = report.get("csp-report", {}) if isinstance(report, dict) and "csp-report" in report else report
-            
+            csp_report = (
+                report.get("csp-report", {})
+                if isinstance(report, dict) and "csp-report" in report
+                else report
+            )
+
             # Return 200 for all cases to avoid giving attackers information
             return {"status": "received"}
-            
+
         except CSPValidationError:
             # Return 200 even for invalid reports to avoid giving attackers information
             return {"status": "received"}
@@ -83,17 +87,21 @@ def app_with_csp_report_only():
         """Handle CSP violation reports with enhanced validation and security."""
         try:
             from resync.csp_validation import process_csp_report, CSPValidationError
-            
+
             # Process the CSP report with enhanced validation
             result = await process_csp_report(request)
-            
+
             # Log specific violation details from sanitized data
             report = result.get("report", {})
-            csp_report = report.get("csp-report", {}) if isinstance(report, dict) and "csp-report" in report else report
-            
+            csp_report = (
+                report.get("csp-report", {})
+                if isinstance(report, dict) and "csp-report" in report
+                else report
+            )
+
             # Return 200 for all cases to avoid giving attackers information
             return {"status": "received"}
-            
+
         except CSPValidationError:
             # Return 200 even for invalid reports to avoid giving attackers information
             return {"status": "received"}
@@ -213,7 +221,7 @@ class TestCSPMiddleware:
                 "column-number": 20,
                 "source-file": "https://example.com/test",
                 "status-code": 200,
-                "script-sample": ""
+                "script-sample": "",
             }
         }
 
@@ -250,8 +258,8 @@ class TestCSPMiddleware:
         html_content = response.text
 
         # Should contain a script tag with nonce attribute
-        assert 'nonce=' in html_content
-        assert 'console.log' in html_content
+        assert "nonce=" in html_content
+        assert "console.log" in html_content
 
     def test_csp_disabled_via_settings(self, monkeypatch):
         """Test that CSP can be disabled via settings."""
@@ -263,12 +271,13 @@ class TestCSPMiddleware:
         app = FastAPI()
 
         # Patch the settings import in the middleware
-        with patch('resync.settings.settings', mock_settings):
+        with patch("resync.settings.settings", mock_settings):
             # Create middleware with CSP disabled
             middleware = create_csp_middleware(app)
 
         # Should return a no-op middleware when CSP is disabled
         from starlette.middleware.base import BaseHTTPMiddleware
+
         assert isinstance(middleware, BaseHTTPMiddleware)
 
 
@@ -284,7 +293,7 @@ class TestCSPConfiguration:
         app = FastAPI()
 
         # Patch the settings import in the middleware
-        with patch('resync.settings.settings', mock_settings):
+        with patch("resync.settings.settings", mock_settings):
             app.add_middleware(CSPMiddleware)
 
         @app.get("/test")
@@ -331,12 +340,14 @@ class TestCSPConfiguration:
 class TestCSPValidationErrorHandling:
     """Test error handling in CSP validation."""
 
-    @patch('resync.csp_validation.process_csp_report')
-    def test_csp_violation_report_processing_error(self, mock_process_csp_report, app_with_csp):
+    @patch("resync.csp_validation.process_csp_report")
+    def test_csp_violation_report_processing_error(
+        self, mock_process_csp_report, app_with_csp
+    ):
         """Test CSP violation report endpoint when processing fails."""
         # Mock the process_csp_report function to raise an exception
         mock_process_csp_report.side_effect = Exception("Processing failed")
-        
+
         client = TestClient(app_with_csp)
 
         # Send a CSP violation report
@@ -344,7 +355,7 @@ class TestCSPValidationErrorHandling:
             "csp-report": {
                 "document-uri": "https://example.com/test",
                 "violated-directive": "script-src 'self'",
-                "original-policy": "default-src 'self'; script-src 'self'"
+                "original-policy": "default-src 'self'; script-src 'self'",
             }
         }
 
@@ -353,12 +364,16 @@ class TestCSPValidationErrorHandling:
         assert response.status_code == 200
         assert response.json() == {"status": "received"}
 
-    @patch('resync.csp_validation.process_csp_report')
-    def test_csp_violation_report_validation_error(self, mock_process_csp_report, app_with_csp):
+    @patch("resync.csp_validation.process_csp_report")
+    def test_csp_violation_report_validation_error(
+        self, mock_process_csp_report, app_with_csp
+    ):
         """Test CSP violation report endpoint when validation fails."""
         # Mock the process_csp_report function to raise a validation error
-        mock_process_csp_report.side_effect = CSPValidationError("Invalid report format")
-        
+        mock_process_csp_report.side_effect = CSPValidationError(
+            "Invalid report format"
+        )
+
         client = TestClient(app_with_csp)
 
         # Send a CSP violation report
@@ -366,7 +381,7 @@ class TestCSPValidationErrorHandling:
             "csp-report": {
                 "document-uri": "https://example.com/test",
                 "violated-directive": "script-src 'self'",
-                "original-policy": "default-src 'self'; script-src 'self'"
+                "original-policy": "default-src 'self'; script-src 'self'",
             }
         }
 

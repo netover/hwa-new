@@ -36,16 +36,16 @@ logger = get_logger(__name__)
 # EXCEPTION HANDLERS
 # ============================================================================
 
+
 async def base_app_exception_handler(
-    request: Request,
-    exc: BaseAppException
+    request: Request, exc: BaseAppException
 ) -> JSONResponse:
     """Handler para exceções da aplicação.
-    
+
     Args:
         request: Requisição HTTP
         exc: Exceção da aplicação
-        
+
     Returns:
         JSONResponse com problema detalhado
     """
@@ -57,183 +57,161 @@ async def base_app_exception_handler(
         correlation_id=exc.correlation_id,
         path=request.url.path,
         method=request.method,
-        exc_info=exc.original_exception is not None
+        exc_info=exc.original_exception is not None,
     )
-    
+
     # Criar problem detail
-    problem = create_problem_detail(
-        exception=exc,
-        instance=str(request.url.path)
-    )
-    
+    problem = create_problem_detail(exception=exc, instance=str(request.url.path))
+
     # Adicionar headers específicos
     headers = {}
-    
+
     # Rate limiting
-    if isinstance(exc, RateLimitError) and exc.details.get('retry_after'):
-        headers['Retry-After'] = str(exc.details['retry_after'])
-    
+    if isinstance(exc, RateLimitError) and exc.details.get("retry_after"):
+        headers["Retry-After"] = str(exc.details["retry_after"])
+
     # Correlation ID
     if exc.correlation_id:
-        headers['X-Correlation-ID'] = exc.correlation_id
-    
+        headers["X-Correlation-ID"] = exc.correlation_id
+
     return JSONResponse(
         status_code=exc.status_code,
         content=problem.model_dump(exclude_none=True),
-        headers=headers
+        headers=headers,
     )
 
 
 async def validation_exception_handler(
-    request: Request,
-    exc: Union[RequestValidationError, PydanticValidationError]
+    request: Request, exc: Union[RequestValidationError, PydanticValidationError]
 ) -> JSONResponse:
     """Handler para erros de validação do Pydantic/FastAPI.
-    
+
     Args:
         request: Requisição HTTP
         exc: Exceção de validação
-        
+
     Returns:
         JSONResponse com erros de validação detalhados
     """
     correlation_id = get_correlation_id()
-    
+
     # Logar erro
     logger.warning(
         "Validation error",
         correlation_id=correlation_id,
         path=request.url.path,
         method=request.method,
-        errors=exc.errors()
+        errors=exc.errors(),
     )
-    
+
     # Converter erros do Pydantic para nosso formato
     validation_errors = []
-    
+
     for error in exc.errors():
-        field = ".".join(str(loc) for loc in error['loc'])
-        
+        field = ".".join(str(loc) for loc in error["loc"])
+
         validation_errors.append(
             ValidationErrorDetail(
                 field=field,
-                message=error['msg'],
-                code=error['type'],
-                value=error.get('input')
+                message=error["msg"],
+                code=error["type"],
+                value=error.get("input"),
             )
         )
-    
+
     # Criar problem detail
     problem = create_validation_problem_detail(
         errors=validation_errors,
         detail=f"Validation failed with {len(validation_errors)} error(s)",
-        instance=str(request.url.path)
+        instance=str(request.url.path),
     )
-    
+
     headers = {}
     if correlation_id:
-        headers['X-Correlation-ID'] = correlation_id
-    
+        headers["X-Correlation-ID"] = correlation_id
+
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content=problem.model_dump(exclude_none=True),
-        headers=headers
+        headers=headers,
     )
 
 
 async def http_exception_handler(
-    request: Request,
-    exc: StarletteHTTPException
+    request: Request, exc: StarletteHTTPException
 ) -> JSONResponse:
     """Handler para exceções HTTP do Starlette.
-    
+
     Args:
         request: Requisição HTTP
         exc: Exceção HTTP
-        
+
     Returns:
         JSONResponse com problema detalhado
     """
     correlation_id = get_correlation_id()
-    
+
     # Logar exceção
     logger.warning(
         f"HTTP exception: {exc.detail}",
         status_code=exc.status_code,
         correlation_id=correlation_id,
         path=request.url.path,
-        method=request.method
+        method=request.method,
     )
-    
+
     # Mapear para nossa exceção
     if exc.status_code == 404:
         app_exc = ResourceNotFoundError(
-            message=str(exc.detail),
-            correlation_id=correlation_id
+            message=str(exc.detail), correlation_id=correlation_id
         )
     elif exc.status_code == 401:
         app_exc = AuthenticationError(
-            message=str(exc.detail),
-            correlation_id=correlation_id
+            message=str(exc.detail), correlation_id=correlation_id
         )
     elif exc.status_code == 403:
         app_exc = AuthorizationError(
-            message=str(exc.detail),
-            correlation_id=correlation_id
+            message=str(exc.detail), correlation_id=correlation_id
         )
     elif exc.status_code == 409:
         app_exc = ResourceConflictError(
-            message=str(exc.detail),
-            correlation_id=correlation_id
+            message=str(exc.detail), correlation_id=correlation_id
         )
     elif exc.status_code == 429:
-        app_exc = RateLimitError(
-            message=str(exc.detail),
-            correlation_id=correlation_id
-        )
+        app_exc = RateLimitError(message=str(exc.detail), correlation_id=correlation_id)
     elif exc.status_code >= 500:
-        app_exc = InternalError(
-            message=str(exc.detail),
-            correlation_id=correlation_id
-        )
+        app_exc = InternalError(message=str(exc.detail), correlation_id=correlation_id)
     else:
         app_exc = ValidationError(
-            message=str(exc.detail),
-            correlation_id=correlation_id
+            message=str(exc.detail), correlation_id=correlation_id
         )
-    
+
     # Criar problem detail
-    problem = create_problem_detail(
-        exception=app_exc,
-        instance=str(request.url.path)
-    )
-    
+    problem = create_problem_detail(exception=app_exc, instance=str(request.url.path))
+
     headers = {}
     if correlation_id:
-        headers['X-Correlation-ID'] = correlation_id
-    
+        headers["X-Correlation-ID"] = correlation_id
+
     return JSONResponse(
         status_code=exc.status_code,
         content=problem.model_dump(exclude_none=True),
-        headers=headers
+        headers=headers,
     )
 
 
-async def unhandled_exception_handler(
-    request: Request,
-    exc: Exception
-) -> JSONResponse:
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handler para exceções não tratadas.
-    
+
     Args:
         request: Requisição HTTP
         exc: Exceção não tratada
-        
+
     Returns:
         JSONResponse com erro interno
     """
     correlation_id = get_correlation_id()
-    
+
     # Logar exceção com stack trace
     logger.critical(
         f"Unhandled exception: {str(exc)}",
@@ -241,34 +219,28 @@ async def unhandled_exception_handler(
         path=request.url.path,
         method=request.method,
         exception_type=type(exc).__name__,
-        exc_info=True
+        exc_info=True,
     )
-    
+
     # Criar exceção interna
     app_exc = InternalError(
         message="An unexpected error occurred",
-        details={
-            "exception_type": type(exc).__name__,
-            "exception_message": str(exc)
-        },
+        details={"exception_type": type(exc).__name__, "exception_message": str(exc)},
         correlation_id=correlation_id,
-        original_exception=exc
+        original_exception=exc,
     )
-    
+
     # Criar problem detail
-    problem = create_problem_detail(
-        exception=app_exc,
-        instance=str(request.url.path)
-    )
-    
+    problem = create_problem_detail(exception=app_exc, instance=str(request.url.path))
+
     headers = {}
     if correlation_id:
-        headers['X-Correlation-ID'] = correlation_id
-    
+        headers["X-Correlation-ID"] = correlation_id
+
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=problem.model_dump(exclude_none=True),
-        headers=headers
+        headers=headers,
     )
 
 
@@ -276,32 +248,33 @@ async def unhandled_exception_handler(
 # REGISTRATION HELPER
 # ============================================================================
 
+
 def register_exception_handlers(app) -> None:
     """Registra todos os exception handlers na aplicação FastAPI.
-    
+
     Args:
         app: Instância da aplicação FastAPI
     """
     # Exceções da aplicação
     app.add_exception_handler(BaseAppException, base_app_exception_handler)
-    
+
     # Exceções de validação
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(PydanticValidationError, validation_exception_handler)
-    
+
     # Exceções HTTP do Starlette
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-    
+
     # Exceções não tratadas
     app.add_exception_handler(Exception, unhandled_exception_handler)
-    
+
     logger.info("Exception handlers registered successfully")
 
 
 __all__ = [
-    'base_app_exception_handler',
-    'validation_exception_handler',
-    'http_exception_handler',
-    'unhandled_exception_handler',
-    'register_exception_handlers',
+    "base_app_exception_handler",
+    "validation_exception_handler",
+    "http_exception_handler",
+    "unhandled_exception_handler",
+    "register_exception_handlers",
 ]

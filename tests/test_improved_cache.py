@@ -12,7 +12,7 @@ from resync.core.improved_cache import (
     CacheEntry,
     InMemoryCacheStorage,
     CacheMetricsCollector,
-    CacheTTLManager
+    CacheTTLManager,
 )
 
 
@@ -118,30 +118,30 @@ class TestCacheMetricsCollector:
         await metrics.record_delete()
 
         metrics_data = await metrics.get_metrics()
-        assert metrics_data['hits'] == 2
-        assert metrics_data['misses'] == 1
-        assert metrics_data['sets'] == 1
-        assert metrics_data['deletes'] == 1
-        assert metrics_data['hit_rate'] == 2/3
+        assert metrics_data["hits"] == 2
+        assert metrics_data["misses"] == 1
+        assert metrics_data["sets"] == 1
+        assert metrics_data["deletes"] == 1
+        assert metrics_data["hit_rate"] == 2 / 3
 
     @pytest.mark.asyncio
     async def test_metrics_hit_rate_calculation(self, metrics):
         """Testa cálculo de hit rate."""
         # Sem requests
         metrics_data = await metrics.get_metrics()
-        assert metrics_data['hit_rate'] == 0
+        assert metrics_data["hit_rate"] == 0
 
         # Apenas misses
         await metrics.record_miss()
         await metrics.record_miss()
         metrics_data = await metrics.get_metrics()
-        assert metrics_data['hit_rate'] == 0
+        assert metrics_data["hit_rate"] == 0
 
         # Mix de hits e misses
         await metrics.record_hit()
         await metrics.record_hit()
         metrics_data = await metrics.get_metrics()
-        assert metrics_data['hit_rate'] == 2/3
+        assert metrics_data["hit_rate"] == 2 / 3
 
 
 class TestImprovedAsyncCache:
@@ -196,10 +196,10 @@ class TestImprovedAsyncCache:
         await cache.delete("key1")
 
         metrics = await cache.get_metrics()
-        assert metrics['sets'] == 1
-        assert metrics['hits'] == 1
-        assert metrics['misses'] == 1
-        assert metrics['deletes'] == 1
+        assert metrics["sets"] == 1
+        assert metrics["hits"] == 1
+        assert metrics["misses"] == 1
+        assert metrics["deletes"] == 1
 
     @pytest.mark.asyncio
     async def test_cache_stats(self, cache):
@@ -208,10 +208,10 @@ class TestImprovedAsyncCache:
         await cache.set("key2", "value2")
 
         stats = await cache.get_stats()
-        assert stats['total_keys'] == 2
-        assert stats['initialized'] is True
-        assert 'hits' in stats
-        assert 'misses' in stats
+        assert stats["total_keys"] == 2
+        assert stats["initialized"] is True
+        assert "hits" in stats
+        assert "misses" in stats
 
     @pytest.mark.asyncio
     async def test_cache_clear(self, cache):

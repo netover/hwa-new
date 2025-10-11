@@ -17,6 +17,7 @@ from .common import (
 
 class AgentType(str, Enum):
     """Valid agent types."""
+
     LOCAL_SCRIPT = "local_script"
     EXTERNAL_API = "external_api"
     DATABASE_QUERY = "database_query"
@@ -26,6 +27,7 @@ class AgentType(str, Enum):
 
 class AgentStatus(str, Enum):
     """Agent status values."""
+
     ACTIVE = "active"
     INACTIVE = "inactive"
     MAINTENANCE = "maintenance"
@@ -34,6 +36,7 @@ class AgentStatus(str, Enum):
 
 class ToolCategory(str, Enum):
     """Valid tool categories."""
+
     TWS_TOOLS = "tws_tools"
     DATABASE_TOOLS = "database_tools"
     API_TOOLS = "api_tools"
@@ -45,109 +48,93 @@ class AgentConfig(BaseModel):
     """Agent configuration validation model."""
 
     id: StringConstraints.AGENT_ID = Field(
-        ...,
-        description="Unique agent identifier",
-        example="tws-troubleshooter-01"
+        ..., description="Unique agent identifier", example="tws-troubleshooter-01"
     )
 
     name: constr(
         min_length=NumericConstraints.MIN_AGENT_NAME_LENGTH,
         max_length=NumericConstraints.MAX_AGENT_NAME_LENGTH,
-        strip_whitespace=True
+        strip_whitespace=True,
     ) = Field(
         ...,
         description="Human-readable agent name",
-        example="TWS Troubleshooting Agent"
+        example="TWS Troubleshooting Agent",
     )
 
     role: StringConstraints.ROLE_TEXT = Field(
         ...,
         description="Agent's role description",
-        example="Specialized in TWS system troubleshooting and diagnostics"
+        example="Specialized in TWS system troubleshooting and diagnostics",
     )
 
     goal: StringConstraints.ROLE_TEXT = Field(
         ...,
         description="Primary goal of the agent",
-        example="Resolve TWS system issues and provide diagnostic assistance"
+        example="Resolve TWS system issues and provide diagnostic assistance",
     )
 
     backstory: StringConstraints.ROLE_TEXT = Field(
         ...,
         description="Agent's background story",
-        example="An experienced TWS administrator with deep system knowledge"
+        example="An experienced TWS administrator with deep system knowledge",
     )
 
     tools: list[StringConstraints.TOOL_NAME] = Field(
         default_factory=list,
         description="List of tools the agent can use",
         max_length=20,
-        example=["tws_status_tool", "tws_troubleshooting_tool"]
+        example=["tws_status_tool", "tws_troubleshooting_tool"],
     )
 
     model_name: StringConstraints.MODEL_NAME = Field(
-        default="llama3:latest",
-        description="LLM model name",
-        example="llama3:latest"
+        default="llama3:latest", description="LLM model name", example="llama3:latest"
     )
 
     memory: bool = Field(
-        default=True,
-        description="Whether the agent has memory enabled"
+        default=True, description="Whether the agent has memory enabled"
     )
 
     verbose: bool = Field(
-        default=False,
-        description="Whether the agent operates in verbose mode"
+        default=False, description="Whether the agent operates in verbose mode"
     )
 
     type: AgentType = Field(
-        default=AgentType.TWS_SPECIALIST,
-        description="Type of agent"
+        default=AgentType.TWS_SPECIALIST, description="Type of agent"
     )
 
     status: AgentStatus = Field(
-        default=AgentStatus.ACTIVE,
-        description="Current agent status"
+        default=AgentStatus.ACTIVE, description="Current agent status"
     )
 
-    description: Optional[constr(
-        min_length=NumericConstraints.MIN_AGENT_DESCRIPTION_LENGTH,
-        max_length=NumericConstraints.MAX_AGENT_DESCRIPTION_LENGTH,
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="Detailed agent description"
-    )
+    description: Optional[
+        constr(
+            min_length=NumericConstraints.MIN_AGENT_DESCRIPTION_LENGTH,
+            max_length=NumericConstraints.MAX_AGENT_DESCRIPTION_LENGTH,
+            strip_whitespace=True,
+        )
+    ] = Field(None, description="Detailed agent description")
 
     configuration: dict[str, Any] = Field(
         default_factory=dict,
         description="Additional agent configuration",
-        max_length=50
+        max_length=50,
     )
 
     tags: list[constr(min_length=1, max_length=50)] = Field(
-        default_factory=list,
-        description="Agent tags for categorization",
-        max_length=10
+        default_factory=list, description="Agent tags for categorization", max_length=10
     )
 
     max_tokens: Optional[int] = Field(
-        None,
-        ge=100,
-        le=100000,
-        description="Maximum tokens for model responses"
+        None, ge=100, le=100000, description="Maximum tokens for model responses"
     )
 
     temperature: Optional[float] = Field(
-        None,
-        ge=0.0,
-        le=2.0,
-        description="Model temperature setting"
+        None, ge=0.0, le=2.0, description="Model temperature setting"
     )
 
     class Config:
         """Pydantic configuration."""
+
         use_enum_values = True
         validate_assignment = True
         extra = "forbid"
@@ -202,7 +189,7 @@ class AgentConfig(BaseModel):
 
         return v
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     def validate_model_compatibility(cls, values):
         """Validate model compatibility with configuration."""
         if isinstance(values, dict):
@@ -231,9 +218,10 @@ class AgentCreateRequest(AgentConfig):
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     def validate_create_request(cls, values):
         """Validate agent creation request."""
         if isinstance(values, dict):
@@ -249,98 +237,69 @@ class AgentCreateRequest(AgentConfig):
 class AgentUpdateRequest(BaseModel):
     """Request model for updating an existing agent."""
 
-    name: Optional[constr(
-        min_length=NumericConstraints.MIN_AGENT_NAME_LENGTH,
-        max_length=NumericConstraints.MAX_AGENT_NAME_LENGTH,
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="Updated agent name"
-    )
+    name: Optional[
+        constr(
+            min_length=NumericConstraints.MIN_AGENT_NAME_LENGTH,
+            max_length=NumericConstraints.MAX_AGENT_NAME_LENGTH,
+            strip_whitespace=True,
+        )
+    ] = Field(None, description="Updated agent name")
 
     role: Optional[StringConstraints.ROLE_TEXT] = Field(
-        None,
-        description="Updated agent role"
+        None, description="Updated agent role"
     )
 
     goal: Optional[StringConstraints.ROLE_TEXT] = Field(
-        None,
-        description="Updated agent goal"
+        None, description="Updated agent goal"
     )
 
     backstory: Optional[StringConstraints.ROLE_TEXT] = Field(
-        None,
-        description="Updated agent backstory"
+        None, description="Updated agent backstory"
     )
 
     tools: Optional[list[StringConstraints.TOOL_NAME]] = Field(
-        None,
-        description="Updated tools list",
-        max_length=20
+        None, description="Updated tools list", max_length=20
     )
 
     model_name: Optional[StringConstraints.MODEL_NAME] = Field(
-        None,
-        description="Updated model name"
+        None, description="Updated model name"
     )
 
-    memory: Optional[bool] = Field(
-        None,
-        description="Updated memory setting"
-    )
+    memory: Optional[bool] = Field(None, description="Updated memory setting")
 
-    verbose: Optional[bool] = Field(
-        None,
-        description="Updated verbose setting"
-    )
+    verbose: Optional[bool] = Field(None, description="Updated verbose setting")
 
-    type: Optional[AgentType] = Field(
-        None,
-        description="Updated agent type"
-    )
+    type: Optional[AgentType] = Field(None, description="Updated agent type")
 
-    status: Optional[AgentStatus] = Field(
-        None,
-        description="Updated agent status"
-    )
+    status: Optional[AgentStatus] = Field(None, description="Updated agent status")
 
-    description: Optional[constr(
-        min_length=NumericConstraints.MIN_AGENT_DESCRIPTION_LENGTH,
-        max_length=NumericConstraints.MAX_AGENT_DESCRIPTION_LENGTH,
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="Updated agent description"
-    )
+    description: Optional[
+        constr(
+            min_length=NumericConstraints.MIN_AGENT_DESCRIPTION_LENGTH,
+            max_length=NumericConstraints.MAX_AGENT_DESCRIPTION_LENGTH,
+            strip_whitespace=True,
+        )
+    ] = Field(None, description="Updated agent description")
 
     configuration: Optional[dict[str, Any]] = Field(
-        None,
-        description="Updated configuration",
-        max_length=50
+        None, description="Updated configuration", max_length=50
     )
 
     tags: Optional[list[constr(min_length=1, max_length=50)]] = Field(
-        None,
-        description="Updated tags",
-        max_length=10
+        None, description="Updated tags", max_length=10
     )
 
     max_tokens: Optional[int] = Field(
-        None,
-        ge=100,
-        le=100000,
-        description="Updated max tokens"
+        None, ge=100, le=100000, description="Updated max tokens"
     )
 
     temperature: Optional[float] = Field(
-        None,
-        ge=0.0,
-        le=2.0,
-        description="Updated temperature"
+        None, ge=0.0, le=2.0, description="Updated temperature"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
         validate_assignment = True
 
@@ -396,50 +355,40 @@ class AgentQueryParams(BaseModel):
     """Query parameters for agent-related endpoints."""
 
     agent_id: Optional[StringConstraints.AGENT_ID] = Field(
-        None,
-        description="Filter by specific agent ID"
+        None, description="Filter by specific agent ID"
     )
 
     name: Optional[constr(min_length=1, max_length=100)] = Field(
-        None,
-        description="Filter by agent name (partial match)"
+        None, description="Filter by agent name (partial match)"
     )
 
-    type: Optional[AgentType] = Field(
-        None,
-        description="Filter by agent type"
-    )
+    type: Optional[AgentType] = Field(None, description="Filter by agent type")
 
-    status: Optional[AgentStatus] = Field(
-        None,
-        description="Filter by agent status"
-    )
+    status: Optional[AgentStatus] = Field(None, description="Filter by agent status")
 
     tags: Optional[list[constr(min_length=1, max_length=50)]] = Field(
-        None,
-        description="Filter by tags",
-        max_length=5
+        None, description="Filter by tags", max_length=5
     )
 
     include_inactive: bool = Field(
-        default=False,
-        description="Include inactive agents in results"
+        default=False, description="Include inactive agents in results"
     )
 
     sort_by: Optional[str] = Field(
         default="name",
         pattern=r"^(name|id|type|status|created_at|updated_at)$",
-        description="Field to sort results by"
+        description="Field to sort results by",
     )
 
     sort_order: Optional[str] = Field(
         default="asc",
         pattern=r"^(asc|desc)$",
-        description="Sort order (ascending or descending)"
+        description="Sort order (ascending or descending)",
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("tags")
@@ -462,22 +411,22 @@ class AgentBulkActionRequest(BaseModel):
         ...,
         description="List of agent IDs to perform action on",
         min_length=1,
-        max_length=100
+        max_length=100,
     )
 
     action: str = Field(
         ...,
         pattern=r"^(activate|deactivate|delete|export)$",
-        description="Bulk action to perform"
+        description="Bulk action to perform",
     )
 
     confirmation_token: Optional[str] = Field(
-        None,
-        description="Confirmation token for destructive actions"
+        None, description="Confirmation token for destructive actions"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("agent_ids")

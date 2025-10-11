@@ -10,7 +10,7 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,7 +36,9 @@ class CachedStaticFiles(StarletteStaticFiles):
 
         if response.status_code == 200:
             # Set cache headers
-            cache_max_age = getattr(settings, 'static_cache_max_age', 86400)  # Default 1 day
+            cache_max_age = getattr(
+                settings, "static_cache_max_age", 86400
+            )  # Default 1 day
             response.headers["Cache-Control"] = f"public, max-age={cache_max_age}"
 
             # Generate ETag for cache validation
@@ -45,7 +47,9 @@ class CachedStaticFiles(StarletteStaticFiles):
                 if full_path.exists():
                     stat_result = os.stat(full_path)
                     file_metadata = f"{stat_result.st_size}-{int(stat_result.st_mtime)}"
-                    etag_value = f'"{hashlib.sha256(file_metadata.encode()).hexdigest()[:16]}"'
+                    etag_value = (
+                        f'"{hashlib.sha256(file_metadata.encode()).hexdigest()[:16]}"'
+                    )
                     response.headers["ETag"] = etag_value
             except Exception as e:
                 logger.warning("failed_to_generate_etag", error=str(e))
@@ -71,13 +75,13 @@ class ApplicationFactory:
     @asynccontextmanager
     async def lifespan(self, app: FastAPI) -> AsyncIterator[None]:
         """
-        Manage application lifecycle with proper startup and shutdown.
-    
-    Args:
-            app: FastAPI application instance
+            Manage application lifecycle with proper startup and shutdown.
 
-        Yields:
-            None during application runtime
+        Args:
+                app: FastAPI application instance
+
+            Yields:
+                None during application runtime
         """
         # Startup
         logger.info("application_startup_initiated")
@@ -85,7 +89,11 @@ class ApplicationFactory:
         try:
             # Import here to avoid circular dependencies
             from resync.core.container import app_container
-            from resync.core.interfaces import ITWSClient, IAgentManager, IKnowledgeGraph
+            from resync.core.interfaces import (
+                ITWSClient,
+                IAgentManager,
+                IKnowledgeGraph,
+            )
             from resync.core.tws_monitor import get_tws_monitor, shutdown_tws_monitor
             from resync.cqrs.dispatcher import initialize_dispatcher
             from resync.api_gateway.container import setup_dependencies
@@ -97,8 +105,8 @@ class ApplicationFactory:
                 RedisInitializationError,
                 ConfigurationError,
             )
-    
-    # Store container reference
+
+            # Store container reference
             app.state.container = app_container
 
             # Container is already initialized during creation
@@ -122,7 +130,7 @@ class ApplicationFactory:
             await initialize_redis_with_retry(
                 max_retries=settings.redis_max_startup_retries,
                 base_backoff=settings.redis_startup_backoff_base,
-                max_backoff=settings.redis_startup_backoff_max
+                max_backoff=settings.redis_startup_backoff_max,
             )
 
             print("\n🚀 Iniciando Resync HWA Dashboard...")
@@ -162,7 +170,9 @@ class ApplicationFactory:
             if e.details.get("hint"):
                 print(f"   💡 Dica: {e.details['hint']}")
             print("\n   Como iniciar Redis localmente:")
-            print("   1. Instalar: brew install redis (macOS) ou apt install redis (Linux)")
+            print(
+                "   1. Instalar: brew install redis (macOS) ou apt install redis (Linux)"
+            )
             print("   2. Iniciar: redis-server")
             print("   3. Testar: redis-cli ping (deve retornar 'PONG')")
             print()
@@ -185,11 +195,7 @@ class ApplicationFactory:
             sys.exit(6)
 
         except Exception as e:
-            logger.critical(
-                "application_startup_failed",
-                error=str(e),
-                exc_info=True
-            )
+            logger.critical("application_startup_failed", error=str(e), exc_info=True)
             raise
         finally:
             # Shutdown
@@ -201,11 +207,7 @@ class ApplicationFactory:
                 logger.info("application_shutdown_completed")
                 print("✅ Encerrado com sucesso!\n")
             except Exception as e:
-                logger.error(
-                    "application_shutdown_error",
-                    error=str(e),
-                    exc_info=True
-                )
+                logger.error("application_shutdown_error", error=str(e), exc_info=True)
 
     def create_application(self) -> FastAPI:
         """
@@ -240,7 +242,7 @@ class ApplicationFactory:
         logger.info(
             "application_created",
             environment=settings.environment.value,
-            debug_mode=settings.is_development
+            debug_mode=settings.is_development,
         )
 
         return self.app
@@ -287,9 +289,9 @@ class ApplicationFactory:
         self.template_env = Environment(
             loader=FileSystemLoader(str(templates_dir)),
             autoescape=select_autoescape(
-                enabled_extensions=('html', 'xml'),
+                enabled_extensions=("html", "xml"),
                 default_for_string=True,
-                default=True
+                default=True,
             ),
             auto_reload=settings.is_development,
             cache_size=400 if settings.is_production else 0,
@@ -333,13 +335,11 @@ class ApplicationFactory:
         )
 
         # 4. CSP Middleware
-        self.app.add_middleware(
-            CSPMiddleware,
-            report_only=not settings.is_production
-        )
+        self.app.add_middleware(CSPMiddleware, report_only=not settings.is_production)
 
         # 5. Additional security headers
         from resync.config.security import add_additional_security_headers
+
         add_additional_security_headers(self.app)
 
         logger.info("middleware_configured")
@@ -347,12 +347,14 @@ class ApplicationFactory:
     def _configure_exception_handlers(self) -> None:
         """Register global exception handlers."""
         from resync.api.exception_handlers import register_exception_handlers
+
         register_exception_handlers(self.app)
         logger.info("exception_handlers_registered")
 
     def _setup_dependency_injection(self) -> None:
         """Configure dependency injection."""
         from resync.core.fastapi_di import inject_container
+
         inject_container(self.app)
         logger.info("dependency_injection_configured")
 
@@ -384,7 +386,7 @@ class ApplicationFactory:
         # Register core routers
         routers = [
             (health_router, "/api/v1", ["Health"]),
-            (agents_router, "/api/v1", ["Agents"]),
+            (agents_router, "/api/v1/agents", ["Agents"]),
             (chat_router, "/api/v1", ["Chat"]),
             (cache_router, "/api/v1", ["Cache"]),
             (audit_router, "/api/v1", ["Audit"]),
@@ -410,9 +412,7 @@ class ApplicationFactory:
 
         # Mount main static directory with caching
         self.app.mount(
-            "/static",
-            CachedStaticFiles(directory=str(static_dir)),
-            name="static"
+            "/static", CachedStaticFiles(directory=str(static_dir)), name="static"
         )
 
         # Mount subdirectories if they exist
@@ -425,7 +425,7 @@ class ApplicationFactory:
                 self.app.mount(
                     f"/{subdir}",
                     CachedStaticFiles(directory=str(subdir_path)),
-                    name=subdir
+                    name=subdir,
                 )
                 mounted += 1
 
@@ -449,6 +449,7 @@ class ApplicationFactory:
             # Apply rate limiting if available
             try:
                 from resync.core.rate_limiter import dashboard_rate_limit
+
                 return await dashboard_rate_limit(
                     self._render_template("revisao.html", request)
                 )
@@ -476,14 +477,13 @@ class ApplicationFactory:
         """
         if not self.templates:
             raise HTTPException(
-                status_code=500,
-                detail="Template engine not configured"
+                status_code=500, detail="Template engine not configured"
             )
 
         try:
             from resync.core.csp_template_response import CSPTemplateResponse
 
-            nonce = getattr(request.state, 'csp_nonce', '')
+            nonce = getattr(request.state, "csp_nonce", "")
             return CSPTemplateResponse(
                 template_name,
                 {
@@ -492,27 +492,19 @@ class ApplicationFactory:
                     "settings": {
                         "project_name": settings.project_name,
                         "version": settings.project_version,
-                        "environment": settings.environment.value
-                    }
+                        "environment": settings.environment.value,
+                    },
                 },
-                self.templates
+                self.templates,
             )
         except FileNotFoundError:
             logger.error("template_not_found", template=template_name)
             raise HTTPException(
-                status_code=404,
-                detail=f"Template {template_name} not found"
+                status_code=404, detail=f"Template {template_name} not found"
             )
         except Exception as e:
-            logger.error(
-                "template_render_error",
-                template=template_name,
-                error=str(e)
-            )
-            raise HTTPException(
-                status_code=500,
-                detail="Internal server error"
-            )
+            logger.error("template_render_error", template=template_name, error=str(e))
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     async def _handle_csp_report(self, request: Request) -> JSONResponse:
         """
@@ -528,39 +520,31 @@ class ApplicationFactory:
             from resync.csp_validation import process_csp_report
 
             result = await process_csp_report(request)
-            
+
             # Log violation details
             report = result.get("report", {})
             csp_report = (
-                report.get("csp-report", report)
-                if isinstance(report, dict)
-                else report
+                report.get("csp-report", report) if isinstance(report, dict) else report
             )
-            
+
             logger.warning(
                 "csp_violation_reported",
                 client_host=request.client.host if request.client else "unknown",
-                blocked_uri=csp_report.get('blocked-uri', 'unknown'),
-                violated_directive=csp_report.get('violated-directive', 'unknown'),
-                effective_directive=csp_report.get('effective-directive', 'unknown')
+                blocked_uri=csp_report.get("blocked-uri", "unknown"),
+                violated_directive=csp_report.get("violated-directive", "unknown"),
+                effective_directive=csp_report.get("effective-directive", "unknown"),
             )
 
-            return JSONResponse(
-                content={"status": "received"},
-                status_code=200
-            )
-        
+            return JSONResponse(content={"status": "received"}, status_code=200)
+
         except Exception as e:
             logger.error(
                 "csp_report_error",
-                        error_type=type(e).__name__,
-                client_host=request.client.host if request.client else "unknown"
+                error_type=type(e).__name__,
+                client_host=request.client.host if request.client else "unknown",
             )
             # Always return 200 to prevent information leakage
-            return JSONResponse(
-                content={"status": "received"},
-                status_code=200
-            )
+            return JSONResponse(content={"status": "received"}, status_code=200)
 
 
 # Module-level factory instance

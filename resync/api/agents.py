@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, Request
 
 from resync.core.exceptions_enhanced import NotFoundError
@@ -9,37 +10,36 @@ agent_manager_dependency = Depends(get_agent_manager)
 
 agents_router = APIRouter()
 
+logger = logging.getLogger(__name__)
 
-@agents_router.get("/")
-async def list_all_agents(request: Request):
+
+@agents_router.get("/all")
+async def list_all_agents(request: Request, agent_manager=agent_manager_dependency):
     """
     Lists the configuration of all available agents.
     """
-    # Return simple JSON response for now
-    return [
-        {
-            "id": "tws-troubleshooting",
-            "name": "TWS Troubleshooting Agent",
-            "description": "Especialista em resolução de problemas do TWS",
-            "model": "tongyi-deepresearch",
-            "temperature": 0.7,
-            "max_tokens": 4096
-        },
-        {
-            "id": "tws-general",
-            "name": "TWS General Assistant",
-            "description": "Assistente geral para operações do TWS",
-            "model": "openrouter-fallback",
-            "temperature": 0.5,
-            "max_tokens": 2048
-        }
-    ]
+    logger.info("list_all_agents endpoint called")
+    try:
+        agents = await agent_manager.get_all_agents()
+        return [
+            {
+                "id": agent.id,
+                "name": agent.name,
+                "role": agent.role,
+                "goal": agent.goal,
+                "model": agent.model_name,
+                "tools": agent.tools,
+            }
+            for agent in agents
+        ]
+    except Exception as e:
+        logger.error(f"Error listing agents: {e}")
+        return []
 
 
 @agents_router.get("/{agent_id}")
 async def get_agent_details(
-    agent_id: SafeAgentID,
-    request: Request,
+    agent_id: SafeAgentID, request: Request, agent_manager=agent_manager_dependency
 ):
     """
     Retrieves the detailed configuration of a specific agent by its ID.
@@ -47,27 +47,24 @@ async def get_agent_details(
     Raises:
         NotFoundError: If no agent with the specified ID is found.
     """
-    # Return mock data for specific agent IDs
-    agent_configs = {
-        "tws-troubleshooting": {
-            "id": "tws-troubleshooting",
-            "name": "TWS Troubleshooting Agent",
-            "description": "Especialista em resolução de problemas do TWS",
-            "model": "tongyi-deepresearch",
-            "temperature": 0.7,
-            "max_tokens": 4096
-        },
-        "tws-general": {
-            "id": "tws-general",
-            "name": "TWS General Assistant",
-            "description": "Assistente geral para operações do TWS",
-            "model": "openrouter-fallback",
-            "temperature": 0.5,
-            "max_tokens": 2048
+    logger.info(f"get_agent_details endpoint called with agent_id: {agent_id}")
+    try:
+        agent_config = await agent_manager.get_agent_config(agent_id)
+        if agent_config is None:
+            raise NotFoundError(f"Agent with ID '{agent_id}' not found.")
+
+        return {
+            "id": agent_config.id,
+            "name": agent_config.name,
+            "role": agent_config.role,
+            "goal": agent_config.goal,
+            "backstory": agent_config.backstory,
+            "tools": agent_config.tools,
+            "model": agent_config.model_name,
+            "memory": agent_config.memory,
         }
-    }
-
-    if agent_id not in agent_configs:
+    except NotFoundError:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting agent details for {agent_id}: {e}")
         raise NotFoundError(f"Agent with ID '{agent_id}' not found.")
-
-    return agent_configs[agent_id]

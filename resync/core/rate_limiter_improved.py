@@ -25,7 +25,7 @@ class TokenBucketRateLimiter:
         self,
         rate: float,  # tokens por segundo
         capacity: int,  # capacidade máxima do bucket
-        name: str = "default"
+        name: str = "default",
     ):
         self.rate = rate
         self.capacity = capacity
@@ -51,10 +51,7 @@ class TokenBucketRateLimiter:
 
             # Adicionar tokens baseado no tempo decorrido
             elapsed = now - self.last_update
-            self.tokens = min(
-                self.capacity,
-                self.tokens + elapsed * self.rate
-            )
+            self.tokens = min(self.capacity, self.tokens + elapsed * self.rate)
             self.last_update = now
 
             # Verificar se há tokens suficientes
@@ -77,20 +74,22 @@ class TokenBucketRateLimiter:
 
     def decorator(self, tokens: int = 1):
         """Decorator para rate limiting."""
+
         def wrapper(func: Callable) -> Callable:
             @wraps(func)
             async def wrapped(*args, **kwargs) -> Any:
                 await self.wait_and_acquire(tokens)
                 return await func(*args, **kwargs)
+
             return wrapped
+
         return wrapper
 
     def get_stats(self) -> dict[str, Any]:
         """Retorna estatísticas do rate limiter."""
         total_requests = self.requests_allowed + self.requests_denied
         success_rate = (
-            self.requests_allowed / total_requests
-            if total_requests > 0 else 0
+            self.requests_allowed / total_requests if total_requests > 0 else 0
         )
 
         return {
@@ -103,7 +102,7 @@ class TokenBucketRateLimiter:
             "requests_denied": self.requests_denied,
             "success_rate": success_rate,
             "tokens_consumed": self.tokens_consumed,
-            "last_update": self.last_update
+            "last_update": self.last_update,
         }
 
 
@@ -117,7 +116,7 @@ class LeakyBucketRateLimiter:
         self,
         rate: float,  # vazão por segundo
         capacity: int,  # capacidade do bucket
-        name: str = "default"
+        name: str = "default",
     ):
         self.rate = rate  # vazão por segundo
         self.capacity = capacity
@@ -177,20 +176,22 @@ class LeakyBucketRateLimiter:
 
     def decorator(self):
         """Decorator para rate limiting."""
+
         def wrapper(func: Callable) -> Callable:
             @wraps(func)
             async def wrapped(*args, **kwargs) -> Any:
                 await self.wait_and_acquire()
                 return await func(*args, **kwargs)
+
             return wrapped
+
         return wrapper
 
     def get_stats(self) -> dict[str, Any]:
         """Retorna estatísticas do rate limiter."""
         total_requests = self.requests_allowed + self.requests_denied
         success_rate = (
-            self.requests_allowed / total_requests
-            if total_requests > 0 else 0
+            self.requests_allowed / total_requests if total_requests > 0 else 0
         )
 
         return {
@@ -203,7 +204,7 @@ class LeakyBucketRateLimiter:
             "requests_denied": self.requests_denied,
             "requests_processed": self.requests_processed,
             "success_rate": success_rate,
-            "running": self._leak_task is not None
+            "running": self._leak_task is not None,
         }
 
 
@@ -214,10 +215,7 @@ class SlidingWindowRateLimiter:
     """
 
     def __init__(
-        self,
-        requests_per_window: int,
-        window_seconds: float,
-        name: str = "default"
+        self, requests_per_window: int, window_seconds: float, name: str = "default"
     ):
         self.requests_per_window = requests_per_window
         self.window_seconds = window_seconds
@@ -252,27 +250,31 @@ class SlidingWindowRateLimiter:
         while not await self.acquire():
             # Espera até a próxima requisição expirar da janela
             if self.requests:
-                wait_time = max(0, (self.requests[0] + self.window_seconds) - time.monotonic())
+                wait_time = max(
+                    0, (self.requests[0] + self.window_seconds) - time.monotonic()
+                )
             else:
                 wait_time = 0.1
             await asyncio.sleep(wait_time)
 
     def decorator(self):
         """Decorator para rate limiting."""
+
         def wrapper(func: Callable) -> Callable:
             @wraps(func)
             async def wrapped(*args, **kwargs) -> Any:
                 await self.wait_and_acquire()
                 return await func(*args, **kwargs)
+
             return wrapped
+
         return wrapper
 
     def get_stats(self) -> dict[str, Any]:
         """Retorna estatísticas do rate limiter."""
         total_requests = self.requests_allowed + self.requests_denied
         success_rate = (
-            self.requests_allowed / total_requests
-            if total_requests > 0 else 0
+            self.requests_allowed / total_requests if total_requests > 0 else 0
         )
 
         return {
@@ -283,7 +285,7 @@ class SlidingWindowRateLimiter:
             "current_window_requests": len(self.requests),
             "requests_allowed": self.requests_allowed,
             "requests_denied": self.requests_denied,
-            "success_rate": success_rate
+            "success_rate": success_rate,
         }
 
 
@@ -298,10 +300,7 @@ class RateLimiterManager:
         self._lock = asyncio.Lock()
 
     async def create_token_bucket(
-        self,
-        name: str,
-        rate: float,
-        capacity: int
+        self, name: str, rate: float, capacity: int
     ) -> TokenBucketRateLimiter:
         """Cria um Token Bucket rate limiter."""
         async with self._lock:
@@ -314,10 +313,7 @@ class RateLimiterManager:
             return limiter
 
     async def create_leaky_bucket(
-        self,
-        name: str,
-        rate: float,
-        capacity: int
+        self, name: str, rate: float, capacity: int
     ) -> LeakyBucketRateLimiter:
         """Cria um Leaky Bucket rate limiter."""
         async with self._lock:
@@ -331,23 +327,22 @@ class RateLimiterManager:
             return limiter
 
     async def create_sliding_window(
-        self,
-        name: str,
-        requests_per_window: int,
-        window_seconds: float
+        self, name: str, requests_per_window: int, window_seconds: float
     ) -> SlidingWindowRateLimiter:
         """Cria um Sliding Window rate limiter."""
         async with self._lock:
             if name in self.limiters:
                 raise ValueError(f"Rate limiter '{name}' already exists")
 
-            limiter = SlidingWindowRateLimiter(requests_per_window, window_seconds, name)
+            limiter = SlidingWindowRateLimiter(
+                requests_per_window, window_seconds, name
+            )
             self.limiters[name] = limiter
             logger.info(
                 "sliding_window_created",
                 name=name,
                 requests_per_window=requests_per_window,
-                window_seconds=window_seconds
+                window_seconds=window_seconds,
             )
             return limiter
 
@@ -362,7 +357,7 @@ class RateLimiterManager:
         async with self._lock:
             if name in self.limiters:
                 limiter = self.limiters[name]
-                if hasattr(limiter, 'stop'):
+                if hasattr(limiter, "stop"):
                     await limiter.stop()
                 del self.limiters[name]
                 logger.info("rate_limiter_removed", name=name)
@@ -371,15 +366,12 @@ class RateLimiterManager:
 
     def get_all_stats(self) -> dict[str, Any]:
         """Retorna estatísticas de todos os limiters."""
-        return {
-            name: limiter.get_stats()
-            for name, limiter in self.limiters.items()
-        }
+        return {name: limiter.get_stats() for name, limiter in self.limiters.items()}
 
     async def shutdown(self):
         """Para todos os rate limiters."""
         for limiter in self.limiters.values():
-            if hasattr(limiter, 'stop'):
+            if hasattr(limiter, "stop"):
                 await limiter.stop()
         self.limiters.clear()
         logger.info("rate_limiter_manager_shutdown")
@@ -413,11 +405,14 @@ def rate_limit(name: str, tokens: int = 1):
     """
     Decorator para aplicar rate limiting usando limiter nomeado.
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
             limiter = get_limiter(name)
             await limiter.wait_and_acquire(tokens)
             return await func(*args, **kwargs)
+
         return wrapper
+
     return decorator

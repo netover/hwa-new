@@ -39,10 +39,11 @@ class CacheStats(BaseModel):
 
 class ConnectionPoolValidator:
     """Validates connection pool settings for database connections."""
-    
+
     @staticmethod
-    def validate_connection_pool(min_connections: int, max_connections: int, 
-                                timeout: float) -> bool:
+    def validate_connection_pool(
+        min_connections: int, max_connections: int, timeout: float
+    ) -> bool:
         """
         Validates connection pool parameters.
 
@@ -80,7 +81,7 @@ class ConnectionPoolValidator:
 def get_redis_connection() -> Optional[Redis]:
     """
     Get a Redis connection using connection pooling and validation.
-    
+
     Returns:
         Redis connection object or None if connection fails
     """
@@ -108,17 +109,17 @@ class RedisCacheManager:
     """
     Enhanced Redis cache manager with optimized caching strategies.
     """
-    
+
     def __init__(self, redis_client: Redis):
         self.redis_client = redis_client
-        
+
     def get(self, key: str) -> Optional[str]:
         """
         Retrieve a value from Redis cache.
-        
+
         Args:
             key: The cache key
-            
+
         Returns:
             Cached value or None if not found
         """
@@ -132,16 +133,16 @@ class RedisCacheManager:
         except Exception as e:
             logger.error(f"Error retrieving from cache: {e}")
             return None
-    
+
     def set(self, key: str, value: str, expire: int = 3600) -> bool:
         """
         Set a value in Redis cache.
-        
+
         Args:
             key: The cache key
             value: The value to cache
             expire: Expiration time in seconds (default 1 hour)
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -152,14 +153,14 @@ class RedisCacheManager:
         except Exception as e:
             logger.error(f"Error setting cache: {e}")
             return False
-    
+
     def delete(self, key: str) -> bool:
         """
         Delete a key from Redis cache.
-        
+
         Args:
             key: The cache key to delete
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -170,7 +171,7 @@ class RedisCacheManager:
         except Exception as e:
             logger.error(f"Error deleting cache: {e}")
             return False
-    
+
     def clear_pattern(self, pattern: str) -> int:
         """
         Delete multiple keys matching a pattern.
@@ -191,7 +192,7 @@ class RedisCacheManager:
         except Exception as e:
             logger.error(f"Error clearing pattern: {e}")
             return 0
-    
+
     def get_cache_stats(self) -> CacheStats:
         """
         Get cache statistics.
@@ -200,19 +201,14 @@ class RedisCacheManager:
             CacheStats object with statistics
         """
         info = self.redis_client.info()
-        keyspace = info.get('Keyspace', {})  # {'db0': {'keys': 123, ...}}
-        hits = int(info.get('keyspace_hits', 0))
-        misses = int(info.get('keyspace_misses', 0))
+        keyspace = info.get("Keyspace", {})  # {'db0': {'keys': 123, ...}}
+        hits = int(info.get("keyspace_hits", 0))
+        misses = int(info.get("keyspace_misses", 0))
         total = hits + misses
         hit_rate = (hits / total) if total > 0 else 0.0
-        size = sum(int(db_info.get('keys', 0)) for db_info in keyspace.values())
+        size = sum(int(db_info.get("keys", 0)) for db_info in keyspace.values())
 
-        return CacheStats(
-            hits=hits,
-            misses=misses,
-            hit_rate=hit_rate,
-            size=size
-        )
+        return CacheStats(hits=hits, misses=misses, hit_rate=hit_rate, size=size)
 
 
 # Global Redis cache manager instance
@@ -222,7 +218,7 @@ redis_manager: Optional[RedisCacheManager] = None
 def validate_connection_pool() -> bool:
     """
     Function to validate connection pool settings as specified in the implementation plan.
-    
+
     Returns:
         True if validation passes, False otherwise
     """
@@ -234,11 +230,13 @@ def validate_connection_pool() -> bool:
     except (TypeError, ValueError) as e:
         logger.error(f"Error parsing Redis connection settings: {e}")
         return False
-    
+
     return ConnectionPoolValidator.validate_connection_pool(min_conn, max_conn, timeout)
 
 
-async def verify_admin_credentials(creds: HTTPBasicCredentials = security_dependency) -> None:
+async def verify_admin_credentials(
+    creds: HTTPBasicCredentials = security_dependency,
+) -> None:
     """
     Dependência para verificar as credenciais de administrador usando Basic Auth.
 
@@ -272,7 +270,9 @@ async def verify_admin_credentials(creds: HTTPBasicCredentials = security_depend
     correct_password = secrets.compare_digest(creds.password, admin_pass)
 
     if not (correct_username and correct_password):
-        logger.warning(f"Failed admin authentication attempt for user: {creds.username}")
+        logger.warning(
+            f"Failed admin authentication attempt for user: {creds.username}"
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciais de administrador inválidas ou ausentes.",
@@ -293,7 +293,7 @@ async def invalidate_tws_cache(
     scope: str = "system",  # 'system', 'jobs', 'workstations'
     tws_client: ITWSClient = tws_client_dependency,
     # Call verify_admin_credentials inside the function to handle rate limiting properly
-    creds: HTTPBasicCredentials = security_dependency
+    creds: HTTPBasicCredentials = security_dependency,
 ) -> CacheInvalidationResponse:
     """
     Invalidates the TWS data cache based on the specified scope.
@@ -308,7 +308,9 @@ async def invalidate_tws_cache(
         await verify_admin_credentials(creds)
 
         # Log the cache invalidation request for security auditing
-        logger.info(f"Cache invalidation requested by user '{creds.username}' with scope '{scope}'")
+        logger.info(
+            f"Cache invalidation requested by user '{creds.username}' with scope '{scope}'"
+        )
 
         # Initialize Redis manager if not already done
         global redis_manager
@@ -317,40 +319,39 @@ async def invalidate_tws_cache(
             if redis_client:
                 redis_manager = RedisCacheManager(redis_client)
             else:
-                logger.warning("Could not connect to Redis, proceeding with TWS client invalidation only")
+                logger.warning(
+                    "Could not connect to Redis, proceeding with TWS client invalidation only"
+                )
 
         if scope == "system":
             # Use Redis manager to clear all TWS-related keys if available
             if redis_manager:
                 redis_manager.clear_pattern("tws:*")
-            
+
             await tws_client.invalidate_system_cache()
             logger.info("Full TWS system cache invalidated successfully")
             return CacheInvalidationResponse(
-                status="success", 
-                detail="Full TWS system cache invalidated."
+                status="success", detail="Full TWS system cache invalidated."
             )
         elif scope == "jobs":
             # Use Redis manager to clear job-related keys if available
             if redis_manager:
                 redis_manager.clear_pattern("tws:jobs:*")
-            
+
             await tws_client.invalidate_all_jobs()
             logger.info("All jobs list cache invalidated successfully")
             return CacheInvalidationResponse(
-                status="success", 
-                detail="All jobs list cache invalidated."
+                status="success", detail="All jobs list cache invalidated."
             )
         elif scope == "workstations":
             # Use Redis manager to clear workstation-related keys if available
             if redis_manager:
                 redis_manager.clear_pattern("tws:workstations:*")
-            
+
             await tws_client.invalidate_all_workstations()
             logger.info("All workstations list cache invalidated successfully")
             return CacheInvalidationResponse(
-                status="success", 
-                detail="All workstations list cache invalidated."
+                status="success", detail="All workstations list cache invalidated."
             )
         else:
             logger.warning(f"Invalid scope '{scope}' provided for cache invalidation")
@@ -365,19 +366,21 @@ async def invalidate_tws_cache(
         logger.error(f"Error during cache invalidation: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to invalidate cache due to server error."
+            detail="Failed to invalidate cache due to server error.",
         ) from e
 
 
 @cache_router.get("/stats", summary="Get cache statistics", response_model=CacheStats)
 @authenticated_rate_limit
-async def get_cache_stats(request: Request, creds: HTTPBasicCredentials = security_dependency) -> CacheStats:
+async def get_cache_stats(
+    request: Request, creds: HTTPBasicCredentials = security_dependency
+) -> CacheStats:
     """
     Get cache statistics including hit rate, size, etc.
     """
     # Verify admin credentials
     await verify_admin_credentials(creds)
-    
+
     # Initialize Redis manager if not already done
     global redis_manager
     if redis_manager is None:
@@ -388,19 +391,22 @@ async def get_cache_stats(request: Request, creds: HTTPBasicCredentials = securi
             logger.error("Could not connect to Redis for stats")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Could not connect to Redis for cache statistics."
+                detail="Could not connect to Redis for cache statistics.",
             )
-    
+
     # Get and return cache stats
     stats = redis_manager.get_cache_stats()
-    logger.info(f"Cache stats retrieved: hits={stats.hits}, misses={stats.misses}, "
-                f"hit_rate={stats.hit_rate:.2%}, size={stats.size}")
-    
+    logger.info(
+        f"Cache stats retrieved: hits={stats.hits}, misses={stats.misses}, "
+        f"hit_rate={stats.hit_rate:.2%}, size={stats.size}"
+    )
+
     return stats
 
 
-def get_database_connection(min_connections: int = 1, max_connections: int = 10, 
-                          timeout: float = 30.0) -> Union[object, None]:
+def get_database_connection(
+    min_connections: int = 1, max_connections: int = 10, timeout: float = 30.0
+) -> Union[object, None]:
     """
     Get a database connection with pool validation.
 

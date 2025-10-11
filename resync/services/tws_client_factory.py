@@ -98,7 +98,7 @@ class BaseTWSClient(ABC):
         return {
             "connected": self._connected,
             "config_valid": True,
-            "type": self.__class__.__name__
+            "type": self.__class__.__name__,
         }
 
 
@@ -114,7 +114,7 @@ class ProductionTWSClient(BaseTWSClient):
             username=config.username,
             password=config.password,
             engine_name=config.engine_name,
-            engine_owner=config.engine_owner
+            engine_owner=config.engine_owner,
         )
 
     async def connect(self) -> bool:
@@ -123,7 +123,7 @@ class ProductionTWSClient(BaseTWSClient):
             self.logger.info(
                 "connecting_to_tws",
                 hostname=self.config.hostname,
-                port=self.config.port
+                port=self.config.port,
             )
             # Delegate to the actual client
             # Note: This assumes OptimizedTWSClient has an async connect method
@@ -173,21 +173,23 @@ class TestTWSClient(BaseTWSClient):
 
     async def get_job_status(self, job_id: str) -> dict[str, any]:
         """Retorna status mockado."""
-        return self.job_statuses.get(job_id, {
-            "job_id": job_id,
-            "status": "COMPLETED",
-            "progress": 100,
-            "start_time": "2024-01-01T10:00:00Z",
-            "end_time": "2024-01-01T10:05:00Z"
-        })
+        return self.job_statuses.get(
+            job_id,
+            {
+                "job_id": job_id,
+                "status": "COMPLETED",
+                "progress": 100,
+                "start_time": "2024-01-01T10:00:00Z",
+                "end_time": "2024-01-01T10:05:00Z",
+            },
+        )
 
     async def health_check(self) -> dict[str, any]:
         """Health check específico para mock."""
         base_check = await super().health_check()
-        base_check.update({
-            "executed_commands_count": len(self.executed_commands),
-            "mock_mode": True
-        })
+        base_check.update(
+            {"executed_commands_count": len(self.executed_commands), "mock_mode": True}
+        )
         return base_check
 
 
@@ -215,7 +217,7 @@ class TWSClientFactory:
             "creating_tws_client",
             mock_mode=config.mock_mode,
             hostname=config.hostname,
-            port=config.port
+            port=config.port,
         )
 
         if config.mock_mode:
@@ -231,9 +233,9 @@ class TWSClientFactory:
             port=settings.TWS_PORT,
             username=settings.TWS_USER,
             password=settings.TWS_PASSWORD,
-            mock_mode=getattr(settings, 'TWS_MOCK_MODE', False),
-            engine_name=getattr(settings, 'TWS_ENGINE_NAME', None),
-            engine_owner=getattr(settings, 'TWS_ENGINE_OWNER', None)
+            mock_mode=getattr(settings, "TWS_MOCK_MODE", False),
+            engine_name=getattr(settings, "TWS_ENGINE_NAME", None),
+            engine_owner=getattr(settings, "TWS_ENGINE_OWNER", None),
         )
         return TWSClientFactory.create(config)
 
@@ -242,7 +244,7 @@ class TWSClientFactory:
         hostname: str = "localhost",
         port: int = 1619,
         username: str = "testuser",
-        password: str = "testpass"
+        password: str = "testpass",
     ) -> BaseTWSClient:
         """Cria cliente para testes com valores padrão."""
         config = TWSConfig(
@@ -251,7 +253,7 @@ class TWSClientFactory:
             username=username,
             password=password,
             mock_mode=True,
-            timeout=5  # Timeout menor para testes
+            timeout=5,  # Timeout menor para testes
         )
         return TWSClientFactory.create(config)
 

@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class Environment(str, Enum):
     """Environment types for CORS configuration."""
+
     DEVELOPMENT = "development"
     PRODUCTION = "production"
     TEST = "test"
@@ -21,6 +22,7 @@ class Environment(str, Enum):
 
 class CORSMethods(str, Enum):
     """Allowed HTTP methods for CORS."""
+
     GET = "GET"
     POST = "POST"
     PUT = "PUT"
@@ -44,51 +46,48 @@ class CORSPolicy(BaseModel):
     # Allowed origins configuration
     allowed_origins: List[str] = Field(
         default=[],
-        description="List of allowed origins. Use specific domains in production, wildcards only in development."
+        description="List of allowed origins. Use specific domains in production, wildcards only in development.",
     )
 
     # Allowed methods configuration
     allowed_methods: List[str] = Field(
         default=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        description="List of allowed HTTP methods."
+        description="List of allowed HTTP methods.",
     )
 
     # Allowed headers configuration
     allowed_headers: List[str] = Field(
         default=["Content-Type", "Authorization", "X-Requested-With"],
-        description="List of allowed headers."
+        description="List of allowed headers.",
     )
 
     # CORS behavior settings
     allow_credentials: bool = Field(
-        default=False,
-        description="Whether to allow credentials in CORS requests."
+        default=False, description="Whether to allow credentials in CORS requests."
     )
 
     max_age: int = Field(
         default=86400,  # 24 hours
-        description="Maximum age in seconds for preflight cache."
+        description="Maximum age in seconds for preflight cache.",
     )
 
     # Security settings
     allow_all_origins: bool = Field(
-        default=False,
-        description="Whether to allow all origins (development only)."
+        default=False, description="Whether to allow all origins (development only)."
     )
 
     # Logging settings
     log_violations: bool = Field(
         default=True,
-        description="Whether to log CORS violations for security monitoring."
+        description="Whether to log CORS violations for security monitoring.",
     )
 
     # Dynamic validation settings
     origin_regex_patterns: List[str] = Field(
-        default=[],
-        description="Regex patterns for dynamic origin validation."
+        default=[], description="Regex patterns for dynamic origin validation."
     )
 
-    @validator('environment', pre=True)
+    @validator("environment", pre=True)
     def validate_environment(cls, v):
         """Validate environment value."""
         if isinstance(v, str):
@@ -101,23 +100,23 @@ class CORSPolicy(BaseModel):
                 return Environment.TEST
         return v
 
-    @validator('allowed_origins', each_item=True)
+    @validator("allowed_origins", each_item=True)
     def validate_origin(cls, v, values):
         """Validate each origin in the allowed_origins list."""
         if not v:
             return v
 
-        environment = values.get('environment')
+        environment = values.get("environment")
 
         # Check for wildcard in production
-        if environment == Environment.PRODUCTION and '*' in v:
+        if environment == Environment.PRODUCTION and "*" in v:
             raise ValueError(
                 "Wildcard origins are not allowed in production. "
                 "Use specific domain names instead."
             )
 
         # Validate origin format
-        if v != '*' and not cls._is_valid_origin_format(v):
+        if v != "*" and not cls._is_valid_origin_format(v):
             raise ValueError(
                 f"Invalid origin format: {v}. "
                 "Expected format: http(s)://domain.com or http(s)://domain.com:port"
@@ -125,7 +124,7 @@ class CORSPolicy(BaseModel):
 
         return v
 
-    @validator('allowed_methods', each_item=True)
+    @validator("allowed_methods", each_item=True)
     def validate_method(cls, v):
         """Validate HTTP methods."""
         allowed_methods = {method.value for method in CORSMethods}
@@ -136,7 +135,7 @@ class CORSPolicy(BaseModel):
             )
         return v
 
-    @validator('max_age')
+    @validator("max_age")
     def validate_max_age(cls, v):
         """Validate max age is reasonable."""
         if v < 0:
@@ -145,10 +144,10 @@ class CORSPolicy(BaseModel):
             raise ValueError("max_age should not exceed 7 days (604800 seconds)")
         return v
 
-    @validator('origin_regex_patterns', each_item=True)
+    @validator("origin_regex_patterns", each_item=True)
     def validate_regex_pattern(cls, v, values):
         """Validate regex patterns are compilable and not allowed in production."""
-        environment = values.get('environment')
+        environment = values.get("environment")
 
         # Security check: prevent regex patterns in production
         if environment == Environment.PRODUCTION:
@@ -174,7 +173,7 @@ class CORSPolicy(BaseModel):
         Returns:
             True if format is valid, False otherwise
         """
-        if origin == '*':
+        if origin == "*":
             return True
 
         # Parse the origin using urlparse for proper validation
@@ -184,7 +183,7 @@ class CORSPolicy(BaseModel):
             return False
 
         # Check that the origin has a valid scheme
-        if parsed.scheme not in ('http', 'https'):
+        if parsed.scheme not in ("http", "https"):
             return False
 
         # Check that the origin has a netloc (network location)
@@ -193,37 +192,39 @@ class CORSPolicy(BaseModel):
 
         # Validate netloc components to prevent common attacks
         netloc = parsed.netloc
-        
+
         # Check for invalid characters or patterns
-        if '..' in netloc or '//' in netloc[1:]:  # Prevent directory traversal and duplicate slashes
+        if (
+            ".." in netloc or "//" in netloc[1:]
+        ):  # Prevent directory traversal and duplicate slashes
             return False
 
         # Extract host and port
         host = parsed.hostname
-        
+
         if host:
             # Special case: localhost is always valid
-            if host.lower() == 'localhost':
+            if host.lower() == "localhost":
                 return True
-                
+
             # IPv4/IPv6 validation
             # Check if it's a valid domain name or IP address
             # For domain validation, check basic pattern
-            if ':' in host:  # Could be IPv6
+            if ":" in host:  # Could be IPv6
                 try:
-                    socket.inet_pton(socket.AF_INET6, host.strip('[]'))
+                    socket.inet_pton(socket.AF_INET6, host.strip("[]"))
                     return True
                 except socket.error:
                     pass  # Not a valid IPv6, continue to other checks
 
-            elif '.' in host:  # Likely IPv4 or domain
+            elif "." in host:  # Likely IPv4 or domain
                 try:
                     socket.inet_aton(host)  # Valid IPv4
                     return True
                 except socket.error:
                     # Not IPv4, check if it's a valid domain name
                     # Simple domain validation using regex
-                    domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'
+                    domain_pattern = r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$"
                     if re.match(domain_pattern, host):
                         return True
                     else:
@@ -241,7 +242,7 @@ class CORSPolicy(BaseModel):
             True if origin is allowed, False otherwise
         """
         # Quick check for wildcard
-        if self.allow_all_origins or '*' in self.allowed_origins:
+        if self.allow_all_origins or "*" in self.allowed_origins:
             return True
 
         # Check explicit allowed origins
@@ -267,7 +268,9 @@ class CORSPolicy(BaseModel):
             Dictionary with CORS configuration parameters
         """
         return {
-            "allow_origins": self.allowed_origins if not self.allow_all_origins else ["*"],
+            "allow_origins": (
+                self.allowed_origins if not self.allow_all_origins else ["*"]
+            ),
             "allow_methods": self.allowed_methods,
             "allow_headers": self.allowed_headers,
             "allow_credentials": self.allow_credentials,
@@ -276,6 +279,7 @@ class CORSPolicy(BaseModel):
 
     class Config:
         """Pydantic configuration."""
+
         use_enum_values = True
         validate_assignment = True
 
@@ -294,7 +298,7 @@ class CORSConfig(BaseModel):
             allow_credentials=True,  # More permissive for development
             log_violations=True,
         ),
-        description="CORS policy for development environment"
+        description="CORS policy for development environment",
     )
 
     production: CORSPolicy = Field(
@@ -306,7 +310,7 @@ class CORSConfig(BaseModel):
             log_violations=True,
             origin_regex_patterns=[],  # No regex patterns in production for security
         ),
-        description="CORS policy for production environment"
+        description="CORS policy for production environment",
     )
 
     test: CORSPolicy = Field(
@@ -317,7 +321,7 @@ class CORSConfig(BaseModel):
             allow_credentials=True,
             log_violations=True,
         ),
-        description="CORS policy for test environment"
+        description="CORS policy for test environment",
     )
 
     def get_policy(self, environment: Union[str, Environment]) -> CORSPolicy:
@@ -342,7 +346,9 @@ class CORSConfig(BaseModel):
         else:
             raise ValueError(f"Unknown environment: {environment}")
 
-    def update_policy(self, environment: Union[str, Environment], policy: CORSPolicy) -> None:
+    def update_policy(
+        self, environment: Union[str, Environment], policy: CORSPolicy
+    ) -> None:
         """
         Update CORS policy for a specific environment.
 

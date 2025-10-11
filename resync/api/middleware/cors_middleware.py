@@ -52,8 +52,18 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.policy = policy
         self.allow_origins = allow_origins or ["*"]
-        self.allow_methods = allow_methods or ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-        self.allow_headers = allow_headers or ["Content-Type", "Authorization", "X-Requested-With"]
+        self.allow_methods = allow_methods or [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "OPTIONS",
+        ]
+        self.allow_headers = allow_headers or [
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With",
+        ]
         self.allow_credentials = allow_credentials
         self.max_age = max_age
         self.allow_origin_regex = allow_origin_regex
@@ -91,9 +101,11 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
         self._cors_requests += 1
 
         # Check if this is a preflight request
-        is_preflight = method == "OPTIONS" and (
-            request.headers.get("access-control-request-method") or
-            request.headers.get("access-control-request-headers")
+        is_preflight = bool(
+            method == "OPTIONS" and (
+                request.headers.get("access-control-request-method")
+                or request.headers.get("access-control-request-headers")
+            )
         )
 
         if is_preflight:
@@ -123,11 +135,7 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
         return response
 
     def _log_cors_violation(
-        self,
-        request: Request,
-        origin: str,
-        method: str,
-        is_preflight: bool
+        self, request: Request, origin: str, method: str, is_preflight: bool
     ) -> None:
         """
         Log CORS violations for security monitoring.
@@ -149,11 +157,7 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
         )
 
     def _add_cors_headers(
-        self,
-        response: Response,
-        origin: str,
-        method: str,
-        is_preflight: bool
+        self, response: Response, origin: str, method: str, is_preflight: bool
     ) -> Response:
         """
         Add appropriate CORS headers to the response.
@@ -175,8 +179,12 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
 
         # Add preflight-specific headers if needed
         if is_preflight:
-            response.headers["Access-Control-Allow-Methods"] = ", ".join(self.allow_methods)
-            response.headers["Access-Control-Allow-Headers"] = ", ".join(self.allow_headers)
+            response.headers["Access-Control-Allow-Methods"] = ", ".join(
+                self.allow_methods
+            )
+            response.headers["Access-Control-Allow-Headers"] = ", ".join(
+                self.allow_headers
+            )
             response.headers["Access-Control-Max-Age"] = str(self.max_age)
 
         return response
@@ -194,7 +202,8 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
             "violations": self._cors_violations,
             "violation_rate": (
                 self._cors_violations / self._cors_requests * 100
-                if self._cors_requests > 0 else 0
+                if self._cors_requests > 0
+                else 0
             ),
         }
 
@@ -202,7 +211,7 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
 def create_cors_middleware(
     app: FastAPI,
     environment: Union[str, Environment] = None,
-    custom_policy: CORSPolicy = None
+    custom_policy: CORSPolicy = None,
 ) -> LoggingCORSMiddleware:
     """
     Create and configure CORS middleware for the application.
@@ -220,6 +229,7 @@ def create_cors_middleware(
         # Try to get from settings or default to development
         try:
             from resync.settings import settings
+
             environment = getattr(settings, "ENVIRONMENT", "development")
         except ImportError:
             environment = "development"
@@ -256,7 +266,7 @@ def create_cors_middleware(
 def add_cors_middleware(
     app: FastAPI,
     environment: Union[str, Environment] = None,
-    custom_policy: CORSPolicy = None
+    custom_policy: CORSPolicy = None,
 ) -> None:
     """
     Add CORS middleware to the FastAPI application.
@@ -274,6 +284,7 @@ def add_cors_middleware(
         # Try to get from settings or default to development
         try:
             from resync.settings import settings
+
             environment = getattr(settings, "ENVIRONMENT", "development")
         except ImportError:
             environment = "development"
@@ -320,8 +331,7 @@ def get_development_cors_config() -> CORSPolicy:
 
 
 def get_production_cors_config(
-    allowed_origins: List[str] = None,
-    allow_credentials: bool = False
+    allowed_origins: List[str] = None, allow_credentials: bool = False
 ) -> CORSPolicy:
     """
     Get CORS configuration for production environment.

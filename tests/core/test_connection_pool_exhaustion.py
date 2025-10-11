@@ -7,7 +7,6 @@ minimal test stubs to satisfy import requirements.
 """
 
 
-
 class TestConnectionPoolExhaustion:
     """Test connection pool exhaustion scenarios."""
 
@@ -30,4 +29,3 @@ class TestResourceLimits:
     def test_placeholder(self) -> None:
         """Placeholder test."""
         assert True
-

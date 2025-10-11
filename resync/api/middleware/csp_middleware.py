@@ -34,7 +34,9 @@ class CSPMiddleware(BaseHTTPMiddleware):
         # Import will be done lazily when needed
         self._settings = None  # Will be set when first needed
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         """
         Process each request and add CSP headers.
 
@@ -76,7 +78,7 @@ class CSPMiddleware(BaseHTTPMiddleware):
         # Generate 16 bytes of cryptographically secure random data
         nonce_bytes = secrets.token_bytes(16)
         # Convert to base64 for use in CSP (required by CSP specification)
-        return base64.b64encode(nonce_bytes).decode('utf-8')
+        return base64.b64encode(nonce_bytes).decode("utf-8")
 
     def _generate_csp_policy(self, nonce: str) -> str:
         """
@@ -90,11 +92,11 @@ class CSPMiddleware(BaseHTTPMiddleware):
         """
         # Import settings lazily to avoid circular imports
         from resync.settings import settings
-        
+
         # Always get fresh settings to support mocking in tests
         # In production, settings is a singleton so this has minimal overhead
         self._settings = settings
-        
+
         # Base CSP directives with enhanced security
         directives = {
             "default-src": ["'self'"],
@@ -109,12 +111,12 @@ class CSPMiddleware(BaseHTTPMiddleware):
             "object-src": ["'none'"],  # Explicitly block objects/plugins
             "child-src": ["'self'"],  # For workers iframes, etc
         }
-        
+
         # Allow connect-src to external URLs if configured
         connect_src_urls = getattr(self._settings, "CSP_CONNECT_SRC_URLS", [])
         if connect_src_urls:
             directives["connect-src"].extend(connect_src_urls)
-        
+
         # Add report-uri if configured
         report_uri = getattr(self._settings, "CSP_REPORT_URI", None)
         if report_uri:
@@ -140,7 +142,11 @@ class CSPMiddleware(BaseHTTPMiddleware):
             response: The response object
             csp_policy: The CSP policy string
         """
-        header_name = "Content-Security-Policy-Report-Only" if self.report_only else "Content-Security-Policy"
+        header_name = (
+            "Content-Security-Policy-Report-Only"
+            if self.report_only
+            else "Content-Security-Policy"
+        )
         response.headers[header_name] = csp_policy
 
         # Also add X-Content-Type-Options for additional security
@@ -165,15 +171,19 @@ class CSPMiddleware(BaseHTTPMiddleware):
         try:
             if request.method != "POST":
                 return
-                
+
             # Process the CSP report with enhanced validation
             try:
                 result = await process_csp_report(request)
-                
+
                 # Log specific violation details from sanitized data
                 report = result.get("report", {})
-                csp_report = report.get("csp-report", {}) if isinstance(report, dict) and "csp-report" in report else report
-                
+                csp_report = (
+                    report.get("csp-report", {})
+                    if isinstance(report, dict) and "csp-report" in report
+                    else report
+                )
+
                 logger.warning(
                     f"CSP Violation: blocked-uri={csp_report.get('blocked-uri', 'unknown')}, "
                     f"violated-directive={csp_report.get('violated-directive', 'unknown')}, "
@@ -188,7 +198,7 @@ class CSPMiddleware(BaseHTTPMiddleware):
                 logger.error(f"Error processing CSP violation report: {e}")
                 # We still return 200 to avoid giving attackers information
                 return
-                
+
         except Exception as e:
             logger.error(f"Error processing CSP violation report: {e}")
 

@@ -11,8 +11,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 # Set up minimal environment variables for testing
-os.environ['ADMIN_USERNAME'] = 'admin'
-os.environ['ADMIN_PASSWORD'] = 'test123'
+os.environ["ADMIN_USERNAME"] = "admin"
+os.environ["ADMIN_PASSWORD"] = "test123"
+
 
 def test_preflight_request_handling() -> None:
     """Test preflight request handling."""
@@ -26,7 +27,7 @@ def test_preflight_request_handling() -> None:
     app = FastAPI()
 
     dev_policy = get_development_cors_config()
-    add_cors_middleware(app, environment='development', custom_policy=dev_policy)
+    add_cors_middleware(app, environment="development", custom_policy=dev_policy)
 
     @app.post("/test")
     def test_endpoint() -> dict[str, str]:
@@ -35,11 +36,14 @@ def test_preflight_request_handling() -> None:
     client = TestClient(app)
 
     # Test preflight request
-    response = client.options("/test", headers={
-        "Origin": "http://localhost:3000",
-        "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "Content-Type, Authorization"
-    })
+    response = client.options(
+        "/test",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type, Authorization",
+        },
+    )
 
     print(f"Preflight response status: {response.status_code}")
     print(f"Preflight response headers: {dict(response.headers)}")
@@ -66,7 +70,7 @@ def test_regular_request() -> None:
     app = FastAPI()
 
     dev_policy = get_development_cors_config()
-    add_cors_middleware(app, environment='development', custom_policy=dev_policy)
+    add_cors_middleware(app, environment="development", custom_policy=dev_policy)
 
     @app.post("/test")
     def test_endpoint() -> dict[str, str]:
@@ -75,10 +79,11 @@ def test_regular_request() -> None:
     client = TestClient(app)
 
     # Test regular POST request
-    response = client.post("/test", headers={
-        "Origin": "http://localhost:3000",
-        "Content-Type": "application/json"
-    }, json={"test": "data"})
+    response = client.post(
+        "/test",
+        headers={"Origin": "http://localhost:3000", "Content-Type": "application/json"},
+        json={"test": "data"},
+    )
 
     print(f"Regular POST response status: {response.status_code}")
     print(f"Regular POST response headers: {dict(response.headers)}")

@@ -209,6 +209,7 @@ class TestCacheHierarchyStress:
         cache = CacheHierarchy(l1_max_size=1000)
         await cache.start()
         try:
+
             async def worker(worker_id: int):
                 for i in range(100):
                     key = f"worker_{worker_id}_key_{i}"

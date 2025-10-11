@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from resync.core.health_models import (
@@ -24,14 +25,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/health", tags=["health"])
 
 # Config router for compatibility
-config_router = APIRouter(prefix="/config", tags=["config"])  # Config-related endpoints would go here
+config_router = APIRouter(
+    prefix="/config", tags=["config"]
+)  # Config-related endpoints would go here
 
 # Alias for health router
 health_router = router
 
+
 # Health check response models
 class HealthSummaryResponse(BaseModel):
     """Health check summary response."""
+
     status: str
     status_color: str
     status_description: str
@@ -41,8 +46,10 @@ class HealthSummaryResponse(BaseModel):
     alerts: List[str]
     performance_metrics: Dict[str, Any]
 
+
 class ComponentHealthResponse(BaseModel):
     """Individual component health response."""
+
     name: str
     component_type: str
     status: str
@@ -53,8 +60,10 @@ class ComponentHealthResponse(BaseModel):
     error_count: int
     metadata: Optional[Dict[str, Any]]
 
+
 class DetailedHealthResponse(BaseModel):
     """Detailed health check response."""
+
     overall_status: str
     overall_status_color: str
     timestamp: str
@@ -65,22 +74,27 @@ class DetailedHealthResponse(BaseModel):
     performance_metrics: Dict[str, Any]
     history: List[Dict[str, Any]]
 
+
 class CoreHealthResponse(BaseModel):
     """Core components health response."""
+
     status: str
     status_color: str
     timestamp: str
     core_components: Dict[str, ComponentHealthResponse]
     summary: Dict[str, Any]
 
+
 # Core components that are critical for system operation
-CORE_COMPONENTS = {
-    "database", "redis", "connection_pools", "file_system"
-}
+CORE_COMPONENTS = {"database", "redis", "connection_pools", "file_system"}
+
 
 @router.get("/", response_model=HealthSummaryResponse)
 async def get_health_summary(
-    auto_enable: bool = Query(default=False, description="Auto-enable system components if validation is successful")
+    auto_enable: bool = Query(
+        default=False,
+        description="Auto-enable system components if validation is successful",
+    )
 ) -> HealthSummaryResponse:
     """
     Get overall system health summary with status indicators.
@@ -103,10 +117,13 @@ async def get_health_summary(
         # Add auto_enable information to the response
         summary_with_auto_enable = health_result.summary.copy()
         summary_with_auto_enable["auto_enable"] = auto_enable
-        summary_with_auto_enable["auto_enable_applied"] = auto_enable and health_result.overall_status != HealthStatus.UNHEALTHY
+        summary_with_auto_enable["auto_enable_applied"] = (
+            auto_enable and health_result.overall_status != HealthStatus.UNHEALTHY
+        )
 
         # Import runtime_metrics to record metrics
         from resync.core.metrics import runtime_metrics
+
         runtime_metrics.health_check_with_auto_enable.increment()
 
         return HealthSummaryResponse(
@@ -114,24 +131,29 @@ async def get_health_summary(
             status_color=get_status_color(health_result.overall_status),
             status_description=get_status_description(health_result.overall_status),
             timestamp=health_result.timestamp.isoformat(),
-            correlation_id=health_result.correlation_id,
+            correlation_id=health_result.correlation_id or "",
             summary=summary_with_auto_enable,
-            alerts=health_result.alerts,
-            performance_metrics=health_result.performance_metrics
+            alerts=[str(alert) for alert in (health_result.alerts or [])],
+            performance_metrics=health_result.performance_metrics,
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         # Import runtime_metrics to record metrics
         from resync.core.metrics import runtime_metrics
+
         # Increment counter for health check failures if we can
         try:
             runtime_metrics.health_check_with_auto_enable.increment()
-        except:
-            pass  # Don't fail the exception handler if metrics recording fails
+        except (AttributeError, ImportError, Exception) as e:
+            # Log metrics failure but don't fail the health check
+            logger.warning(
+                f"Failed to increment health check metrics: {e}", exc_info=True
+            )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Health check system error: {str(e)}"
+            detail=f"Health check system error: {str(e)}",
         ) from e
+
 
 @router.get("/core", response_model=CoreHealthResponse)
 async def get_core_health() -> CoreHealthResponse:
@@ -147,7 +169,8 @@ async def get_core_health() -> CoreHealthResponse:
 
         # Filter only core components
         core_components = {
-            name: component for name, component in health_result.components.items()
+            name: component
+            for name, component in health_result.components.items()
             if name in CORE_COMPONENTS
         }
 
@@ -167,11 +190,11 @@ async def get_core_health() -> CoreHealthResponse:
                 component_type=component.component_type.value,
                 status=component.status.value,
                 status_color=get_status_color(component.status),
-                message=component.message,
+                message=component.message or "",
                 response_time_ms=component.response_time_ms,
                 last_check=component.last_check.isoformat(),
                 error_count=component.error_count,
-                metadata=component.metadata
+                metadata=component.metadata,
             )
             for name, component in core_components.items()
         }
@@ -183,9 +206,11 @@ async def get_core_health() -> CoreHealthResponse:
                 1 for c in core_components.values() if c.status == HealthStatus.HEALTHY
             ),
             "unhealthy_core_components": sum(
-                1 for c in core_components.values() if c.status == HealthStatus.UNHEALTHY
+                1
+                for c in core_components.values()
+                if c.status == HealthStatus.UNHEALTHY
             ),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         return CoreHealthResponse(
@@ -193,19 +218,24 @@ async def get_core_health() -> CoreHealthResponse:
             status_color=get_status_color(core_status),
             timestamp=health_result.timestamp.isoformat(),
             core_components=core_components_response,
-            summary=core_summary
+            summary=core_summary,
         )
     except Exception as e:
         logger.error(f"Core health check failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Core health check system error: {str(e)}"
+            detail=f"Core health check system error: {str(e)}",
         ) from e
+
 
 @router.get("/detailed", response_model=DetailedHealthResponse)
 async def get_detailed_health(
-    include_history: bool = Query(False, description="Include health history in response"),
-    history_hours: int = Query(24, description="Hours of history to include", ge=1, le=168)
+    include_history: bool = Query(
+        False, description="Include health history in response"
+    ),
+    history_hours: int = Query(
+        24, description="Hours of history to include", ge=1, le=168
+    ),
 ) -> DetailedHealthResponse:
     """
     Get detailed health check with all components and optional history.
@@ -228,11 +258,11 @@ async def get_detailed_health(
                 component_type=component.component_type.value,
                 status=component.status.value,
                 status_color=get_status_color(component.status),
-                message=component.message,
+                message=component.message or "",
                 response_time_ms=component.response_time_ms,
                 last_check=component.last_check.isoformat(),
                 error_count=component.error_count,
-                metadata=component.metadata
+                metadata=component.metadata,
             )
             for name, component in health_result.components.items()
         }
@@ -246,7 +276,7 @@ async def get_detailed_health(
                     "timestamp": entry.timestamp.isoformat(),
                     "overall_status": entry.overall_status.value,
                     "overall_status_color": get_status_color(entry.overall_status),
-                    "summary": entry.summary
+                    "summary": get_status_description(entry.overall_status),
                 }
                 for entry in history
             ]
@@ -255,19 +285,20 @@ async def get_detailed_health(
             overall_status=health_result.overall_status.value,
             overall_status_color=get_status_color(health_result.overall_status),
             timestamp=health_result.timestamp.isoformat(),
-            correlation_id=health_result.correlation_id,
+            correlation_id=health_result.correlation_id or "",
             components=components_response,
             summary=health_result.summary,
             alerts=health_result.alerts,
             performance_metrics=health_result.performance_metrics,
-            history=history_data
+            history=history_data,
         )
     except Exception as e:
         logger.error(f"Detailed health check failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Detailed health check system error: {str(e)}"
+            detail=f"Detailed health check system error: {str(e)}",
         ) from e
+
 
 @router.get("/ready")
 async def readiness_probe() -> Dict[str, Any]:
@@ -286,7 +317,8 @@ async def readiness_probe() -> Dict[str, Any]:
 
         # Check only core components for readiness
         core_components = {
-            name: component for name, component in health_result.components.items()
+            name: component
+            for name, component in health_result.components.items()
             if name in CORE_COMPONENTS
         }
 
@@ -304,17 +336,16 @@ async def readiness_probe() -> Dict[str, Any]:
                 name: {
                     "status": component.status.value,
                     "status_color": get_status_color(component.status),
-                    "message": component.message
+                    "message": component.message,
                 }
                 for name, component in core_components.items()
-            }
+            },
         }
 
         if not ready:
             # Return 503 Service Unavailable if not ready
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=response_data
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=response_data
             )
 
         return response_data
@@ -327,9 +358,10 @@ async def readiness_probe() -> Dict[str, Any]:
             detail={
                 "status": "not_ready",
                 "timestamp": datetime.now().isoformat(),
-                "error": str(e)
-            }
+                "error": str(e),
+            },
         ) from e
+
 
 @router.get("/live")
 async def liveness_probe() -> Dict[str, Any]:
@@ -355,8 +387,8 @@ async def liveness_probe() -> Dict[str, Any]:
         # System is considered alive if it has performed health checks recently
         # or if it's the first check (last_check is None)
         alive = (
-            last_check is None or
-            (current_time - last_check).total_seconds() < 300  # 5 minutes
+            last_check is None
+            or (current_time - last_check).total_seconds() < 300  # 5 minutes
         )
 
         if not alive:
@@ -366,15 +398,15 @@ async def liveness_probe() -> Dict[str, Any]:
                     "status": "dead",
                     "timestamp": current_time.isoformat(),
                     "last_health_check": last_check.isoformat() if last_check else None,
-                    "message": "Health check system appears to be stuck"
-                }
+                    "message": "Health check system appears to be stuck",
+                },
             )
 
         return {
             "status": "alive",
             "timestamp": current_time.isoformat(),
             "last_health_check": last_check.isoformat() if last_check else None,
-            "message": "System is responding"
+            "message": "System is responding",
         }
 
     except Exception as e:
@@ -385,9 +417,10 @@ async def liveness_probe() -> Dict[str, Any]:
             detail={
                 "status": "dead",
                 "timestamp": datetime.now().isoformat(),
-                "error": str(e)
-            }
+                "error": str(e),
+            },
         ) from e
+
 
 @router.post("/component/{component_name}/recover")
 async def recover_component(component_name: str) -> Dict[str, Any]:
@@ -413,16 +446,21 @@ async def recover_component(component_name: str) -> Dict[str, Any]:
             "component": component_name,
             "recovery_attempted": True,
             "recovery_successful": recovery_success,
-            "current_status": component_health.status.value if component_health else "unknown",
-            "status_color": get_status_color(component_health.status) if component_health else "⚪",
-            "message": component_health.message if component_health else "Component not found",
-            "timestamp": datetime.now().isoformat()
+            "current_status": (
+                component_health.status.value if component_health else "unknown"
+            ),
+            "status_color": (
+                get_status_color(component_health.status) if component_health else "⚪"
+            ),
+            "message": (
+                component_health.message if component_health else "Component not found"
+            ),
+            "timestamp": datetime.now().isoformat(),
         }
 
         if not recovery_success:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=response_data
+                status_code=status.HTTP_400_BAD_REQUEST, detail=response_data
             )
 
         return response_data
@@ -436,9 +474,10 @@ async def recover_component(component_name: str) -> Dict[str, Any]:
                 "recovery_attempted": True,
                 "recovery_successful": False,
                 "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            }
+                "timestamp": datetime.now().isoformat(),
+            },
         ) from e
+
 
 @router.get("/redis")
 async def get_redis_health() -> Dict[str, Any]:
@@ -462,7 +501,7 @@ async def get_redis_health() -> Dict[str, Any]:
                 "status": "critical",
                 "message": "Redis component not found in health check",
                 "idempotency_safe": False,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
         # Additional Redis-specific validation
@@ -470,9 +509,13 @@ async def get_redis_health() -> Dict[str, Any]:
             "status": redis_component.status.value,
             "status_color": get_status_color(redis_component.status),
             "message": redis_component.message,
-            "last_check": redis_component.last_check.isoformat() if redis_component.last_check else None,
+            "last_check": (
+                redis_component.last_check.isoformat()
+                if redis_component.last_check
+                else None
+            ),
             "response_time": redis_component.response_time,
-            "details": redis_component.details or {}
+            "details": redis_component.details or {},
         }
 
         # Determine if system can guarantee idempotency
@@ -481,7 +524,7 @@ async def get_redis_health() -> Dict[str, Any]:
         if not idempotency_safe:
             logger.warning(
                 "Redis health check failed - idempotency may be compromised",
-                extra={"redis_status": redis_component.status.value}
+                extra={"redis_status": redis_component.status.value},
             )
 
         return {
@@ -490,7 +533,11 @@ async def get_redis_health() -> Dict[str, Any]:
             "redis": redis_details,
             "timestamp": datetime.now().isoformat(),
             "correlation_id": health_result.correlation_id,
-            "warning": "Redis unavailable - idempotency guarantees compromised" if not idempotency_safe else None
+            "warning": (
+                "Redis unavailable - idempotency guarantees compromised"
+                if not idempotency_safe
+                else None
+            ),
         }
 
     except Exception as e:
@@ -500,7 +547,7 @@ async def get_redis_health() -> Dict[str, Any]:
             "idempotency_safe": False,
             "error": str(e),
             "timestamp": datetime.now().isoformat(),
-            "warning": "Redis health check failed - system cannot guarantee idempotency"
+            "warning": "Redis health check failed - system cannot guarantee idempotency",
         }
 
 
@@ -513,18 +560,55 @@ async def list_components() -> Dict[str, List[Dict[str, str]]]:
         Dict[str, List[Dict[str, str]]]: List of available components
     """
     components = [
-        {"name": "database", "type": ComponentType.DATABASE.value, "description": "Database connectivity and performance"},
-        {"name": "redis", "type": ComponentType.REDIS.value, "description": "Redis cache connectivity"},
-        {"name": "cache_hierarchy", "type": ComponentType.CACHE.value, "description": "Cache hierarchy health"},
-        {"name": "file_system", "type": ComponentType.FILE_SYSTEM.value, "description": "File system and disk space"},
-        {"name": "memory", "type": ComponentType.MEMORY.value, "description": "Memory usage monitoring"},
-        {"name": "cpu", "type": ComponentType.CPU.value, "description": "CPU load monitoring"},
-        {"name": "tws_monitor", "type": ComponentType.EXTERNAL_API.value, "description": "TWS external service health"},
-        {"name": "connection_pools", "type": ComponentType.CONNECTION_POOL.value, "description": "Database connection pools"},
-        {"name": "websocket_pool", "type": ComponentType.WEBSOCKET.value, "description": "WebSocket connection pools"},
+        {
+            "name": "database",
+            "type": ComponentType.DATABASE.value,
+            "description": "Database connectivity and performance",
+        },
+        {
+            "name": "redis",
+            "type": ComponentType.REDIS.value,
+            "description": "Redis cache connectivity",
+        },
+        {
+            "name": "cache_hierarchy",
+            "type": ComponentType.CACHE.value,
+            "description": "Cache hierarchy health",
+        },
+        {
+            "name": "file_system",
+            "type": ComponentType.FILE_SYSTEM.value,
+            "description": "File system and disk space",
+        },
+        {
+            "name": "memory",
+            "type": ComponentType.MEMORY.value,
+            "description": "Memory usage monitoring",
+        },
+        {
+            "name": "cpu",
+            "type": ComponentType.CPU.value,
+            "description": "CPU load monitoring",
+        },
+        {
+            "name": "tws_monitor",
+            "type": ComponentType.EXTERNAL_API.value,
+            "description": "TWS external service health",
+        },
+        {
+            "name": "connection_pools",
+            "type": ComponentType.CONNECTION_POOL.value,
+            "description": "Database connection pools",
+        },
+        {
+            "name": "websocket_pool",
+            "type": ComponentType.WEBSOCKET.value,
+            "description": "WebSocket connection pools",
+        },
     ]
 
     return {"components": components}
+
 
 @router.on_event("shutdown")
 async def shutdown_health_service():
@@ -533,6 +617,104 @@ async def shutdown_health_service():
         await shutdown_health_check_service()
         logger.info("Health service shutdown completed")
     except Exception as e:
+        logger.error(f"Error during health service shutdown: {e}")
+
+
+async def health_check_core(request) -> JSONResponse:
+    """
+    Health check endpoint handler for core components.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        JSONResponse: Core health status response
+    """
+    try:
+        core_health = await get_core_health()
+        return JSONResponse(
+            status_code=status.HTTP_200_OK, content=core_health.model_dump()
+        )
+    except HTTPException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
+    except Exception as e:
+        logger.error(f"Core health check endpoint error: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"error": f"Core health check failed: {str(e)}"},
+        )
+
+
+async def health_check_detailed(request) -> JSONResponse:
+    """
+    Health check endpoint handler for detailed health information.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        JSONResponse: Detailed health status response
+    """
+    try:
+        detailed_health = await get_detailed_health()
+        return JSONResponse(
+            status_code=status.HTTP_200_OK, content=detailed_health.model_dump()
+        )
+    except HTTPException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
+    except Exception as e:
+        logger.error(f"Detailed health check endpoint error: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"error": f"Detailed health check failed: {str(e)}"},
+        )
+
+
+async def health_check_ready(request) -> JSONResponse:
+    """
+    Readiness probe endpoint handler.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        JSONResponse: Readiness status response
+    """
+    try:
+        ready_status = await readiness_probe()
+        status_code = (
+            status.HTTP_200_OK
+            if ready_status.get("ready", False)
+            else status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+        return JSONResponse(status_code=status_code, content=ready_status)
+    except Exception as e:
+        logger.error(f"Readiness probe endpoint error: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"ready": False, "error": str(e)},
+        )
+
+
+async def health_check_live(request) -> JSONResponse:
+    """
+    Liveness probe endpoint handler.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        JSONResponse: Liveness status response
+    """
+    try:
+        live_status = await liveness_probe()
+        return JSONResponse(status_code=status.HTTP_200_OK, content=live_status)
+    except Exception as e:
+        logger.error(f"Liveness probe endpoint error: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"alive": False, "error": str(e)},
+        )
 
 
 async def health_check() -> Dict[str, Any]:
@@ -551,7 +733,7 @@ async def health_check() -> Dict[str, Any]:
             "timestamp": health_result.timestamp.isoformat(),
             "correlation_id": health_result.correlation_id,
             "healthy": health_result.overall_status == HealthStatus.HEALTHY,
-            "message": get_status_description(health_result.overall_status)
+            "message": get_status_description(health_result.overall_status),
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -559,6 +741,6 @@ async def health_check() -> Dict[str, Any]:
             "status": "unhealthy",
             "timestamp": datetime.now().isoformat(),
             "healthy": False,
-            "error": str(e)
+            "error": str(e),
         }
         logger.error(f"Error during health service shutdown: {e}")

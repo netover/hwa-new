@@ -15,6 +15,7 @@ from resync.core.async_cache import AsyncTTLCache
 from resync.core.improved_cache import ImprovedAsyncCache
 from resync.services.tws_service import OptimizedTWSClient
 from resync.services.tws_client_factory import TWSClientFactory
+
 # Rate limiter imports - commented out as classes may not exist yet
 # from resync.core.rate_limiter import RateLimiter
 # from resync.core.rate_limiter_improved import TokenBucketRateLimiter
@@ -24,33 +25,29 @@ logger = logging.getLogger(__name__)
 
 # Métricas de migração
 migration_legacy_hits = Counter(
-    'migration_legacy_hits_total',
-    'Total hits no sistema legado',
-    ['component']
+    "migration_legacy_hits_total", "Total hits no sistema legado", ["component"]
 )
 
 migration_new_hits = Counter(
-    'migration_new_hits_total',
-    'Total hits no novo sistema',
-    ['component']
+    "migration_new_hits_total", "Total hits no novo sistema", ["component"]
 )
 
 migration_fallbacks = Counter(
-    'migration_fallbacks_total',
-    'Total fallbacks para sistema legado',
-    ['component', 'reason']
+    "migration_fallbacks_total",
+    "Total fallbacks para sistema legado",
+    ["component", "reason"],
 )
 
 migration_errors = Counter(
-    'migration_errors_total',
-    'Total erros durante migração',
-    ['component', 'error_type']
+    "migration_errors_total",
+    "Total erros durante migração",
+    ["component", "error_type"],
 )
 
 migration_latency = Histogram(
-    'migration_operation_latency_seconds',
-    'Latência de operações durante migração',
-    ['component', 'operation']
+    "migration_operation_latency_seconds",
+    "Latência de operações durante migração",
+    ["component", "operation"],
 )
 
 
@@ -73,14 +70,14 @@ class CacheMigrationManager:
         try:
             # Inicializar cache legado
             self.legacy_cache = AsyncTTLCache(
-                ttl_seconds=getattr(settings, 'ASYNC_CACHE_TTL', 3600),
-                num_shards=getattr(settings, 'ASYNC_CACHE_NUM_SHARDS', 16)
+                ttl_seconds=getattr(settings, "ASYNC_CACHE_TTL", 3600),
+                num_shards=getattr(settings, "ASYNC_CACHE_NUM_SHARDS", 16),
             )
 
             # Inicializar novo cache
             self.new_cache = ImprovedAsyncCache(
-                default_ttl=getattr(settings, 'ASYNC_CACHE_TTL', 3600),
-                enable_metrics=self.enable_metrics
+                default_ttl=getattr(settings, "ASYNC_CACHE_TTL", 3600),
+                enable_metrics=self.enable_metrics,
             )
             await self.new_cache.initialize()
 
@@ -105,10 +102,10 @@ class CacheMigrationManager:
                 result = await self.new_cache.get(key)
                 if result is not None:
                     if self.enable_metrics:
-                        migration_new_hits.labels(component='cache').inc()
-                    migration_latency.labels(component='cache', operation='get').observe(
-                        asyncio.get_event_loop().time() - start_time
-                    )
+                        migration_new_hits.labels(component="cache").inc()
+                    migration_latency.labels(
+                        component="cache", operation="get"
+                    ).observe(asyncio.get_event_loop().time() - start_time)
                     return result
 
                 # Se novo cache não tem o valor, tentar legacy como fallback
@@ -117,8 +114,7 @@ class CacheMigrationManager:
                     if legacy_result is not None:
                         if self.enable_metrics:
                             migration_fallbacks.labels(
-                                component='cache',
-                                reason='cache_miss_new'
+                                component="cache", reason="cache_miss_new"
                             ).inc()
                         # Opcional: popular novo cache com valor encontrado
                         await self.new_cache.set(key, legacy_result)
@@ -127,36 +123,42 @@ class CacheMigrationManager:
             except Exception as e:
                 logger.warning(f"Error in new cache, falling back to legacy: {e}")
                 if self.enable_metrics:
-                    migration_errors.labels(component='cache', error_type='new_cache_error').inc()
-                    migration_fallbacks.labels(component='cache', reason='error').inc()
+                    migration_errors.labels(
+                        component="cache", error_type="new_cache_error"
+                    ).inc()
+                    migration_fallbacks.labels(component="cache", reason="error").inc()
 
                 # Fallback para cache legado
                 if self.legacy_cache:
                     try:
                         result = await self.legacy_cache.get(key)
-                        migration_latency.labels(component='cache', operation='get').observe(
-                            asyncio.get_event_loop().time() - start_time
-                        )
+                        migration_latency.labels(
+                            component="cache", operation="get"
+                        ).observe(asyncio.get_event_loop().time() - start_time)
                         return result
                     except Exception as e2:
                         logger.error(f"Error in legacy cache fallback: {e2}")
                         if self.enable_metrics:
-                            migration_errors.labels(component='cache', error_type='legacy_cache_error').inc()
+                            migration_errors.labels(
+                                component="cache", error_type="legacy_cache_error"
+                            ).inc()
 
         # Usar apenas cache legado
         if self.legacy_cache:
             try:
                 result = await self.legacy_cache.get(key)
                 if self.enable_metrics:
-                    migration_legacy_hits.labels(component='cache').inc()
-                migration_latency.labels(component='cache', operation='get').observe(
+                    migration_legacy_hits.labels(component="cache").inc()
+                migration_latency.labels(component="cache", operation="get").observe(
                     asyncio.get_event_loop().time() - start_time
                 )
                 return result
             except Exception as e:
                 logger.error(f"Error in legacy cache: {e}")
                 if self.enable_metrics:
-                    migration_errors.labels(component='cache', error_type='legacy_cache_error').inc()
+                    migration_errors.labels(
+                        component="cache", error_type="legacy_cache_error"
+                    ).inc()
 
         return None
 
@@ -176,7 +178,7 @@ class CacheMigrationManager:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-        migration_latency.labels(component='cache', operation='set').observe(
+        migration_latency.labels(component="cache", operation="set").observe(
             asyncio.get_event_loop().time() - start_time
         )
 
@@ -199,7 +201,7 @@ class CacheMigrationManager:
         else:
             success = False
 
-        migration_latency.labels(component='cache', operation='delete').observe(
+        migration_latency.labels(component="cache", operation="delete").observe(
             asyncio.get_event_loop().time() - start_time
         )
 
@@ -221,21 +223,21 @@ class CacheMigrationManager:
     async def get_stats(self) -> dict[str, Any]:
         """Obter estatísticas de ambos os sistemas."""
         stats = {
-            'migration_mode': 'new' if self.use_new_cache else 'legacy',
-            'dual_write_enabled': True,
-            'legacy_stats': {},
-            'new_stats': {}
+            "migration_mode": "new" if self.use_new_cache else "legacy",
+            "dual_write_enabled": True,
+            "legacy_stats": {},
+            "new_stats": {},
         }
 
-        if self.legacy_cache and hasattr(self.legacy_cache, 'get_stats'):
+        if self.legacy_cache and hasattr(self.legacy_cache, "get_stats"):
             try:
-                stats['legacy_stats'] = self.legacy_cache.get_stats()
+                stats["legacy_stats"] = self.legacy_cache.get_stats()
             except Exception as e:
                 logger.warning(f"Error getting legacy stats: {e}")
 
         if self.new_cache:
             try:
-                stats['new_stats'] = await self.new_cache.get_stats()
+                stats["new_stats"] = await self.new_cache.get_stats()
             except Exception as e:
                 logger.warning(f"Error getting new stats: {e}")
 
@@ -265,8 +267,8 @@ class TWSMigrationManager:
                 port=settings.TWS_PORT,
                 username=settings.TWS_USER,
                 password=settings.TWS_PASSWORD,
-                engine_name=getattr(settings, 'TWS_ENGINE_NAME', None),
-                engine_owner=getattr(settings, 'TWS_ENGINE_OWNER', None)
+                engine_name=getattr(settings, "TWS_ENGINE_NAME", None),
+                engine_owner=getattr(settings, "TWS_ENGINE_OWNER", None),
             )
 
             # Cliente novo via factory
@@ -284,13 +286,15 @@ class TWSMigrationManager:
             try:
                 result = await self.new_client.connect()
                 if self.enable_metrics:
-                    migration_new_hits.labels(component='tws').inc()
+                    migration_new_hits.labels(component="tws").inc()
                 return result
             except Exception as e:
                 logger.warning(f"Error in new TWS client, falling back: {e}")
                 if self.enable_metrics:
-                    migration_errors.labels(component='tws', error_type='new_client_error').inc()
-                    migration_fallbacks.labels(component='tws', reason='error').inc()
+                    migration_errors.labels(
+                        component="tws", error_type="new_client_error"
+                    ).inc()
+                    migration_fallbacks.labels(component="tws", reason="error").inc()
 
         # Fallback para cliente legado
         if self.legacy_client:
@@ -298,12 +302,14 @@ class TWSMigrationManager:
                 # Assumindo que o cliente legado tem método connect
                 result = await self.legacy_client.connect()
                 if self.enable_metrics:
-                    migration_legacy_hits.labels(component='tws').inc()
+                    migration_legacy_hits.labels(component="tws").inc()
                 return result
             except Exception as e:
                 logger.error(f"Error in legacy TWS client: {e}")
                 if self.enable_metrics:
-                    migration_errors.labels(component='tws', error_type='legacy_client_error').inc()
+                    migration_errors.labels(
+                        component="tws", error_type="legacy_client_error"
+                    ).inc()
 
         return False
 
@@ -314,22 +320,22 @@ class TWSMigrationManager:
         if self.use_new_client and self.new_client:
             try:
                 result = await self.new_client.execute_command(command)
-                migration_latency.labels(component='tws', operation='execute_command').observe(
-                    asyncio.get_event_loop().time() - start_time
-                )
+                migration_latency.labels(
+                    component="tws", operation="execute_command"
+                ).observe(asyncio.get_event_loop().time() - start_time)
                 return result
             except Exception as e:
                 logger.warning(f"Error in new TWS client, falling back: {e}")
                 if self.enable_metrics:
-                    migration_fallbacks.labels(component='tws', reason='error').inc()
+                    migration_fallbacks.labels(component="tws", reason="error").inc()
 
         # Fallback para cliente legado
         if self.legacy_client:
             try:
                 result = await self.legacy_client.execute_command(command)
-                migration_latency.labels(component='tws', operation='execute_command').observe(
-                    asyncio.get_event_loop().time() - start_time
-                )
+                migration_latency.labels(
+                    component="tws", operation="execute_command"
+                ).observe(asyncio.get_event_loop().time() - start_time)
                 return result
             except Exception as e:
                 logger.error(f"Error in legacy TWS client: {e}")
@@ -343,22 +349,22 @@ class TWSMigrationManager:
         if self.use_new_client and self.new_client:
             try:
                 result = await self.new_client.get_job_status(job_id)
-                migration_latency.labels(component='tws', operation='get_job_status').observe(
-                    asyncio.get_event_loop().time() - start_time
-                )
+                migration_latency.labels(
+                    component="tws", operation="get_job_status"
+                ).observe(asyncio.get_event_loop().time() - start_time)
                 return result
             except Exception as e:
                 logger.warning(f"Error in new TWS client, falling back: {e}")
                 if self.enable_metrics:
-                    migration_fallbacks.labels(component='tws', reason='error').inc()
+                    migration_fallbacks.labels(component="tws", reason="error").inc()
 
         # Fallback para cliente legado
         if self.legacy_client:
             try:
                 result = await self.legacy_client.get_job_status(job_id)
-                migration_latency.labels(component='tws', operation='get_job_status').observe(
-                    asyncio.get_event_loop().time() - start_time
-                )
+                migration_latency.labels(
+                    component="tws", operation="get_job_status"
+                ).observe(asyncio.get_event_loop().time() - start_time)
                 return result
             except Exception as e:
                 logger.error(f"Error in legacy TWS client: {e}")
@@ -386,14 +392,14 @@ class RateLimitMigrationManager:
         """Adquirir permissão de rate limiting."""
         # Placeholder - always allow for now
         if self.enable_metrics:
-            migration_legacy_hits.labels(component='rate_limit').inc()
+            migration_legacy_hits.labels(component="rate_limit").inc()
         return True
 
     def get_stats(self) -> dict[str, Any]:
         """Obter estatísticas de rate limiting."""
         return {
-            'migration_mode': 'placeholder',
-            'status': 'rate_limiter_not_implemented'
+            "migration_mode": "placeholder",
+            "status": "rate_limiter_not_implemented",
         }
 
 
@@ -420,7 +426,7 @@ async def shutdown_migration_managers():
 def get_migration_stats() -> dict[str, Any]:
     """Obter estatísticas de todos os migration managers."""
     return {
-        'cache': asyncio.run(cache_migration_manager.get_stats()),
-        'tws': {},  # TWS manager não tem stats ainda
-        'rate_limit': rate_limit_migration_manager.get_stats()
+        "cache": asyncio.run(cache_migration_manager.get_stats()),
+        "tws": {},  # TWS manager não tem stats ainda
+        "rate_limit": rate_limit_migration_manager.get_stats(),
     }

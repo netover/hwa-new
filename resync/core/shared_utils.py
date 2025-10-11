@@ -10,7 +10,7 @@ logger = structlog.get_logger(__name__)
 @dataclass
 class TeamsNotification:
     """Standardized Teams notification structure."""
-    
+
     title: str
     message: str
     severity: str  # "info", "warning", "error"
@@ -25,23 +25,21 @@ class NotificationError(Exception):
 
 
 def create_job_status_notification(
-    job_data: Dict[str, Any], 
-    instance_name: str, 
-    job_status_filters: List[str]
+    job_data: Dict[str, Any], instance_name: str, job_status_filters: List[str]
 ) -> TeamsNotification:
     """
     Create a standardized job status notification.
-    
+
     Args:
         job_data: Dictionary containing job information
         instance_name: Name of the TWS instance
         job_status_filters: List of status filters to match against
-        
+
     Returns:
         TeamsNotification: Standardized notification object
     """
     job_status = job_data.get("status", "").upper()
-    
+
     # Check if job status matches filters
     if job_status in [status.upper() for status in job_status_filters]:
         return TeamsNotification(
@@ -55,8 +53,8 @@ def create_job_status_notification(
                 "start_time": job_data.get("start_time"),
                 "end_time": job_data.get("end_time"),
                 "duration": job_data.get("duration"),
-                "owner": job_data.get("owner")
-            }
+                "owner": job_data.get("owner"),
+            },
         )
-    
+
     return None

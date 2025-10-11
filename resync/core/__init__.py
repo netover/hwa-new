@@ -21,6 +21,7 @@ from .async_cache import AsyncTTLCache
 from .config_watcher import handle_config_change
 from .metrics import runtime_metrics
 
+
 # --- Core Component Boot Manager ---
 class CoreBootManager:
     """Hardened boot manager for core components with lifecycle tracking and health validation."""
@@ -66,19 +67,20 @@ class CoreBootManager:
                 "correlation_id": self._correlation_id,
             }
 
-    def add_global_event(self, event: str, data: Optional[Dict[str, Any]] = None) -> None:
+    def add_global_event(
+        self, event: str, data: Optional[Dict[str, Any]] = None
+    ) -> None:
         """Add a trace event to the global correlation context."""
         with self._boot_lock:
-            self._global_correlation_context["events"].append({
-                "timestamp": time.time(),
-                "event": event,
-                "data": data or {}
-            })
-            
+            self._global_correlation_context["events"].append(
+                {"timestamp": time.time(), "event": event, "data": data or {}}
+            )
+
             # Keep only last 100 events to prevent memory growth
             if len(self._global_correlation_context["events"]) > 100:
-                self._global_correlation_context["events"] = \
+                self._global_correlation_context["events"] = (
                     self._global_correlation_context["events"][-100:]
+                )
 
     def get_global_correlation_id(self) -> str:
         """Get the global correlation ID for distributed tracing."""
@@ -87,8 +89,8 @@ class CoreBootManager:
     def get_environment_tags(self) -> Dict[str, Any]:
         """Get environment tags for mock detection and debugging."""
         return {
-            "is_mock": getattr(self, '_is_mock', False),
-            "mock_reason": getattr(self, '_mock_reason', None),
+            "is_mock": getattr(self, "_is_mock", False),
+            "mock_reason": getattr(self, "_mock_reason", None),
             "boot_id": self._correlation_id,
             "component_count": len(self._components),
         }
@@ -97,11 +99,11 @@ class CoreBootManager:
 # --- Environment Detection and Validation ---
 class EnvironmentDetector:
     """Detect and validate execution environment for security and compatibility."""
-    
+
     def __init__(self):
         self._validation_cache = {}
         self._last_validation = 0
-    
+
     def detect_environment(self) -> Dict[str, Any]:
         """Detect execution environment characteristics."""
         return {
@@ -110,12 +112,12 @@ class EnvironmentDetector:
             "has_internet": self._check_internet_access(),
             "temp_dir": os.environ.get("TEMP", "/tmp"),
         }
-    
+
     def _check_internet_access(self) -> bool:
         """Check if internet access is available."""
         # Simplified check - in a real implementation this would be more robust
         return True
-    
+
     def validate_environment(self) -> bool:
         """Validate execution environment for security compliance."""
         try:
@@ -123,18 +125,18 @@ class EnvironmentDetector:
             current_time = time.time()
             if current_time - self._last_validation < 60:
                 return self._validation_cache.get("result", True)
-            
+
             # Perform validation checks
             env_ok = True
-            
+
             # Update cache
             self._validation_cache = {
                 "result": env_ok,
                 "timestamp": current_time,
-                "details": {}
+                "details": {},
             }
             self._last_validation = current_time
-            
+
             return env_ok
         except Exception as e:
             logger.warning(f"Environment validation failed: {e}")
@@ -145,17 +147,20 @@ class EnvironmentDetector:
 try:
     # Initialize environment detector
     env_detector = EnvironmentDetector()
-    
+
     # Initialize boot manager
     boot_manager = CoreBootManager()
-    
+
     # Set environment info in boot manager
-    boot_manager._global_correlation_context["environment"] = env_detector.detect_environment()
-    
+    boot_manager._global_correlation_context["environment"] = (
+        env_detector.detect_environment()
+    )
+
     # Set boot manager reference in global_utils
     from . import global_utils
+
     global_utils.set_boot_manager(boot_manager)
-    
+
 except Exception as e:
     logger.critical(f"Failed to initialize core components: {e}")
     raise

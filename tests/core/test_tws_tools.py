@@ -149,10 +149,14 @@ async def test_tool_handles_client_exception(mock_tws_client):
     trouble_tool = TWSTroubleshootingTool(tws_client=mock_tws_client)
 
     # Act & Assert
-    with pytest.raises(ToolProcessingError, match="Erro inesperado ao obter o status do TWS") as excinfo_status:
+    with pytest.raises(
+        ToolProcessingError, match="Erro inesperado ao obter o status do TWS"
+    ) as excinfo_status:
         await status_tool.get_tws_status()
     assert excinfo_status.value.__cause__ is original_exception
 
-    with pytest.raises(ToolProcessingError, match="Erro inesperado ao analisar as falhas do TWS") as excinfo_trouble:
+    with pytest.raises(
+        ToolProcessingError, match="Erro inesperado ao analisar as falhas do TWS"
+    ) as excinfo_trouble:
         await trouble_tool.analyze_failures()
     assert excinfo_trouble.value.__cause__ is original_exception

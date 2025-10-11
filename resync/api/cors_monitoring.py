@@ -19,6 +19,7 @@ cors_monitor_router = APIRouter()
 
 class CORSStats(BaseModel):
     """CORS middleware statistics."""
+
     total_requests: int
     preflight_requests: int
     violations: int
@@ -28,6 +29,7 @@ class CORSStats(BaseModel):
 
 class CORSViolation(BaseModel):
     """CORS violation details."""
+
     timestamp: datetime
     origin: str
     method: str
@@ -40,6 +42,7 @@ class CORSViolation(BaseModel):
 
 class CORSConfigResponse(BaseModel):
     """CORS configuration response."""
+
     environment: str
     enabled: bool
     allow_all_origins: bool
@@ -67,7 +70,7 @@ async def get_cors_stats(request: Request) -> CORSStats:
         preflight_requests=0,
         violations=0,
         violation_rate=0.0,
-        last_updated=datetime.now(timezone.utc)
+        last_updated=datetime.now(timezone.utc),
     )
 
 
@@ -75,8 +78,12 @@ async def get_cors_stats(request: Request) -> CORSStats:
 @authenticated_rate_limit
 async def get_cors_violations(
     request: Request,
-    limit: int = Query(default=50, ge=1, le=500, description="Maximum number of violations to return"),
-    hours: int = Query(default=24, ge=1, le=168, description="Number of hours to look back")
+    limit: int = Query(
+        default=50, ge=1, le=500, description="Maximum number of violations to return"
+    ),
+    hours: int = Query(
+        default=24, ge=1, le=168, description="Number of hours to look back"
+    ),
 ) -> List[CORSViolation]:
     """
     Get recent CORS violations for security analysis.
@@ -128,7 +135,7 @@ async def test_cors_policy(
     request: Request,
     origin: str = Query(..., description="Origin to test"),
     method: str = Query(default="GET", description="HTTP method to test"),
-    path: str = Query(default="/api/test", description="Path to test")
+    path: str = Query(default="/api/test", description="Path to test"),
 ) -> Dict[str, Any]:
     """
     Test CORS policy for a specific origin and method.
@@ -168,15 +175,14 @@ async def test_cors_policy(
             "allowed_methods": policy.allowed_methods,
             "allow_credentials": policy.allow_credentials,
             "log_violations": policy.log_violations,
-        }
+        },
     }
 
 
 @cors_monitor_router.post("/cors/validate-origins")
 @authenticated_rate_limit
 async def validate_origins(
-    request: Request,
-    origins: List[str] = origins_query_dependency
+    request: Request, origins: List[str] = origins_query_dependency
 ) -> Dict[str, Any]:
     """
     Validate a list of origins against the current CORS policy.
@@ -206,12 +212,13 @@ async def validate_origins(
         results[origin] = {
             "allowed": is_allowed,
             "validation_errors": validation_errors,
-            "policy_match": origin in policy.allowed_origins or policy.allow_all_origins
+            "policy_match": origin in policy.allowed_origins
+            or policy.allow_all_origins,
         }
 
     return {
         "environment": environment,
         "total_origins": len(origins),
         "allowed_count": sum(1 for r in results.values() if r["allowed"]),
-        "results": results
+        "results": results,
     }

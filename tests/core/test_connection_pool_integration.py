@@ -1,4 +1,3 @@
-
 """
 Integration tests for the complete connection pooling system.
 
@@ -47,9 +46,9 @@ class TestConnectionPoolIntegration:
 
         # Create integrated system
         system = {
-            'pool_manager': pool_manager,
-            'ws_manager': ws_manager,
-            'initialized': True
+            "pool_manager": pool_manager,
+            "ws_manager": ws_manager,
+            "initialized": True,
         }
 
         yield system
@@ -61,8 +60,8 @@ class TestConnectionPoolIntegration:
     @pytest.mark.asyncio
     async def test_system_initialization(self, integrated_system):
         """Test complete system initialization."""
-        pool_manager = integrated_system['pool_manager']
-        ws_manager = integrated_system['ws_manager']
+        pool_manager = integrated_system["pool_manager"]
+        ws_manager = integrated_system["ws_manager"]
 
         # Verify managers are initialized
         assert pool_manager._initialized is True
@@ -81,7 +80,7 @@ class TestConnectionPoolIntegration:
     @pytest.mark.asyncio
     async def test_cross_pool_coordination(self, integrated_system):
         """Test coordination between different connection pools."""
-        pool_manager = integrated_system['pool_manager']
+        pool_manager = integrated_system["pool_manager"]
         results = []
 
         async def multi_pool_operation(operation_id: int):
@@ -134,8 +133,8 @@ class TestConnectionPoolIntegration:
         # Perform operations that use connections
         async def memory_intensive_operation(operation_id: int):
             """Memory-intensive operation with connections."""
-            pool_manager = integrated_system['pool_manager']
-            ws_manager = integrated_system['ws_manager']
+            pool_manager = integrated_system["pool_manager"]
+            ws_manager = integrated_system["ws_manager"]
 
             # Create WebSocket connection
             mock_websocket = AsyncMock()
@@ -186,16 +185,16 @@ class TestConnectionPoolIntegration:
     @pytest.mark.asyncio
     async def test_production_like_scenario(self, integrated_system):
         """Test production-like scenario with mixed load."""
-        pool_manager = integrated_system['pool_manager']
-        ws_manager = integrated_system['ws_manager']
+        pool_manager = integrated_system["pool_manager"]
+        ws_manager = integrated_system["ws_manager"]
 
         # Simulate production load patterns
         results = {
-            'database_queries': 0,
-            'cache_operations': 0,
-            'api_calls': 0,
-            'websocket_messages': 0,
-            'errors': 0,
+            "database_queries": 0,
+            "cache_operations": 0,
+            "api_calls": 0,
+            "websocket_messages": 0,
+            "errors": 0,
         }
 
         async def production_database_task(task_id: int):
@@ -206,11 +205,11 @@ class TestConnectionPoolIntegration:
                     async with db_pool.get_connection():
                         # Simulate database query
                         await asyncio.sleep(0.002)
-                        results['database_queries'] += 1
+                        results["database_queries"] += 1
                         return "db_success"
                 return "db_no_pool"
             except Exception as e:
-                results['errors'] += 1
+                results["errors"] += 1
                 return f"db_error_{str(e)}"
 
         async def production_cache_task(task_id: int):
@@ -221,11 +220,11 @@ class TestConnectionPoolIntegration:
                     async with redis_pool.get_connection():
                         # Simulate cache operation
                         await asyncio.sleep(0.001)
-                        results['cache_operations'] += 1
+                        results["cache_operations"] += 1
                         return "cache_success"
                 return "cache_no_pool"
             except Exception as e:
-                results['errors'] += 1
+                results["errors"] += 1
                 return f"cache_error_{str(e)}"
 
         async def production_api_task(task_id: int):
@@ -236,11 +235,11 @@ class TestConnectionPoolIntegration:
                     async with http_pool.get_connection():
                         # Simulate API call
                         await asyncio.sleep(0.003)
-                        results['api_calls'] += 1
+                        results["api_calls"] += 1
                         return "api_success"
                 return "api_no_pool"
             except Exception as e:
-                results['errors'] += 1
+                results["errors"] += 1
                 return f"api_error_{str(e)}"
 
         async def production_websocket_task(task_id: int):
@@ -257,15 +256,17 @@ class TestConnectionPoolIntegration:
                 await asyncio.sleep(0.001)
 
                 # Send message
-                await ws_manager.send_personal_message(f"WS message {task_id}", client_id)
-                results['websocket_messages'] += 1
+                await ws_manager.send_personal_message(
+                    f"WS message {task_id}", client_id
+                )
+                results["websocket_messages"] += 1
 
                 # Disconnect
                 await ws_manager.disconnect(client_id)
 
                 return "ws_success"
             except Exception as e:
-                results['errors'] += 1
+                results["errors"] += 1
                 return f"ws_error_{str(e)}"
 
         # Create mixed workload
@@ -295,14 +296,18 @@ class TestConnectionPoolIntegration:
         duration = end_time - start_time
 
         # Analyze results
-        successful_tasks = sum(1 for outcome in outcomes if isinstance(outcome, str) and "success" in outcome)
+        successful_tasks = sum(
+            1
+            for outcome in outcomes
+            if isinstance(outcome, str) and "success" in outcome
+        )
 
         assert successful_tasks >= len(tasks) * 0.85  # At least 85% success rate
-        assert results['database_queries'] > 0
-        assert results['cache_operations'] > 0
-        assert results['api_calls'] > 0
-        assert results['websocket_messages'] > 0
-        assert results['errors'] < len(tasks) * 0.15  # Less than 15% errors
+        assert results["database_queries"] > 0
+        assert results["cache_operations"] > 0
+        assert results["api_calls"] > 0
+        assert results["websocket_messages"] > 0
+        assert results["errors"] < len(tasks) * 0.15  # Less than 15% errors
 
         print("Production scenario test:")
         print(f"  Total tasks: {len(tasks)}")
@@ -317,8 +322,8 @@ class TestConnectionPoolIntegration:
     @pytest.mark.asyncio
     async def test_graceful_shutdown(self, integrated_system):
         """Test graceful shutdown of connection pooling system."""
-        pool_manager = integrated_system['pool_manager']
-        ws_manager = integrated_system['ws_manager']
+        pool_manager = integrated_system["pool_manager"]
+        ws_manager = integrated_system["ws_manager"]
 
         # Create some active connections
         active_connections = []
@@ -373,7 +378,7 @@ class TestConnectionPoolIntegration:
     @pytest.mark.asyncio
     async def test_error_recovery_and_resilience(self, integrated_system):
         """Test error recovery and system resilience."""
-        pool_manager = integrated_system['pool_manager']
+        pool_manager = integrated_system["pool_manager"]
 
         error_scenarios = []
         recovery_results = []
@@ -418,7 +423,9 @@ class TestConnectionPoolIntegration:
                     db_pool = pool_manager.get_pool("database")
                     if db_pool:
                         # Mock health check failure
-                        with patch.object(db_pool, '_validate_connection', return_value=False):
+                        with patch.object(
+                            db_pool, "_validate_connection", return_value=False
+                        ):
                             health_result = await db_pool.health_check()
                             if not health_result:
                                 error_scenarios.append(f"health_fail_{scenario_id}")
@@ -445,13 +452,13 @@ class TestConnectionPoolIntegration:
     @pytest.mark.asyncio
     async def test_performance_under_stress(self, integrated_system):
         """Test system performance under stress conditions."""
-        pool_manager = integrated_system['pool_manager']
+        pool_manager = integrated_system["pool_manager"]
 
         # Create stress test with high concurrency
         stress_results = {
-            'successful_operations': 0,
-            'failed_operations': 0,
-            'total_time': 0,
+            "successful_operations": 0,
+            "failed_operations": 0,
+            "total_time": 0,
         }
 
         async def stress_operation(operation_id: int):
@@ -466,16 +473,16 @@ class TestConnectionPoolIntegration:
                         try:
                             async with pool.get_connection(timeout=0.5):
                                 await asyncio.sleep(0.001)  # Very short operation
-                                stress_results['successful_operations'] += 1
+                                stress_results["successful_operations"] += 1
                         except Exception:
-                            stress_results['failed_operations'] += 1
+                            stress_results["failed_operations"] += 1
 
             except Exception:
-                stress_results['failed_operations'] += 1
+                stress_results["failed_operations"] += 1
 
             finally:
                 end_time = time.time()
-                stress_results['total_time'] += (end_time - start_time)
+                stress_results["total_time"] += end_time - start_time
 
         # Create high concurrency stress test
         num_stress_operations = 100
@@ -488,15 +495,18 @@ class TestConnectionPoolIntegration:
                 return await stress_operation(operation_id)
 
         stress_start_time = time.time()
-        stress_tasks = [limited_stress_operation(i) for i in range(num_stress_operations)]
+        stress_tasks = [
+            limited_stress_operation(i) for i in range(num_stress_operations)
+        ]
         await asyncio.gather(*stress_tasks, return_exceptions=True)
         stress_end_time = time.time()
 
         total_stress_time = stress_end_time - stress_start_time
 
         # Analyze stress test results
-        success_rate = stress_results['successful_operations'] / (
-            stress_results['successful_operations'] + stress_results['failed_operations']
+        success_rate = stress_results["successful_operations"] / (
+            stress_results["successful_operations"]
+            + stress_results["failed_operations"]
         )
 
         assert success_rate > 0.7  # At least 70% success rate under stress
@@ -508,7 +518,9 @@ class TestConnectionPoolIntegration:
         print(f"  Failed: {stress_results['failed_operations']}")
         print(f"  Success rate: {success_rate*100:.1f}%")
         print(f"  Total time: {total_stress_time:.2f}s")
-        print(f"  Average time per operation: {stress_results['total_time']/num_stress_operations*1000:.1f}ms")
+        print(
+            f"  Average time per operation: {stress_results['total_time']/num_stress_operations*1000:.1f}ms"
+        )
 
 
 class TestConnectionPoolProductionReadiness:

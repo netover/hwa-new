@@ -95,26 +95,30 @@ class AsyncAuditQueue(IAuditQueue):
             max_connections=getattr(self.settings, "REDIS_POOL_MAX_SIZE", 20),
             min_connections=getattr(self.settings, "REDIS_POOL_MIN_SIZE", 5),
             retry_on_timeout=True,
-            health_check_interval=getattr(self.settings, "REDIS_POOL_HEALTH_CHECK_INTERVAL", 60),
+            health_check_interval=getattr(
+                self.settings, "REDIS_POOL_HEALTH_CHECK_INTERVAL", 60
+            ),
             socket_keepalive=True,
             socket_keepalive_options={},
-            encoding='utf-8',
-            decode_responses=False
+            encoding="utf-8",
+            decode_responses=False,
         )
         self.sync_client = redis.Redis(connection_pool=sync_pool)
 
         # Use async connection pool correctly
         from redis.asyncio import ConnectionPool as AsyncConnectionPool
-        
+
         async_pool = AsyncConnectionPool.from_url(
             self.redis_url,
             max_connections=getattr(self.settings, "REDIS_POOL_MAX_SIZE", 20),
             min_connections=getattr(self.settings, "REDIS_POOL_MIN_SIZE", 5),
             retry_on_timeout=True,
-            health_check_interval=getattr(self.settings, "REDIS_POOL_HEALTH_CHECK_INTERVAL", 60),
+            health_check_interval=getattr(
+                self.settings, "REDIS_POOL_HEALTH_CHECK_INTERVAL", 60
+            ),
             socket_keepalive=True,
-            encoding='utf-8',
-            decode_responses=False
+            encoding="utf-8",
+            decode_responses=False,
         )
         self.async_client = AsyncRedis(connection_pool=async_pool)
 
@@ -142,9 +146,7 @@ class AsyncAuditQueue(IAuditQueue):
 
         # Check if already exists
         if await self.async_client.hexists(self.audit_status_key, memory_id):
-            logger.warning(
-                "memory_already_exists_in_audit_queue", memory_id=memory_id
-            )
+            logger.warning("memory_already_exists_in_audit_queue", memory_id=memory_id)
             return False
 
         # Store memory data as JSON
@@ -171,15 +173,36 @@ class AsyncAuditQueue(IAuditQueue):
             logger.info("added_memory_to_audit_queue", memory_id=memory_id)
             return True
         except RedisError as e:
-            logger.error("redis_error_while_adding_memory_to_audit_queue", memory_id=memory_id, error=str(e), exc_info=True)
+            logger.error(
+                "redis_error_while_adding_memory_to_audit_queue",
+                memory_id=memory_id,
+                error=str(e),
+                exc_info=True,
+            )
             # Consider this a critical error - raise exception to handle appropriately
-            raise AuditError(f"Failed to add memory to audit queue due to Redis error: {e}") from e
+            raise AuditError(
+                f"Failed to add memory to audit queue due to Redis error: {e}"
+            ) from e
         except TypeError as e:
-            logger.error("type_error_while_adding_memory_to_audit_queue", memory_id=memory_id, error=str(e), exc_info=True)
-            raise DataParsingError(f"Failed to serialize memory data for audit: {e}") from e
+            logger.error(
+                "type_error_while_adding_memory_to_audit_queue",
+                memory_id=memory_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise DataParsingError(
+                f"Failed to serialize memory data for audit: {e}"
+            ) from e
         except Exception as e:
-            logger.error("unexpected_error_while_adding_memory_to_audit_queue", memory_id=memory_id, error=str(e), exc_info=True)
-            raise AuditError(f"Failed to add memory to audit queue due to unexpected error: {e}") from e
+            logger.error(
+                "unexpected_error_while_adding_memory_to_audit_queue",
+                memory_id=memory_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise AuditError(
+                f"Failed to add memory to audit queue due to unexpected error: {e}"
+            ) from e
 
     async def get_pending_audits(self, limit: int = 50) -> List[Dict[str, Any]]:
         """
@@ -193,7 +216,9 @@ class AsyncAuditQueue(IAuditQueue):
         """
         try:
             # Get memory IDs from queue
-            memory_ids = await self.async_client.lrange(self.audit_queue_key, 0, limit - 1)
+            memory_ids = await self.async_client.lrange(
+                self.audit_queue_key, 0, limit - 1
+            )
 
             if not memory_ids:
                 return []
@@ -202,7 +227,9 @@ class AsyncAuditQueue(IAuditQueue):
             pending_audits = []
             for memory_id in memory_ids:
                 memory_id_str = memory_id.decode("utf-8")
-                status = await self.async_client.hget(self.audit_status_key, memory_id_str)
+                status = await self.async_client.hget(
+                    self.audit_status_key, memory_id_str
+                )
 
                 if status and status.decode("utf-8") == "pending":
                     data_json = await self.async_client.hget(
@@ -213,20 +240,42 @@ class AsyncAuditQueue(IAuditQueue):
                             data = json.loads(data_json.decode("utf-8"))
                             pending_audits.append(data)
                         except json.JSONDecodeError as e:
-                            logger.error("failed_to_decode_json_for_memory", memory_id=memory_id_str, error=str(e), exc_info=True)
+                            logger.error(
+                                "failed_to_decode_json_for_memory",
+                                memory_id=memory_id_str,
+                                error=str(e),
+                                exc_info=True,
+                            )
                             # Continue processing other items instead of failing completely
                             continue
                         except UnicodeDecodeError as e:
-                            logger.error("failed_to_decode_utf8_for_memory", memory_id=memory_id_str, error=str(e), exc_info=True)
+                            logger.error(
+                                "failed_to_decode_utf8_for_memory",
+                                memory_id=memory_id_str,
+                                error=str(e),
+                                exc_info=True,
+                            )
                             continue
 
             return pending_audits
         except RedisError as e:
-            logger.error("redis_error_while_retrieving_pending_audits", error=str(e), exc_info=True)
-            raise AuditError(f"Failed to retrieve pending audits due to Redis error: {e}") from e
+            logger.error(
+                "redis_error_while_retrieving_pending_audits",
+                error=str(e),
+                exc_info=True,
+            )
+            raise AuditError(
+                f"Failed to retrieve pending audits due to Redis error: {e}"
+            ) from e
         except Exception as e:
-            logger.error("unexpected_error_while_retrieving_pending_audits", error=str(e), exc_info=True)
-            raise AuditError(f"Failed to retrieve pending audits due to unexpected error: {e}") from e
+            logger.error(
+                "unexpected_error_while_retrieving_pending_audits",
+                error=str(e),
+                exc_info=True,
+            )
+            raise AuditError(
+                f"Failed to retrieve pending audits due to unexpected error: {e}"
+            ) from e
 
     async def update_audit_status(self, memory_id: str, status: str) -> bool:
         """
@@ -241,7 +290,9 @@ class AsyncAuditQueue(IAuditQueue):
         """
         try:
             # Check if exists
-            current_status = await self.async_client.hget(self.audit_status_key, memory_id)
+            current_status = await self.async_client.hget(
+                self.audit_status_key, memory_id
+            )
             if not current_status:
                 logger.warning("memory_not_found_in_audit_queue", memory_id=memory_id)
                 return False
@@ -258,21 +309,45 @@ class AsyncAuditQueue(IAuditQueue):
                         data["reviewed_at"] = datetime.now(timezone.utc).isoformat()
                         pipe.hset(self.audit_data_key, memory_id, json.dumps(data))
                     except json.JSONDecodeError as e:
-                        logger.error("failed_to_decode_json_for_memory", memory_id=memory_id, error=str(e), exc_info=True)
+                        logger.error(
+                            "failed_to_decode_json_for_memory",
+                            memory_id=memory_id,
+                            error=str(e),
+                            exc_info=True,
+                        )
                         # Continue with the update but without updating the data part
                     except UnicodeDecodeError as e:
-                        logger.error("failed_to_decode_utf8_for_memory", memory_id=memory_id, error=str(e), exc_info=True)
+                        logger.error(
+                            "failed_to_decode_utf8_for_memory",
+                            memory_id=memory_id,
+                            error=str(e),
+                            exc_info=True,
+                        )
                         # Continue with the update but without updating the data part
                 await pipe.execute()
 
             logger.info("updated_memory_status", memory_id=memory_id, status=status)
             return True
         except RedisError as e:
-            logger.error("redis_error_while_updating_audit_status", memory_id=memory_id, error=str(e), exc_info=True)
-            raise AuditError(f"Failed to update audit status due to Redis error: {e}") from e
+            logger.error(
+                "redis_error_while_updating_audit_status",
+                memory_id=memory_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise AuditError(
+                f"Failed to update audit status due to Redis error: {e}"
+            ) from e
         except Exception as e:
-            logger.error("unexpected_error_while_updating_audit_status", memory_id=memory_id, error=str(e), exc_info=True)
-            raise AuditError(f"Failed to update audit status due to unexpected error: {e}") from e
+            logger.error(
+                "unexpected_error_while_updating_audit_status",
+                memory_id=memory_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise AuditError(
+                f"Failed to update audit status due to unexpected error: {e}"
+            ) from e
 
     async def is_memory_approved(self, memory_id: str) -> bool:
         """
@@ -383,7 +458,9 @@ class AsyncAuditQueue(IAuditQueue):
             logger.warning("failed_to_acquire_lock", lock_key=lock_key, error=str(e))
             return False
         except RedisError as e:
-            logger.error("redis_error_during_lock_acquisition", lock_key=lock_key, error=str(e))
+            logger.error(
+                "redis_error_during_lock_acquisition", lock_key=lock_key, error=str(e)
+            )
             return False
 
     async def release_lock(self, lock_key: str, lock_value: str) -> bool:
@@ -405,7 +482,9 @@ class AsyncAuditQueue(IAuditQueue):
             logger.warning("failed_to_release_lock", lock_key=lock_key, error=str(e))
             return False
         except ValueError as e:
-            logger.warning("value_error_during_lock_release", lock_key=lock_key, error=str(e))
+            logger.warning(
+                "value_error_during_lock_release", lock_key=lock_key, error=str(e)
+            )
             return False
 
     async def with_lock(self, lock_key: str, timeout: int = 30) -> Any:
@@ -454,16 +533,24 @@ class AsyncAuditQueue(IAuditQueue):
         try:
             return await self.distributed_lock.force_release(lock_key)
         except AuditError as e:
-            logger.error("audit_error_force_releasing_lock", lock_key=lock_key, error=str(e))
+            logger.error(
+                "audit_error_force_releasing_lock", lock_key=lock_key, error=str(e)
+            )
             return False
         except RedisError as e:
-            logger.error("redis_error_force_releasing_lock", lock_key=lock_key, error=str(e))
+            logger.error(
+                "redis_error_force_releasing_lock", lock_key=lock_key, error=str(e)
+            )
             return False
         except ValueError as e:
-            logger.error("value_error_force_releasing_lock", lock_key=lock_key, error=str(e))
+            logger.error(
+                "value_error_force_releasing_lock", lock_key=lock_key, error=str(e)
+            )
             return False
         except (ConnectionError, TimeoutError) as e:
-            logger.error("connection_error_force_releasing_lock", lock_key=lock_key, error=str(e))
+            logger.error(
+                "connection_error_force_releasing_lock", lock_key=lock_key, error=str(e)
+            )
             return False
 
     async def get_all_audits(self) -> List[Dict[str, Any]]:
@@ -742,7 +829,9 @@ async def migrate_from_sqlite() -> None:
         raise FileProcessingError(f"File not found during migration: {e}") from e
     except (ValueError, TypeError) as e:
         logger.critical(
-            "unexpected_error_during_sqlite_to_redis_migration", error=str(e), exc_info=True
+            "unexpected_error_during_sqlite_to_redis_migration",
+            error=str(e),
+            exc_info=True,
         )
         raise AuditError(
             f"Unexpected error during SQLite to Redis migration: {e}"

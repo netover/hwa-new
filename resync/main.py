@@ -38,7 +38,9 @@ def validate_configuration_on_startup():
         print("\n   Crie um arquivo .env na raiz do projeto com:")
         print("   ADMIN_USERNAME=admin")
         print("   ADMIN_PASSWORD=suasenha123")
-        print("   SECRET_KEY=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')")
+        print(
+            "   SECRET_KEY=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+        )
         print("   REDIS_URL=redis://localhost:6379")
         print("   TWS_HOST=localhost")
         print("   TWS_PORT=31111")
@@ -61,10 +63,10 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
     from resync.settings import settings
-    
+
     uvicorn.run(
         app,
-        host=getattr(settings, 'server_host', '127.0.0.1'),
-        port=getattr(settings, 'server_port', 8000),
-        log_config=None  # Use our structured logging
+        host=getattr(settings, "server_host", "127.0.0.1"),
+        port=getattr(settings, "server_port", 8000),
+        log_config=None,  # Use our structured logging
     )

@@ -77,14 +77,17 @@ mock_tws_troubleshooting_tool = MockTool(
 
 # Replace the imports in agent_manager with our mocks
 import sys
+from types import ModuleType
 
-sys.modules["agno"] = type(
-    "MockAgno",
-    (),
-    {"Agent": MockAgent, "tools": type("MockTools", (), {"Tool": MockTool})},
-)()
+# Create mock modules
+mock_agno = ModuleType("agno")
+setattr(mock_agno, "Agent", MockAgent)
+mock_agno_tools = ModuleType("agno.tools")
+setattr(mock_agno_tools, "Tool", MockTool)
+setattr(mock_agno, "tools", mock_agno_tools)
 
-sys.modules["agno.tools"] = type("MockAgnoTools", (), {"Tool": MockTool})()
+sys.modules["agno"] = mock_agno
+sys.modules["agno.tools"] = mock_agno_tools
 
 # Replace settings with our mock
 import resync.core.agent_manager as am_module

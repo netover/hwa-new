@@ -11,6 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Environment(str, Enum):
     """Ambientes suportados."""
+
     DEVELOPMENT = "development"
     PRODUCTION = "production"
     TEST = "test"
@@ -52,7 +53,7 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="allow",
         env_prefix="APP_",
-        validate_default=True
+        validate_default=True,
     )
 
     # ============================================================================
@@ -60,35 +61,30 @@ class Settings(BaseSettings):
     # ============================================================================
 
     environment: Environment = Field(
-        default=Environment.DEVELOPMENT,
-        description="Ambiente de execução"
+        default=Environment.DEVELOPMENT, description="Ambiente de execução"
     )
 
     project_name: str = Field(
-        default="Resync",
-        min_length=1,
-        description="Nome do projeto"
+        default="Resync", min_length=1, description="Nome do projeto"
     )
 
     project_version: str = Field(
         default="1.0.0",
         pattern=r"^\d+\.\d+\.\d+$",
-        description="Versão do projeto (semver)"
+        description="Versão do projeto (semver)",
     )
 
     description: str = Field(
         default="Real-time monitoring dashboard for HCL Workload Automation",
-        description="Descrição do projeto"
+        description="Descrição do projeto",
     )
 
     base_dir: Path = Field(
-        default_factory=Path.cwd,
-        description="Diretório base da aplicação"
+        default_factory=Path.cwd, description="Diretório base da aplicação"
     )
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
-        default="INFO",
-        description="Nível de logging"
+        default="INFO", description="Nível de logging"
     )
 
     # ============================================================================
@@ -96,20 +92,13 @@ class Settings(BaseSettings):
     # ============================================================================
 
     neo4j_uri: str = Field(
-        default="bolt://localhost:7687",
-        description="URI de conexão Neo4j"
+        default="bolt://localhost:7687", description="URI de conexão Neo4j"
     )
 
-    neo4j_user: str = Field(
-        default="neo4j",
-        min_length=1,
-        description="Usuário Neo4j"
-    )
+    neo4j_user: str = Field(default="neo4j", min_length=1, description="Usuário Neo4j")
 
     neo4j_password: str = Field(
-        default="password",
-        min_length=1,
-        description="Senha Neo4j"
+        default="password", min_length=1, description="Senha Neo4j"
     )
 
     # Connection Pool - Neo4j
@@ -125,8 +114,7 @@ class Settings(BaseSettings):
     # ============================================================================
 
     redis_url: str = Field(
-        default="redis://localhost:6379/0",
-        description="URL de conexão Redis"
+        default="redis://localhost:6379/0", description="URL de conexão Redis"
     )
 
     redis_min_connections: int = Field(default=1, ge=1, le=100)
@@ -145,16 +133,34 @@ class Settings(BaseSettings):
     redis_max_startup_retries: int = Field(default=3, ge=1, le=10)
     redis_startup_backoff_base: float = Field(default=0.1, gt=0)
     redis_startup_backoff_max: float = Field(default=10.0, gt=0)
-    redis_startup_lock_timeout: int = Field(default=30, ge=5, description="Timeout for distributed Redis initialization lock")
-    redis_health_check_interval: int = Field(default=5, ge=1, description="Interval for Redis connection health checks")
+    redis_startup_lock_timeout: int = Field(
+        default=30,
+        ge=5,
+        description="Timeout for distributed Redis initialization lock",
+    )
+    redis_health_check_interval: int = Field(
+        default=5, ge=1, description="Interval for Redis connection health checks"
+    )
 
     # Robust Cache Configuration
-    robust_cache_max_items: int = Field(default=100_000, ge=100, description="Maximum number of items in robust cache")
-    robust_cache_max_memory_mb: int = Field(default=100, ge=10, description="Maximum memory usage for robust cache")
-    robust_cache_eviction_batch_size: int = Field(default=100, ge=1, description="Number of items to evict in one batch")
-    robust_cache_enable_weak_refs: bool = Field(default=True, description="Enable weak references for large objects")
-    robust_cache_enable_wal: bool = Field(default=False, description="Enable Write-Ahead Logging for cache")
-    robust_cache_wal_path: str | None = Field(default=None, description="Path for cache Write-Ahead Log")
+    robust_cache_max_items: int = Field(
+        default=100_000, ge=100, description="Maximum number of items in robust cache"
+    )
+    robust_cache_max_memory_mb: int = Field(
+        default=100, ge=10, description="Maximum memory usage for robust cache"
+    )
+    robust_cache_eviction_batch_size: int = Field(
+        default=100, ge=1, description="Number of items to evict in one batch"
+    )
+    robust_cache_enable_weak_refs: bool = Field(
+        default=True, description="Enable weak references for large objects"
+    )
+    robust_cache_enable_wal: bool = Field(
+        default=False, description="Enable Write-Ahead Logging for cache"
+    )
+    robust_cache_wal_path: str | None = Field(
+        default=None, description="Path for cache Write-Ahead Log"
+    )
 
     # ============================================================================
     # LLM
@@ -162,19 +168,17 @@ class Settings(BaseSettings):
 
     llm_endpoint: str = Field(
         default="https://openrouter.ai/api/v1",
-        description="Endpoint da API LLM (OpenRouter)"
+        description="Endpoint da API LLM (OpenRouter)",
     )
 
     llm_api_key: str = Field(
         default="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",
         min_length=1,
-        description="Chave de API do LLM (OpenRouter)"
+        description="Chave de API do LLM (OpenRouter)",
     )
 
     llm_timeout: float = Field(
-        default=60.0,
-        gt=0,
-        description="Timeout para chamadas LLM em segundos"
+        default=60.0, gt=0, description="Timeout para chamadas LLM em segundos"
     )
 
     auditor_model_name: str = Field(default="gpt-3.5-turbo")
@@ -186,23 +190,23 @@ class Settings(BaseSettings):
     # Cache Hierarchy Configuration
     cache_hierarchy_l1_max_size: int = Field(
         default=int(os.environ.get("CACHE_HIERARCHY_L1_MAX_SIZE", 5000)),
-        description="Maximum number of entries in L1 cache"
+        description="Maximum number of entries in L1 cache",
     )
     cache_hierarchy_l2_ttl: int = Field(
         default=int(os.environ.get("CACHE_HIERARCHY_L2_TTL", 600)),
-        description="Time-To-Live for L2 cache entries in seconds"
+        description="Time-To-Live for L2 cache entries in seconds",
     )
     cache_hierarchy_l2_cleanup_interval: int = Field(
         default=int(os.environ.get("CACHE_HIERARCHY_L2_CLEANUP_INTERVAL", 60)),
-        description="Cleanup interval for L2 cache in seconds"
+        description="Cleanup interval for L2 cache in seconds",
     )
     cache_hierarchy_num_shards: int = Field(
         default=int(os.environ.get("CACHE_HIERARCHY_NUM_SHARDS", 8)),
-        description="Number of shards for cache"
+        description="Number of shards for cache",
     )
     cache_hierarchy_max_workers: int = Field(
         default=int(os.environ.get("CACHE_HIERARCHY_MAX_WORKERS", 4)),
-        description="Max workers for cache operations"
+        description="Max workers for cache operations",
     )
 
     # ============================================================================
@@ -210,8 +214,7 @@ class Settings(BaseSettings):
     # ============================================================================
 
     tws_mock_mode: bool = Field(
-        default=True,
-        description="Usar modo mock para TWS (desenvolvimento)"
+        default=True, description="Usar modo mock para TWS (desenvolvimento)"
     )
 
     tws_host: str | None = Field(default=None)
@@ -219,16 +222,18 @@ class Settings(BaseSettings):
     tws_user: str | None = Field(  # type: ignore[call-overload]
         default=None,
         env="TWS_USER",
-        description="Usuário do TWS (obrigatório se não estiver em modo mock)"
+        description="Usuário do TWS (obrigatório se não estiver em modo mock)",
     )
     tws_password: str | None = Field(  # type: ignore[call-overload]
         default=None,
         env="TWS_PASSWORD",
         description="Senha do TWS (obrigatório se não estiver em modo mock)",
-        exclude=True  # Não incluir em logs ou serializações
+        exclude=True,  # Não incluir em logs ou serializações
     )
     tws_base_url: str = Field(default="http://localhost:31111")
-    tws_request_timeout: float = Field(default=30.0, gt=0, description="Timeout para requisições TWS")
+    tws_request_timeout: float = Field(
+        default=30.0, gt=0, description="Timeout para requisições TWS"
+    )
 
     # Connection Pool - HTTP
     http_pool_min_size: int = Field(default=10, ge=1)
@@ -243,15 +248,11 @@ class Settings(BaseSettings):
     # ============================================================================
 
     admin_username: str = Field(
-        default="admin",
-        min_length=3,
-        description="Nome de usuário do administrador"
+        default="admin", min_length=3, description="Nome de usuário do administrador"
     )
 
     admin_password: str = Field(
-        default="change_me_please",
-        min_length=8,
-        description="Senha do administrador"
+        default="change_me_please", min_length=8, description="Senha do administrador"
     )
 
     # CORS
@@ -268,15 +269,11 @@ class Settings(BaseSettings):
     # ============================================================================
 
     server_host: str = Field(
-        default="127.0.0.1",
-        description="Host do servidor (padrão: localhost apenas)"
+        default="127.0.0.1", description="Host do servidor (padrão: localhost apenas)"
     )
 
     server_port: int = Field(
-        default=8000,
-        ge=1024,
-        le=65535,
-        description="Porta do servidor"
+        default=8000, ge=1024, le=65535, description="Porta do servidor"
     )
 
     # ============================================================================
@@ -300,12 +297,12 @@ class Settings(BaseSettings):
     # File Ingestion Settings
     knowledge_base_dirs: list[Path] = Field(
         default_factory=lambda: [Path.cwd() / "resync/RAG"],
-        description="Directories included in the knowledge base"
+        description="Directories included in the knowledge base",
     )
-    
+
     protected_directories: list[Path] = Field(
         default_factory=lambda: [Path.cwd() / "resync/RAG/BASE"],
-        description="Protected directories that should not be modified"
+        description="Protected directories that should not be modified",
     )
 
     @property
@@ -563,23 +560,21 @@ class Settings(BaseSettings):
 
     # Controle de migração para novos componentes
     MIGRATION_USE_NEW_CACHE: bool = Field(
-        default=False,
-        description="Usar ImprovedAsyncCache ao invés de AsyncTTLCache"
+        default=False, description="Usar ImprovedAsyncCache ao invés de AsyncTTLCache"
     )
 
     MIGRATION_USE_NEW_TWS: bool = Field(
         default=False,
-        description="Usar TWSClientFactory ao invés de implementação direta"
+        description="Usar TWSClientFactory ao invés de implementação direta",
     )
 
     MIGRATION_USE_NEW_RATE_LIMIT: bool = Field(
         default=False,
-        description="Usar RateLimiterManager ao invés de implementação básica"
+        description="Usar RateLimiterManager ao invés de implementação básica",
     )
 
     MIGRATION_ENABLE_METRICS: bool = Field(
-        default=True,
-        description="Habilitar métricas de migração e monitoramento"
+        default=True, description="Habilitar métricas de migração e monitoramento"
     )
 
     # ============================================================================
@@ -596,35 +591,35 @@ class Settings(BaseSettings):
         """Backward compatibility property for PROTECTED_DIRECTORIES."""
         return self.protected_directories
 
-    @field_validator('base_dir')
+    @field_validator("base_dir")
     @classmethod
     def validate_base_dir(cls, v: Path) -> Path:
         """Resolve base_dir para path absoluto."""
         return v.resolve()
 
-    @field_validator('db_pool_max_size')
+    @field_validator("db_pool_max_size")
     @classmethod
     def validate_db_pool_sizes(cls, v: int, info: ValidationInfo) -> int:
         """Valida que max_size >= min_size."""
-        min_size = info.data.get('db_pool_min_size', 0)
+        min_size = info.data.get("db_pool_min_size", 0)
         if v < min_size:
             raise ValueError(
                 f"db_pool_max_size ({v}) must be >= db_pool_min_size ({min_size})"
             )
         return v
 
-    @field_validator('redis_pool_max_size')
+    @field_validator("redis_pool_max_size")
     @classmethod
     def validate_redis_pool_sizes(cls, v: int, info: ValidationInfo) -> int:
         """Valida que max_size >= min_size."""
-        min_size = info.data.get('redis_pool_min_size', 0)
+        min_size = info.data.get("redis_pool_min_size", 0)
         if v < min_size:
             raise ValueError(
                 f"redis_pool_max_size ({v}) must be >= redis_pool_min_size ({min_size})"
             )
         return v
 
-    @field_validator('redis_url')
+    @field_validator("redis_url")
     @classmethod
     def validate_redis_url(cls, v: str) -> str:
         """Valida formato da URL Redis."""
@@ -635,7 +630,7 @@ class Settings(BaseSettings):
             )
         return v
 
-    @field_validator('admin_password')
+    @field_validator("admin_password")
     @classmethod
     def validate_password_strength(cls, v: str) -> str:
         """Valida força mínima da senha."""
@@ -644,69 +639,60 @@ class Settings(BaseSettings):
             raise ValueError("Senha deve ter no mínimo 8 caracteres")
         return v
 
-    @field_validator('admin_password')
+    @field_validator("admin_password")
     @classmethod
     def validate_production_password(cls, v: str, info: ValidationInfo) -> str:
         """Valida senha em produção."""
-        env = info.data.get('environment')
+        env = info.data.get("environment")
         if env == Environment.PRODUCTION:
             insecure_passwords = {
-                'change_me_please',
-                'change_me_immediately',
-                'admin',
-                'password',
-                '12345678'
+                "change_me_please",
+                "change_me_immediately",
+                "admin",
+                "password",
+                "12345678",
             }
             if v.lower() in insecure_passwords:
-                raise ValueError(
-                    "Insecure admin password not allowed in production"
-                )
+                raise ValueError("Insecure admin password not allowed in production")
         return v
 
-
-    @field_validator('cors_allowed_origins')
+    @field_validator("cors_allowed_origins")
     @classmethod
     def validate_production_cors(cls, v: list[str], info: ValidationInfo) -> list[str]:
         """Valida CORS em produção."""
-        env = info.data.get('environment')
+        env = info.data.get("environment")
         if env == Environment.PRODUCTION and "*" in v:
-            raise ValueError(
-                "Wildcard CORS origins not allowed in production"
-            )
+            raise ValueError("Wildcard CORS origins not allowed in production")
         return v
 
-    @field_validator('llm_api_key')
+    @field_validator("llm_api_key")
     @classmethod
     def validate_llm_api_key(cls, v: str, info: ValidationInfo) -> str:
         """Valida chave da API em produção."""
-        env = info.data.get('environment')
+        env = info.data.get("environment")
         if env == Environment.PRODUCTION:
             if v == "dummy_key_for_development":
-                raise ValueError(
-                    "LLM_API_KEY must be set to a valid key in production"
-                )
+                raise ValueError("LLM_API_KEY must be set to a valid key in production")
         return v
 
-    @field_validator('tws_user', 'tws_password')
+    @field_validator("tws_user", "tws_password")
     @classmethod
-    def validate_tws_credentials(cls, v: str | None, info: ValidationInfo) -> str | None:
+    def validate_tws_credentials(
+        cls, v: str | None, info: ValidationInfo
+    ) -> str | None:
         """Valida credenciais TWS quando não está em modo mock."""
         if info.field_name == "tws_password" and v:
             # Validar força da senha em produção
-            env = info.data.get('environment')
+            env = info.data.get("environment")
             if env == Environment.PRODUCTION:
                 if len(v) < 12:
                     raise ValueError(
                         "TWS_PASSWORD must be at least 12 characters in production"
                     )
                 # Verificar se não é uma senha padrão
-                common_passwords = {
-                    "password", "twsuser", "tws_password", "change_me"
-                }
+                common_passwords = {"password", "twsuser", "tws_password", "change_me"}
                 if v.lower() in common_passwords:
-                    raise ValueError(
-                        "TWS_PASSWORD cannot be a common/default password"
-                    )
+                    raise ValueError("TWS_PASSWORD cannot be a common/default password")
         return v
 
     def model_post_init(self, _context: Any) -> None:
@@ -714,10 +700,10 @@ class Settings(BaseSettings):
         # Validar TWS quando não está em mock mode
         if not self.tws_mock_mode:
             required_tws = {
-                'tws_host': self.tws_host,
-                'tws_port': self.tws_port,
-                'tws_user': self.tws_user,
-                'tws_password': self.tws_password
+                "tws_host": self.tws_host,
+                "tws_port": self.tws_port,
+                "tws_user": self.tws_user,
+                "tws_password": self.tws_password,
             }
             missing = [k for k, v in required_tws.items() if not v]
             if missing:

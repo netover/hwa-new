@@ -30,7 +30,7 @@ async def test_threshold_logic() -> None:
         total_connections=20,
         connection_errors=0,
         pool_hits=100,
-        pool_misses=5
+        pool_misses=5,
     )
 
     # Test threshold calculation
@@ -47,7 +47,7 @@ async def test_threshold_logic() -> None:
 
     # Test 2: At threshold
     mock_stats.active_connections = 18  # 90% usage (at threshold)
-    usage_percent = (18 / 20 * 100)
+    usage_percent = 18 / 20 * 100
 
     print("\nTest 2: At threshold (90%)")
     print(f"Active: 18, Total: 20, Usage: {usage_percent:.1f}%")
@@ -57,13 +57,15 @@ async def test_threshold_logic() -> None:
 
     # Test 3: Custom threshold
     config2 = HealthCheckConfig(database_connection_threshold_percent=75.0)
-    usage_percent = (18 / 20 * 100)  # 90% usage
+    usage_percent = 18 / 20 * 100  # 90% usage
 
     print("\nTest 3: Custom threshold (75%)")
     print(f"Active: 18, Total: 20, Usage: {usage_percent:.1f}%")
     print(f"Threshold: {config2.database_connection_threshold_percent}%")
     print("Expected status: DEGRADED")
-    print(f"Calculation: {usage_percent} >= {config2.database_connection_threshold_percent} = {usage_percent >= config2.database_connection_threshold_percent}")
+    print(
+        f"Calculation: {usage_percent} >= {config2.database_connection_threshold_percent} = {usage_percent >= config2.database_connection_threshold_percent}"
+    )
 
     # Test 4: Edge case - zero connections
     ConnectionPoolStats(
@@ -71,7 +73,7 @@ async def test_threshold_logic() -> None:
         active_connections=0,
         idle_connections=0,
         total_connections=0,
-        connection_errors=0
+        connection_errors=0,
     )
 
     usage_percent = (0 / 0 * 100) if 0 > 0 else 0.0
@@ -92,7 +94,7 @@ async def test_threshold_logic() -> None:
 
 async def test_configurable_values() -> None:
     """Test different threshold configurations."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Testing configurable threshold values...")
 
     thresholds = [50.0, 75.0, 80.0, 85.0, 90.0, 95.0, 99.0]
@@ -112,7 +114,7 @@ async def main() -> None:
     await test_threshold_logic()
     await test_configurable_values()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("✅ All manual tests completed successfully!")
     print("✅ Database connection threshold functionality is working correctly")
     print("✅ Configurable threshold alerting is implemented")

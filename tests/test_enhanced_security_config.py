@@ -19,12 +19,12 @@ class TestEnhancedSecurityConfiguration:
     def test_enhanced_security_middleware_initialization(self):
         """Test initialization of enhanced security middleware."""
         app = FastAPI()
-        
+
         # Test with default configuration
         middleware = EnhancedSecurityMiddleware(app)
         assert middleware is not None
         assert middleware.enable_hsts is False  # Disabled in non-production
-        
+
         # Test with custom configuration
         middleware = EnhancedSecurityMiddleware(
             app,
@@ -39,7 +39,7 @@ class TestEnhancedSecurityConfiguration:
         """Test default CSP generation."""
         app = FastAPI()
         middleware = EnhancedSecurityMiddleware(app)
-        
+
         csp = middleware._default_csp()
         assert isinstance(csp, str)
         assert "default-src 'self'" in csp
@@ -51,7 +51,7 @@ class TestEnhancedSecurityConfiguration:
         """Test default permissions policy generation."""
         app = FastAPI()
         middleware = EnhancedSecurityMiddleware(app)
-        
+
         policy = middleware._default_permissions_policy()
         assert isinstance(policy, str)
         assert "geolocation=()" in policy
@@ -62,7 +62,7 @@ class TestEnhancedSecurityConfiguration:
         """Test default feature policy generation."""
         app = FastAPI()
         middleware = EnhancedSecurityMiddleware(app)
-        
+
         policy = middleware._default_feature_policy()
         assert isinstance(policy, str)
         assert "geolocation 'none'" in policy
@@ -85,7 +85,7 @@ class TestEnhancedSecurityConfiguration:
             "Cross-Origin-Opener-Policy": "same-origin",
             "Cross-Origin-Resource-Policy": "same-origin",
         }
-        
+
         missing = validate_security_headers(headers_with_all_security)
         assert len(missing) == 0
 
@@ -94,7 +94,7 @@ class TestEnhancedSecurityConfiguration:
             "Content-Security-Policy": "default-src 'self'",
             "X-Content-Type-Options": "nosniff",
         }
-        
+
         missing = validate_security_headers(headers_missing_some)
         assert len(missing) > 0
         assert "Strict-Transport-Security" in missing
@@ -103,13 +103,13 @@ class TestEnhancedSecurityConfiguration:
     def test_configure_enhanced_security(self):
         """Test configuration of enhanced security."""
         app = FastAPI()
-        
+
         # Test configuration with default settings
         configure_enhanced_security(app)
-        
+
         # Should have middleware added
         assert len(app.user_middleware) > 0
-        
+
         # Test configuration with custom settings
         app2 = FastAPI()
         custom_config = {
@@ -117,7 +117,7 @@ class TestEnhancedSecurityConfiguration:
             "strict_transport_security_max_age": 15768000,  # 6 months
         }
         configure_enhanced_security(app2, custom_config)
-        
+
         # Should have middleware added
         assert len(app2.user_middleware) > 0
 
@@ -125,17 +125,17 @@ class TestEnhancedSecurityConfiguration:
     async def test_security_middleware_dispatch(self):
         """Test security middleware dispatch functionality."""
         app = FastAPI()
-        
+
         @app.get("/test")
         async def test_endpoint():
             return {"message": "test"}
-        
+
         # Add security middleware
         app.add_middleware(EnhancedSecurityMiddleware)
-        
+
         client = TestClient(app)
         response = client.get("/test")
-        
+
         # Check that security headers are present
         assert response.status_code == 200
         assert "X-Content-Type-Options" in response.headers
@@ -145,24 +145,24 @@ class TestEnhancedSecurityConfiguration:
     async def test_security_middleware_skip_paths(self):
         """Test that security headers are skipped for certain paths."""
         app = FastAPI()
-        
+
         @app.get("/health")
         async def health_endpoint():
             return {"status": "ok"}
-        
+
         @app.get("/test")
         async def test_endpoint():
             return {"message": "test"}
-        
+
         # Add security middleware
         app.add_middleware(EnhancedSecurityMiddleware)
-        
+
         client = TestClient(app)
-        
+
         # Test health endpoint (should skip security headers)
         health_response = client.get("/health")
         assert health_response.status_code == 200
-        
+
         # Test regular endpoint (should have security headers)
         test_response = client.get("/test")
         assert test_response.status_code == 200

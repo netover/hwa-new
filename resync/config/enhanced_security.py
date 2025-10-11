@@ -69,7 +69,9 @@ class EnhancedSecurityMiddleware(BaseHTTPMiddleware):
         self.strict_transport_security_max_age = strict_transport_security_max_age
         self.content_security_policy = content_security_policy or self._default_csp()
         self.referrer_policy = referrer_policy
-        self.permissions_policy = permissions_policy or self._default_permissions_policy()
+        self.permissions_policy = (
+            permissions_policy or self._default_permissions_policy()
+        )
         self.feature_policy = feature_policy or self._default_feature_policy()
 
     async def dispatch(self, request: Request, call_next) -> Response:
@@ -88,10 +90,10 @@ class EnhancedSecurityMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         response = await call_next(request)
-        
+
         # Add security headers
         self._add_security_headers(response)
-        
+
         return response
 
     def _should_skip_security_headers(self, request: Request) -> bool:
@@ -180,8 +182,14 @@ class EnhancedSecurityMiddleware(BaseHTTPMiddleware):
         # Base directives
         directives = {
             "default-src": ["'self'"],
-            "script-src": ["'self'", "'unsafe-inline'"],  # Allow inline for now, should be restricted
-            "style-src": ["'self'", "'unsafe-inline'"],   # Allow inline for now, should be restricted
+            "script-src": [
+                "'self'",
+                "'unsafe-inline'",
+            ],  # Allow inline for now, should be restricted
+            "style-src": [
+                "'self'",
+                "'unsafe-inline'",
+            ],  # Allow inline for now, should be restricted
             "img-src": ["'self'", "data:", "https:"],
             "font-src": ["'self'", "https:", "data:"],
             "connect-src": ["'self'"],

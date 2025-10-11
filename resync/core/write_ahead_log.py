@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class WalOperationType(Enum):
     """Types of operations that can be logged in the WAL."""
+
     SET = "SET"
     DELETE = "DELETE"
     EXPIRE = "EXPIRE"
@@ -30,13 +31,14 @@ class WalOperationType(Enum):
 @dataclass
 class WalEntry:
     """Represents a single entry in the write-ahead log."""
+
     operation: WalOperationType
     key: str
     value: Optional[Any] = None
     timestamp: float = field(default_factory=time.time)
     ttl: Optional[float] = None
     checksum: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert the WAL entry to a dictionary for serialization."""
         result = {
@@ -44,13 +46,13 @@ class WalEntry:
             "key": self.key,
             "value": self.value,
             "timestamp": self.timestamp,
-            "ttl": self.ttl
+            "ttl": self.ttl,
         }
         # Only include checksum if it exists
         if self.checksum is not None:
             result["checksum"] = self.checksum
         return result
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "WalEntry":
         """Create a WAL entry from a dictionary."""
@@ -60,13 +62,13 @@ class WalEntry:
             key=data["key"],
             value=data.get("value"),
             timestamp=data.get("timestamp", time.time()),
-            ttl=data.get("ttl")
+            ttl=data.get("ttl"),
         )
         # Add checksum if present in the data
         if "checksum" in data:
             entry.checksum = data["checksum"]
         return entry
-    
+
     def calculate_checksum(self) -> str:
         """Calculate a checksum for this entry to ensure data integrity."""
         # Temporarily remove checksum from data to calculate checksum
@@ -82,11 +84,13 @@ class WalEntry:
 
 class WriteAheadLog:
     """Write-Ahead Logging system for cache operations."""
-    
-    def __init__(self, log_path: Union[str, Path], max_log_size: int = 10 * 1024 * 1024):  # 10MB default
+
+    def __init__(
+        self, log_path: Union[str, Path], max_log_size: int = 10 * 1024 * 1024
+    ):  # 10MB default
         """
         Initialize the WAL system.
-        
+
         Args:
             log_path: Path to store the WAL files
             max_log_size: Maximum size of a single WAL file before rotation
@@ -96,14 +100,14 @@ class WriteAheadLog:
         self.log_file = None
         self.current_size = 0
         self.lock = asyncio.Lock()
-        
+
         # Ensure log directory exists
         self.log_path.mkdir(parents=True, exist_ok=True)
-        
+
         # Initialize with the current log file
         self.current_log_file_path = self.log_path / f"wal_{int(time.time())}.log"
         self._file_handle = None  # Track the file handle for proper closing
-    
+
     async def _ensure_log_file_open(self):
         """Ensure the log file is open for writing."""
         # Check if file handle exists and is for the correct file path
@@ -113,7 +117,7 @@ class WriteAheadLog:
         else:
             # aiofiles doesn't expose the filename directly, so we'll assume we need to check
             # by tracking the current file path separately
-            if not hasattr(self, '_current_file_path'):
+            if not hasattr(self, "_current_file_path"):
                 self._current_file_path = self.current_log_file_path
                 need_new_handle = True
             elif self._current_file_path != self.current_log_file_path:
@@ -125,21 +129,23 @@ class WriteAheadLog:
 
         if need_new_handle:
             # Close current file handle if it exists and is open
-            if self._file_handle and not getattr(self._file_handle, 'closed', False):
+            if self._file_handle and not getattr(self._file_handle, "closed", False):
                 try:
                     await self._file_handle.close()
                 except Exception as e:
                     logger.warning(f"Error closing WAL file handle: {e}")
 
             # Open or create the log file in append mode using aiofiles
-            self._file_handle = await aiofiles.open(self.current_log_file_path, "a", encoding="utf-8")
+            self._file_handle = await aiofiles.open(
+                self.current_log_file_path, "a", encoding="utf-8"
+            )
             self._current_file_path = self.current_log_file_path
             # Get current file size
             if self.current_log_file_path.exists():
                 self.current_size = self.current_log_file_path.stat().st_size
             else:
                 self.current_size = 0
-    
+
     async def _rotate_log_if_needed(self):
         """Rotate the log file if it exceeds the maximum size."""
         # Check if the current size (from the file itself) exceeds the max size
@@ -151,21 +157,23 @@ class WriteAheadLog:
                     try:
                         await self._file_handle.close()
                     except Exception as e:
-                        logger.warning(f"Error closing WAL file handle during rotation: {e}")
-                
+                        logger.warning(
+                            f"Error closing WAL file handle during rotation: {e}"
+                        )
+
                 # Create new log file with timestamp
                 timestamp = int(time.time())
                 self.current_log_file_path = self.log_path / f"wal_{timestamp}.log"
                 self.current_size = 0
                 # New file will be opened on next operation
-    
+
     async def log_operation(self, entry: WalEntry) -> bool:
         """
         Log an operation to the write-ahead log with fsync for durability.
-        
+
         Args:
             entry: The WAL entry to log
-            
+
         Returns:
             True if successfully logged, False otherwise
         """
@@ -173,49 +181,49 @@ class WriteAheadLog:
             try:
                 # Check if we need to rotate first to ensure we're writing to the right file
                 await self._rotate_log_if_needed()
-                
+
                 # Ensure log file is open (this will open the correct file after rotation if needed)
                 await self._ensure_log_file_open()
-                
+
                 # Calculate checksum for data integrity (before adding it to the entry)
                 checksum = entry.calculate_checksum()
-                
+
                 # Add checksum to the entry
                 entry.checksum = checksum
-                
+
                 # Serialize and write the entry
                 serialized_entry = json.dumps(entry.to_dict()) + "\n"
-                
+
                 # Write to the file using aiofiles
                 await self._file_handle.write(serialized_entry)
                 await self._file_handle.flush()  # Ensure data is written to OS buffer
-                
+
                 # For aiofiles, sync the file handle itself
                 # Since aiofiles doesn't have a direct fsync, we'll flush and use os.fsync on the underlying fd
-                if hasattr(self._file_handle, 'fileno'):
+                if hasattr(self._file_handle, "fileno"):
                     fd = self._file_handle.fileno()
                     os.fsync(fd)
-                
+
                 # Update current size
-                self.current_size += len(serialized_entry.encode('utf-8'))
-                
+                self.current_size += len(serialized_entry.encode("utf-8"))
+
                 return True
             except Exception as e:
                 logger.error(f"Failed to log operation to WAL: {e}")
                 return False
-    
+
     async def read_log(self, log_file_path: Union[str, Path]) -> List[WalEntry]:
         """
         Read and parse all entries from a WAL file.
-        
+
         Args:
             log_file_path: Path to the WAL file to read
-            
+
         Returns:
             List of WAL entries from the file
         """
         entries = []
-        
+
         try:
             async with aiofiles.open(log_file_path, "r", encoding="utf-8") as f:
                 content = await f.read()
@@ -223,90 +231,99 @@ class WriteAheadLog:
                     line = line.strip()
                     if not line:
                         continue
-                    
+
                     try:
                         data = json.loads(line)
                         entry = WalEntry.from_dict(data)
-                        
+
                         # Verify checksum
                         expected_checksum = entry.calculate_checksum()
                         if entry.checksum != expected_checksum:
-                            logger.warning(f"Checksum mismatch at line {line_num} in {log_file_path}")
+                            logger.warning(
+                                f"Checksum mismatch at line {line_num} in {log_file_path}"
+                            )
                             continue  # Skip corrupted entry
-                        
+
                         entries.append(entry)
                     except json.JSONDecodeError as e:
-                        logger.error(f"Failed to parse JSON at line {line_num} in {log_file_path}: {e}")
+                        logger.error(
+                            f"Failed to parse JSON at line {line_num} in {log_file_path}: {e}"
+                        )
                     except Exception as e:
-                        logger.error(f"Error processing line {line_num} in {log_file_path}: {e}")
-                        
+                        logger.error(
+                            f"Error processing line {line_num} in {log_file_path}: {e}"
+                        )
+
         except FileNotFoundError:
             logger.info(f"WAL file not found: {log_file_path}")
         except Exception as e:
             logger.error(f"Error reading WAL file {log_file_path}: {e}")
-        
+
         return entries
-    
+
     async def replay_log(self, cache: Any) -> int:
         """
         Replay all operations in the WAL to recover cache state.
-        
+
         Args:
             cache: Cache instance to replay operations on
-            
+
         Returns:
             Number of operations successfully replayed
         """
         replayed_count = 0
         failed_count = 0
-        
+
         # Get all WAL files, sorted by creation time
         wal_files = sorted(
-            self.log_path.glob("wal_*.log"),
-            key=lambda x: x.stat().st_mtime
+            self.log_path.glob("wal_*.log"), key=lambda x: x.stat().st_mtime
         )
-        
+
         for wal_file in wal_files:
             logger.info(f"Replaying WAL file: {wal_file}")
             entries = await self.read_log(wal_file)
-            
+
             for entry in entries:
                 try:
                     # Apply the operation to the cache
                     if entry.operation == WalOperationType.SET:
                         # We need to call the cache's internal set method
                         # The cache should have a method to apply operations without logging again
-                        if hasattr(cache, 'apply_wal_set'):
+                        if hasattr(cache, "apply_wal_set"):
                             await cache.apply_wal_set(entry.key, entry.value, entry.ttl)
                         else:
                             # Fallback: try to directly set with TTL if it's an AsyncTTLCache
-                            await cache.set(entry.key, entry.value, ttl_override=entry.ttl)
+                            await cache.set(
+                                entry.key, entry.value, ttl_override=entry.ttl
+                            )
                     elif entry.operation == WalOperationType.DELETE:
-                        if hasattr(cache, 'apply_wal_delete'):
+                        if hasattr(cache, "apply_wal_delete"):
                             await cache.apply_wal_delete(entry.key)
                         else:
                             await cache.delete(entry.key)
                     elif entry.operation == WalOperationType.EXPIRE:
                         # For expired entries, we just need to ensure they're not in the cache
                         await cache.delete(entry.key)
-                    
+
                     replayed_count += 1
                 except Exception as e:
                     logger.error(f"Error replaying WAL entry for key {entry.key}: {e}")
                     failed_count += 1
-        
-        logger.info(f"Replayed {replayed_count} operations from WAL, {failed_count} failed")
+
+        logger.info(
+            f"Replayed {replayed_count} operations from WAL, {failed_count} failed"
+        )
         return replayed_count
-    
+
     async def cleanup_old_logs(self, retention_hours: int = 24):
         """
         Clean up old WAL files based on retention policy.
-        
+
         Args:
             retention_hours: Number of hours to retain WAL files
         """
         cutoff_time = time.time() - (retention_hours * 3600)
-        
+
         for wal_file in self.log_path.glob("wal_*.log"):
             if wal_file.stat().st_mtime < cutoff_time:
                 try:
@@ -314,7 +331,7 @@ class WriteAheadLog:
                     logger.info(f"Removed old WAL file: {wal_file}")
                 except Exception as e:
                     logger.error(f"Failed to remove old WAL file {wal_file}: {e}")
-    
+
     async def close(self):
         """Close the WAL system and release resources."""
         if self._file_handle and not self._file_handle.closed:

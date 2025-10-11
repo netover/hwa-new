@@ -17,15 +17,15 @@ from fastapi import FastAPI, Request
 from slowapi.errors import RateLimitExceeded
 
 # Set test environment variables before importing resync modules
-os.environ['APP_ENV'] = 'test'
-os.environ['ADMIN_USERNAME'] = 'test_admin'
-os.environ['ADMIN_PASSWORD'] = 'test_password'
-os.environ['NEO4J_URI'] = 'bolt://localhost:7687'
-os.environ['NEO4J_USER'] = 'neo4j'
-os.environ['NEO4J_PASSWORD'] = 'password'
-os.environ['REDIS_URL'] = 'redis://localhost:6379'
-os.environ['LLM_ENDPOINT'] = 'http://localhost:8001/v1'
-os.environ['TWS_MOCK_MODE'] = 'true'
+os.environ["APP_ENV"] = "test"
+os.environ["ADMIN_USERNAME"] = "test_admin"
+os.environ["ADMIN_PASSWORD"] = "test_password"
+os.environ["NEO4J_URI"] = "bolt://localhost:7687"
+os.environ["NEO4J_USER"] = "neo4j"
+os.environ["NEO4J_PASSWORD"] = "password"
+os.environ["REDIS_URL"] = "redis://localhost:6379"
+os.environ["LLM_ENDPOINT"] = "http://localhost:8001/v1"
+os.environ["TWS_MOCK_MODE"] = "true"
 
 from resync.core.rate_limiter import (
     RateLimitConfig,
@@ -104,12 +104,16 @@ class TestUserIdentifierFunctions:
         identifier = get_user_identifier(mock_request)
         assert identifier == "127.0.0.1"
 
-    def test_get_user_identifier_with_authenticated_user(self, mock_authenticated_request):
+    def test_get_user_identifier_with_authenticated_user(
+        self, mock_authenticated_request
+    ):
         """Test getting user identifier from authenticated user."""
         identifier = get_user_identifier(mock_authenticated_request)
         assert identifier == "user:test_user"
 
-    def test_get_authenticated_user_identifier_with_user(self, mock_authenticated_request):
+    def test_get_authenticated_user_identifier_with_user(
+        self, mock_authenticated_request
+    ):
         """Test getting authenticated user identifier with user."""
         identifier = get_authenticated_user_identifier(mock_authenticated_request)
         assert identifier == "auth_user:test_user"
@@ -135,7 +139,8 @@ class TestRateLimitExceededResponse:
         assert response.status_code == 429
         # Parse JSON content from response
         import json
-        content = json.loads(response.body.decode('utf-8'))
+
+        content = json.loads(response.body.decode("utf-8"))
         assert "error" in content
         assert content["error"] == "Rate limit exceeded"
         assert "retry_after" in content
@@ -164,6 +169,7 @@ class TestRateLimitDecorators:
     @pytest.mark.asyncio
     async def test_public_rate_limit_decorator(self):
         """Test public rate limit decorator."""
+
         # Test that decorator can be applied without error
         @public_rate_limit
         async def test_endpoint(request):  # Add request parameter required by slowapi
@@ -175,6 +181,7 @@ class TestRateLimitDecorators:
     @pytest.mark.asyncio
     async def test_authenticated_rate_limit_decorator(self):
         """Test authenticated rate limit decorator."""
+
         # Test that decorator can be applied without error
         @authenticated_rate_limit
         async def test_endpoint(request):  # Add request parameter required by slowapi
@@ -186,6 +193,7 @@ class TestRateLimitDecorators:
     @pytest.mark.asyncio
     async def test_critical_rate_limit_decorator(self):
         """Test critical rate limit decorator."""
+
         # Test that decorator can be applied without error
         @critical_rate_limit
         async def test_endpoint(request):  # Add request parameter required by slowapi
@@ -200,11 +208,11 @@ class TestRateLimiterInitialization:
 
     def test_init_rate_limiter(self, test_app):
         """Test initializing rate limiter with FastAPI app."""
-        with patch('resync.core.rate_limiter.logger') as mock_logger:
+        with patch("resync.core.rate_limiter.logger") as mock_logger:
             init_rate_limiter(test_app)
 
             # Check that limiter is added to app state
-            assert hasattr(test_app.state, 'limiter')
+            assert hasattr(test_app.state, "limiter")
 
             # Check that exception handler is added
             assert RateLimitExceeded in test_app.exception_handlers
@@ -222,7 +230,7 @@ class TestIntegrationScenarios:
     @pytest.mark.asyncio
     async def test_rate_limiting_with_mock_redis(self, test_app):
         """Test rate limiting initialization."""
-        with patch('redis.asyncio.from_url') as mock_redis:
+        with patch("redis.asyncio.from_url") as mock_redis:
             # Mock Redis client
             mock_redis_client = Mock()
             mock_redis.return_value = mock_redis_client
@@ -231,7 +239,7 @@ class TestIntegrationScenarios:
             init_rate_limiter(test_app)
 
             # Test that limiter is properly initialized (Redis connection is lazy)
-            assert hasattr(test_app.state, 'limiter')
+            assert hasattr(test_app.state, "limiter")
 
     @pytest.mark.asyncio
     async def test_concurrent_requests(self, mock_request):
@@ -245,6 +253,7 @@ class TestIntegrationScenarios:
         """Test sliding window rate limiting configuration."""
         # Test that sliding window is enabled by default
         from resync.settings import settings
+
         assert settings.rate_limit_sliding_window is True
 
 
@@ -263,7 +272,8 @@ class TestErrorHandling:
         assert response.status_code == 429
         # Parse JSON content from response
         import json
-        content = json.loads(response.body.decode('utf-8'))
+
+        content = json.loads(response.body.decode("utf-8"))
         assert content["retry_after"] == 60  # Should use default
 
     def test_invalid_request_object(self):

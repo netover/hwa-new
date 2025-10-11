@@ -64,7 +64,9 @@ async def test_load_agents_returns_when_path_does_not_exist_and_no_raise(
     agent_manager, mocker
 ):
     """Tests that the method returns gracefully if the default path doesn't exist."""
-    mocker.patch("resync.settings.AGENT_CONFIG_PATH", Path("/tmp/non_existent_path.json"))
+    mocker.patch(
+        "resync.settings.AGENT_CONFIG_PATH", Path("/tmp/non_existent_path.json")
+    )
     # Should not raise an exception, just log an error and return
     await agent_manager.load_agents_from_config()
     assert agent_manager.agents == {}

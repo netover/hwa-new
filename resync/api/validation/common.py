@@ -24,15 +24,21 @@ class ValidationErrorResponse(BaseModel):
     method: Optional[str] = None
     error_code: str = "VALIDATION_ERROR"
 
-    def add_error(self, field: str, message: str, error_type: str = "value_error",
-                  severity: str = "error", context: Optional[Dict[str, Any]] = None) -> None:
+    def add_error(
+        self,
+        field: str,
+        message: str,
+        error_type: str = "value_error",
+        severity: str = "error",
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """Add a validation error detail."""
         error_detail = {
             "field": field,
             "message": message,
             "type": error_type,
             "severity": severity,
-            "context": context
+            "context": context,
         }
         self.details.append(error_detail)
 
@@ -54,6 +60,7 @@ class BaseValidatedModel(BaseModel):
 
     class Config:
         """Pydantic configuration."""
+
         validate_assignment = True  # Validate on assignment
         use_enum_values = True  # Use enum values in serialization
         extra = "forbid"  # Forbid extra fields
@@ -79,10 +86,7 @@ class StringConstraints:
 
     # Agent IDs: alphanumeric, underscore, hyphen (3-50 chars)
     AGENT_ID = constr(
-        pattern=r"^[a-zA-Z0-9_-]+$",
-        min_length=3,
-        max_length=50,
-        strip_whitespace=True
+        pattern=r"^[a-zA-Z0-9_-]+$", min_length=3, max_length=50, strip_whitespace=True
     )
 
     # Safe text: alphanumeric, spaces, common punctuation
@@ -90,7 +94,7 @@ class StringConstraints:
         pattern=r"^[a-zA-Z0-9\s.,!?'\"()\-:;]*$",
         min_length=1,
         max_length=1000,
-        strip_whitespace=True
+        strip_whitespace=True,
     )
 
     # Role/Goal text: more permissive but still safe
@@ -98,7 +102,7 @@ class StringConstraints:
         pattern=r"^[a-zA-Z0-9\s.,!?'\"()\-:;/]+$",
         min_length=5,
         max_length=500,
-        strip_whitespace=True
+        strip_whitespace=True,
     )
 
     # Model names: alphanumeric and common separators
@@ -106,15 +110,12 @@ class StringConstraints:
         pattern=r"^[a-zA-Z0-9\-:_/]+$",
         min_length=3,
         max_length=100,
-        strip_whitespace=True
+        strip_whitespace=True,
     )
 
     # Tool names: alphanumeric and underscore
     TOOL_NAME = constr(
-        pattern=r"^[a-zA-Z0-9_]+$",
-        min_length=3,
-        max_length=50,
-        strip_whitespace=True
+        pattern=r"^[a-zA-Z0-9_]+$", min_length=3, max_length=50, strip_whitespace=True
     )
 
     # File names: alphanumeric, underscore, hyphen, dot
@@ -122,7 +123,7 @@ class StringConstraints:
         pattern=r"^[a-zA-Z0-9_.\-]+$",
         min_length=1,
         max_length=255,
-        strip_whitespace=True
+        strip_whitespace=True,
     )
 
 
@@ -184,9 +185,7 @@ class ValidationPatterns:
     """Common regex patterns for validation."""
 
     # Email pattern (more restrictive than EmailStr)
-    EMAIL_PATTERN = re.compile(
-        r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-    )
+    EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
     # URL pattern for API endpoints
     API_ENDPOINT_PATTERN = re.compile(
@@ -194,25 +193,19 @@ class ValidationPatterns:
     )
 
     # File extension pattern
-    FILE_EXTENSION_PATTERN = re.compile(
-        r"^\.[a-zA-Z0-9]{1,10}$"
-    )
+    FILE_EXTENSION_PATTERN = re.compile(r"^\.[a-zA-Z0-9]{1,10}$")
 
     # Alphanumeric with spaces and common punctuation
-    SAFE_TEXT_PATTERN = re.compile(
-        r"^[a-zA-Z0-9\s.,!?'\"()\-:;/]+$"
-    )
+    SAFE_TEXT_PATTERN = re.compile(r"^[a-zA-Z0-9\s.,!?'\"()\-:;/]+$")
 
     # Script/XSS detection pattern
     SCRIPT_PATTERN = re.compile(
         r"<script.*?>.*?</script.*?>|<.*?(javascript|onload|onclick|onerror).*?>",
-        re.IGNORECASE | re.DOTALL
+        re.IGNORECASE | re.DOTALL,
     )
 
     # Command injection pattern
-    COMMAND_INJECTION_PATTERN = re.compile(
-        r"(;|\||&&|`|\$|\(|\)|<|>|\\n|\\r|\\t)"
-    )
+    COMMAND_INJECTION_PATTERN = re.compile(r"(;|\||&&|`|\$|\(|\)|<|>|\\n|\\r|\\t)")
 
     # Path traversal pattern
     PATH_TRAVERSAL_PATTERN = re.compile(
@@ -221,27 +214,30 @@ class ValidationPatterns:
 
     # UUID pattern
     UUID_PATTERN = re.compile(
-        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-        re.IGNORECASE
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
     )
 
 
 class SanitizationLevel(str, Enum):
     """Levels of input sanitization."""
-    STRICT = "strict"      # Only alphanumeric and basic punctuation
+
+    STRICT = "strict"  # Only alphanumeric and basic punctuation
     MODERATE = "moderate"  # Allow more punctuation but block scripts
     PERMISSIVE = "permissive"  # Allow most safe characters
-    NONE = "none"         # No sanitization (use with caution)
+    NONE = "none"  # No sanitization (use with caution)
 
 
 class ValidationSeverity(str, Enum):
     """Validation error severity levels."""
+
     ERROR = "error"
     WARNING = "warning"
     INFO = "info"
 
 
-def sanitize_input(text: str, level: SanitizationLevel = SanitizationLevel.MODERATE) -> str:
+def sanitize_input(
+    text: str, level: SanitizationLevel = SanitizationLevel.MODERATE
+) -> str:
     """
     Sanitize input text to prevent XSS and injection attacks.
 
@@ -271,7 +267,11 @@ def sanitize_input(text: str, level: SanitizationLevel = SanitizationLevel.MODER
         text = ValidationPatterns.COMMAND_INJECTION_PATTERN.sub("", text)
         text = ValidationPatterns.PATH_TRAVERSAL_PATTERN.sub("", text)
         # Remove SQL injection patterns
-        text = re.sub(r"(?i)\b(union|select|insert|update|delete|drop|create|alter|exec|execute|script|declare|truncate)\b", "", text)
+        text = re.sub(
+            r"(?i)\b(union|select|insert|update|delete|drop|create|alter|exec|execute|script|declare|truncate)\b",
+            "",
+            text,
+        )
         text = re.sub(r"(--|#|/\*|\*/)", "", text)
     elif level == SanitizationLevel.PERMISSIVE:
         # Only remove obvious script tags
@@ -313,8 +313,11 @@ def validate_string_length(text: str, min_length: int, max_length: int) -> str:
     return text
 
 
-def validate_numeric_range(value: Union[int, float], min_value: Optional[Union[int, float]] = None,
-                         max_value: Optional[Union[int, float]] = None) -> Union[int, float]:
+def validate_numeric_range(
+    value: Union[int, float],
+    min_value: Optional[Union[int, float]] = None,
+    max_value: Optional[Union[int, float]] = None,
+) -> Union[int, float]:
     """
     Validate numeric value within specified range.
 
@@ -341,7 +344,9 @@ def validate_numeric_range(value: Union[int, float], min_value: Optional[Union[i
     return value
 
 
-def validate_pattern(text: str, pattern: Union[str, Pattern], message: Optional[str] = None) -> str:
+def validate_pattern(
+    text: str, pattern: Union[str, Pattern], message: Optional[str] = None
+) -> str:
     """
     Validate text against a regex pattern.
 
@@ -368,7 +373,9 @@ def validate_pattern(text: str, pattern: Union[str, Pattern], message: Optional[
     return text
 
 
-def validate_enum_value(value: str, enum_class: type, case_sensitive: bool = True) -> str:
+def validate_enum_value(
+    value: str, enum_class: type, case_sensitive: bool = True
+) -> str:
     """
     Validate value against enum members.
 
@@ -398,6 +405,7 @@ def validate_enum_value(value: str, enum_class: type, case_sensitive: bool = Tru
 
 class FieldValidationRule(BaseModel):
     """Individual field validation rule."""
+
     field_name: str
     rule_type: str  # "length", "pattern", "range", "custom"
     constraint: Union[str, int, float, Dict[str, Any]]

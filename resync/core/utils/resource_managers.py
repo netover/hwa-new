@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ResourceManager(ABC, Generic[T]):
@@ -51,9 +51,9 @@ class LLMResourceManager(ResourceManager):
     async def release(self, client: Any) -> None:
         """Close LLM client."""
         try:
-            if hasattr(client, 'close'):
+            if hasattr(client, "close"):
                 await client.close()
-            elif hasattr(client, 'aclose'):
+            elif hasattr(client, "aclose"):
                 await client.aclose()
             logger.debug("LLM client released")
         except Exception as e:
@@ -69,7 +69,9 @@ class LLMResourceManager(ResourceManager):
 
 
 @asynccontextmanager
-async def managed_llm_call(client_factory: Optional[Callable[[], Any]] = None) -> AsyncIterator[Any]:
+async def managed_llm_call(
+    client_factory: Optional[Callable[[], Any]] = None,
+) -> AsyncIterator[Any]:
     """
     Context manager for LLM client lifecycle.
 
@@ -80,6 +82,7 @@ async def managed_llm_call(client_factory: Optional[Callable[[], Any]] = None) -
     if client_factory is None:
         # Default factory - can be customized
         from resync.core.utils.llm import create_llm_client
+
         client_factory = create_llm_client
 
     manager = LLMResourceManager(client_factory)
@@ -97,7 +100,9 @@ async def managed_llm_call(client_factory: Optional[Callable[[], Any]] = None) -
 
 
 @asynccontextmanager
-async def managed_database_connection(connection_factory: Callable[[], Any]) -> AsyncIterator[Any]:
+async def managed_database_connection(
+    connection_factory: Callable[[], Any],
+) -> AsyncIterator[Any]:
     """
     Context manager for database connection lifecycle.
 
@@ -122,7 +127,7 @@ async def managed_database_connection(connection_factory: Callable[[], Any]) -> 
 
 
 @contextmanager
-def managed_file_operation(file_path: str, mode: str = 'r', **kwargs) -> Iterator[Any]:
+def managed_file_operation(file_path: str, mode: str = "r", **kwargs) -> Iterator[Any]:
     """
     Context manager for file operations.
 
@@ -147,7 +152,9 @@ def managed_file_operation(file_path: str, mode: str = 'r', **kwargs) -> Iterato
 
 
 @asynccontextmanager
-async def managed_http_session(session_factory: Optional[Callable[[], Any]] = None) -> AsyncIterator[Any]:
+async def managed_http_session(
+    session_factory: Optional[Callable[[], Any]] = None,
+) -> AsyncIterator[Any]:
     """
     Context manager for HTTP session lifecycle.
 
@@ -160,13 +167,17 @@ async def managed_http_session(session_factory: Optional[Callable[[], Any]] = No
         # Default to aiohttp if available
         try:
             import aiohttp
+
             session_factory = lambda: aiohttp.ClientSession()
         except ImportError:
             try:
                 import httpx
+
                 session_factory = lambda: httpx.AsyncClient()
             except ImportError:
-                raise ImportError("No HTTP client library available. Install aiohttp or httpx.")
+                raise ImportError(
+                    "No HTTP client library available. Install aiohttp or httpx."
+                )
 
     session = None
     try:
@@ -272,16 +283,20 @@ class ResourcePoolManager:
 
 # Convenience functions for common use cases
 
+
 async def create_llm_resource_pool(max_size: int = 5) -> ResourcePoolManager:
     """Create a resource pool for LLM clients."""
     from resync.core.utils.llm import create_llm_client
+
     manager = LLMResourceManager(create_llm_client)
     pool = ResourcePoolManager(manager, max_size)
     await pool.initialize()
     return pool
 
 
-def create_database_pool_manager(connection_factory: Callable[[], Any], max_size: int = 10) -> ResourcePoolManager:
+def create_database_pool_manager(
+    connection_factory: Callable[[], Any], max_size: int = 10
+) -> ResourcePoolManager:
     """Create a resource pool for database connections."""
 
     class DatabaseResourceManager(ResourceManager):
@@ -297,7 +312,7 @@ def create_database_pool_manager(connection_factory: Callable[[], Any], max_size
         async def health_check(self, conn):
             try:
                 # Basic health check - try a simple query
-                if hasattr(conn, 'execute'):
+                if hasattr(conn, "execute"):
                     await conn.execute("SELECT 1")
                 return True
             except Exception:

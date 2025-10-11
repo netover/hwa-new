@@ -30,12 +30,18 @@ class TestHealthCheckEndpoints:
         """Test basic health check endpoint."""
         # Mock health service
         mock_health_service = Mock()
-        mock_health_service.perform_comprehensive_health_check = AsyncMock(return_value=Mock(
-            overall_status=HealthStatus.HEALTHY,
-            timestamp=datetime.now(),
-            components={"test": ComponentHealth("test", ComponentType.DATABASE, HealthStatus.HEALTHY)},
-            performance_metrics={"total_check_time_ms": 100}
-        ))
+        mock_health_service.perform_comprehensive_health_check = AsyncMock(
+            return_value=Mock(
+                overall_status=HealthStatus.HEALTHY,
+                timestamp=datetime.now(),
+                components={
+                    "test": ComponentHealth(
+                        "test", ComponentType.DATABASE, HealthStatus.HEALTHY
+                    )
+                },
+                performance_metrics={"total_check_time_ms": 100},
+            )
+        )
         mock_request.app.state.health_service = mock_health_service
 
         response = await health_check(mock_request)
@@ -52,12 +58,18 @@ class TestHealthCheckEndpoints:
         """Test health check endpoint with unhealthy status."""
         # Mock health service with unhealthy result
         mock_health_service = Mock()
-        mock_health_service.perform_comprehensive_health_check = AsyncMock(return_value=Mock(
-            overall_status=HealthStatus.UNHEALTHY,
-            timestamp=datetime.now(),
-            components={"test": ComponentHealth("test", ComponentType.DATABASE, HealthStatus.UNHEALTHY)},
-            performance_metrics={"total_check_time_ms": 100}
-        ))
+        mock_health_service.perform_comprehensive_health_check = AsyncMock(
+            return_value=Mock(
+                overall_status=HealthStatus.UNHEALTHY,
+                timestamp=datetime.now(),
+                components={
+                    "test": ComponentHealth(
+                        "test", ComponentType.DATABASE, HealthStatus.UNHEALTHY
+                    )
+                },
+                performance_metrics={"total_check_time_ms": 100},
+            )
+        )
         mock_request.app.state.health_service = mock_health_service
 
         response = await health_check(mock_request)
@@ -72,12 +84,18 @@ class TestHealthCheckEndpoints:
         """Test core health check endpoint."""
         # Mock health service
         mock_health_service = Mock()
-        mock_health_service.perform_core_health_check = AsyncMock(return_value=Mock(
-            overall_status=HealthStatus.HEALTHY,
-            timestamp=datetime.now(),
-            components={"database": ComponentHealth("database", ComponentType.DATABASE, HealthStatus.HEALTHY)},
-            performance_metrics={"total_check_time_ms": 50}
-        ))
+        mock_health_service.perform_core_health_check = AsyncMock(
+            return_value=Mock(
+                overall_status=HealthStatus.HEALTHY,
+                timestamp=datetime.now(),
+                components={
+                    "database": ComponentHealth(
+                        "database", ComponentType.DATABASE, HealthStatus.HEALTHY
+                    )
+                },
+                performance_metrics={"total_check_time_ms": 50},
+            )
+        )
         mock_request.app.state.health_service = mock_health_service
 
         response = await health_check_core(mock_request)
@@ -93,16 +111,28 @@ class TestHealthCheckEndpoints:
         """Test detailed health check endpoint."""
         # Mock health service
         mock_health_service = Mock()
-        mock_health_service.perform_comprehensive_health_check = AsyncMock(return_value=Mock(
-            overall_status=HealthStatus.HEALTHY,
-            timestamp=datetime.now(),
-            components={"test": ComponentHealth("test", ComponentType.DATABASE, HealthStatus.HEALTHY)},
-            performance_metrics={"total_check_time_ms": 100},
-            message="All systems operational"
-        ))
-        mock_health_service.get_health_history = Mock(return_value=[
-            Mock(timestamp=datetime.now(), overall_status=HealthStatus.HEALTHY, component_changes={})
-        ])
+        mock_health_service.perform_comprehensive_health_check = AsyncMock(
+            return_value=Mock(
+                overall_status=HealthStatus.HEALTHY,
+                timestamp=datetime.now(),
+                components={
+                    "test": ComponentHealth(
+                        "test", ComponentType.DATABASE, HealthStatus.HEALTHY
+                    )
+                },
+                performance_metrics={"total_check_time_ms": 100},
+                message="All systems operational",
+            )
+        )
+        mock_health_service.get_health_history = Mock(
+            return_value=[
+                Mock(
+                    timestamp=datetime.now(),
+                    overall_status=HealthStatus.HEALTHY,
+                    component_changes={},
+                )
+            ]
+        )
         mock_request.app.state.health_service = mock_health_service
 
         response = await health_check_detailed(mock_request)
@@ -203,14 +233,20 @@ class TestHealthCheckFormats:
         client = TestClient(router)
 
         # Mock the health service
-        with patch('resync.api.health.get_health_check_service') as mock_get_service:
+        with patch("resync.api.health.get_health_check_service") as mock_get_service:
             mock_service = Mock()
-            mock_service.perform_comprehensive_health_check = AsyncMock(return_value=Mock(
-                overall_status=HealthStatus.HEALTHY,
-                timestamp=datetime.now(),
-                components={"test": ComponentHealth("test", ComponentType.DATABASE, HealthStatus.HEALTHY)},
-                performance_metrics={"total_check_time_ms": 100}
-            ))
+            mock_service.perform_comprehensive_health_check = AsyncMock(
+                return_value=Mock(
+                    overall_status=HealthStatus.HEALTHY,
+                    timestamp=datetime.now(),
+                    components={
+                        "test": ComponentHealth(
+                            "test", ComponentType.DATABASE, HealthStatus.HEALTHY
+                        )
+                    },
+                    performance_metrics={"total_check_time_ms": 100},
+                )
+            )
             mock_get_service.return_value = mock_service
 
             response = client.get("/")
@@ -234,17 +270,26 @@ class TestHealthCheckFormats:
 
         client = TestClient(router)
 
-        with patch('resync.api.health.get_health_check_service') as mock_get_service:
+        with patch("resync.api.health.get_health_check_service") as mock_get_service:
             mock_service = Mock()
-            mock_service.perform_comprehensive_health_check = AsyncMock(return_value=Mock(
-                overall_status=HealthStatus.DEGRADED,
-                timestamp=datetime.now(),
-                components={
-                    "database": ComponentHealth("database", ComponentType.DATABASE, HealthStatus.HEALTHY),
-                    "redis": ComponentHealth("redis", ComponentType.REDIS, HealthStatus.DEGRADED, message="Connection timeout")
-                },
-                performance_metrics={"total_check_time_ms": 150}
-            ))
+            mock_service.perform_comprehensive_health_check = AsyncMock(
+                return_value=Mock(
+                    overall_status=HealthStatus.DEGRADED,
+                    timestamp=datetime.now(),
+                    components={
+                        "database": ComponentHealth(
+                            "database", ComponentType.DATABASE, HealthStatus.HEALTHY
+                        ),
+                        "redis": ComponentHealth(
+                            "redis",
+                            ComponentType.REDIS,
+                            HealthStatus.DEGRADED,
+                            message="Connection timeout",
+                        ),
+                    },
+                    performance_metrics={"total_check_time_ms": 150},
+                )
+            )
             mock_get_service.return_value = mock_service
 
             response = client.get("/")

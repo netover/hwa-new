@@ -42,7 +42,7 @@ class TestCORSMonitoring:
 
     def test_get_cors_config_endpoint(self):
         """Test CORS configuration endpoint."""
-        with patch('resync.api.cors_monitoring.settings') as mock_settings:
+        with patch("resync.api.cors_monitoring.settings") as mock_settings:
             mock_settings.CORS_ENVIRONMENT = "development"
             mock_settings.CORS_ENABLED = True
 
@@ -63,7 +63,7 @@ class TestCORSMonitoring:
 
     def test_test_cors_policy_endpoint(self):
         """Test CORS policy testing endpoint."""
-        with patch('resync.api.cors_monitoring.settings') as mock_settings:
+        with patch("resync.api.cors_monitoring.settings") as mock_settings:
             mock_settings.CORS_ENVIRONMENT = "development"
             mock_settings.CORS_ENABLED = True
 
@@ -72,8 +72,8 @@ class TestCORSMonitoring:
                 params={
                     "origin": "http://localhost:3000",
                     "method": "GET",
-                    "path": "/api/test"
-                }
+                    "path": "/api/test",
+                },
             )
 
             assert response.status_code == 200
@@ -88,13 +88,13 @@ class TestCORSMonitoring:
 
     def test_validate_origins_endpoint(self):
         """Test origins validation endpoint."""
-        with patch('resync.api.cors_monitoring.settings') as mock_settings:
+        with patch("resync.api.cors_monitoring.settings") as mock_settings:
             mock_settings.CORS_ENVIRONMENT = "development"
             mock_settings.CORS_ENABLED = True
 
             response = self.client.post(
                 "/api/cors/validate-origins",
-                params={"origins": ["http://localhost:3000", "https://example.com"]}
+                params={"origins": ["http://localhost:3000", "https://example.com"]},
             )
 
             assert response.status_code == 200
@@ -111,13 +111,13 @@ class TestCORSMonitoring:
 
     def test_validate_origins_production_restrictions(self):
         """Test that production environment rejects wildcard origins."""
-        with patch('resync.api.cors_monitoring.settings') as mock_settings:
+        with patch("resync.api.cors_monitoring.settings") as mock_settings:
             mock_settings.CORS_ENVIRONMENT = "production"
             mock_settings.CORS_ENABLED = True
 
             response = self.client.post(
                 "/api/cors/validate-origins",
-                params={"origins": ["*", "https://example.com"]}
+                params={"origins": ["*", "https://example.com"]},
             )
 
             assert response.status_code == 200
@@ -126,7 +126,10 @@ class TestCORSMonitoring:
             # Wildcard should have validation errors in production
             wildcard_result = data["results"]["*"]
             assert len(wildcard_result["validation_errors"]) > 0
-            assert "Wildcard origins not allowed in production" in wildcard_result["validation_errors"][0]
+            assert (
+                "Wildcard origins not allowed in production"
+                in wildcard_result["validation_errors"][0]
+            )
 
     def test_cors_violations_endpoint_empty(self):
         """Test CORS violations endpoint when no violations exist."""
@@ -142,8 +145,7 @@ class TestCORSMonitoring:
     def test_cors_violations_endpoint_with_params(self):
         """Test CORS violations endpoint with query parameters."""
         response = self.client.get(
-            "/api/cors/violations",
-            params={"limit": 10, "hours": 1}
+            "/api/cors/violations", params={"limit": 10, "hours": 1}
         )
 
         assert response.status_code == 200
@@ -176,7 +178,9 @@ class TestCORSMonitoringIntegration:
         app = FastAPI()
 
         # Add CORS monitoring router with proper prefix
-        app.include_router(cors_monitor_router, prefix="/api/cors", tags=["CORS Monitoring"])
+        app.include_router(
+            cors_monitor_router, prefix="/api/cors", tags=["CORS Monitoring"]
+        )
 
         client = TestClient(app)
 
@@ -212,7 +216,7 @@ class TestCORSMonitoringValidation:
 
     def test_validate_origins_with_invalid_input(self):
         """Test origins validation with invalid input."""
-        with patch('resync.api.cors_monitoring.settings') as mock_settings:
+        with patch("resync.api.cors_monitoring.settings") as mock_settings:
             mock_settings.CORS_ENVIRONMENT = "development"
             mock_settings.CORS_ENABLED = True
 
@@ -224,7 +228,7 @@ class TestCORSMonitoringValidation:
 
     def test_test_cors_policy_with_invalid_method(self):
         """Test CORS policy testing with invalid HTTP method."""
-        with patch('resync.api.cors_monitoring.settings') as mock_settings:
+        with patch("resync.api.cors_monitoring.settings") as mock_settings:
             mock_settings.CORS_ENVIRONMENT = "development"
             mock_settings.CORS_ENABLED = True
 
@@ -233,8 +237,8 @@ class TestCORSMonitoringValidation:
                 params={
                     "origin": "http://localhost:3000",
                     "method": "INVALID_METHOD",
-                    "path": "/api/test"
-                }
+                    "path": "/api/test",
+                },
             )
 
             # Should handle invalid method gracefully

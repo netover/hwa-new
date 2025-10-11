@@ -18,9 +18,11 @@ def mock_services():
 
     # Use the container's 'register_instance' to override the real services
     # with our mocks for the duration of the test.
-    with app_container.register_instance(ITWSClient, mock_tws_client), \
-         app_container.register_instance(IKnowledgeGraph, mock_kg_client), \
-         app_container.register_instance(IAgentManager, mock_agent_manager):
+    with (
+        app_container.register_instance(ITWSClient, mock_tws_client),
+        app_container.register_instance(IKnowledgeGraph, mock_kg_client),
+        app_container.register_instance(IAgentManager, mock_agent_manager),
+    ):
         yield {
             "tws_client": mock_tws_client,
             "kg_client": mock_kg_client,

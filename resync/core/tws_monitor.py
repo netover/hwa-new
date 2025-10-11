@@ -85,8 +85,8 @@ class TWSMonitor:
         self.alert_thresholds = {
             "api_error_rate": 0.05,  # 5% error rate
             "cache_hit_ratio": 0.80,  # 80% hit ratio
-            "llm_cost_daily": 10.0,   # $10 daily budget
-            "memory_usage_mb": 500.0, # 500MB memory limit
+            "llm_cost_daily": 10.0,  # $10 daily budget
+            "memory_usage_mb": 500.0,  # 500MB memory limit
             "circuit_breaker_trips": 3,  # 3 trips per hour
         }
 
@@ -124,7 +124,9 @@ class TWSMonitor:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error("error_in_tws_monitoring_loop", error=str(e), exc_info=True)
+                logger.error(
+                    "error_in_tws_monitoring_loop", error=str(e), exc_info=True
+                )
                 await asyncio.sleep(10)  # Brief pause on error
 
     async def _collect_metrics(self) -> None:
@@ -154,7 +156,7 @@ class TWSMonitor:
                 llm_tokens_used=llm_metrics.get("tokens", 0),
                 llm_cost_estimate=llm_metrics.get("cost", 0.0),
                 memory_usage_mb=memory_usage,
-                uptime_seconds=time.time() - start_time
+                uptime_seconds=time.time() - start_time,
             )
 
             self.metrics_history.append(metrics)
@@ -162,8 +164,7 @@ class TWSMonitor:
             # Keep only last 24 hours of metrics
             cutoff_time = datetime.now() - timedelta(hours=24)
             self.metrics_history = [
-                m for m in self.metrics_history
-                if m.timestamp > cutoff_time
+                m for m in self.metrics_history if m.timestamp > cutoff_time
             ]
 
         except Exception as e:
@@ -194,15 +195,12 @@ class TWSMonitor:
         """Measure LLM usage."""
         # This would typically access LLM metrics
         # For now, we'll return simulated values
-        return {
-            "calls": 10,
-            "tokens": 1000,
-            "cost": 0.02
-        }
+        return {"calls": 10, "tokens": 1000, "cost": 0.02}
 
     async def _measure_memory_usage(self) -> float:
         """Measure memory usage."""
         import psutil
+
         process = psutil.Process()
         return process.memory_info().rss / (1024 * 1024)  # MB
 
@@ -217,7 +215,9 @@ class TWSMonitor:
 
         # Check API error rate
         if latest_metrics.api_error_rates:
-            avg_error_rate = sum(latest_metrics.api_error_rates) / len(latest_metrics.api_error_rates)
+            avg_error_rate = sum(latest_metrics.api_error_rates) / len(
+                latest_metrics.api_error_rates
+            )
             if avg_error_rate > self.alert_thresholds["api_error_rate"]:
                 alerts_to_add.append(
                     Alert(
@@ -226,13 +226,15 @@ class TWSMonitor:
                         category="api",
                         message=f"API error rate exceeded threshold: {avg_error_rate:.2%}",
                         timestamp=datetime.now(),
-                        details={"error_rate": avg_error_rate}
+                        details={"error_rate": avg_error_rate},
                     )
                 )
 
         # Check cache hit ratio
         if latest_metrics.cache_hit_ratios:
-            avg_hit_ratio = sum(latest_metrics.cache_hit_ratios) / len(latest_metrics.cache_hit_ratios)
+            avg_hit_ratio = sum(latest_metrics.cache_hit_ratios) / len(
+                latest_metrics.cache_hit_ratios
+            )
             if avg_hit_ratio < self.alert_thresholds["cache_hit_ratio"]:
                 alerts_to_add.append(
                     Alert(
@@ -241,7 +243,7 @@ class TWSMonitor:
                         category="cache",
                         message=f"Cache hit ratio below threshold: {avg_hit_ratio:.2%}",
                         timestamp=datetime.now(),
-                        details={"hit_ratio": avg_hit_ratio}
+                        details={"hit_ratio": avg_hit_ratio},
                     )
                 )
 
@@ -255,7 +257,10 @@ class TWSMonitor:
                     category="llm",
                     message=f"LLM cost approaching daily budget: ${daily_cost:.2f}",
                     timestamp=datetime.now(),
-                    details={"daily_cost": daily_cost, "budget": self.alert_thresholds["llm_cost_daily"]}
+                    details={
+                        "daily_cost": daily_cost,
+                        "budget": self.alert_thresholds["llm_cost_daily"],
+                    },
                 )
             )
 
@@ -268,7 +273,7 @@ class TWSMonitor:
                     category="memory",
                     message=f"Memory usage exceeded threshold: {latest_metrics.memory_usage_mb:.1f}MB",
                     timestamp=datetime.now(),
-                    details={"memory_usage_mb": latest_metrics.memory_usage_mb}
+                    details={"memory_usage_mb": latest_metrics.memory_usage_mb},
                 )
             )
 
@@ -296,16 +301,22 @@ class TWSMonitor:
                 title=f"TWS Alert: {alert.category.title()}",
                 message=alert.message,
                 severity=alert.severity,
-                additional_data=alert.details
+                additional_data=alert.details,
             )
 
             # Send notification
             await teams_integration.send_notification(notification)
 
         except Exception as e:
-            logger.error("failed_to_send_teams_notification_for_alert", error=str(e), exc_info=True)
+            logger.error(
+                "failed_to_send_teams_notification_for_alert",
+                error=str(e),
+                exc_info=True,
+            )
 
-    async def monitor_job_status_change(self, job_data: Dict[str, Any], instance_name: str) -> None:
+    async def monitor_job_status_change(
+        self, job_data: Dict[str, Any], instance_name: str
+    ) -> None:
         """Monitor job status changes and send notifications for configured statuses.
 
         Args:
@@ -317,29 +328,41 @@ class TWSMonitor:
             teams_integration = await get_teams_integration()
 
             # Check if job notifications are enabled
-            if not teams_integration.config.enabled or not teams_integration.config.enable_job_notifications:
+            if (
+                not teams_integration.config.enabled
+                or not teams_integration.config.enable_job_notifications
+            ):
                 return
 
             # Check if this instance is being monitored
-            if (teams_integration.config.monitored_tws_instances and
-                instance_name not in teams_integration.config.monitored_tws_instances):
+            if (
+                teams_integration.config.monitored_tws_instances
+                and instance_name
+                not in teams_integration.config.monitored_tws_instances
+            ):
                 return
 
             # Check if job status matches filters
             job_status = job_data.get("status", "").upper()
-            if job_status in [status.upper() for status in teams_integration.config.job_status_filters]:
+            if job_status in [
+                status.upper() for status in teams_integration.config.job_status_filters
+            ]:
                 # Send notification
                 notification = create_job_status_notification(
                     job_data, instance_name, teams_integration.config.job_status_filters
                 )
-                
+
                 if notification is None:
                     return
 
                 await teams_integration.send_notification(notification)
 
         except Exception as e:
-            logger.error("failed_to_process_job_status_change_for_teams_notification", error=str(e), exc_info=True)
+            logger.error(
+                "failed_to_process_job_status_change_for_teams_notification",
+                error=str(e),
+                exc_info=True,
+            )
 
     def get_performance_report(self) -> Dict[str, Any]:
         """Get comprehensive performance report.
@@ -352,14 +375,22 @@ class TWSMonitor:
             if self.metrics_history:
                 latest_metrics = self.metrics_history[-1]
                 avg_api_response_time = (
-                    sum(sum(m.api_response_times) for m in self.metrics_history) /
-                    sum(len(m.api_response_times) for m in self.metrics_history)
-                ) if any(m.api_response_times for m in self.metrics_history) else 0.0
+                    (
+                        sum(sum(m.api_response_times) for m in self.metrics_history)
+                        / sum(len(m.api_response_times) for m in self.metrics_history)
+                    )
+                    if any(m.api_response_times for m in self.metrics_history)
+                    else 0.0
+                )
 
                 avg_cache_hit_ratio = (
-                    sum(sum(m.cache_hit_ratios) for m in self.metrics_history) /
-                    sum(len(m.cache_hit_ratios) for m in self.metrics_history)
-                ) if any(m.cache_hit_ratios for m in self.metrics_history) else 0.0
+                    (
+                        sum(sum(m.cache_hit_ratios) for m in self.metrics_history)
+                        / sum(len(m.cache_hit_ratios) for m in self.metrics_history)
+                    )
+                    if any(m.cache_hit_ratios for m in self.metrics_history)
+                    else 0.0
+                )
             else:
                 latest_metrics = PerformanceMetrics()
                 avg_api_response_time = 0.0
@@ -367,9 +398,10 @@ class TWSMonitor:
 
             # Get recent alerts
             recent_alerts = [
-                alert for alert in self.alerts
-                if not alert.resolved and
-                (datetime.now() - alert.timestamp).seconds < 3600  # Last hour
+                alert
+                for alert in self.alerts
+                if not alert.resolved
+                and (datetime.now() - alert.timestamp).seconds < 3600  # Last hour
             ]
 
             return {
@@ -380,7 +412,7 @@ class TWSMonitor:
                     "llm_cost_today": latest_metrics.llm_cost_estimate,
                     "memory_usage_mb": latest_metrics.memory_usage_mb,
                     "uptime_seconds": latest_metrics.uptime_seconds,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
                 },
                 "alerts": [
                     {
@@ -390,22 +422,31 @@ class TWSMonitor:
                         "message": alert.message,
                         "timestamp": alert.timestamp.isoformat(),
                         "resolved": alert.resolved,
-                        "details": alert.details
+                        "details": alert.details,
                     }
                     for alert in recent_alerts
                 ],
                 "summary": {
                     "total_alerts": len([a for a in self.alerts if not a.resolved]),
-                    "critical_alerts": len([a for a in self.alerts if not a.resolved and a.severity == "critical"]),
-                    "high_alerts": len([a for a in self.alerts if not a.resolved and a.severity == "high"])
-                }
+                    "critical_alerts": len(
+                        [
+                            a
+                            for a in self.alerts
+                            if not a.resolved and a.severity == "critical"
+                        ]
+                    ),
+                    "high_alerts": len(
+                        [
+                            a
+                            for a in self.alerts
+                            if not a.resolved and a.severity == "high"
+                        ]
+                    ),
+                },
             }
 
         except Exception as e:
-            logger.error(
-                "Error generating performance report",
-                error=str(e)
-            )
+            logger.error("Error generating performance report", error=str(e))
             raise PerformanceError(f"Failed to generate performance report: {e}") from e
 
     def get_alerts(self, limit: int = 10) -> List[Dict[str, Any]]:
@@ -420,7 +461,7 @@ class TWSMonitor:
         recent_alerts = sorted(
             [alert for alert in self.alerts if not alert.resolved],
             key=lambda x: x.timestamp,
-            reverse=True
+            reverse=True,
         )[:limit]
 
         return [
@@ -431,7 +472,7 @@ class TWSMonitor:
                 "message": alert.message,
                 "timestamp": alert.timestamp.isoformat(),
                 "resolved": alert.resolved,
-                "details": alert.details
+                "details": alert.details,
             }
             for alert in recent_alerts
         ]
@@ -467,7 +508,7 @@ async def shutdown_tws_monitor() -> None:
 
 class TWSMonitorInterface:
     """Interface to provide synchronous access to the TWS monitor."""
-    
+
     def get_performance_report(self) -> Dict[str, Any]:
         """Get performance report. Requires async initialization."""
         if _tws_monitor is None:
@@ -480,17 +521,13 @@ class TWSMonitorInterface:
                     "llm_cost_today": 0.0,
                     "memory_usage_mb": 0.0,
                     "uptime_seconds": 0.0,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
                 },
                 "alerts": [],
-                "summary": {
-                    "total_alerts": 0,
-                    "critical_alerts": 0,
-                    "high_alerts": 0
-                }
+                "summary": {"total_alerts": 0, "critical_alerts": 0, "high_alerts": 0},
             }
         return _tws_monitor.get_performance_report()
-    
+
     def get_alerts(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent alerts. Requires async initialization."""
         if _tws_monitor is None:

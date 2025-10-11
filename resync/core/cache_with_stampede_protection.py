@@ -10,7 +10,7 @@ from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class CacheEntry:
@@ -51,10 +51,7 @@ class CacheWithStampedeProtection(Generic[T]):
         self._lock = asyncio.Lock()
 
     async def get(
-        self,
-        key: str,
-        loader: Callable[[], T],
-        ttl: Optional[int] = None
+        self, key: str, loader: Callable[[], T], ttl: Optional[int] = None
     ) -> T:
         """Get value from cache or load it with stampede protection."""
 
@@ -75,10 +72,7 @@ class CacheWithStampedeProtection(Generic[T]):
             return await self._get_without_protection(key, loader, expiry)
 
     async def _get_with_stampede_protection(
-        self,
-        key: str,
-        loader: Callable[[], T],
-        expiry: float
+        self, key: str, loader: Callable[[], T], expiry: float
     ) -> T:
         """Get with stampede protection."""
 
@@ -118,21 +112,13 @@ class CacheWithStampedeProtection(Generic[T]):
                 del self._loading[key]
 
     async def _get_without_protection(
-        self,
-        key: str,
-        loader: Callable[[], T],
-        expiry: float
+        self, key: str, loader: Callable[[], T], expiry: float
     ) -> T:
         """Get without stampede protection."""
 
         return await self._load_value(key, loader, expiry)
 
-    async def _load_value(
-        self,
-        key: str,
-        loader: Callable[[], T],
-        expiry: float
-    ) -> T:
+    async def _load_value(self, key: str, loader: Callable[[], T], expiry: float) -> T:
         """Load value and cache it."""
 
         try:
@@ -174,12 +160,13 @@ class CacheWithStampedeProtection(Generic[T]):
         """Get cache statistics."""
 
         current_time = time.time()
-        valid_entries = sum(1 for entry in self._cache.values()
-                          if current_time < entry.expiry)
+        valid_entries = sum(
+            1 for entry in self._cache.values() if current_time < entry.expiry
+        )
 
         return {
             "total_entries": len(self._cache),
             "valid_entries": valid_entries,
             "loading_operations": len(self._loading),
-            "stampede_protection_level": self.config.stampede_protection_level.value
+            "stampede_protection_level": self.config.stampede_protection_level.value,
         }

@@ -73,17 +73,21 @@ except ImportError:
         def run(self, message: str) -> str:
             """Synchronous version of arun for compatibility."""
             import asyncio
+
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     import asyncio
+
                     async def run_async():
                         return await self.arun(message)
+
                     return asyncio.create_task(run_async())
                 else:
                     return loop.run_until_complete(self.arun(message))
             except Exception:
                 import asyncio
+
                 return asyncio.run(self.arun(message))
 
         def to_dict(self) -> dict:
@@ -147,21 +151,23 @@ class AgentsConfig(BaseModel):
 class AgentManager:
     """
     Manages the lifecycle and operations of AI agents.
-    Implements the Borg pattern for thread-safe singleton behavior.
+    Implements singleton pattern for thread-safe behavior.
     """
-    
-    _shared_state: dict[str, Any] = {}
+
+    _instance: Optional["AgentManager"] = None
     _lock = threading.RLock()
     _initialized = False
-    
-    def __new__(cls, *args, **kwargs):
-        """Implementação Borg Pattern - mais pythônico que Singleton clássico."""
-        obj = super().__new__(cls)
-        obj.__dict__ = cls._shared_state
-        return obj
 
-    async def load_agents_from_config(self) -> None:
-        """Loads agent configurations from settings."""
+    def __new__(cls, *args, **kwargs):
+        """Thread-safe singleton implementation."""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+
+    async def load_agents_from_config(self, config_path: Optional[str] = None) -> None:
+        """Loads agent configurations from settings or specified path."""
         # Implementation for loading agents from config
 
     async def get_agent(self, agent_id: str) -> Any:
@@ -196,6 +202,7 @@ class AgentManager:
                     if not self.tws_client:
                         from resync.core.fastapi_di import get_service
                         from resync.core.interfaces import ITWSClient
+
                         try:
                             self.tws_client = await get_service(ITWSClient)()
                         except Exception as e:
@@ -222,7 +229,9 @@ class AgentManager:
                     name=agent_config.name,
                     description=agent_config.backstory,  # ✅ PASSAR DESCRIPTION
                 )
-                logger.info(f"Created mock agent: {agent}, has arun: {hasattr(agent, 'arun')}")
+                logger.info(
+                    f"Created mock agent: {agent}, has arun: {hasattr(agent, 'arun')}"
+                )
                 return agent
 
         except Exception as e:
@@ -232,6 +241,28 @@ class AgentManager:
     async def get_all_agents(self) -> list[AgentConfig]:
         """Returns the configuration of all loaded agents."""
         return self.agent_configs
+
+    async def get_agent_config(self, agent_id: str) -> Optional[AgentConfig]:
+        """Retrieves the configuration of a specific agent by its ID."""
+        for config in self.agent_configs:
+            if config.id == agent_id:
+                return config
+        return None
+
+    async def _get_tws_client(self) -> Any:
+        """Get or create TWS client with thread-safe initialization."""
+        if not self.tws_client:
+            async with self._tws_init_lock:
+                if not self.tws_client:
+                    from resync.core.fastapi_di import get_service
+                    from resync.core.interfaces import ITWSClient
+
+                    try:
+                        self.tws_client = await get_service(ITWSClient)()
+                    except Exception as e:
+                        logger.warning(f"Failed to get TWS client: {e}")
+                        self.tws_client = None
+        return self.tws_client
 
     def _discover_tools(self) -> dict[str, Any]:
         """Discover available tools for agents."""
@@ -256,7 +287,7 @@ class AgentManager:
         with self._lock:
             if not self._initialized:
                 self._initialized = True
-                
+
                 global_correlation = get_global_correlation_id()
                 correlation_id = runtime_metrics.create_correlation_id(
                     {
@@ -272,12 +303,18 @@ class AgentManager:
                     if not AGNO_AVAILABLE:
                         runtime_metrics.agent_mock_fallbacks.increment()
                         is_production = (
-                            getattr(settings_module, "ENVIRONMENT", "development").lower()
+                            getattr(
+                                settings_module, "ENVIRONMENT", "development"
+                            ).lower()
                             == "production"
                         )
                         if is_production:
                             error_msg = "CRITICAL: agno.agent not available in production environment. Cannot proceed with MockAgent fallback."
-                            logger.critical("agno_agent_unavailable_production", error=error_msg, correlation_id=correlation_id)
+                            logger.critical(
+                                "agno_agent_unavailable_production",
+                                error=error_msg,
+                                correlation_id=correlation_id,
+                            )
                             runtime_metrics.record_health_check(
                                 "agent_manager",
                                 "critical",
@@ -311,7 +348,7 @@ class AgentManager:
                             model_name="tongyi-deepresearch",
                             temperature=0.7,
                             memory=True,
-                            verbose=False
+                            verbose=False,
                         ),
                         AgentConfig(
                             id="tws-general",
@@ -323,8 +360,8 @@ class AgentManager:
                             model_name="openrouter-fallback",
                             temperature=0.5,
                             memory=True,
-                            verbose=False
-                        )
+                            verbose=False,
+                        ),
                     ]
                     self.tools: dict[str, Any] = self._discover_tools()
                     self.tws_client: Optional[OptimizedTWSClient] = None
@@ -333,14 +370,22 @@ class AgentManager:
                     self._tws_init_lock: asyncio.Lock = asyncio.Lock()
 
                     runtime_metrics.record_health_check("agent_manager", "healthy")
-                    logger.info("agent_manager_initialized_successfully", correlation_id=correlation_id)
+                    logger.info(
+                        "agent_manager_initialized_successfully",
+                        correlation_id=correlation_id,
+                    )
 
                 except AgentError as e:
                     # Capture specific, known critical errors during initialization
                     runtime_metrics.record_health_check(
                         "agent_manager", "failed", {"error": str(e)}
                     )
-                    logger.critical("agent_manager_initialization_failed", error=str(e), correlation_id=correlation_id, exc_info=True)
+                    logger.critical(
+                        "agent_manager_initialization_failed",
+                        error=str(e),
+                        correlation_id=correlation_id,
+                        exc_info=True,
+                    )
                     raise  # Re-raise the specific AgentError
                 finally:
                     runtime_metrics.close_correlation_id(correlation_id)

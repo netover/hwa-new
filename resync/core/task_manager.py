@@ -93,7 +93,7 @@ class TaskManager:
         max_retries: int = 0,
         retry_delay: float = 1.0,
         timeout: Optional[float] = None,
-        **kwargs
+        **kwargs,
     ) -> str:
         """Submit a task for execution."""
 
@@ -105,7 +105,7 @@ class TaskManager:
             priority=priority,
             max_retries=max_retries,
             retry_delay=retry_delay,
-            timeout=timeout
+            timeout=timeout,
         )
 
         self.tasks[task.id] = task
@@ -128,7 +128,11 @@ class TaskManager:
 
         task = self.tasks[task_id]
 
-        if task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
+        if task.status in [
+            TaskStatus.COMPLETED,
+            TaskStatus.FAILED,
+            TaskStatus.CANCELLED,
+        ]:
             return False
 
         if task_id in self.running_tasks:
@@ -150,8 +154,7 @@ class TaskManager:
                 # Get next task from queue with timeout
                 try:
                     priority_value, task_id = await asyncio.wait_for(
-                        self.task_queue.get(),
-                        timeout=1.0
+                        self.task_queue.get(), timeout=1.0
                     )
                 except asyncio.TimeoutError:
                     continue
@@ -182,8 +185,7 @@ class TaskManager:
                 if asyncio.iscoroutinefunction(task.func):
                     if task.timeout:
                         result = await asyncio.wait_for(
-                            task.func(*task.args, **task.kwargs),
-                            timeout=task.timeout
+                            task.func(*task.args, **task.kwargs), timeout=task.timeout
                         )
                     else:
                         result = await task.func(*task.args, **task.kwargs)
@@ -192,11 +194,15 @@ class TaskManager:
                     loop = asyncio.get_event_loop()
                     if task.timeout:
                         result = await asyncio.wait_for(
-                            loop.run_in_executor(None, task.func, *task.args, **task.kwargs),
-                            timeout=task.timeout
+                            loop.run_in_executor(
+                                None, task.func, *task.args, **task.kwargs
+                            ),
+                            timeout=task.timeout,
                         )
                     else:
-                        result = await loop.run_in_executor(None, task.func, *task.args, **task.kwargs)
+                        result = await loop.run_in_executor(
+                            None, task.func, *task.args, **task.kwargs
+                        )
 
                 task.result = result
                 task.status = TaskStatus.COMPLETED
@@ -249,13 +255,19 @@ class TaskManager:
 
         status_counts = {}
         for task in self.tasks.values():
-            status_counts[task.status.value] = status_counts.get(task.status.value, 0) + 1
+            status_counts[task.status.value] = (
+                status_counts.get(task.status.value, 0) + 1
+            )
 
         return {
             "total_tasks": len(self.tasks),
             "running_tasks": len(self.running_tasks),
             "queued_tasks": self.task_queue.qsize(),
             "max_workers": self.max_workers,
-            "available_workers": self.semaphore._value if hasattr(self.semaphore, '_value') else 'unknown',
-            "status_counts": status_counts
+            "available_workers": (
+                self.semaphore._value
+                if hasattr(self.semaphore, "_value")
+                else "unknown"
+            ),
+            "status_counts": status_counts,
         }

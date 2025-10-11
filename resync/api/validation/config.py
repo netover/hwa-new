@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, validator
 
 class ValidationMode(str, Enum):
     """Validation strictness modes."""
+
     STRICT = "strict"
     MODERATE = "moderate"
     PERMISSIVE = "permissive"
@@ -18,6 +19,7 @@ class ValidationMode(str, Enum):
 
 class SanitizationLevel(str, Enum):
     """Input sanitization levels."""
+
     STRICT = "strict"
     MODERATE = "moderate"
     PERMISSIVE = "permissive"
@@ -27,54 +29,44 @@ class SanitizationLevel(str, Enum):
 class ValidationConfigModel(BaseModel):
     """Main validation configuration model."""
 
-    enabled: bool = Field(
-        default=True,
-        description="Enable validation globally"
-    )
+    enabled: bool = Field(default=True, description="Enable validation globally")
 
     mode: ValidationMode = Field(
-        default=ValidationMode.STRICT,
-        description="Validation strictness mode"
+        default=ValidationMode.STRICT, description="Validation strictness mode"
     )
 
     sanitization_level: SanitizationLevel = Field(
-        default=SanitizationLevel.MODERATE,
-        description="Input sanitization level"
+        default=SanitizationLevel.MODERATE, description="Input sanitization level"
     )
 
     max_validation_errors: int = Field(
         default=50,
         ge=1,
         le=1000,
-        description="Maximum number of validation errors to return"
+        description="Maximum number of validation errors to return",
     )
 
-    enable_logging: bool = Field(
-        default=True,
-        description="Enable validation logging"
-    )
+    enable_logging: bool = Field(default=True, description="Enable validation logging")
 
     log_level: str = Field(
         default="INFO",
         pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$",
-        description="Validation logging level"
+        description="Validation logging level",
     )
 
     enable_metrics: bool = Field(
-        default=True,
-        description="Enable validation metrics collection"
+        default=True, description="Enable validation metrics collection"
     )
 
     rate_limit_validation: bool = Field(
-        default=True,
-        description="Enable validation rate limiting"
+        default=True, description="Enable validation rate limiting"
     )
 
     validation_rate_limit: int = Field(
         default=100,
         ge=1,
         le=1000,
-        description="Validation requests per minute rate limit"
+        description="Validation requests per minute rate limit",
     )
 
     skip_paths: List[str] = Field(
@@ -85,86 +77,77 @@ class ValidationConfigModel(BaseModel):
             "/openapi.json",
             "/static",
             "/assets",
-            "/favicon.ico"
+            "/favicon.ico",
         ],
-        description="Paths to skip validation for"
+        description="Paths to skip validation for",
     )
 
     custom_validators: dict[str, dict[str, Any]] = Field(  # type: ignore[type-arg]
         default_factory=dict,
         description="Custom validator configurations",
-        max_items=50
+        max_items=50,
     )
 
     error_response_format: str = Field(
         default="detailed",
         pattern=r"^(basic|detailed|verbose)$",
-        description="Validation error response format"
+        description="Validation error response format",
     )
 
     enable_field_suggestions: bool = Field(
-        default=True,
-        description="Enable field suggestions in error messages"
+        default=True, description="Enable field suggestions in error messages"
     )
 
     max_string_length: int = Field(
-        default=10000,
-        ge=1,
-        le=100000,
-        description="Maximum allowed string length"
+        default=10000, ge=1, le=100000, description="Maximum allowed string length"
     )
 
     max_nested_depth: int = Field(
-        default=10,
-        ge=1,
-        le=50,
-        description="Maximum nested object depth"
+        default=10, ge=1, le=50, description="Maximum nested object depth"
     )
 
     max_array_items: int = Field(
-        default=1000,
-        ge=1,
-        le=10000,
-        description="Maximum items in arrays"
+        default=1000, ge=1, le=10000, description="Maximum items in arrays"
     )
 
     allowed_file_types: List[str] = Field(
         default_factory=lambda: [
-            "text/plain", "text/csv", "application/json", "application/pdf",
-            "image/jpeg", "image/png", "image/gif", "image/webp",
-            "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "text/plain",
+            "text/csv",
+            "application/json",
+            "application/pdf",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ],
-        description="Allowed file MIME types"
+        description="Allowed file MIME types",
     )
 
     max_file_size: int = Field(
         default=10 * 1024 * 1024,  # 10MB
         ge=1024,  # 1KB minimum
         le=100 * 1024 * 1024,  # 100MB maximum
-        description="Maximum file size in bytes"
+        description="Maximum file size in bytes",
     )
 
     enable_circuit_breaker: bool = Field(
-        default=True,
-        description="Enable circuit breaker for validation failures"
+        default=True, description="Enable circuit breaker for validation failures"
     )
 
     circuit_breaker_threshold: int = Field(
-        default=10,
-        ge=1,
-        le=100,
-        description="Circuit breaker failure threshold"
+        default=10, ge=1, le=100, description="Circuit breaker failure threshold"
     )
 
     circuit_breaker_timeout: int = Field(
-        default=60,
-        ge=10,
-        le=3600,
-        description="Circuit breaker timeout in seconds"
+        default=60, ge=10, le=3600, description="Circuit breaker timeout in seconds"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("skip_paths")
@@ -242,43 +225,33 @@ class AgentValidationConfig(BaseModel):
     """Agent-specific validation configuration."""
 
     max_name_length: int = Field(
-        default=100,
-        ge=1,
-        le=500,
-        description="Maximum agent name length"
+        default=100, ge=1, le=500, description="Maximum agent name length"
     )
 
     max_description_length: int = Field(
-        default=500,
-        ge=1,
-        le=2000,
-        description="Maximum agent description length"
+        default=500, ge=1, le=2000, description="Maximum agent description length"
     )
 
     allowed_models: List[str] = Field(
         default_factory=lambda: ["gpt-3.5-turbo", "gpt-4", "claude-3", "llama2"],
-        description="Allowed AI models"
+        description="Allowed AI models",
     )
 
     max_tools: int = Field(
-        default=20,
-        ge=0,
-        le=100,
-        description="Maximum number of tools per agent"
+        default=20, ge=0, le=100, description="Maximum number of tools per agent"
     )
 
     require_unique_name: bool = Field(
-        default=True,
-        description="Require unique agent names"
+        default=True, description="Require unique agent names"
     )
 
     validate_model_compatibility: bool = Field(
-        default=True,
-        description="Validate model compatibility"
+        default=True, description="Validate model compatibility"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
 
@@ -286,39 +259,28 @@ class ChatValidationConfig(BaseModel):
     """Chat-specific validation configuration."""
 
     max_message_length: int = Field(
-        default=10000,
-        ge=1,
-        le=100000,
-        description="Maximum message length"
+        default=10000, ge=1, le=100000, description="Maximum message length"
     )
 
     max_session_name_length: int = Field(
-        default=200,
-        ge=1,
-        le=500,
-        description="Maximum session name length"
+        default=200, ge=1, le=500, description="Maximum session name length"
     )
 
     max_context_messages: int = Field(
-        default=100,
-        ge=1,
-        le=1000,
-        description="Maximum context messages"
+        default=100, ge=1, le=1000, description="Maximum context messages"
     )
 
     enable_content_filtering: bool = Field(
-        default=True,
-        description="Enable content filtering"
+        default=True, description="Enable content filtering"
     )
 
     blocked_keywords: List[str] = Field(
-        default_factory=list,
-        description="Keywords to block in messages",
-        max_items=100
+        default_factory=list, description="Keywords to block in messages", max_items=100
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
 
@@ -326,102 +288,78 @@ class SecurityValidationConfig(BaseModel):
     """Security-specific validation configuration."""
 
     enable_xss_protection: bool = Field(
-        default=True,
-        description="Enable XSS protection"
+        default=True, description="Enable XSS protection"
     )
 
     enable_sql_injection_protection: bool = Field(
-        default=True,
-        description="Enable SQL injection protection"
+        default=True, description="Enable SQL injection protection"
     )
 
     enable_command_injection_protection: bool = Field(
-        default=True,
-        description="Enable command injection protection"
+        default=True, description="Enable command injection protection"
     )
 
     enable_path_traversal_protection: bool = Field(
-        default=True,
-        description="Enable path traversal protection"
+        default=True, description="Enable path traversal protection"
     )
 
     max_request_size: int = Field(
         default=1 * 1024 * 1024,  # 1MB
         ge=1024,  # 1KB minimum
         le=10 * 1024 * 1024,  # 10MB maximum
-        description="Maximum request size in bytes"
+        description="Maximum request size in bytes",
     )
 
     rate_limit_per_minute: int = Field(
-        default=100,
-        ge=1,
-        le=1000,
-        description="Requests per minute rate limit"
+        default=100, ge=1, le=1000, description="Requests per minute rate limit"
     )
 
     max_login_attempts: int = Field(
-        default=5,
-        ge=1,
-        le=20,
-        description="Maximum login attempts"
+        default=5, ge=1, le=20, description="Maximum login attempts"
     )
 
     enable_captcha_validation: bool = Field(
-        default=False,
-        description="Enable CAPTCHA validation"
+        default=False, description="Enable CAPTCHA validation"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
 
 class RateLimitConfig(BaseModel):
     """Rate limiting configuration."""
 
-    enabled: bool = Field(
-        default=True,
-        description="Enable rate limiting"
-    )
+    enabled: bool = Field(default=True, description="Enable rate limiting")
 
     requests_per_minute: int = Field(
-        default=60,
-        ge=1,
-        le=1000,
-        description="Requests per minute"
+        default=60, ge=1, le=1000, description="Requests per minute"
     )
 
     burst_size: int = Field(
-        default=10,
-        ge=1,
-        le=100,
-        description="Burst size for rate limiting"
+        default=10, ge=1, le=100, description="Burst size for rate limiting"
     )
 
     window_size: int = Field(
-        default=60,
-        ge=1,
-        le=3600,
-        description="Rate limiting window size in seconds"
+        default=60, ge=1, le=3600, description="Rate limiting window size in seconds"
     )
 
     key_prefix: str = Field(
-        default="validation_rate_limit",
-        description="Rate limiting key prefix"
+        default="validation_rate_limit", description="Rate limiting key prefix"
     )
 
     enable_ip_based_limiting: bool = Field(
-        default=True,
-        description="Enable IP-based rate limiting"
+        default=True, description="Enable IP-based rate limiting"
     )
 
     enable_user_based_limiting: bool = Field(
-        default=False,
-        description="Enable user-based rate limiting"
+        default=False, description="Enable user-based rate limiting"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
 
@@ -455,16 +393,19 @@ class ValidationSettings:
                 # Try JSON first, then fallback to other formats
                 if self.config_file.suffix.lower() == ".json":
                     import json
+
                     config_dict = json.loads(config_data)
                 else:
                     # Try TOML
                     try:
                         import toml
+
                         config_dict = toml.loads(config_data)
                     except ImportError:
                         # Try YAML
                         try:
                             import yaml
+
                             config_dict = yaml.safe_load(config_data)
                         except ImportError:
                             # Fallback to simple key=value format
@@ -473,7 +414,9 @@ class ValidationSettings:
                 self._config = ValidationConfigModel(**config_dict)
 
             except Exception as e:
-                raise ValueError(f"Failed to load validation config from {self.config_file}: {e}")
+                raise ValueError(
+                    f"Failed to load validation config from {self.config_file}: {e}"
+                )
         else:
             # Use default configuration
             self._config = ValidationConfigModel()
@@ -522,6 +465,7 @@ class ValidationSettings:
         # Save as JSON by default
         with open(self.config_file, "w") as f:
             import json
+
             json.dump(self._config.model_dump(), f, indent=2)
 
     def update_config(self, **kwargs) -> None:
@@ -588,7 +532,9 @@ class ValidationSettings:
 _validation_settings: Optional[ValidationSettings] = None
 
 
-def get_validation_settings(config_file: Optional[Union[str, Path]] = None) -> ValidationSettings:
+def get_validation_settings(
+    config_file: Optional[Union[str, Path]] = None,
+) -> ValidationSettings:
     """
     Get global validation settings instance.
 
@@ -627,5 +573,5 @@ __all__ = [
     "RateLimitConfig",
     "ValidationSettings",
     "get_validation_settings",
-    "set_validation_settings"
+    "set_validation_settings",
 ]

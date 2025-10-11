@@ -35,6 +35,7 @@ from typing import Dict, List, Optional
 @dataclass
 class PyflakesIssue:
     """Represents a single Pyflakes issue."""
+
     file_path: str
     line: int
     column: int
@@ -46,18 +47,23 @@ class PyflakesIssue:
 @dataclass
 class FixReport:
     """Report of fixes applied."""
+
     total_issues: int = 0
     fixed_issues: int = 0
     failed_fixes: int = 0
     issues_by_type: Dict[str, int] = field(default_factory=dict)
-    issues_by_file: Dict[str, List[PyflakesIssue]] = field(default_factory=lambda: defaultdict(list))
+    issues_by_file: Dict[str, List[PyflakesIssue]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
     errors: List[str] = field(default_factory=list)
 
 
 class PyflakesFixer:
     """Main automation orchestrator for Pyflakes fixes."""
 
-    def __init__(self, pyflakes_output: str, dry_run: bool = False, backup: bool = True):
+    def __init__(
+        self, pyflakes_output: str, dry_run: bool = False, backup: bool = True
+    ):
         self.pyflakes_output = pyflakes_output
         self.dry_run = dry_run
         self.backup = backup
@@ -72,17 +78,19 @@ class PyflakesFixer:
     def _parse_pyflakes_output(self) -> None:
         """Parse pyflakes output and categorize issues."""
         # More robust pattern that handles various formats
-        pattern = r'^(.+?):(\d+):(\d+):\s*(.+)'
+        pattern = r"^(.+?):(\d+):(\d+):\s*(.+)"
         issue_patterns = {
-            'unused_import': re.compile(r"'.+' imported but unused"),
-            'undefined_name': re.compile(r"undefined name '(.+)'"),
-            'fstring_placeholder': re.compile(r"f-string is missing placeholders"),
-            'forward_annotation': re.compile(r"syntax error in forward annotation"),
-            'unused_variable': re.compile(r"local variable '.+' is assigned to but never used"),
-            'redefinition': re.compile(r"redefinition of unused '(.+)' from line \d+"),
+            "unused_import": re.compile(r"'.+' imported but unused"),
+            "undefined_name": re.compile(r"undefined name '(.+)'"),
+            "fstring_placeholder": re.compile(r"f-string is missing placeholders"),
+            "forward_annotation": re.compile(r"syntax error in forward annotation"),
+            "unused_variable": re.compile(
+                r"local variable '.+' is assigned to but never used"
+            ),
+            "redefinition": re.compile(r"redefinition of unused '(.+)' from line \d+"),
         }
 
-        lines = self.pyflakes_output.strip().split('\n')
+        lines = self.pyflakes_output.strip().split("\n")
         i = 0
         while i < len(lines):
             line = lines[i].strip()
@@ -102,7 +110,7 @@ class PyflakesFixer:
                     continue
 
                 # Determine issue type
-                issue_type = 'unknown'
+                issue_type = "unknown"
                 for type_name, pat in issue_patterns.items():
                     if pat.search(message):
                         issue_type = type_name
@@ -113,11 +121,13 @@ class PyflakesFixer:
                     line=line_num,
                     column=col_num,
                     message=message,
-                    issue_type=issue_type
+                    issue_type=issue_type,
                 )
 
                 self.issues.append(issue)
-                self.report.issues_by_type[issue_type] = self.report.issues_by_type.get(issue_type, 0) + 1
+                self.report.issues_by_type[issue_type] = (
+                    self.report.issues_by_type.get(issue_type, 0) + 1
+                )
                 self.report.issues_by_file[file_path].append(issue)
             else:
                 self.logger.warning(f"Could not parse line: {line}")
@@ -130,12 +140,12 @@ class PyflakesFixer:
     def run_all_fixes(self) -> FixReport:
         """Run all fix phases in order."""
         phases = [
-            ('forward_annotations', self.fix_forward_annotations),
-            ('undefined_names', self.fix_undefined_names),
-            ('fstring_placeholders', self.fix_fstring_placeholders),
-            ('unused_imports', self.remove_unused_imports),
-            ('unused_variables', self.remove_unused_variables),
-            ('redefinitions', self.fix_redefinitions),
+            ("forward_annotations", self.fix_forward_annotations),
+            ("undefined_names", self.fix_undefined_names),
+            ("fstring_placeholders", self.fix_fstring_placeholders),
+            ("unused_imports", self.remove_unused_imports),
+            ("unused_variables", self.remove_unused_variables),
+            ("redefinitions", self.fix_redefinitions),
         ]
 
         for phase_name, phase_method in phases:
@@ -151,19 +161,25 @@ class PyflakesFixer:
     def fix_forward_annotations(self) -> None:
         """Fix syntax errors in forward annotations."""
         # Forward annotations like '^[a-zA-Z0-9_.-]+$' need to be quoted
-        issues = [i for i in self.issues if i.issue_type == 'forward_annotation' and not i.fixed]
+        issues = [
+            i
+            for i in self.issues
+            if i.issue_type == "forward_annotation" and not i.fixed
+        ]
 
         for issue in issues:
             try:
                 self._fix_forward_annotation(issue)
             except Exception as e:
-                self.logger.error(f"Failed to fix forward annotation in {issue.file_path}:{issue.line}: {e}")
+                self.logger.error(
+                    f"Failed to fix forward annotation in {issue.file_path}:{issue.line}: {e}"
+                )
                 self.report.failed_fixes += 1
 
     def _fix_forward_annotation(self, issue: PyflakesIssue) -> None:
         """Fix a single forward annotation issue."""
         # Read the file
-        with open(issue.file_path, 'r', encoding='utf-8') as f:
+        with open(issue.file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         line_content = lines[issue.line - 1]
@@ -174,24 +190,32 @@ class PyflakesFixer:
         if regex_pattern:
             old_pattern = regex_pattern.group(1)
             new_pattern = f'"{old_pattern}"'
-            lines[issue.line - 1] = line_content.replace(f"'{old_pattern}'", new_pattern)
+            lines[issue.line - 1] = line_content.replace(
+                f"'{old_pattern}'", new_pattern
+            )
 
             if not self.dry_run:
                 self._write_file_with_backup(issue.file_path, lines)
 
             issue.fixed = True
             self.report.fixed_issues += 1
-            self.logger.info(f"Fixed forward annotation in {issue.file_path}:{issue.line}")
+            self.logger.info(
+                f"Fixed forward annotation in {issue.file_path}:{issue.line}"
+            )
 
     def fix_undefined_names(self) -> None:
         """Fix undefined name issues."""
-        issues = [i for i in self.issues if i.issue_type == 'undefined_name' and not i.fixed]
+        issues = [
+            i for i in self.issues if i.issue_type == "undefined_name" and not i.fixed
+        ]
 
         for issue in issues:
             try:
                 self._fix_undefined_name(issue)
             except Exception as e:
-                self.logger.error(f"Failed to fix undefined name in {issue.file_path}:{issue.line}: {e}")
+                self.logger.error(
+                    f"Failed to fix undefined name in {issue.file_path}:{issue.line}: {e}"
+                )
                 self.report.failed_fixes += 1
 
     def _fix_undefined_name(self, issue: PyflakesIssue) -> None:
@@ -204,33 +228,33 @@ class PyflakesFixer:
         undefined_name = match.group(1)
 
         # Read the file
-        with open(issue.file_path, 'r', encoding='utf-8') as f:
+        with open(issue.file_path, "r", encoding="utf-8") as f:
             content = f.read()
 
         # Common fixes based on context
         fixes = {
-            'sys': 'import sys',
-            're': 'import re',
-            'logging': 'import logging',
-            'Optional': 'from typing import Optional',
-            'List': 'from typing import List',
-            'Dict': 'from typing import Dict',
-            'Any': 'from typing import Any',
-            'Union': 'from typing import Union',
-            'Tuple': 'from typing import Tuple',
-            'Set': 'from typing import Set',
-            'Callable': 'from typing import Callable',
-            'Awaitable': 'from typing import Awaitable',
-            'Type': 'from typing import Type',
-            'cast': 'from typing import cast',
-            'get_type_hints': 'from typing import get_type_hints',
-            'TYPE_CHECKING': 'from typing import TYPE_CHECKING',
-            'auto': 'from enum import auto',
-            'field': 'from dataclasses import field',
-            'asdict': 'from dataclasses import asdict',
-            'dataclass': 'from dataclasses import dataclass',
-            'abstractmethod': 'from abc import abstractmethod',
-            'ABC': 'from abc import ABC',
+            "sys": "import sys",
+            "re": "import re",
+            "logging": "import logging",
+            "Optional": "from typing import Optional",
+            "List": "from typing import List",
+            "Dict": "from typing import Dict",
+            "Any": "from typing import Any",
+            "Union": "from typing import Union",
+            "Tuple": "from typing import Tuple",
+            "Set": "from typing import Set",
+            "Callable": "from typing import Callable",
+            "Awaitable": "from typing import Awaitable",
+            "Type": "from typing import Type",
+            "cast": "from typing import cast",
+            "get_type_hints": "from typing import get_type_hints",
+            "TYPE_CHECKING": "from typing import TYPE_CHECKING",
+            "auto": "from enum import auto",
+            "field": "from dataclasses import field",
+            "asdict": "from dataclasses import asdict",
+            "dataclass": "from dataclasses import dataclass",
+            "abstractmethod": "from abc import abstractmethod",
+            "ABC": "from abc import ABC",
         }
 
         if undefined_name in fixes:
@@ -241,9 +265,9 @@ class PyflakesFixer:
             # Find the right place to insert the import
             insert_pos = 0
             for i, line in enumerate(lines):
-                if line.startswith('#'):
+                if line.startswith("#"):
                     continue
-                if line.startswith('import ') or line.startswith('from '):
+                if line.startswith("import ") or line.startswith("from "):
                     insert_pos = i + 1
                 else:
                     break
@@ -259,19 +283,25 @@ class PyflakesFixer:
 
     def fix_fstring_placeholders(self) -> None:
         """Fix f-strings missing placeholders."""
-        issues = [i for i in self.issues if i.issue_type == 'fstring_placeholder' and not i.fixed]
+        issues = [
+            i
+            for i in self.issues
+            if i.issue_type == "fstring_placeholder" and not i.fixed
+        ]
 
         for issue in issues:
             try:
                 self._fix_fstring_placeholder(issue)
             except Exception as e:
-                self.logger.error(f"Failed to fix f-string in {issue.file_path}:{issue.line}: {e}")
+                self.logger.error(
+                    f"Failed to fix f-string in {issue.file_path}:{issue.line}: {e}"
+                )
                 self.report.failed_fixes += 1
 
     def _fix_fstring_placeholder(self, issue: PyflakesIssue) -> None:
         """Fix a single f-string placeholder issue."""
         # Read the file
-        with open(issue.file_path, 'r', encoding='utf-8') as f:
+        with open(issue.file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         line_content = lines[issue.line - 1]
@@ -282,7 +312,9 @@ class PyflakesFixer:
         if fstring_match:
             quote = fstring_match.group(1)
             content = fstring_match.group(2)
-            new_line = line_content.replace(f'f{quote}{content}{quote}', f'{quote}{content}{quote}')
+            new_line = line_content.replace(
+                f"f{quote}{content}{quote}", f"{quote}{content}{quote}"
+            )
 
             lines[issue.line - 1] = new_line
 
@@ -291,11 +323,15 @@ class PyflakesFixer:
 
             issue.fixed = True
             self.report.fixed_issues += 1
-            self.logger.info(f"Fixed f-string placeholder in {issue.file_path}:{issue.line}")
+            self.logger.info(
+                f"Fixed f-string placeholder in {issue.file_path}:{issue.line}"
+            )
 
     def remove_unused_imports(self) -> None:
         """Remove unused imports."""
-        issues = [i for i in self.issues if i.issue_type == 'unused_import' and not i.fixed]
+        issues = [
+            i for i in self.issues if i.issue_type == "unused_import" and not i.fixed
+        ]
 
         # Group by file
         by_file = defaultdict(list)
@@ -306,12 +342,16 @@ class PyflakesFixer:
             try:
                 self._remove_unused_imports_from_file(file_path, file_issues)
             except Exception as e:
-                self.logger.error(f"Failed to remove unused imports from {file_path}: {e}")
+                self.logger.error(
+                    f"Failed to remove unused imports from {file_path}: {e}"
+                )
                 self.report.failed_fixes += len(file_issues)
 
-    def _remove_unused_imports_from_file(self, file_path: str, issues: List[PyflakesIssue]) -> None:
+    def _remove_unused_imports_from_file(
+        self, file_path: str, issues: List[PyflakesIssue]
+    ) -> None:
         """Remove unused imports from a single file."""
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         # Extract unused import names
@@ -332,7 +372,9 @@ class PyflakesFixer:
             for unused in unused_imports:
                 if f"import {unused}" in line or f"from {unused}" in line:
                     # Check if it's part of a multi-line import
-                    if line.strip().endswith('\\') or (line.strip().startswith('from ') and ',' in line):
+                    if line.strip().endswith("\\") or (
+                        line.strip().startswith("from ") and "," in line
+                    ):
                         # For simplicity, skip complex multi-line imports
                         continue
                     skip_line = True
@@ -355,23 +397,29 @@ class PyflakesFixer:
 
     def remove_unused_variables(self) -> None:
         """Remove unused variables."""
-        issues = [i for i in self.issues if i.issue_type == 'unused_variable' and not i.fixed]
+        issues = [
+            i for i in self.issues if i.issue_type == "unused_variable" and not i.fixed
+        ]
 
         for issue in issues:
             try:
                 self._remove_unused_variable(issue)
             except Exception as e:
-                self.logger.error(f"Failed to remove unused variable in {issue.file_path}:{issue.line}: {e}")
+                self.logger.error(
+                    f"Failed to remove unused variable in {issue.file_path}:{issue.line}: {e}"
+                )
                 self.report.failed_fixes += 1
 
     def _remove_unused_variable(self, issue: PyflakesIssue) -> None:
         """Remove a single unused variable."""
         # Read the file
-        with open(issue.file_path, 'r', encoding='utf-8') as f:
+        with open(issue.file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         # Extract variable name
-        match = re.search(r"local variable '(.+)' is assigned to but never used", issue.message)
+        match = re.search(
+            r"local variable '(.+)' is assigned to but never used", issue.message
+        )
         if not match:
             return
 
@@ -379,7 +427,11 @@ class PyflakesFixer:
         line_content = lines[issue.line - 1]
 
         # Simple case: variable assignment on its own line
-        if f"{var_name} =" in line_content and not line_content.strip().startswith('if ') and not line_content.strip().startswith('for '):
+        if (
+            f"{var_name} =" in line_content
+            and not line_content.strip().startswith("if ")
+            and not line_content.strip().startswith("for ")
+        ):
             # Remove the entire line
             lines.pop(issue.line - 1)
 
@@ -388,23 +440,29 @@ class PyflakesFixer:
 
             issue.fixed = True
             self.report.fixed_issues += 1
-            self.logger.info(f"Removed unused variable '{var_name}' in {issue.file_path}:{issue.line}")
+            self.logger.info(
+                f"Removed unused variable '{var_name}' in {issue.file_path}:{issue.line}"
+            )
 
     def fix_redefinitions(self) -> None:
         """Fix redefinition issues."""
-        issues = [i for i in self.issues if i.issue_type == 'redefinition' and not i.fixed]
+        issues = [
+            i for i in self.issues if i.issue_type == "redefinition" and not i.fixed
+        ]
 
         for issue in issues:
             try:
                 self._fix_redefinition(issue)
             except Exception as e:
-                self.logger.error(f"Failed to fix redefinition in {issue.file_path}:{issue.line}: {e}")
+                self.logger.error(
+                    f"Failed to fix redefinition in {issue.file_path}:{issue.line}: {e}"
+                )
                 self.report.failed_fixes += 1
 
     def _fix_redefinition(self, issue: PyflakesIssue) -> None:
         """Fix a single redefinition issue."""
         # Read the file
-        with open(issue.file_path, 'r', encoding='utf-8') as f:
+        with open(issue.file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         # Extract the redefined name
@@ -424,7 +482,9 @@ class PyflakesFixer:
 
             issue.fixed = True
             self.report.fixed_issues += 1
-            self.logger.info(f"Removed redefinition of '{redefined_name}' in {issue.file_path}:{issue.line}")
+            self.logger.info(
+                f"Removed redefinition of '{redefined_name}' in {issue.file_path}:{issue.line}"
+            )
 
     def _write_file_with_backup(self, file_path: str, lines: List[str]) -> None:
         """Write file with backup if enabled."""
@@ -434,7 +494,7 @@ class PyflakesFixer:
             self.backups[file_path] = backup_path
             self.logger.info(f"Created backup: {backup_path}")
 
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
 
     def rollback_changes(self) -> None:
@@ -479,7 +539,7 @@ class PyflakesFixer:
         report_text = "\n".join(report_lines)
 
         if output_file:
-            with open(output_file, 'w', encoding='utf-8') as f:
+            with open(output_file, "w", encoding="utf-8") as f:
                 f.write(report_text)
             self.logger.info(f"Report saved to {output_file}")
 
@@ -489,29 +549,58 @@ class PyflakesFixer:
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(description="Automated Pyflakes issues fixer")
-    parser.add_argument('--dry-run', action='store_true', help="Show what would be fixed without making changes")
-    parser.add_argument('--backup', action='store_true', default=True, help="Create backup files before making changes")
-    parser.add_argument('--no-backup', action='store_false', dest='backup', help="Don't create backup files")
-    parser.add_argument('--verbose', action='store_true', help="Enable verbose logging")
-    parser.add_argument('--phase', choices=['forward_annotations', 'undefined_names', 'fstring_placeholders',
-                                           'unused_imports', 'unused_variables', 'redefinitions'],
-                       help="Run only specific phase")
-    parser.add_argument('--report', type=str, help="Generate detailed report to specified file")
-    parser.add_argument('--pyflakes-output', type=str, default='pyflakes_output.txt',
-                       help="Path to pyflakes output file")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be fixed without making changes",
+    )
+    parser.add_argument(
+        "--backup",
+        action="store_true",
+        default=True,
+        help="Create backup files before making changes",
+    )
+    parser.add_argument(
+        "--no-backup",
+        action="store_false",
+        dest="backup",
+        help="Don't create backup files",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
+    parser.add_argument(
+        "--phase",
+        choices=[
+            "forward_annotations",
+            "undefined_names",
+            "fstring_placeholders",
+            "unused_imports",
+            "unused_variables",
+            "redefinitions",
+        ],
+        help="Run only specific phase",
+    )
+    parser.add_argument(
+        "--report", type=str, help="Generate detailed report to specified file"
+    )
+    parser.add_argument(
+        "--pyflakes-output",
+        type=str,
+        default="pyflakes_output.txt",
+        help="Path to pyflakes output file",
+    )
 
     args = parser.parse_args()
 
     # Setup logging
     level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(level=level, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(level=level, format="%(asctime)s - %(levelname)s - %(message)s")
 
     # Read pyflakes output
     if not os.path.exists(args.pyflakes_output):
         print(f"Error: Pyflakes output file '{args.pyflakes_output}' not found")
         sys.exit(1)
 
-    with open(args.pyflakes_output, 'r', encoding='utf-8') as f:
+    with open(args.pyflakes_output, "r", encoding="utf-8") as f:
         pyflakes_output = f.read()
 
     # Create fixer
@@ -542,5 +631,5 @@ def main():
         print(f"\nFixed {fixer.report.fixed_issues} issues")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

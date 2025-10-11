@@ -43,7 +43,7 @@ async def main() -> None:
     Função principal que inicializa os serviços e inicia o processo de ingestão.
     """
     logger.info("Iniciando o script para popular a base de conhecimento...")
-    knowledge_graph: IKnowledgeGraph | None = None
+    knowledge_graph: IKnowledgeGraph
     try:
         # 1. Inicializa o Knowledge Graph
         knowledge_graph = AsyncKnowledgeGraph()  # type: ignore[no-untyped-call]
@@ -55,7 +55,9 @@ async def main() -> None:
 
         # 3. Chama a função para carregar e processar os documentos
         processed_count = await load_existing_rag_documents(file_ingestor)
-        logger.info(f"Processo de ingestão concluído. {processed_count} documentos foram processados.")
+        logger.info(
+            f"Processo de ingestão concluído. {processed_count} documentos foram processados."
+        )
 
     finally:
         # 4. Garante que a conexão com o banco de dados seja fechada

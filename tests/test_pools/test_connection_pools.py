@@ -2,12 +2,16 @@ import pytest
 import asyncio
 
 from resync.core.pools.base_pool import ConnectionPoolConfig
-from resync.core.pools.pool_manager import get_connection_pool_manager, reset_connection_pool_manager
+from resync.core.pools.pool_manager import (
+    get_connection_pool_manager,
+    reset_connection_pool_manager,
+)
 
 
 # ============================================================================
 # FIXTURES
 # ============================================================================
+
 
 @pytest.fixture
 def pool_config():
@@ -34,15 +38,17 @@ async def cleanup_manager():
 # RACE CONDITION TESTS
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_singleton_race_condition():
     """Test that singleton is thread-safe under concurrent access."""
+
     async def get_manager():
         return await get_connection_pool_manager()
-    
+
     # Create 100 concurrent tasks
     tasks = [get_manager() for _ in range(100)]
     managers = await asyncio.gather(*tasks)
-    
+
     # All should be the same instance
     assert len(set(id(m) for m in managers)) == 1

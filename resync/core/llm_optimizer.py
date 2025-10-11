@@ -18,9 +18,7 @@ from resync.core.litellm_init import get_litellm_router
 
 # Define the circuit breaker for LLM API calls
 llm_api_breaker = pybreaker.CircuitBreaker(
-    fail_max=5,
-    reset_timeout=60,
-    exclude=(ValueError,)  # Don't count validation errors
+    fail_max=5, reset_timeout=60, exclude=(ValueError,)  # Don't count validation errors
 )
 
 logger = logging.getLogger(__name__)
@@ -53,7 +51,9 @@ class TWS_LLMOptimizer:
 
         # Model routing based on complexity
         self.model_routing = {
-            "simple": getattr(settings, "AUDITOR_MODEL_NAME", "gpt-3.5-turbo"),  # For basic queries
+            "simple": getattr(
+                settings, "AUDITOR_MODEL_NAME", "gpt-3.5-turbo"
+            ),  # For basic queries
             "complex": getattr(
                 settings, "AGENT_MODEL_NAME", "gpt-4o"
             ),  # For complex analysis
@@ -113,7 +113,7 @@ class TWS_LLMOptimizer:
         is_complex = any(
             indicator in query_lower for indicator in complexity_indicators
         )
-        
+
         # Check if we have a LiteLLM router available for advanced model selection
         router = get_litellm_router()
         if router:
@@ -122,26 +122,36 @@ class TWS_LLMOptimizer:
                 # Try to use a TWS troubleshooting model group if defined
                 try:
                     from litellm import get_available_models
+
                     available_models = get_available_models()
                     if any("gpt-4" in model for model in available_models):
                         return self.model_routing["troubleshooting"]
                     elif any("gpt-4" in model for model in self.model_routing.values()):
                         return self.model_routing["complex"]
-                except:
-                    pass  # Fall back to normal selection
-            
+                except Exception as e:
+                    # Log model selection error and fall back to normal selection
+                    logger.debug(f"GPT-4 model selection failed, using fallback: {e}")
+
             # Check for local model preference
             if not is_complex and "local" in settings.ENVIRONMENT.lower():
                 # Prioritize local Ollama models for non-complex queries in local environments
                 try:
                     # Check if Ollama is available
                     import httpx
+
                     with httpx.Client(timeout=5.0) as client:
-                        response = client.get(f"{settings.LLM_ENDPOINT}/api/tags")  # Assuming Ollama endpoint
+                        response = client.get(
+                            f"{settings.LLM_ENDPOINT}/api/tags"
+                        )  # Assuming Ollama endpoint
                         if response.status_code == 200:
-                            return "ollama/mistral"  # Use local model for simple queries
-                except:
-                    pass  # Ollama not available, continue with normal selection
+                            return (
+                                "ollama/mistral"  # Use local model for simple queries
+                            )
+                except Exception as e:
+                    # Log Ollama availability check error and continue with normal selection
+                    logger.debug(
+                        f"Ollama availability check failed, using fallback: {e}"
+                    )
 
         if is_complex:
             return self.model_routing["complex"]
@@ -217,7 +227,11 @@ class TWS_LLMOptimizer:
                         max_tokens=500 if template_key != "troubleshooting" else 1000,
                         # Pass settings-based configuration to take advantage of LiteLLM features
                         api_base=getattr(settings, "LLM_ENDPOINT", None),
-                        api_key=settings.LLM_API_KEY if settings.LLM_API_KEY != "your_default_api_key_here" else None
+                        api_key=(
+                            settings.LLM_API_KEY
+                            if settings.LLM_API_KEY != "your_default_api_key_here"
+                            else None
+                        ),
                     )
 
             response_time = time.time() - start_time
@@ -288,13 +302,17 @@ class TWS_LLMOptimizer:
                 max_tokens=1000,
                 temperature=0.7,
                 api_base=getattr(settings, "LLM_ENDPOINT", None),
-                api_key=settings.LLM_API_KEY if settings.LLM_API_KEY != "your_default_api_key_here" else None
+                api_key=(
+                    settings.LLM_API_KEY
+                    if settings.LLM_API_KEY != "your_default_api_key_here"
+                    else None
+                ),
             )
 
             full_response = ""
             async for chunk in response:
-                if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
-                    content = chunk.choices[0].get('delta', {}).get('content', '')
+                if hasattr(chunk, "choices") and len(chunk.choices) > 0:
+                    content = chunk.choices[0].get("delta", {}).get("content", "")
                     if content:
                         full_response += content
 
@@ -304,10 +322,7 @@ class TWS_LLMOptimizer:
             return full_response
 
         except Exception as e:
-            logger.error(
-                "Error in LLM streaming",
-                error=str(e)
-            )
+            logger.error("Error in LLM streaming", error=str(e))
             # Fallback to original method (which now also uses LiteLLM)
             result = await call_llm(prompt, model=model, max_tokens=1000)
             await self.response_cache.set(cache_key, result)

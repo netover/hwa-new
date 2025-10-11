@@ -1,6 +1,7 @@
 """
 Command implementations for TWS operations in the CQRS pattern.
 """
+
 from dataclasses import dataclass
 from typing import List
 from resync.cqrs.base import ICommand
@@ -39,6 +40,7 @@ class GetJobStatusBatchCommand(ICommand):
     """
     Command to retrieve the status of multiple TWS jobs in a batch.
     """
+
     job_ids: List[str]
 
 
@@ -47,6 +49,7 @@ class UpdateJobStatusCommand(ICommand):
     """
     Command to update the status of a specific TWS job.
     """
+
     job_id: str
     new_status: str
 
@@ -56,6 +59,7 @@ class ExecuteJobCommand(ICommand):
     """
     Command to execute a specific TWS job.
     """
+
     job_id: str
 
 

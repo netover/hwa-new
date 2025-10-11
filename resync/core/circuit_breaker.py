@@ -161,7 +161,11 @@ class CircuitBreaker:
         elif new_state == CircuitBreakerState.CLOSED:
             self.stats.failures = 0
 
-        logger.debug("circuit_breaker_state_changed", old_state=old_state.value, new_state=new_state.value)
+        logger.debug(
+            "circuit_breaker_state_changed",
+            old_state=old_state.value,
+            new_state=new_state.value,
+        )
 
     def _should_attempt_reset(self) -> bool:
         """Check if circuit breaker should attempt to reset."""

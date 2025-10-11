@@ -41,36 +41,56 @@ class TeamsConfigUpdate(BaseModel):
     enabled: Optional[bool] = Field(None, description="Enable Teams integration")
     webhook_url: Optional[str] = Field(None, description="Teams webhook URL")
     channel_name: Optional[str] = Field(None, description="Teams channel name")
-    bot_name: Optional[constr(min_length=1, max_length=50)] = Field(None, description="Bot display name")
+    bot_name: Optional[str] = Field(
+        None, min_length=1, max_length=50, description="Bot display name"
+    )
     avatar_url: Optional[str] = Field(None, description="Bot avatar URL")
-    enable_conversation_learning: Optional[bool] = Field(None, description="Enable conversation learning")
-    enable_job_notifications: Optional[bool] = Field(None, description="Enable job status notifications")
-    monitored_tws_instances: Optional[List[str]] = Field(None, description="List of monitored TWS instances")
-    job_status_filters: Optional[List[str]] = Field(None, description="Job status filters for notifications")
-    notification_types: Optional[List[str]] = Field(None, description="Types of notifications to send")
+    enable_conversation_learning: Optional[bool] = Field(
+        None, description="Enable conversation learning"
+    )
+    enable_job_notifications: Optional[bool] = Field(
+        None, description="Enable job status notifications"
+    )
+    monitored_tws_instances: Optional[List[str]] = Field(
+        None, description="List of monitored TWS instances"
+    )
+    job_status_filters: Optional[List[str]] = Field(
+        None, description="Job status filters for notifications"
+    )
+    notification_types: Optional[List[str]] = Field(
+        None, description="Types of notifications to send"
+    )
 
 
 class AdminConfigResponse(BaseModel):
     """Admin configuration response model."""
 
-    teams: Dict[str, Any] = Field(default_factory=dict, description="Teams integration configuration")
+    teams: Dict[str, Any] = Field(
+        default_factory=dict, description="Teams integration configuration"
+    )
     tws: Dict[str, Any] = Field(default_factory=dict, description="TWS configuration")
-    system: Dict[str, Any] = Field(default_factory=dict, description="System configuration")
-    last_updated: str = Field(default_factory=lambda: datetime.now().isoformat(), description="Last update timestamp")
+    system: Dict[str, Any] = Field(
+        default_factory=dict, description="System configuration"
+    )
+    last_updated: str = Field(
+        default_factory=lambda: datetime.now().isoformat(),
+        description="Last update timestamp",
+    )
 
 
 class TeamsHealthResponse(BaseModel):
     """Teams integration health check response."""
 
-    status: Dict[str, Any] = Field(default_factory=dict, description="Teams integration status")
-    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat(), description="Health check timestamp")
+    status: Dict[str, Any] = Field(
+        default_factory=dict, description="Teams integration status"
+    )
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now().isoformat(),
+        description="Health check timestamp",
+    )
 
 
-@admin_router.get(
-    "/",
-    response_class=HTMLResponse,
-    summary="Admin Dashboard"
-)
+@admin_router.get("/", response_class=HTMLResponse, summary="Admin Dashboard")
 async def admin_dashboard(request: Request) -> HTMLResponse:
     """Serve the admin configuration dashboard.
 
@@ -88,7 +108,7 @@ async def admin_dashboard(request: Request) -> HTMLResponse:
         logger.error(f"Failed to render admin dashboard: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to render admin dashboard"
+            detail="Failed to render admin dashboard",
         ) from e
 
 
@@ -96,7 +116,7 @@ async def admin_dashboard(request: Request) -> HTMLResponse:
     "/config",
     summary="Get Admin Configuration",
     response_model=AdminConfigResponse,
-    dependencies=[Depends(verify_admin_credentials)]
+    dependencies=[Depends(verify_admin_credentials)],
 )
 async def get_admin_config(request: Request) -> AdminConfigResponse:
     """Get current admin configuration.
@@ -106,7 +126,7 @@ async def get_admin_config(request: Request) -> AdminConfigResponse:
     """
     try:
         # Get Teams configuration
-        teams_integration = await get_teams_integration()
+        teams_integration = get_teams_integration()
         teams_config = teams_integration.config
 
         teams_config_dict = {
@@ -119,7 +139,7 @@ async def get_admin_config(request: Request) -> AdminConfigResponse:
             "enable_job_notifications": teams_config.enable_job_notifications,
             "monitored_tws_instances": teams_config.monitored_tws_instances,
             "job_status_filters": teams_config.job_status_filters,
-            "notification_types": teams_config.notification_types
+            "notification_types": teams_config.notification_types,
         }
 
         # Get TWS configuration (simplified)
@@ -128,7 +148,7 @@ async def get_admin_config(request: Request) -> AdminConfigResponse:
             "port": getattr(settings, "TWS_PORT", None),
             "user": getattr(settings, "TWS_USER", None),
             "mock_mode": getattr(settings, "TWS_MOCK_MODE", False),
-            "monitored_instances": getattr(settings, "MONITORED_TWS_INSTANCES", [])
+            "monitored_instances": getattr(settings, "MONITORED_TWS_INSTANCES", []),
         }
 
         # Get system configuration
@@ -136,21 +156,21 @@ async def get_admin_config(request: Request) -> AdminConfigResponse:
             "llm_endpoint": getattr(settings, "LLM_ENDPOINT", None),
             "admin_username": getattr(settings, "ADMIN_USERNAME", None),
             "debug": getattr(settings, "DEBUG", False),
-            "environment": getattr(settings, "APP_ENV", "development")
+            "environment": getattr(settings, "APP_ENV", "development"),
         }
 
         return AdminConfigResponse(
             teams=teams_config_dict,
             tws=tws_config,
             system=system_config,
-            last_updated=datetime.now().isoformat()
+            last_updated=datetime.now().isoformat(),
         )
 
     except Exception as e:
         logger.error(f"Failed to get admin configuration: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get configuration: {str(e)}"
+            detail=f"Failed to get configuration: {str(e)}",
         ) from e
 
 
@@ -158,11 +178,10 @@ async def get_admin_config(request: Request) -> AdminConfigResponse:
     "/config/teams",
     summary="Update Teams Configuration",
     response_model=AdminConfigResponse,
-    dependencies=[Depends(verify_admin_credentials)]
+    dependencies=[Depends(verify_admin_credentials)],
 )
 async def update_teams_config(
-    request: Request,
-    config_update: TeamsConfigUpdate
+    request: Request, config_update: TeamsConfigUpdate
 ) -> AdminConfigResponse:
     """Update Microsoft Teams integration configuration.
 
@@ -171,7 +190,7 @@ async def update_teams_config(
     """
     try:
         # Get current Teams integration
-        teams_integration = await get_teams_integration()
+        teams_integration = get_teams_integration()
         current_config = teams_integration.config
 
         # Update configuration with provided values
@@ -196,7 +215,7 @@ async def update_teams_config(
             "enable_job_notifications": current_config.enable_job_notifications,
             "monitored_tws_instances": current_config.monitored_tws_instances,
             "job_status_filters": current_config.job_status_filters,
-            "notification_types": current_config.notification_types
+            "notification_types": current_config.notification_types,
         }
 
         # Get other configuration sections
@@ -205,28 +224,28 @@ async def update_teams_config(
             "port": getattr(settings, "TWS_PORT", None),
             "user": getattr(settings, "TWS_USER", None),
             "mock_mode": getattr(settings, "TWS_MOCK_MODE", False),
-            "monitored_instances": getattr(settings, "MONITORED_TWS_INSTANCES", [])
+            "monitored_instances": getattr(settings, "MONITORED_TWS_INSTANCES", []),
         }
 
         system_config = {
             "llm_endpoint": getattr(settings, "LLM_ENDPOINT", None),
             "admin_username": getattr(settings, "ADMIN_USERNAME", None),
             "debug": getattr(settings, "DEBUG", False),
-            "environment": getattr(settings, "APP_ENV", "development")
+            "environment": getattr(settings, "APP_ENV", "development"),
         }
 
         return AdminConfigResponse(
             teams=teams_config_dict,
             tws=tws_config,
             system=system_config,
-            last_updated=datetime.now().isoformat()
+            last_updated=datetime.now().isoformat(),
         )
 
     except Exception as e:
         logger.error(f"Failed to update Teams configuration: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update configuration: {str(e)}"
+            detail=f"Failed to update configuration: {str(e)}",
         ) from e
 
 
@@ -234,11 +253,10 @@ async def update_teams_config(
     "/config/teams/health",
     summary="Get Teams Integration Health",
     response_model=TeamsHealthResponse,
-    dependencies=[Depends(verify_admin_credentials)]
+    dependencies=[Depends(verify_admin_credentials)],
 )
 async def get_teams_health(
-    request: Request,
-    teams_integration: TeamsIntegration = teams_integration_dependency
+    request: Request, teams_integration: TeamsIntegration = teams_integration_dependency
 ) -> TeamsHealthResponse:
     """Get Microsoft Teams integration health status.
 
@@ -248,26 +266,25 @@ async def get_teams_health(
     try:
         health_status = await teams_integration.health_check()
         return TeamsHealthResponse(
-            status=health_status,
-            timestamp=datetime.now().isoformat()
+            status=health_status, timestamp=datetime.now().isoformat()
         )
     except Exception as e:
         logger.error(f"Failed to get Teams health status: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get Teams health status: {str(e)}"
+            detail=f"Failed to get Teams health status: {str(e)}",
         ) from e
 
 
 @admin_router.post(
     "/config/teams/test-notification",
     summary="Test Teams Notification",
-    dependencies=[Depends(verify_admin_credentials)]
+    dependencies=[Depends(verify_admin_credentials)],
 )
 async def test_teams_notification(
     request: Request,
     message: str = "Test notification from Resync",
-    teams_integration: TeamsIntegration = teams_integration_dependency
+    teams_integration: TeamsIntegration = teams_integration_dependency,
 ) -> Dict[str, Any]:
     """Send test notification to Microsoft Teams.
 
@@ -283,8 +300,8 @@ async def test_teams_notification(
             severity="info",
             additional_data={
                 "test_timestamp": datetime.now().isoformat(),
-                "instance": "admin_test"
-            }
+                "instance": "admin_test",
+            },
         )
 
         # Send notification
@@ -294,31 +311,30 @@ async def test_teams_notification(
             return {
                 "status": "success",
                 "message": "Test notification sent successfully",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
         else:
             return {
                 "status": "error",
                 "message": "Failed to send test notification",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
     except Exception as e:
         logger.error(f"Failed to send test Teams notification: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to send test notification: {str(e)}"
+            detail=f"Failed to send test notification: {str(e)}",
         ) from e
 
 
 @admin_router.get(
     "/status",
     summary="Get Admin System Status",
-    dependencies=[Depends(verify_admin_credentials)]
+    dependencies=[Depends(verify_admin_credentials)],
 )
 async def get_admin_status(
-    request: Request,
-    tws_client: ITWSClient = tws_client_dependency
+    request: Request, tws_client: ITWSClient = tws_client_dependency
 ) -> Dict[str, Any]:
     """Get overall system status for administration.
 
@@ -333,27 +349,27 @@ async def get_admin_status(
             tws_status = "error"
 
         # Get Teams integration status
-        teams_integration = await get_teams_integration()
-        teams_health = await teams_integration.health_check()
+        teams_integration = get_teams_integration()
+        teams_health = teams_integration.health_check()
 
         return {
             "system": {
                 "status": "operational",
                 "timestamp": datetime.now().isoformat(),
                 "environment": getattr(settings, "APP_ENV", "development"),
-                "debug": getattr(settings, "DEBUG", False)
+                "debug": getattr(settings, "DEBUG", False),
             },
             "tws": {
                 "status": tws_status,
-                "host": getattr(settings, "TWS_HOST", "not_configured")
+                "host": getattr(settings, "TWS_HOST", "not_configured"),
             },
             "teams": teams_health,
-            "version": getattr(settings, "PROJECT_VERSION", "unknown")
+            "version": getattr(settings, "PROJECT_VERSION", "unknown"),
         }
 
     except Exception as e:
         logger.error(f"Failed to get admin status: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get system status: {str(e)}"
+            detail=f"Failed to get system status: {str(e)}",
         ) from e

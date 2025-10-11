@@ -16,7 +16,7 @@ class ResyncException(Exception):
         user_friendly_message: Optional[str] = None,
         troubleshooting_hints: Optional[list[str]] = None,
         details: Optional[Dict[str, Any]] = None,
-        original_exception: Optional[Exception] = None
+        original_exception: Optional[Exception] = None,
     ):
         """
         Initialize the exception with enhanced error information.
@@ -36,8 +36,12 @@ class ResyncException(Exception):
         self.error_code = error_code or self._generate_error_code()
         self.error_category = error_category or self._get_default_category()
         self.severity = severity or self._get_default_severity()
-        self.user_friendly_message = user_friendly_message or self._get_default_user_message()
-        self.troubleshooting_hints = troubleshooting_hints or self._get_default_troubleshooting_hints()
+        self.user_friendly_message = (
+            user_friendly_message or self._get_default_user_message()
+        )
+        self.troubleshooting_hints = (
+            troubleshooting_hints or self._get_default_troubleshooting_hints()
+        )
         self.details = details or {}
         self.original_exception = original_exception
         self.timestamp = datetime.utcnow()
@@ -47,8 +51,9 @@ class ResyncException(Exception):
         class_name = self.__class__.__name__
         # Convert CamelCase to UPPER_SNAKE_CASE
         import re
-        s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', class_name)
-        return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).upper()
+
+        s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", class_name)
+        return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).upper()
 
     def _get_default_category(self) -> str:
         """Get the default error category for this exception type."""
@@ -77,7 +82,7 @@ class ResyncException(Exception):
             "troubleshooting_hints": self.troubleshooting_hints,
             "details": self.details,
             "timestamp": self.timestamp.isoformat(),
-            "exception_type": self.__class__.__name__
+            "exception_type": self.__class__.__name__,
         }
 
 
@@ -137,7 +142,7 @@ class TWSConnectionError(ResyncException):
         return [
             "Check if the TWS service is running.",
             "Verify the TWS connection settings.",
-            "Ensure network connectivity to the TWS server."
+            "Ensure network connectivity to the TWS server.",
         ]
 
 
@@ -249,7 +254,7 @@ class LLMError(ResyncException):
         return [
             "Check if the LLM service is available.",
             "Verify the LLM API credentials.",
-            "Ensure the LLM endpoint is correctly configured."
+            "Ensure the LLM endpoint is correctly configured.",
         ]
 
 
@@ -308,7 +313,7 @@ class DatabaseError(ResyncException):
         return [
             "Check database connectivity.",
             "Verify database credentials.",
-            "Ensure the database service is running."
+            "Ensure the database service is running.",
         ]
 
 
@@ -337,12 +342,7 @@ class NotFoundError(ResyncException):
     def _get_default_user_message(self) -> str:
         return "The requested resource was not found."
 
-    def __init__(
-        self,
-        resource: str,
-        identifier: Optional[str] = None,
-        **kwargs
-    ):
+    def __init__(self, resource: str, identifier: Optional[str] = None, **kwargs):
         """
         Initialize NotFoundError with resource information.
 
@@ -359,11 +359,7 @@ class NotFoundError(ResyncException):
         if identifier:
             details["identifier"] = identifier
 
-        super().__init__(
-            message=message,
-            details=details,
-            **kwargs
-        )
+        super().__init__(message=message, details=details, **kwargs)
 
 
 # Exception factory for creating exceptions with consistent patterns
@@ -375,7 +371,7 @@ class ExceptionFactory:
         field: str,
         message: str,
         value: Optional[Any] = None,
-        error_code: Optional[str] = None
+        error_code: Optional[str] = None,
     ) -> ParsingError:
         """Create a validation error with field information."""
         details = {"field": field}
@@ -385,40 +381,36 @@ class ExceptionFactory:
         return ParsingError(
             message=f"Validation error in field '{field}': {message}",
             error_code=error_code or "VALIDATION_ERROR",
-            details=details
+            details=details,
         )
 
     @staticmethod
     def create_resource_not_found(
         resource: str,
         identifier: Optional[str] = None,
-        error_code: Optional[str] = None
+        error_code: Optional[str] = None,
     ) -> NotFoundError:
         """Create a resource not found error."""
         return NotFoundError(
             resource=resource,
             identifier=identifier,
-            error_code=error_code or "RESOURCE_NOT_FOUND"
+            error_code=error_code or "RESOURCE_NOT_FOUND",
         )
 
     @staticmethod
     def create_external_service_error(
-        service: str,
-        message: str,
-        error_code: Optional[str] = None
+        service: str, message: str, error_code: Optional[str] = None
     ) -> TWSConnectionError:
         """Create an external service error."""
         return TWSConnectionError(
             message=f"External service '{service}' error: {message}",
             error_code=error_code or f"{service.upper()}_SERVICE_ERROR",
-            details={"service": service}
+            details={"service": service},
         )
 
     @staticmethod
     def create_rate_limit_error(
-        limit: int,
-        window: str,
-        error_code: Optional[str] = None
+        limit: int, window: str, error_code: Optional[str] = None
     ) -> ResyncException:
         """Create a rate limit error."""
         return ResyncException(
@@ -427,5 +419,5 @@ class ExceptionFactory:
             error_category="RATE_LIMIT",
             severity="MEDIUM",
             user_friendly_message="Too many requests. Please try again later.",
-            details={"limit": limit, "window": window}
+            details={"limit": limit, "window": window},
         )

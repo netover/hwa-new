@@ -37,16 +37,22 @@ class AsyncTTLCache:
     - Snapshot and restore functionality for persistence
     - LRU eviction when cache bounds are exceeded
     - Production-grade error handling and logging
-    
+
     The cache uses sharding to distribute entries across multiple locked segments,
     reducing contention under high concurrency. Each shard has its own asyncio.Lock
     to ensure thread-safe access while maximizing parallelism.
     """
 
     def __init__(
-        self, ttl_seconds: int = 60, cleanup_interval: int = 30, num_shards: int = 16,
-        enable_wal: bool = False, wal_path: Optional[str] = None,
-        max_entries: int = 100000, max_memory_mb: int = 100, paranoia_mode: bool = False
+        self,
+        ttl_seconds: int = 60,
+        cleanup_interval: int = 30,
+        num_shards: int = 16,
+        enable_wal: bool = False,
+        wal_path: Optional[str] = None,
+        max_entries: int = 100000,
+        max_memory_mb: int = 100,
+        paranoia_mode: bool = False,
     ):
         """
         Initialize the async cache.
@@ -81,21 +87,59 @@ class AsyncTTLCache:
                 from resync.settings import settings
 
                 # Use constructor parameters if provided, otherwise fall back to settings
-                self.ttl_seconds = ttl_seconds if ttl_seconds != 60 else getattr(settings, "ASYNC_CACHE_TTL", ttl_seconds)
-                self.cleanup_interval = cleanup_interval if cleanup_interval != 30 else getattr(settings, "ASYNC_CACHE_CLEANUP_INTERVAL", cleanup_interval)
-                self.num_shards = num_shards if num_shards != 16 else getattr(settings, "ASYNC_CACHE_NUM_SHARDS", num_shards)
+                self.ttl_seconds = (
+                    ttl_seconds
+                    if ttl_seconds != 60
+                    else getattr(settings, "ASYNC_CACHE_TTL", ttl_seconds)
+                )
+                self.cleanup_interval = (
+                    cleanup_interval
+                    if cleanup_interval != 30
+                    else getattr(
+                        settings, "ASYNC_CACHE_CLEANUP_INTERVAL", cleanup_interval
+                    )
+                )
+                self.num_shards = (
+                    num_shards
+                    if num_shards != 16
+                    else getattr(settings, "ASYNC_CACHE_NUM_SHARDS", num_shards)
+                )
                 # Get WAL settings
-                self.enable_wal = enable_wal if enable_wal != False else getattr(settings, "ASYNC_CACHE_ENABLE_WAL", enable_wal)
-                self.wal_path = wal_path if wal_path is not None else getattr(settings, "ASYNC_CACHE_WAL_PATH", wal_path)
+                self.enable_wal = (
+                    enable_wal
+                    if enable_wal != False
+                    else getattr(settings, "ASYNC_CACHE_ENABLE_WAL", enable_wal)
+                )
+                self.wal_path = (
+                    wal_path
+                    if wal_path is not None
+                    else getattr(settings, "ASYNC_CACHE_WAL_PATH", wal_path)
+                )
                 # Get bounds settings
-                self.max_entries = max_entries if max_entries != 100000 else getattr(settings, "ASYNC_CACHE_MAX_ENTRIES", max_entries)
-                self.max_memory_mb = max_memory_mb if max_memory_mb != 100 else getattr(settings, "ASYNC_CACHE_MAX_MEMORY_MB", max_memory_mb)
-                self.paranoia_mode = paranoia_mode if paranoia_mode != False else getattr(settings, "ASYNC_CACHE_PARANOIA_MODE", paranoia_mode)
-                
+                self.max_entries = (
+                    max_entries
+                    if max_entries != 100000
+                    else getattr(settings, "ASYNC_CACHE_MAX_ENTRIES", max_entries)
+                )
+                self.max_memory_mb = (
+                    max_memory_mb
+                    if max_memory_mb != 100
+                    else getattr(settings, "ASYNC_CACHE_MAX_MEMORY_MB", max_memory_mb)
+                )
+                self.paranoia_mode = (
+                    paranoia_mode
+                    if paranoia_mode != False
+                    else getattr(settings, "ASYNC_CACHE_PARANOIA_MODE", paranoia_mode)
+                )
+
                 # In paranoia mode, lower the bounds significantly
                 if self.paranoia_mode:
-                    self.max_entries = min(self.max_entries, 10000)  # Max 10K entries in paranoia mode
-                    self.max_memory_mb = min(self.max_memory_mb, 10)  # Max 10MB in paranoia mode
+                    self.max_entries = min(
+                        self.max_entries, 10000
+                    )  # Max 10K entries in paranoia mode
+                    self.max_memory_mb = min(
+                        self.max_memory_mb, 10
+                    )  # Max 10MB in paranoia mode
 
                 log_with_correlation(
                     logging.DEBUG,
@@ -120,7 +164,9 @@ class AsyncTTLCache:
                 )
 
             # Initialize cache shards and locks regardless of settings loading outcome
-            self.shards: List[Dict[str, CacheEntry]] = [{} for _ in range(self.num_shards)]
+            self.shards: List[Dict[str, CacheEntry]] = [
+                {} for _ in range(self.num_shards)
+            ]
             self.shard_locks = [asyncio.Lock() for _ in range(self.num_shards)]
             self.cleanup_task: Optional[asyncio.Task[None]] = None
             # Start with is_running=False so _start_cleanup_task can properly start the task
@@ -187,7 +233,7 @@ class AsyncTTLCache:
     async def _replay_wal_on_startup(self) -> int:
         """
         Replay the WAL log on cache startup to restore state.
-        
+
         Returns:
             Number of operations replayed
         """
@@ -206,10 +252,10 @@ class AsyncTTLCache:
             # Handle special case for hash collision more deterministically
             if key_hash == 0:
                 key_hash = sum(ord(c) for c in str(key)) + len(str(key))
-            
+
             # Use modulo to ensure consistent distribution
             shard_index = abs(key_hash) % self.num_shards
-            
+
             # Double-check bounds (defense in depth) with deterministic fallback
             if not (0 <= shard_index < self.num_shards):
                 # Use a deterministic fallback based on key content
@@ -219,7 +265,9 @@ class AsyncTTLCache:
         except (OverflowError, ValueError) as e:
             # Hash computation failed - use deterministic fallback
             # Use a more robust approach that considers more of the key content
-            key_sum = sum(ord(c) for c in str(key)[:20])  # Use first 20 chars for better distribution
+            key_sum = sum(
+                ord(c) for c in str(key)[:20]
+            )  # Use first 20 chars for better distribution
             shard_index = key_sum % self.num_shards
             logger.warning(
                 f"Hash computation failed for key {repr(key)}: {e}, using fallback shard {shard_index}"
@@ -234,7 +282,7 @@ class AsyncTTLCache:
         """
         if not shard:
             return None
-        
+
         # Find the entry with the oldest timestamp
         lru_key = min(shard.keys(), key=lambda k: shard[k].timestamp)
         return lru_key
@@ -321,7 +369,7 @@ class AsyncTTLCache:
 
     async def _remove_expired_entries(self) -> None:
         """Remove expired entries from cache using parallel processing.
-        
+
         This method efficiently removes all expired cache entries across all shards
         by processing each shard concurrently. It maintains thread safety by
         acquiring each shard's lock before modifying its contents.
@@ -332,14 +380,14 @@ class AsyncTTLCache:
 
         current_time = time()
         total_removed = 0
-        
+
         # Function to process a single shard
         async def process_shard(i):
             """Process a single shard to remove expired entries.
-            
+
             Args:
                 i: Index of the shard to process
-                
+
             Returns:
                 Number of entries removed from this shard
             """
@@ -364,7 +412,7 @@ class AsyncTTLCache:
         shard_indices = list(range(self.num_shards))
         tasks = [process_shard(i) for i in shard_indices]
         results = await asyncio.gather(*tasks)
-        
+
         total_removed = sum(results)
 
         if total_removed > 0:
@@ -387,7 +435,7 @@ class AsyncTTLCache:
 
         Args:
             key: Cache key to retrieve (will be validated/normalized)
-            
+
         Returns:
             Cached value if exists and not expired, None otherwise
 
@@ -401,14 +449,19 @@ class AsyncTTLCache:
 
         # Ensure cleanup task is running
         self._start_cleanup_task()
-        
+
         # Perform WAL replay if needed on first use
-        if hasattr(self, '_needs_wal_replay_on_first_use') and self._needs_wal_replay_on_first_use:
+        if (
+            hasattr(self, "_needs_wal_replay_on_first_use")
+            and self._needs_wal_replay_on_first_use
+        ):
             # Remove the flag to prevent replay on every operation
-            self._needs_wal_replay_on_first_use = False 
+            self._needs_wal_replay_on_first_use = False
             # Perform the WAL replay
             replayed_ops = await self._replay_wal_on_startup()
-            logger.info("replayed_operations_from_WAL_on_first_use", replayed_ops=replayed_ops)
+            logger.info(
+                "replayed_operations_from_WAL_on_first_use", replayed_ops=replayed_ops
+            )
 
         try:
             # Validate and normalize key
@@ -555,14 +608,19 @@ class AsyncTTLCache:
 
         # Ensure cleanup task is running
         self._start_cleanup_task()
-        
+
         # Perform WAL replay if needed on first use
-        if hasattr(self, '_needs_wal_replay_on_first_use') and self._needs_wal_replay_on_first_use:
+        if (
+            hasattr(self, "_needs_wal_replay_on_first_use")
+            and self._needs_wal_replay_on_first_use
+        ):
             # Remove the flag to prevent replay on every operation
-            self._needs_wal_replay_on_first_use = False 
+            self._needs_wal_replay_on_first_use = False
             # Perform the WAL replay
             replayed_ops = await self._replay_wal_on_startup()
-            logger.info("replayed_operations_from_WAL_on_first_use", replayed_ops=replayed_ops)
+            logger.info(
+                "replayed_operations_from_WAL_on_first_use", replayed_ops=replayed_ops
+            )
 
         try:
             # FUZZING-HARDENED INPUT VALIDATION
@@ -574,7 +632,7 @@ class AsyncTTLCache:
                     operation=WalOperationType.SET,
                     key=key,
                     value=value,
-                    ttl=ttl_seconds
+                    ttl=ttl_seconds,
                 )
                 log_success = await self.wal.log_operation(wal_entry)
                 if not log_success:
@@ -596,12 +654,16 @@ class AsyncTTLCache:
                 # Check bounds after adding - if we're still over the limit, start evicting
                 # but limit the number of evictions to avoid infinite loops
                 eviction_count = 0
-                max_evictions = self.num_shards * 2  # Prevent infinite loop, try at most 2 per shard
-                
+                max_evictions = (
+                    self.num_shards * 2
+                )  # Prevent infinite loop, try at most 2 per shard
+
                 while not self._check_cache_bounds() and eviction_count < max_evictions:
                     # Cache is too large, trigger LRU eviction
                     lru_key = self._get_lru_key(shard)
-                    if lru_key and lru_key != key:  # Don't evict the entry we just added
+                    if (
+                        lru_key and lru_key != key
+                    ):  # Don't evict the entry we just added
                         # Remove LRU entry from this shard
                         del shard[lru_key]
                         runtime_metrics.cache_evictions.increment()
@@ -612,7 +674,7 @@ class AsyncTTLCache:
                         )
                         eviction_count += 1
                     elif lru_key == key:
-                        # If the key we just added is the LRU (happens with size 1 cache), 
+                        # If the key we just added is the LRU (happens with size 1 cache),
                         # we need to remove it and raise error
                         del shard[key]
                         raise ValueError(
@@ -624,7 +686,7 @@ class AsyncTTLCache:
                         for i, other_shard in enumerate(self.shards):
                             if i == self.shards.index(shard):
                                 continue  # Skip current shard since we just checked it
-                                
+
                             if not self._check_cache_bounds():
                                 other_lock = self.shard_locks[i]
                                 async with other_lock:
@@ -640,12 +702,16 @@ class AsyncTTLCache:
                                         eviction_count += 1
                                         eviction_found = True
                                         break  # Only evict one per iteration
-                        
+
                         if not eviction_found:
                             # If we couldn't find anything to evict, check if it's because we're in a tiny cache
                             if eviction_count == 0 and self.max_entries < 2:
                                 # For tiny caches, check if we're trying to add a second item
-                                if len(shard) > 1 or any(len(s) > 0 for j, s in enumerate(self.shards) if j != self.shards.index(shard)):
+                                if len(shard) > 1 or any(
+                                    len(s) > 0
+                                    for j, s in enumerate(self.shards)
+                                    if j != self.shards.index(shard)
+                                ):
                                     # Remove the newly added entry since it makes us exceed bounds
                                     del shard[key]
                                     raise ValueError(
@@ -781,20 +847,22 @@ class AsyncTTLCache:
         )
 
         # Perform WAL replay if needed on first use
-        if hasattr(self, '_needs_wal_replay_on_first_use') and self._needs_wal_replay_on_first_use:
+        if (
+            hasattr(self, "_needs_wal_replay_on_first_use")
+            and self._needs_wal_replay_on_first_use
+        ):
             # Remove the flag to prevent replay on every operation
-            self._needs_wal_replay_on_first_use = False 
+            self._needs_wal_replay_on_first_use = False
             # Perform the WAL replay
             replayed_ops = await self._replay_wal_on_startup()
-            logger.info("replayed_operations_from_WAL_on_first_use", replayed_ops=replayed_ops)
+            logger.info(
+                "replayed_operations_from_WAL_on_first_use", replayed_ops=replayed_ops
+            )
 
         try:
             # If WAL is enabled, log the operation before applying it to the cache
             if self.enable_wal and self.wal:
-                wal_entry = WalEntry(
-                    operation=WalOperationType.DELETE,
-                    key=key
-                )
+                wal_entry = WalEntry(operation=WalOperationType.DELETE, key=key)
                 log_success = await self.wal.log_operation(wal_entry)
                 if not log_success:
                     logger.error("failed_to_log_DELETE_operation_to_WAL", key=key)
@@ -977,9 +1045,9 @@ class AsyncTTLCache:
 
     def size(self) -> int:
         """Get the current number of items in cache.
-        
+
         Note: This method provides an approximate count as it doesn't acquire locks
-        for each shard to avoid blocking. In high-concurrency scenarios, the count 
+        for each shard to avoid blocking. In high-concurrency scenarios, the count
         may be slightly inaccurate but sufficient for bounds checking purposes.
         """
         # Return approximate size without blocking on locks for performance
@@ -996,14 +1064,14 @@ class AsyncTTLCache:
             True if within bounds, False if too large
         """
         current_size = self.size()
-        
+
         # Check item count bounds
         if not self._check_item_count_bounds(current_size):
             return False
 
         # Check memory usage bounds
         return self._check_memory_usage_bounds(current_size)
-        
+
     def _check_item_count_bounds(self, current_size: int) -> bool:
         """Check if item count is within safe bounds."""
         max_safe_size = self.max_entries  # Use configurable max entries
@@ -1024,19 +1092,20 @@ class AsyncTTLCache:
             )
             return False
         return True
-        
+
     def _check_memory_usage_bounds(self, current_size: int) -> bool:
         """Check if memory usage is within safe bounds."""
         # More accurate memory usage estimation
         try:
             import sys
+
             estimated_memory_mb = 0
-            
+
             # Calculate more accurate memory usage by sampling some entries
             sample_size = min(100, current_size)  # Sample up to 100 entries
             sample_count = 0
             sample_memory = 0
-            
+
             for shard in self.shards:
                 for key, entry in shard.items():
                     if sample_count >= sample_size:
@@ -1049,18 +1118,20 @@ class AsyncTTLCache:
                     sample_count += 1
                 if sample_count >= sample_size:
                     break
-            
+
             # Extrapolate to full cache size
             if sample_count > 0:
                 avg_memory_per_item = sample_memory / sample_count
-                estimated_memory_mb = (avg_memory_per_item * current_size) / (1024 * 1024)
+                estimated_memory_mb = (avg_memory_per_item * current_size) / (
+                    1024 * 1024
+                )
             else:
                 # Fallback to rough calculation if no items sampled
                 estimated_memory_mb = current_size * 0.5  # ~500KB per 1000 entries
-            
+
             # Use configurable max memory limit
             max_memory_mb = self.max_memory_mb
-            
+
             # Check if we're approaching the memory limit (80% threshold)
             memory_threshold = max_memory_mb * 0.8
             if estimated_memory_mb > memory_threshold:
@@ -1075,14 +1146,16 @@ class AsyncTTLCache:
                                 "estimated_mb": estimated_memory_mb,
                                 "current_size": current_size,
                                 "sample_count": sample_count,
-                                "avg_memory_per_item": avg_memory_per_item if sample_count > 0 else 0,
+                                "avg_memory_per_item": (
+                                    avg_memory_per_item if sample_count > 0 else 0
+                                ),
                                 "max_memory_mb": max_memory_mb,
                                 "threshold_reached": "80%",
                             }
                         )
-                    }
+                    },
                 )
-                
+
                 # Implement auto-tuning for cache parameters to reduce memory usage
                 if estimated_memory_mb > max_memory_mb:
                     logger.warning(
@@ -1095,11 +1168,13 @@ class AsyncTTLCache:
                                     "estimated_mb": estimated_memory_mb,
                                     "current_size": current_size,
                                     "sample_count": sample_count,
-                                    "avg_memory_per_item": avg_memory_per_item if sample_count > 0 else 0,
+                                    "avg_memory_per_item": (
+                                        avg_memory_per_item if sample_count > 0 else 0
+                                    ),
                                     "max_memory_mb": max_memory_mb,
                                 }
                             )
-                        }
+                        },
                     )
                     return False
         except Exception as e:
@@ -1114,7 +1189,7 @@ class AsyncTTLCache:
                             "error": str(e),
                         }
                     )
-                }
+                },
             )
             # If we can't estimate memory, just check the size limit
             max_safe_size = self.max_entries  # Use configurable max entries
@@ -1316,10 +1391,10 @@ class AsyncTTLCache:
     async def _health_check_functionality(self, correlation_id) -> Dict[str, Any]:
         """
         Perform basic functionality tests for the health check.
-        
+
         Args:
             correlation_id: Correlation ID for logging
-            
+
         Returns:
             Dict with status or error details if functionality tests fail
         """
@@ -1385,13 +1460,15 @@ class AsyncTTLCache:
                 "correlation_id": correlation_id.id,
                 "production_ready": False,
             }
-        
+
         return {"status": "ok"}
-    
-    async def _health_check_integrity(self, is_production: bool, correlation_id) -> Dict[str, Any]:
+
+    async def _health_check_integrity(
+        self, is_production: bool, correlation_id
+    ) -> Dict[str, Any]:
         """
         Perform cache bounds and integrity checks.
-        
+
         This method validates multiple aspects of cache integrity:
         1. Checks that cache size is valid
         2. Verifies that bounds checks pass
@@ -1401,27 +1478,27 @@ class AsyncTTLCache:
         Args:
             is_production: Whether the environment is production
             correlation_id: Correlation ID for logging
-            
+
         Returns:
             Dict with status or error details if integrity checks fail
         """
         current_size = self.size()
         if current_size < 0:
             return self._create_integrity_error_response(
-                "Invalid cache size", 
-                {"current_size": current_size}, 
-                correlation_id, 
-                False
+                "Invalid cache size",
+                {"current_size": current_size},
+                correlation_id,
+                False,
             )
 
         # Check bounds compliance
         bounds_ok = self._check_cache_bounds()
         if not bounds_ok:
             return self._create_integrity_warning_response(
-                "Cache bounds exceeded", 
-                {"current_size": current_size}, 
-                correlation_id, 
-                is_production
+                "Cache bounds exceeded",
+                {"current_size": current_size},
+                correlation_id,
+                is_production,
             )
 
         # 3. SHARD INTEGRITY CHECKS
@@ -1430,29 +1507,31 @@ class AsyncTTLCache:
 
         if total_from_shards != current_size:
             return self._create_integrity_error_response(
-                "Shard size inconsistency", 
+                "Shard size inconsistency",
                 {
                     "total_size": current_size,
                     "shard_total": total_from_shards,
-                    "shard_sizes": shard_sizes
-                }, 
-                correlation_id, 
-                False
+                    "shard_sizes": shard_sizes,
+                },
+                correlation_id,
+                False,
             )
 
         # Check for shard size imbalances (should be roughly equal)
         imbalance_check = self._check_shard_balance(shard_sizes, current_size)
         if imbalance_check:
             return imbalance_check
-            
+
         return {
-            "status": "ok", 
-            "current_size": current_size, 
-            "shard_sizes": shard_sizes, 
-            "bounds_ok": bounds_ok
+            "status": "ok",
+            "current_size": current_size,
+            "shard_sizes": shard_sizes,
+            "bounds_ok": bounds_ok,
         }
-        
-    def _create_integrity_error_response(self, error_msg: str, details: Dict, correlation_id, production_ready: bool) -> Dict[str, Any]:
+
+    def _create_integrity_error_response(
+        self, error_msg: str, details: Dict, correlation_id, production_ready: bool
+    ) -> Dict[str, Any]:
         """Create a standardized error response for integrity checks."""
         return {
             "status": "critical",
@@ -1460,10 +1539,12 @@ class AsyncTTLCache:
             "error": error_msg,
             "correlation_id": correlation_id.id,
             "production_ready": production_ready,
-            **details
+            **details,
         }
-        
-    def _create_integrity_warning_response(self, error_msg: str, details: Dict, correlation_id, is_production: bool) -> Dict[str, Any]:
+
+    def _create_integrity_warning_response(
+        self, error_msg: str, details: Dict, correlation_id, is_production: bool
+    ) -> Dict[str, Any]:
         """Create a standardized warning response for integrity checks."""
         return {
             "status": "warning",
@@ -1471,10 +1552,12 @@ class AsyncTTLCache:
             "error": error_msg,
             "correlation_id": correlation_id.id,
             "production_ready": is_production,  # Only critical in production
-            **details
+            **details,
         }
-        
-    def _check_shard_balance(self, shard_sizes: List[int], current_size: int) -> Optional[Dict[str, Any]]:
+
+    def _check_shard_balance(
+        self, shard_sizes: List[int], current_size: int
+    ) -> Optional[Dict[str, Any]]:
         """Check if shards are balanced."""
         if self.num_shards > 1:
             avg_shard_size = current_size / self.num_shards
@@ -1490,15 +1573,17 @@ class AsyncTTLCache:
                     "production_ready": True,  # Not critical but worth monitoring
                 }
         return None
-    
-    async def _health_check_background_tasks(self, is_production: bool, correlation_id) -> Dict[str, str]:
+
+    async def _health_check_background_tasks(
+        self, is_production: bool, correlation_id
+    ) -> Dict[str, str]:
         """
         Check the status of background tasks.
-        
+
         Args:
             is_production: Whether the environment is production
             correlation_id: Correlation ID for logging
-            
+
         Returns:
             Dict with status or error details if background task checks fail
         """
@@ -1516,16 +1601,16 @@ class AsyncTTLCache:
                 "correlation_id": correlation_id.id,
                 "production_ready": False,
             }
-        
+
         return {"status": "ok", "cleanup_status": cleanup_status}
-    
+
     async def _health_check_performance(self, correlation_id) -> Dict[str, Any]:
         """
         Check performance metrics.
-        
+
         Args:
             correlation_id: Correlation ID for logging
-            
+
         Returns:
             Dict with status or error details if performance checks fail
         """
@@ -1540,16 +1625,16 @@ class AsyncTTLCache:
                 "correlation_id": correlation_id.id,
                 "production_ready": False,
             }
-        
+
         return {"status": "ok", "hit_rate": hit_rate}
-    
+
     async def _health_check_config(self, correlation_id) -> Dict[str, Any]:
         """
         Check configuration validity.
-        
+
         Args:
             correlation_id: Correlation ID for logging
-            
+
         Returns:
             Dict with status or error details if config validation fails
         """
@@ -1558,9 +1643,7 @@ class AsyncTTLCache:
 
         # Check configuration validity
         if self.ttl_seconds <= 0 or self.ttl_seconds > 86400:
-            production_issues.append(
-                f"Invalid TTL configuration: {self.ttl_seconds}"
-            )
+            production_issues.append(f"Invalid TTL configuration: {self.ttl_seconds}")
 
         if self.num_shards <= 0 or self.num_shards > 256:
             production_issues.append(f"Invalid shard count: {self.num_shards}")
@@ -1574,7 +1657,7 @@ class AsyncTTLCache:
                 "correlation_id": correlation_id.id,
                 "production_ready": False,
             }
-        
+
         return {"status": "ok"}
 
     async def health_check(self) -> Dict[str, Any]:
@@ -1593,12 +1676,16 @@ class AsyncTTLCache:
             security_level = env_detector.get_security_level()
 
             # 1. BASIC FUNCTIONALITY TESTS
-            functionality_result = await self._health_check_functionality(correlation_id)
+            functionality_result = await self._health_check_functionality(
+                correlation_id
+            )
             if functionality_result["status"] != "ok":
                 return functionality_result
 
             # 2. CACHE BOUNDS AND INTEGRITY CHECKS
-            integrity_result = await self._health_check_integrity(is_production, correlation_id)
+            integrity_result = await self._health_check_integrity(
+                is_production, correlation_id
+            )
             if integrity_result["status"] != "ok":
                 return integrity_result
             current_size = integrity_result["current_size"]
@@ -1606,7 +1693,9 @@ class AsyncTTLCache:
             bounds_ok = integrity_result["bounds_ok"]
 
             # 4. BACKGROUND TASK HEALTH
-            bg_task_result = await self._health_check_background_tasks(is_production, correlation_id)
+            bg_task_result = await self._health_check_background_tasks(
+                is_production, correlation_id
+            )
             if bg_task_result["status"] != "ok":
                 return bg_task_result
             cleanup_status = bg_task_result["cleanup_status"]
@@ -1683,7 +1772,7 @@ class AsyncTTLCache:
         try:
             # Validate inputs
             validated_key, validated_ttl = self._validate_cache_inputs(key, value, ttl)
-            
+
             current_time = time()
             entry = CacheEntry(data=value, timestamp=current_time, ttl=validated_ttl)
 
@@ -1698,12 +1787,12 @@ class AsyncTTLCache:
                         runtime_metrics.cache_evictions.increment()
                     else:
                         break
-                        
+
                 if not self._check_cache_bounds():
                     for i, other_shard in enumerate(self.shards):
                         if i == self.shards.index(shard):
                             continue
-                            
+
                         if not self._check_cache_bounds():
                             other_lock = self.shard_locks[i]
                             async with other_lock:
@@ -1717,7 +1806,10 @@ class AsyncTTLCache:
                 # Final bounds check - reject if still over bounds
                 # This is crucial to ensure we never exceed the configured limits
                 if not self._check_cache_bounds():
-                    logger.warning("cache_bounds_exceeded_during_WAL_replay", key=repr(validated_key))
+                    logger.warning(
+                        "cache_bounds_exceeded_during_WAL_replay",
+                        key=repr(validated_key),
+                    )
                     return
 
                 # Only add the entry if we're within bounds
@@ -1760,7 +1852,7 @@ async def get_redis_client():
             socket_connect_timeout=5,
             socket_timeout=5,
             retry_on_timeout=True,
-            decode_responses=False
+            decode_responses=False,
         )
 
         return client

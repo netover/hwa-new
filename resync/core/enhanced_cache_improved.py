@@ -10,9 +10,11 @@ import psutil
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class CacheEntry:
     """Enhanced cache entry with metadata."""
+
     data: Any
     timestamp: float
     ttl: float
@@ -30,6 +32,7 @@ class CacheEntry:
         """Update last access time and increment access count."""
         self.last_access = time.time()
         self.access_count += 1
+
 
 class EnhancedAsyncCache:
     """
@@ -66,7 +69,9 @@ class EnhancedAsyncCache:
         self.default_ttl = ttl_seconds
         self.enable_encryption = enable_encryption
         self.key_prefix = key_prefix
-        self.memory_limit_mb = memory_limit_mb or (psutil.virtual_memory().available // (1024 * 1024) // 4)  # 25% of available
+        self.memory_limit_mb = memory_limit_mb or (
+            psutil.virtual_memory().available // (1024 * 1024) // 4
+        )  # 25% of available
 
         # Core data structures
         self._cache: OrderedDict[str, CacheEntry] = OrderedDict()
@@ -114,7 +119,7 @@ class EnhancedAsyncCache:
         key: str,
         value: Any,
         ttl_seconds: Optional[int] = None,
-        encrypt: Optional[bool] = None
+        encrypt: Optional[bool] = None,
     ) -> bool:
         """Set value in cache with optional encryption."""
         async with self._lock:
@@ -126,7 +131,7 @@ class EnhancedAsyncCache:
                 data=value,
                 timestamp=time.time(),
                 ttl=ttl,
-                size_bytes=self._estimate_size(value)
+                size_bytes=self._estimate_size(value),
             )
 
             # Check memory bounds before adding
@@ -168,7 +173,8 @@ class EnhancedAsyncCache:
         async with self._lock:
             current_time = time.time()
             expired_keys = [
-                key for key, entry in self._cache.items()
+                key
+                for key, entry in self._cache.items()
                 if entry.is_expired(current_time)
             ]
 
@@ -227,7 +233,9 @@ class EnhancedAsyncCache:
             elif isinstance(obj, (list, tuple)):
                 return sum(self._estimate_size(item) for item in obj) + 64  # Overhead
             elif isinstance(obj, dict):
-                return sum(len(k) + self._estimate_size(v) for k, v in obj.items()) + 128  # Overhead
+                return (
+                    sum(len(k) + self._estimate_size(v) for k, v in obj.items()) + 128
+                )  # Overhead
             else:
                 return 256  # Default object size
         except:
@@ -273,4 +281,3 @@ class EnhancedAsyncCache:
             evicted_mb += entry_mb
             del self._cache[oldest_key]
             self._evictions += 1
-

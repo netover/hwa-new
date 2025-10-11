@@ -9,7 +9,7 @@ from resync.services.tws_client_factory import (
     TWSClientFactory,
     TWSConfig,
     ProductionTWSClient,
-    TestTWSClient
+    TestTWSClient,
 )
 
 
@@ -23,28 +23,20 @@ class TestTWSConfig:
             port=1619,
             username="user",
             password="password",
-            mock_mode=True
+            mock_mode=True,
         )
         config.validate()  # Não deve lançar exceção
 
     def test_invalid_hostname(self):
         """Testa hostname inválido."""
-        config = TWSConfig(
-            hostname="",
-            port=1619,
-            username="user",
-            password="password"
-        )
+        config = TWSConfig(hostname="", port=1619, username="user", password="password")
         with pytest.raises(ValueError, match="TWS hostname is required"):
             config.validate()
 
     def test_invalid_port(self):
         """Testa porta inválida."""
         config = TWSConfig(
-            hostname="localhost",
-            port=70000,
-            username="user",
-            password="password"
+            hostname="localhost", port=70000, username="user", password="password"
         )
         with pytest.raises(ValueError, match="TWS port must be between 1 and 65535"):
             config.validate()
@@ -56,7 +48,7 @@ class TestTWSConfig:
             port=1619,
             username="user",
             password="password",
-            timeout=0
+            timeout=0,
         )
         with pytest.raises(ValueError, match="Timeout must be positive"):
             config.validate()
@@ -72,7 +64,7 @@ class TestTWSClientFactory:
             port=1619,
             username="user",
             password="password",
-            mock_mode=True
+            mock_mode=True,
         )
         client = TWSClientFactory.create(config)
         assert isinstance(client, TestTWSClient)
@@ -85,7 +77,7 @@ class TestTWSClientFactory:
             port=1619,
             username="produser",
             password="prodpass",
-            mock_mode=False
+            mock_mode=False,
         )
         client = TWSClientFactory.create(config)
         assert isinstance(client, ProductionTWSClient)
@@ -128,7 +120,7 @@ class TestTestTWSClient:
             port=1619,
             username="user",
             password="password",
-            mock_mode=True
+            mock_mode=True,
         )
 
     @pytest.fixture
@@ -166,7 +158,7 @@ class TestTestTWSClient:
         client.job_statuses["job456"] = {
             "job_id": "job456",
             "status": "RUNNING",
-            "progress": 50
+            "progress": 50,
         }
         status = await client.get_job_status("job456")
         assert status["status"] == "RUNNING"
@@ -209,7 +201,7 @@ class TestProductionTWSClient:
             port=1619,
             username="produser",
             password="prodpass",
-            mock_mode=False
+            mock_mode=False,
         )
 
     @pytest.fixture

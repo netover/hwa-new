@@ -11,9 +11,9 @@ from unittest.mock import Mock
 import pytest
 
 # Set test environment variables before any imports
-os.environ['APP_ENV'] = 'test'
-os.environ['ADMIN_USERNAME'] = 'test_admin'
-os.environ['ADMIN_PASSWORD'] = 'test_password'
+os.environ["APP_ENV"] = "test"
+os.environ["ADMIN_USERNAME"] = "test_admin"
+os.environ["ADMIN_PASSWORD"] = "test_password"
 
 # Add the project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -59,12 +59,16 @@ class TestUserIdentifierFunctions:
         identifier = get_user_identifier(mock_request)
         assert identifier == "127.0.0.1"
 
-    def test_get_user_identifier_with_authenticated_user(self, mock_authenticated_request):
+    def test_get_user_identifier_with_authenticated_user(
+        self, mock_authenticated_request
+    ):
         """Test getting user identifier from authenticated user."""
         identifier = get_user_identifier(mock_authenticated_request)
         assert identifier == "user:test_user"
 
-    def test_get_authenticated_user_identifier_with_user(self, mock_authenticated_request):
+    def test_get_authenticated_user_identifier_with_user(
+        self, mock_authenticated_request
+    ):
         """Test getting authenticated user identifier with user."""
         identifier = get_authenticated_user_identifier(mock_authenticated_request)
         assert identifier == "auth_user:test_user"
@@ -117,30 +121,33 @@ class TestRateLimitDecorators:
 
     def test_public_rate_limit_decorator(self):
         """Test public rate limit decorator."""
+
         @public_rate_limit
         def test_endpoint():
             return {"status": "ok"}
 
         # The decorator should be applied
-        assert hasattr(test_endpoint, '_rate_limit')
+        assert hasattr(test_endpoint, "_rate_limit")
 
     def test_authenticated_rate_limit_decorator(self):
         """Test authenticated rate limit decorator."""
+
         @authenticated_rate_limit
         def test_endpoint():
             return {"status": "ok"}
 
         # The decorator should be applied
-        assert hasattr(test_endpoint, '_rate_limit')
+        assert hasattr(test_endpoint, "_rate_limit")
 
     def test_critical_rate_limit_decorator(self):
         """Test critical rate limit decorator."""
+
         @critical_rate_limit
         def test_endpoint():
             return {"status": "ok"}
 
         # The decorator should be applied
-        assert hasattr(test_endpoint, '_rate_limit')
+        assert hasattr(test_endpoint, "_rate_limit")
 
 
 class TestErrorHandling:

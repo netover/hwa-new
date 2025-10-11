@@ -22,7 +22,9 @@ security_dependency = Depends(security)
 tws_client_dependency = Depends(get_tws_client)
 
 
-async def verify_admin_credentials(creds: HTTPBasicCredentials = security_dependency) -> HTTPBasicCredentials:
+async def verify_admin_credentials(
+    creds: HTTPBasicCredentials = security_dependency,
+) -> HTTPBasicCredentials:
     """
     Dependência para verificar as credenciais de administrador usando Basic Auth.
 
@@ -56,7 +58,9 @@ async def verify_admin_credentials(creds: HTTPBasicCredentials = security_depend
     correct_password = secrets.compare_digest(creds.password, admin_pass)
 
     if not (correct_username and correct_password):
-        logger.warning(f"Failed admin authentication attempt for user: {creds.username}")
+        logger.warning(
+            f"Failed admin authentication attempt for user: {creds.username}"
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciais de administrador inválidas ou ausentes.",
@@ -76,7 +80,7 @@ async def invalidate_tws_cache(
     scope: str = "system",  # 'system', 'jobs', 'workstations'
     tws_client: ITWSClient = tws_client_dependency,
     # Call verify_admin_credentials inside the function to handle rate limiting properly
-    creds: HTTPBasicCredentials = security_dependency
+    creds: HTTPBasicCredentials = security_dependency,
 ) -> dict[str, str]:
     """
     Invalidates the TWS data cache based on the specified scope.
@@ -90,7 +94,9 @@ async def invalidate_tws_cache(
     await verify_admin_credentials(creds)
 
     # Log the cache invalidation request for security auditing
-    logger.info(f"Cache invalidation requested by user '{creds.username}' with scope '{scope}'")
+    logger.info(
+        f"Cache invalidation requested by user '{creds.username}' with scope '{scope}'"
+    )
 
     if scope == "system":
         await tws_client.invalidate_system_cache()
@@ -103,7 +109,10 @@ async def invalidate_tws_cache(
     elif scope == "workstations":
         await tws_client.invalidate_all_workstations()
         logger.info("All workstations list cache invalidated successfully")
-        return {"status": "success", "detail": "All workstations list cache invalidated."}
+        return {
+            "status": "success",
+            "detail": "All workstations list cache invalidated.",
+        }
     else:
         logger.warning(f"Invalid scope '{scope}' provided for cache invalidation")
         raise HTTPException(

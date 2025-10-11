@@ -12,16 +12,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 # Set up minimal environment variables for testing
-os.environ['ADMIN_USERNAME'] = 'admin'
-os.environ['ADMIN_PASSWORD'] = 'test123'
+os.environ["ADMIN_USERNAME"] = "admin"
+os.environ["ADMIN_PASSWORD"] = "test123"
+
 
 def test_cors_development() -> None:
     """Test CORS in development environment."""
     print("🧪 Testing Development Environment...")
 
     # Set development environment
-    os.environ['APP_ENV'] = 'development'
-    os.environ['CORS_ENVIRONMENT'] = 'development'
+    os.environ["APP_ENV"] = "development"
+    os.environ["CORS_ENVIRONMENT"] = "development"
 
     from resync.api.middleware.cors_config import get_development_cors_config  # type: ignore[attr-defined]
     from resync.api.middleware.cors_middleware import create_cors_middleware
@@ -46,10 +47,13 @@ def test_cors_development() -> None:
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
 
     # Test preflight request
-    response = client.options("/test", headers={
-        "Origin": "http://localhost:3000",
-        "Access-Control-Request-Method": "GET"
-    })
+    response = client.options(
+        "/test",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
     assert "access-control-allow-origin" in response.headers
     assert "access-control-allow-methods" in response.headers
 
@@ -61,8 +65,8 @@ def test_cors_production() -> None:
     print("🧪 Testing Production Environment...")
 
     # Set production environment
-    os.environ['APP_ENV'] = 'production'
-    os.environ['CORS_ENVIRONMENT'] = 'production'
+    os.environ["APP_ENV"] = "production"
+    os.environ["CORS_ENVIRONMENT"] = "production"
 
     from resync.api.middleware.cors_config import get_production_cors_config  # type: ignore[attr-defined]
     from resync.api.middleware.cors_middleware import create_cors_middleware
@@ -71,8 +75,8 @@ def test_cors_production() -> None:
 
     # Create production CORS middleware with specific allowed origins
     prod_config = get_production_cors_config(  # type: ignore[attr-defined]
-        allowed_origins=['https://app.example.com', 'https://api.example.com'],
-        allow_credentials=False
+        allowed_origins=["https://app.example.com", "https://api.example.com"],
+        allow_credentials=False,
     )
     cors_middleware = create_cors_middleware(prod_config)
     app.add_middleware(cors_middleware)  # type: ignore[call-arg,arg-type]
@@ -103,8 +107,8 @@ def test_cors_test_environment() -> None:
     print("🧪 Testing Test Environment...")
 
     # Set test environment
-    os.environ['APP_ENV'] = 'test'
-    os.environ['CORS_ENVIRONMENT'] = 'test'
+    os.environ["APP_ENV"] = "test"
+    os.environ["CORS_ENVIRONMENT"] = "test"
 
     from resync.api.middleware.cors_config import get_test_cors_config  # type: ignore[attr-defined]
     from resync.api.middleware.cors_middleware import create_cors_middleware
@@ -123,7 +127,11 @@ def test_cors_test_environment() -> None:
     client = TestClient(app)
 
     # Test allowed origins from test config
-    test_origins = ["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:3000"]
+    test_origins = [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+    ]
 
     for origin in test_origins:
         response = client.get("/test", headers={"Origin": origin})
@@ -147,7 +155,7 @@ def test_cors_headers_validation() -> None:
         allowed_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allowed_headers=["Content-Type", "Authorization", "X-Requested-With"],
         allow_credentials=False,
-        max_age=86400
+        max_age=86400,
     )
 
     # Validate policy settings
@@ -174,8 +182,7 @@ def test_cors_violation_detection() -> None:
 
     # Create production policy with logging
     prod_config = get_production_cors_config(  # type: ignore[attr-defined]
-        allowed_origins=["https://app.example.com"],
-        allow_credentials=False
+        allowed_origins=["https://app.example.com"], allow_credentials=False
     )
     prod_config.log_violations = True
 
@@ -189,10 +196,10 @@ def test_cors_violation_detection() -> None:
     client = TestClient(app)
 
     # Test with unauthorized origin
-    response = client.get("/test", headers={
-        "Origin": "https://unauthorized.com",
-        "User-Agent": "TestClient/1.0"
-    })
+    response = client.get(
+        "/test",
+        headers={"Origin": "https://unauthorized.com", "User-Agent": "TestClient/1.0"},
+    )
 
     # Should still get response (middleware logs but doesn't block)
     assert response.status_code == 200
@@ -210,10 +217,7 @@ def test_dynamic_origin_patterns() -> None:
     policy = CORSPolicy(
         environment=Environment.DEVELOPMENT,
         allowed_origins=[],
-        origin_regex_patterns=[
-            r"https://.*\.example\.com$",
-            r"https://api\..*\.com$"
-        ]
+        origin_regex_patterns=[r"https://.*\.example\.com$", r"https://api\..*\.com$"],
     )
 
     # Test pattern matching
@@ -252,11 +256,14 @@ def test_preflight_request_handling() -> None:
     client = TestClient(app)
 
     # Test preflight request
-    response = client.options("/test", headers={
-        "Origin": "http://localhost:3000",
-        "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "Content-Type, Authorization"
-    })
+    response = client.options(
+        "/test",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type, Authorization",
+        },
+    )
 
     assert response.status_code == 200
     assert "access-control-allow-origin" in response.headers
@@ -308,6 +315,7 @@ def main() -> None:
     except Exception as e:
         print(f"❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

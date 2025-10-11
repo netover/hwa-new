@@ -3,12 +3,12 @@
 import json
 import pytest
 from resync.csp_validation import (
-    validate_csp_report, 
-    _is_safe_uri, 
+    validate_csp_report,
+    _is_safe_uri,
     _is_safe_directive_value,
     sanitize_csp_report,
     CSPValidationError,
-    validate_csp_report_legacy
+    validate_csp_report_legacy,
 )
 
 
@@ -30,12 +30,12 @@ class TestCSPValidation:
                 "column-number": 20,
                 "source-file": "https://example.com/script.js",
                 "status-code": 200,
-                "script-sample": ""
+                "script-sample": "",
             }
         }
-        
+
         report_json = json.dumps(report_data)
-        assert validate_csp_report(report_json.encode('utf-8')) is True
+        assert validate_csp_report(report_json.encode("utf-8")) is True
 
     def test_invalid_csp_report_missing_required_fields(self):
         """Test validation of CSP report missing required fields."""
@@ -45,9 +45,9 @@ class TestCSPValidation:
                 # Missing required fields: violated-directive, original-policy
             }
         }
-        
+
         report_json = json.dumps(report_data)
-        assert validate_csp_report(report_json.encode('utf-8')) is False
+        assert validate_csp_report(report_json.encode("utf-8")) is False
 
     def test_invalid_csp_report_too_large(self):
         """Test validation of CSP report that is too large."""
@@ -58,16 +58,18 @@ class TestCSPValidation:
                 "document-uri": "https://example.com/page",
                 "violated-directive": "script-src 'self'",
                 "original-policy": "default-src 'self'; script-src 'self'",
-                "large-field": large_data
+                "large-field": large_data,
             }
         }
-        
+
         report_json = json.dumps(report_data)
-        assert validate_csp_report(report_json.encode('utf-8')) is False
+        assert validate_csp_report(report_json.encode("utf-8")) is False
 
     def test_invalid_csp_report_malformed_json(self):
         """Test validation of malformed JSON."""
-        malformed_json = b'{ "csp-report": { "document-uri": "https://example.com/page", }'
+        malformed_json = (
+            b'{ "csp-report": { "document-uri": "https://example.com/page", }'
+        )
         assert validate_csp_report(malformed_json) is False
 
     def test_safe_uri_validation_valid_http(self):
@@ -92,7 +94,9 @@ class TestCSPValidation:
 
     def test_safe_uri_validation_data_uri_too_long(self):
         """Test validation of overly long data URIs."""
-        long_data_uri = "data:text/plain;base64," + "A" * 2000  # Longer than 1000 char limit
+        long_data_uri = (
+            "data:text/plain;base64," + "A" * 2000
+        )  # Longer than 1000 char limit
         assert _is_safe_uri(long_data_uri) is False
 
     def test_safe_uri_validation_private_ip(self):
@@ -114,48 +118,56 @@ class TestCSPValidation:
 
     def test_safe_directive_value_dangerous_script_tag(self):
         """Test validation of directive values with dangerous script tags."""
-        assert _is_safe_directive_value("script-src 'self' <script>alert('xss')</script>") is False
+        assert (
+            _is_safe_directive_value("script-src 'self' <script>alert('xss')</script>")
+            is False
+        )
 
     def test_safe_directive_value_javascript_protocol(self):
         """Test validation of directive values with javascript: protocol."""
-        assert _is_safe_directive_value("script-src 'self' javascript:alert('xss')") is False
+        assert (
+            _is_safe_directive_value("script-src 'self' javascript:alert('xss')")
+            is False
+        )
 
     def test_safe_directive_value_on_event_handler(self):
         """Test validation of directive values with event handlers."""
-        assert _is_safe_directive_value("script-src 'self' onclick='alert(\"xss\")'") is False
+        assert (
+            _is_safe_directive_value("script-src 'self' onclick='alert(\"xss\")'")
+            is False
+        )
 
     def test_sanitize_csp_report_string_fields(self):
         """Test sanitization of string fields."""
         report_data = {
             "document-uri": "https://example.com/page",
             "violated-directive": "script-src 'self'",
-            "original-policy": "default-src 'self'; script-src 'self'"
+            "original-policy": "default-src 'self'; script-src 'self'",
         }
-        
+
         sanitized = sanitize_csp_report(report_data)
         assert sanitized["document-uri"] == "https://example.com/page"
         assert sanitized["violated-directive"] == "script-src &#x27;self&#x27;"
-        assert sanitized["original-policy"] == "default-src &#x27;self&#x27;; script-src &#x27;self&#x27;"
+        assert (
+            sanitized["original-policy"]
+            == "default-src &#x27;self&#x27;; script-src &#x27;self&#x27;"
+        )
 
     def test_sanitize_csp_report_html_escaping(self):
         """Test HTML escaping in sanitization."""
         report_data = {
             "document-uri": "https://example.com/page<script>alert('xss')</script>",
-            "violated-directive": "<script>alert('xss')</script>"
+            "violated-directive": "<script>alert('xss')</script>",
         }
-        
+
         sanitized = sanitize_csp_report(report_data)
         assert "<script>" in sanitized["document-uri"]
         assert "<script>" in sanitized["violated-directive"]
 
     def test_sanitize_csp_report_numeric_fields(self):
         """Test sanitization of numeric fields."""
-        report_data = {
-            "status-code": 200,
-            "line-number": 10,
-            "column-number": 5
-        }
-        
+        report_data = {"status-code": 200, "line-number": 10, "column-number": 5}
+
         sanitized = sanitize_csp_report(report_data)
         assert sanitized["status-code"] == 200
         assert sanitized["line-number"] == 10
@@ -163,19 +175,15 @@ class TestCSPValidation:
 
     def test_sanitize_csp_report_enum_fields(self):
         """Test sanitization of enum fields."""
-        report_data = {
-            "disposition": "enforce"
-        }
-        
+        report_data = {"disposition": "enforce"}
+
         sanitized = sanitize_csp_report(report_data)
         assert sanitized["disposition"] == "enforce"
 
     def test_sanitize_csp_report_invalid_enum_fields(self):
         """Test sanitization of invalid enum fields."""
-        report_data = {
-            "disposition": "invalid-value"
-        }
-        
+        report_data = {"disposition": "invalid-value"}
+
         sanitized = sanitize_csp_report(report_data)
         assert "disposition" not in sanitized
 
@@ -184,10 +192,10 @@ class TestCSPValidation:
         report_data = {
             "csp-report": {
                 "document-uri": "https://example.com/page",
-                "violated-directive": "script-src 'self'"
+                "violated-directive": "script-src 'self'",
             }
         }
-        
+
         sanitized = sanitize_csp_report(report_data)
         assert "csp-report" in sanitized
         nested_report = sanitized["csp-report"]
@@ -201,13 +209,15 @@ class TestCSPValidation:
             "csp-report": {
                 "document-uri": "https://example.com/page",
                 "violated-directive": "script-src 'self'",
-                "original-policy": "default-src 'self'; script-src 'self'"
+                "original-policy": "default-src 'self'; script-src 'self'",
             }
         }
-        
+
         report_json = json.dumps(report_data)
         # Both functions should return the same result
-        assert validate_csp_report(report_json.encode('utf-8')) == validate_csp_report_legacy(report_json.encode('utf-8'))
+        assert validate_csp_report(
+            report_json.encode("utf-8")
+        ) == validate_csp_report_legacy(report_json.encode("utf-8"))
 
 
 class TestCSPProcessing:

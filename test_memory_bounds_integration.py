@@ -6,7 +6,7 @@ import sys
 from datetime import datetime, timedelta
 
 # Add the project root to the path
-sys.path.insert(0, '.')
+sys.path.insert(0, ".")
 
 from resync.core.health_models import HealthCheckConfig, HealthCheckResult, HealthStatus
 from resync.core.health_service import HealthCheckService
@@ -23,7 +23,7 @@ async def test_memory_bounds_integration():
         history_cleanup_batch_size=2,
         history_retention_days=1,
         enable_memory_monitoring=True,
-        memory_usage_threshold_mb=1
+        memory_usage_threshold_mb=1,
     )
 
     # Create service
@@ -36,7 +36,7 @@ async def test_memory_bounds_integration():
     for i in range(15):
         result = HealthCheckResult(
             overall_status=HealthStatus.HEALTHY,
-            timestamp=datetime.now() - timedelta(minutes=i)
+            timestamp=datetime.now() - timedelta(minutes=i),
         )
         service._update_health_history(result)
 
@@ -64,8 +64,7 @@ async def test_memory_bounds_integration():
     for i in range(5):
         # Create a new HealthCheckResult directly instead of trying to copy from empty list
         old_result = HealthCheckResult(
-            overall_status=HealthStatus.HEALTHY,
-            timestamp=old_time - timedelta(hours=i)
+            overall_status=HealthStatus.HEALTHY, timestamp=old_time - timedelta(hours=i)
         )
         service.health_history.append(old_result)
 

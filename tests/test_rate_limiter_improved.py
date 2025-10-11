@@ -10,7 +10,7 @@ from resync.core.rate_limiter_improved import (
     TokenBucketRateLimiter,
     LeakyBucketRateLimiter,
     SlidingWindowRateLimiter,
-    RateLimiterManager
+    RateLimiterManager,
 )
 
 
@@ -95,7 +95,9 @@ class TestLeakyBucketRateLimiter:
     @pytest.fixture
     async def limiter(self):
         """Fixture para LeakyBucket limiter."""
-        limiter = LeakyBucketRateLimiter(rate=2, capacity=5, name="test")  # 2 vazamentos por segundo
+        limiter = LeakyBucketRateLimiter(
+            rate=2, capacity=5, name="test"
+        )  # 2 vazamentos por segundo
         await limiter.start()
         yield limiter
         await limiter.stop()
@@ -175,9 +177,7 @@ class TestSlidingWindowRateLimiter:
     async def limiter(self):
         """Fixture para SlidingWindow limiter."""
         return SlidingWindowRateLimiter(
-            requests_per_window=3,
-            window_seconds=1,
-            name="test"
+            requests_per_window=3, window_seconds=1, name="test"
         )
 
     @pytest.mark.asyncio
@@ -231,7 +231,7 @@ class TestSlidingWindowRateLimiter:
         stats = limiter.get_stats()
         assert stats["requests_allowed"] == 2
         assert stats["requests_denied"] == 1
-        assert stats["success_rate"] == 2/3
+        assert stats["success_rate"] == 2 / 3
 
 
 class TestRateLimiterManager:

@@ -90,6 +90,11 @@ class IKnowledgeGraph(Protocol):
         """Atomically checks if memory is already processed, and if not, deletes it."""
         ...
 
+    @property
+    def client(self) -> Any:
+        """Gets the underlying Neo4j driver client."""
+        ...
+
 
 @runtime_checkable
 class IFileIngestor(Protocol):
@@ -153,6 +158,22 @@ class IAuditQueue(Protocol):
         """Adds an audit record to the queue."""
         ...
 
+    def get_all_audits_sync(self) -> list[dict[str, Any]]:
+        """Synchronously retrieves all audit records."""
+        ...
+
+    def get_audits_by_status_sync(self, status: str) -> list[dict[str, Any]]:
+        """Synchronously retrieves audit records by status."""
+        ...
+
+    def update_audit_status_sync(self, audit_id: str, status: str) -> bool:
+        """Synchronously updates audit status."""
+        ...
+
+    def get_audit_metrics_sync(self) -> dict[str, Any]:
+        """Synchronously retrieves audit metrics."""
+        ...
+
 
 @runtime_checkable
 class ITWSClient(Protocol):
@@ -184,11 +205,7 @@ class ITWSClient(Protocol):
         ...
 
     async def validate_connection(
-        self, 
-        host: str = None, 
-        port: int = None, 
-        user: str = None, 
-        password: str = None
+        self, host: Optional[str] = None, port: Optional[int] = None, user: Optional[str] = None, password: Optional[str] = None
     ) -> dict[str, bool]:
         """Validates TWS connection parameters."""
         ...
@@ -196,3 +213,25 @@ class ITWSClient(Protocol):
     async def close(self) -> None:
         """Closes the TWS client connection."""
         ...
+
+    async def invalidate_system_cache(self) -> None:
+        """Invalidates system-level cache."""
+        ...
+
+    async def invalidate_all_jobs(self) -> None:
+        """Invalidates all job-related cache."""
+        ...
+
+    async def invalidate_all_workstations(self) -> None:
+        """Invalidates all workstation-related cache."""
+        ...
+
+    async def get_job_status_batch(self, job_ids: list[str]) -> list[dict[str, Any]]:
+        """Retrieves status for multiple jobs in batch."""
+        ...
+
+    # Note: These are simple attributes in the implementation, not properties
+    host: str
+    port: int
+    user: str
+    password: str

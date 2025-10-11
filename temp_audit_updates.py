@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/audit", tags=["audit"])
 
 class AuditRecordResponse(BaseModel):
     """Pydantic model for audit record responses"""
+
     id: str
     user_query: str
     agent_response: str
@@ -35,22 +36,22 @@ class AuditRecordResponse(BaseModel):
 class ReviewAction(BaseModel):
     memory_id: str
     action: str  # "approve" or "reject"
-    
-    @field_validator('action')
+
+    @field_validator("action")
     @classmethod
     def validate_action(cls, v: str) -> str:
         """
         Validate the review action.
-        
+
         Args:
             v: The action to validate
-            
+
         Returns:
             The validated action
         """
-        valid_actions = {'approve', 'reject'}
+        valid_actions = {"approve", "reject"}
         if v.lower() not in valid_actions:
-            raise ValueError(f'Invalid action: {v}. Must be one of {valid_actions}')
+            raise ValueError(f"Invalid action: {v}. Must be one of {valid_actions}")
         return v.lower()
 
 
@@ -71,9 +72,17 @@ def get_flagged_memories(
     Retrieves memories from the audit queue based on status and search query.
     """
     # Get the current user from request state
-    user_id = getattr(request.state, 'user_id', 'system') if hasattr(request.state, 'user_id') else 'system'
-    correlation_id = getattr(request.state, 'correlation_id', None) if hasattr(request.state, 'correlation_id') else None
-    
+    user_id = (
+        getattr(request.state, "user_id", "system")
+        if hasattr(request.state, "user_id")
+        else "system"
+    )
+    correlation_id = (
+        getattr(request.state, "correlation_id", None)
+        if hasattr(request.state, "correlation_id")
+        else None
+    )
+
     try:
         if status == "all":
             memories = audit_queue.get_all_audits_sync()
@@ -92,20 +101,24 @@ def get_flagged_memories(
 
         # Log the audit event for successful retrieval
         log_audit_event(
-            action="retrieve_flagged_memories", 
-            user_id=user_id, 
-            details={"status_filter": status, "query_present": query is not None, "result_count": len(memories)},
-            correlation_id=correlation_id
+            action="retrieve_flagged_memories",
+            user_id=user_id,
+            details={
+                "status_filter": status,
+                "query_present": query is not None,
+                "result_count": len(memories),
+            },
+            correlation_id=correlation_id,
         )
-        
+
         # Convert dictionaries to AuditRecordResponse models
         return [AuditRecordResponse(**memory) for memory in memories]
     except Exception as e:
         log_audit_event(
-            action="retrieve_flagged_memories_error", 
-            user_id=user_id, 
+            action="retrieve_flagged_memories_error",
+            user_id=user_id,
             details={"status_filter": status, "error": str(e)},
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
         raise HTTPException(
             status_code=500, detail=f"Error retrieving flagged memories: {e}"
@@ -124,39 +137,51 @@ async def review_memory(
     """
     # Get the current user from request state (this would need to come from auth)
     # For now, using a placeholder - in production, this should come from auth
-    user_id = getattr(request.state, 'user_id', 'system') if hasattr(request.state, 'user_id') else 'system'
-    correlation_id = getattr(request.state, 'correlation_id', None) if hasattr(request.state, 'correlation_id') else None
-    
+    user_id = (
+        getattr(request.state, "user_id", "system")
+        if hasattr(request.state, "user_id")
+        else "system"
+    )
+    correlation_id = (
+        getattr(request.state, "correlation_id", None)
+        if hasattr(request.state, "correlation_id")
+        else None
+    )
+
     if review.action == "approve":
         try:
             if not audit_queue.update_audit_status_sync(review.memory_id, "approved"):
                 log_audit_event(
-                    action="review_attempt_failed", 
-                    user_id=user_id, 
-                    details={"memory_id": review.memory_id, "attempted_action": "approve", "reason": "not_found"},
-                    correlation_id=correlation_id
+                    action="review_attempt_failed",
+                    user_id=user_id,
+                    details={
+                        "memory_id": review.memory_id,
+                        "attempted_action": "approve",
+                        "reason": "not_found",
+                    },
+                    correlation_id=correlation_id,
                 )
                 raise HTTPException(status_code=404, detail="Audit record not found.")
 
             await knowledge_graph.client.add_observations(
                 review.memory_id, ["MANUALLY_APPROVED_BY_ADMIN"]
             )
-            
+
             # Log the successful audit event
             log_audit_event(
-                action="memory_approved", 
-                user_id=user_id, 
+                action="memory_approved",
+                user_id=user_id,
                 details={"memory_id": review.memory_id},
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
-            
+
             return {"status": "approved", "memory_id": review.memory_id}
         except Exception as e:
             log_audit_event(
-                action="approval_error", 
-                user_id=user_id, 
+                action="approval_error",
+                user_id=user_id,
                 details={"memory_id": review.memory_id, "error": str(e)},
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
             raise HTTPException(
                 status_code=500, detail=f"Error approving memory: {e}"
@@ -166,30 +191,34 @@ async def review_memory(
         try:
             if not audit_queue.update_audit_status_sync(review.memory_id, "rejected"):
                 log_audit_event(
-                    action="review_attempt_failed", 
-                    user_id=user_id, 
-                    details={"memory_id": review.memory_id, "attempted_action": "reject", "reason": "not_found"},
-                    correlation_id=correlation_id
+                    action="review_attempt_failed",
+                    user_id=user_id,
+                    details={
+                        "memory_id": review.memory_id,
+                        "attempted_action": "reject",
+                        "reason": "not_found",
+                    },
+                    correlation_id=correlation_id,
                 )
                 raise HTTPException(status_code=404, detail="Audit record not found.")
 
             await knowledge_graph.client.delete(review.memory_id)
-            
+
             # Log the successful audit event
             log_audit_event(
-                action="memory_rejected", 
-                user_id=user_id, 
+                action="memory_rejected",
+                user_id=user_id,
                 details={"memory_id": review.memory_id},
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
-            
+
             return {"status": "rejected", "memory_id": review.memory_id}
         except Exception as e:
             log_audit_event(
-                action="rejection_error", 
-                user_id=user_id, 
+                action="rejection_error",
+                user_id=user_id,
                 details={"memory_id": review.memory_id, "error": str(e)},
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
             raise HTTPException(
                 status_code=500, detail=f"Error rejecting memory: {e}"
@@ -207,27 +236,35 @@ def get_audit_metrics(
     Returns metrics for the audit queue (total pending, approved, rejected).
     """
     # Get the current user from request state
-    user_id = getattr(request.state, 'user_id', 'system') if hasattr(request.state, 'user_id') else 'system'
-    correlation_id = getattr(request.state, 'correlation_id', None) if hasattr(request.state, 'correlation_id') else None
-    
+    user_id = (
+        getattr(request.state, "user_id", "system")
+        if hasattr(request.state, "user_id")
+        else "system"
+    )
+    correlation_id = (
+        getattr(request.state, "correlation_id", None)
+        if hasattr(request.state, "correlation_id")
+        else None
+    )
+
     try:
         metrics = audit_queue.get_audit_metrics_sync()
-        
+
         # Log the audit event for successful metrics retrieval
         log_audit_event(
-            action="retrieve_audit_metrics", 
-            user_id=user_id, 
+            action="retrieve_audit_metrics",
+            user_id=user_id,
             details=metrics,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
-        
+
         return metrics
     except Exception as e:
         log_audit_event(
-            action="retrieve_audit_metrics_error", 
-            user_id=user_id, 
+            action="retrieve_audit_metrics_error",
+            user_id=user_id,
             details={"error": str(e)},
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
         raise HTTPException(
             status_code=500, detail=f"Error retrieving audit metrics: {e}"

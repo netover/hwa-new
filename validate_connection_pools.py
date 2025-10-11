@@ -15,6 +15,7 @@ from unittest.mock import Mock
 @dataclass
 class ConnectionPoolConfig:
     """Configuration for connection pools."""
+
     pool_name: str
     min_size: int = 5
     max_size: int = 20
@@ -29,6 +30,7 @@ class ConnectionPoolConfig:
 @dataclass
 class ConnectionPoolStats:
     """Statistics for connection pools."""
+
     pool_name: str
     active_connections: int = 0
     idle_connections: int = 0
@@ -425,6 +427,7 @@ async def main() -> int:
     else:
         print("❌ Some tests failed.")
         return 1
+
 
 if __name__ == "__main__":
     exit_code = asyncio.run(main())

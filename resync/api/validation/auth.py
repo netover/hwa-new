@@ -11,6 +11,7 @@ from .common import BaseValidatedModel
 
 class AuthProvider(str, Enum):
     """Supported authentication providers."""
+
     LOCAL = "local"
     LDAP = "ldap"
     OAUTH2 = "oauth2"
@@ -19,6 +20,7 @@ class AuthProvider(str, Enum):
 
 class TokenType(str, Enum):
     """Token types."""
+
     ACCESS = "access"
     REFRESH = "refresh"
     API_KEY = "api_key"
@@ -26,6 +28,7 @@ class TokenType(str, Enum):
 
 class UserRole(str, Enum):
     """User roles."""
+
     ADMIN = "admin"
     USER = "user"
     GUEST = "guest"
@@ -35,39 +38,29 @@ class UserRole(str, Enum):
 class LoginRequest(BaseValidatedModel):
     """Login request validation model."""
 
-    username: constr(
+    username: str = Field(
+        ...,
         min_length=3,
         max_length=50,
-        pattern=r"^[a-zA-Z0-9_.-]+$",
-        strip_whitespace=True
-    ) = Field(
-        ...,
         description="Username for authentication",
-        example="john.doe"
+        example="john.doe",
     )
 
-    password: constr(
-        min_length=8,
-        max_length=128,
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="Password for authentication",
-        example="SecureP@ssw0rd123"
+    password: constr(min_length=8, max_length=128, strip_whitespace=True) = Field(
+        ..., description="Password for authentication", example="SecureP@ssw0rd123"
     )
 
     remember_me: bool = Field(
-        default=False,
-        description="Whether to create a persistent session"
+        default=False, description="Whether to create a persistent session"
     )
 
     provider: AuthProvider = Field(
-        default=AuthProvider.LOCAL,
-        description="Authentication provider"
+        default=AuthProvider.LOCAL, description="Authentication provider"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("username")
@@ -100,12 +93,22 @@ class LoginRequest(BaseValidatedModel):
 
         # Check for common weak passwords
         weak_passwords = {
-            "password", "123456", "12345678", "qwerty", "abc123",
-            "password123", "admin", "root", "guest", "test"
+            "password",
+            "123456",
+            "12345678",
+            "qwerty",
+            "abc123",
+            "password123",
+            "admin",
+            "root",
+            "guest",
+            "test",
         }
 
         if v.lower() in weak_passwords:
-            raise ValueError("Password is too common, please choose a stronger password")
+            raise ValueError(
+                "Password is too common, please choose a stronger password"
+            )
 
         # Check for sequential characters
         if any(seq in v.lower() for seq in ["123", "abc", "qwe", "asd"]):
@@ -120,51 +123,39 @@ class TokenRequest(BaseValidatedModel):
     grant_type: str = Field(
         ...,
         pattern=r"^(password|refresh_token|client_credentials)$",
-        description="OAuth2 grant type"
+        description="OAuth2 grant type",
     )
 
-    username: Optional[constr(
+    username: Optional[str] = Field(
+        None,
         min_length=3,
         max_length=50,
-        pattern=r"^[a-zA-Z0-9_.-]+$",
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="Username (required for password grant)"
+        description="Username (required for password grant)",
     )
 
-    password: Optional[constr(
-        min_length=8,
-        max_length=128,
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="Password (required for password grant)"
+    password: Optional[constr(min_length=8, max_length=128, strip_whitespace=True)] = (
+        Field(None, description="Password (required for password grant)")
     )
 
     refresh_token: Optional[str] = Field(
-        None,
-        description="Refresh token (required for refresh_token grant)"
+        None, description="Refresh token (required for refresh_token grant)"
     )
 
     client_id: Optional[str] = Field(
-        None,
-        description="Client ID (required for client_credentials grant)"
+        None, description="Client ID (required for client_credentials grant)"
     )
 
     client_secret: Optional[str] = Field(
-        None,
-        description="Client secret (required for client_credentials grant)"
+        None, description="Client secret (required for client_credentials grant)"
     )
 
     scope: Optional[List[str]] = Field(
-        default_factory=list,
-        description="Requested scopes",
-        max_length=10
+        default_factory=list, description="Requested scopes", max_length=10
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("username", "password")
@@ -195,7 +186,9 @@ class TokenRequest(BaseValidatedModel):
 
         if grant_type == "client_credentials" and not v:
             field_name = "client_id" if "client_id" in str(v) else "client_secret"
-            raise ValueError(f"{field_name} is required for client_credentials grant type")
+            raise ValueError(
+                f"{field_name} is required for client_credentials grant type"
+            )
 
         return v
 
@@ -203,35 +196,21 @@ class TokenRequest(BaseValidatedModel):
 class PasswordChangeRequest(BaseValidatedModel):
     """Password change request validation model."""
 
-    current_password: constr(
-        min_length=8,
-        max_length=128,
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="Current password"
+    current_password: constr(min_length=8, max_length=128, strip_whitespace=True) = (
+        Field(..., description="Current password")
     )
 
-    new_password: constr(
-        min_length=8,
-        max_length=128,
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="New password"
+    new_password: constr(min_length=8, max_length=128, strip_whitespace=True) = Field(
+        ..., description="New password"
     )
 
-    confirm_password: constr(
-        min_length=8,
-        max_length=128,
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="Confirm new password"
+    confirm_password: constr(min_length=8, max_length=128, strip_whitespace=True) = (
+        Field(..., description="Confirm new password")
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("new_password")
@@ -270,55 +249,29 @@ class PasswordChangeRequest(BaseValidatedModel):
 class UserRegistrationRequest(BaseValidatedModel):
     """User registration request validation model."""
 
-    username: constr(
-        min_length=3,
-        max_length=50,
-        pattern=r"^[a-zA-Z0-9_.-]+$",
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="Desired username"
+    username: str = Field(
+        ..., min_length=3, max_length=50, description="Desired username"
     )
 
-    email: EmailStr = Field(
-        ...,
-        description="Email address"
+    email: EmailStr = Field(..., description="Email address")
+
+    password: constr(min_length=8, max_length=128, strip_whitespace=True) = Field(
+        ..., description="Password"
     )
 
-    password: constr(
-        min_length=8,
-        max_length=128,
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="Password"
+    first_name: Optional[constr(min_length=1, max_length=50, strip_whitespace=True)] = (
+        Field(None, description="First name")
     )
 
-    first_name: Optional[constr(
-        min_length=1,
-        max_length=50,
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="First name"
+    last_name: Optional[constr(min_length=1, max_length=50, strip_whitespace=True)] = (
+        Field(None, description="Last name")
     )
 
-    last_name: Optional[constr(
-        min_length=1,
-        max_length=50,
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="Last name"
-    )
-
-    role: UserRole = Field(
-        default=UserRole.USER,
-        description="User role"
-    )
+    role: UserRole = Field(default=UserRole.USER, description="User role")
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("username")
@@ -329,8 +282,16 @@ class UserRegistrationRequest(BaseValidatedModel):
 
         # Check for reserved usernames
         reserved = {
-            "admin", "root", "system", "api", "test", "guest",
-            "user", "service", "localhost", "127.0.0.1"
+            "admin",
+            "root",
+            "system",
+            "api",
+            "test",
+            "guest",
+            "user",
+            "service",
+            "localhost",
+            "127.0.0.1",
         }
 
         if v.lower() in reserved:
@@ -343,8 +304,11 @@ class UserRegistrationRequest(BaseValidatedModel):
         """Validate email domain."""
         # Check for common temporary email domains
         temp_domains = {
-            "tempmail.org", "10minutemail.com", "mailinator.com",
-            "guerrillamail.com", "throwaway.email"
+            "tempmail.org",
+            "10minutemail.com",
+            "mailinator.com",
+            "guerrillamail.com",
+            "throwaway.email",
         }
 
         domain = v.split("@")[1].lower()
@@ -376,12 +340,22 @@ class UserRegistrationRequest(BaseValidatedModel):
 
         # Check for common weak passwords
         weak_passwords = {
-            "password", "123456", "12345678", "qwerty", "abc123",
-            "password123", "admin", "root", "guest", "test"
+            "password",
+            "123456",
+            "12345678",
+            "qwerty",
+            "abc123",
+            "password123",
+            "admin",
+            "root",
+            "guest",
+            "test",
         }
 
         if v.lower() in weak_passwords:
-            raise ValueError("Password is too common, please choose a stronger password")
+            raise ValueError(
+                "Password is too common, please choose a stronger password"
+            )
 
         # Check for sequential characters - be less strict for test passwords
         if any(seq in v.lower() for seq in ["1234", "abcd", "qwer", "asdf"]):
@@ -397,79 +371,58 @@ class TokenRefreshRequest(BaseValidatedModel):
     """Token refresh request validation model."""
 
     refresh_token: constr(min_length=10, max_length=500) = Field(
-        ...,
-        description="Refresh token"
+        ..., description="Refresh token"
     )
 
-    client_id: Optional[str] = Field(
-        None,
-        description="Client ID"
-    )
+    client_id: Optional[str] = Field(None, description="Client ID")
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
 
 class LogoutRequest(BaseValidatedModel):
     """Logout request validation model."""
 
-    access_token: Optional[str] = Field(
-        None,
-        description="Access token to invalidate"
-    )
+    access_token: Optional[str] = Field(None, description="Access token to invalidate")
 
     refresh_token: Optional[str] = Field(
-        None,
-        description="Refresh token to invalidate"
+        None, description="Refresh token to invalidate"
     )
 
     logout_all_sessions: bool = Field(
-        default=False,
-        description="Whether to logout all active sessions"
+        default=False, description="Whether to logout all active sessions"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
 
 class APIKeyRequest(BaseValidatedModel):
     """API key request validation model."""
 
-    name: constr(
-        min_length=3,
-        max_length=50,
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="API key name"
+    name: constr(min_length=3, max_length=50, strip_whitespace=True) = Field(
+        ..., description="API key name"
     )
 
-    description: Optional[constr(
-        min_length=5,
-        max_length=200,
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="API key description"
-    )
+    description: Optional[
+        constr(min_length=5, max_length=200, strip_whitespace=True)
+    ] = Field(None, description="API key description")
 
     scopes: List[str] = Field(
-        default_factory=list,
-        description="API key scopes",
-        max_length=10
+        default_factory=list, description="API key scopes", max_length=10
     )
 
     expires_in_days: Optional[int] = Field(
-        None,
-        ge=1,
-        le=365,
-        description="Number of days until expiration"
+        None, ge=1, le=365, description="Number of days until expiration"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("name")
@@ -500,22 +453,11 @@ class APIKeyRequest(BaseValidatedModel):
 class MFARequest(BaseValidatedModel):
     """Multi-factor authentication request validation model."""
 
-    code: constr(
-        min_length=6,
-        max_length=8,
-        pattern=r"^[0-9]+$",
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="MFA code"
-    )
+    code: str = Field(..., min_length=6, max_length=8, description="MFA code")
 
-    method: str = Field(
-        default="totp",
-        pattern=r"^(totp|sms|email|backup_code)$",
-        description="MFA method"
-    )
+    method: str = Field(default="totp", description="MFA method")
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"

@@ -2,7 +2,6 @@
 Tests for Adaptive Circuit Breaker functionality.
 """
 
-
 import pytest
 
 from resync.core.resilience import CircuitBreakerManager

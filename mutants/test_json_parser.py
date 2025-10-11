@@ -22,14 +22,16 @@ test_cases = [
 print("Testing JSON parser robustness...")
 for i, (response, required_keys) in enumerate(test_cases):
     try:
-        result = parse_llm_json_response(response, required_keys)
+        # Use empty list if required_keys is None
+        keys = required_keys if required_keys is not None else []
+        result = parse_llm_json_response(response, keys)
         print(f"Test {i+1}: SUCCESS - {result}")
     except Exception as e:
         print(f"Test {i+1}: FAILED - {e}")
 
 # Test malformed
 try:
-    parse_llm_json_response("This is not JSON at all")
+    parse_llm_json_response("This is not JSON at all", [])
     print("Malformed test: FAILED - Should have raised exception")
 except Exception:
     print("Malformed test: SUCCESS - Correctly raised exception")

@@ -76,7 +76,9 @@ async def test_analyze_memory_returns_none_on_database_error(
 
     # Assert
     assert result is None
-    assert "Database or KnowledgeGraph error analyzing memory test-mem-123" in caplog.text
+    assert (
+        "Database or KnowledgeGraph error analyzing memory test-mem-123" in caplog.text
+    )
 
 
 @patch("resync.core.ia_auditor._fetch_recent_memories", new_callable=AsyncMock)

@@ -18,10 +18,11 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 # Set minimal required environment variables
-os.environ['ADMIN_USERNAME'] = 'test_admin'
-os.environ['ADMIN_PASSWORD'] = 'test_password'
-os.environ['ENVIRONMENT'] = 'test'
-os.environ['PYTHONASYNCIODEBUG'] = '0'  # Disable asyncio debug for performance
+os.environ["ADMIN_USERNAME"] = "test_admin"
+os.environ["ADMIN_PASSWORD"] = "test_password"
+os.environ["ENVIRONMENT"] = "test"
+os.environ["PYTHONASYNCIODEBUG"] = "0"  # Disable asyncio debug for performance
+
 
 @pytest.mark.asyncio
 async def test_connection_pool_config() -> None:
@@ -70,6 +71,7 @@ async def test_connection_pool_config() -> None:
         gc.collect()
         return False
 
+
 @pytest.mark.asyncio
 async def test_connection_pool_stats() -> None:
     """Test connection pool statistics."""
@@ -105,6 +107,7 @@ async def test_connection_pool_stats() -> None:
         gc.collect()
         return False
 
+
 @pytest.mark.asyncio
 async def test_pool_manager_creation() -> None:
     """Test connection pool manager creation."""
@@ -113,12 +116,22 @@ async def test_pool_manager_creation() -> None:
         from resync.core.connection_pool_manager import ConnectionPoolManager
 
         # Comprehensive mocking to prevent real resource allocation
-        with patch.object(ConnectionPoolManager, 'initialize', new_callable=AsyncMock) as mock_init, \
-             patch.object(ConnectionPoolManager, 'close_all', new_callable=AsyncMock), \
-             patch('resync.core.pools.pool_manager.settings') as mock_settings, \
-             patch('resync.core.pools.pool_manager.DatabaseConnectionPool') as mock_db_pool, \
-             patch('resync.core.pools.pool_manager.RedisConnectionPool') as mock_redis_pool, \
-             patch('resync.core.pools.pool_manager.HTTPConnectionPool') as mock_http_pool:
+        with (
+            patch.object(
+                ConnectionPoolManager, "initialize", new_callable=AsyncMock
+            ) as mock_init,
+            patch.object(ConnectionPoolManager, "close_all", new_callable=AsyncMock),
+            patch("resync.core.pools.pool_manager.settings") as mock_settings,
+            patch(
+                "resync.core.pools.pool_manager.DatabaseConnectionPool"
+            ) as mock_db_pool,
+            patch(
+                "resync.core.pools.pool_manager.RedisConnectionPool"
+            ) as mock_redis_pool,
+            patch(
+                "resync.core.pools.pool_manager.HTTPConnectionPool"
+            ) as mock_http_pool,
+        ):
 
             # Configure mocks to prevent real initialization
             mock_init.return_value = None
@@ -158,10 +171,12 @@ async def test_pool_manager_creation() -> None:
 
     except Exception as e:
         import traceback
+
         print(f"- ConnectionPoolManager test failed: {e}")
         print(f"Traceback: {traceback.format_exc()}")
         gc.collect()
         return False
+
 
 @pytest.mark.asyncio
 async def test_websocket_pool_manager() -> None:
@@ -171,8 +186,14 @@ async def test_websocket_pool_manager() -> None:
         from resync.core.websocket_pool_manager import WebSocketPoolManager
 
         # Simple approach: patch initialization to prevent background tasks
-        with patch.object(WebSocketPoolManager, 'initialize', new_callable=AsyncMock) as mock_init, \
-             patch.object(WebSocketPoolManager, 'shutdown', new_callable=AsyncMock) as mock_shutdown:
+        with (
+            patch.object(
+                WebSocketPoolManager, "initialize", new_callable=AsyncMock
+            ) as mock_init,
+            patch.object(
+                WebSocketPoolManager, "shutdown", new_callable=AsyncMock
+            ) as mock_shutdown,
+        ):
 
             # Configure mocks
             mock_init.return_value = None
@@ -223,10 +244,12 @@ async def test_websocket_pool_manager() -> None:
 
     except Exception as e:
         import traceback
+
         print(f"- WebSocketPoolManager test failed: {e}")
         print(f"Traceback: {traceback.format_exc()}")
         gc.collect()
         return False
+
 
 async def main() -> None:
     """Run all validation tests."""
@@ -262,13 +285,16 @@ async def main() -> None:
         gc.collect()
         return 1
 
+
 if __name__ == "__main__":
     # Run with optimized asyncio settings for testing
     import sys
+
     if sys.platform != "win32":
         # On Unix systems, we can use uvloop for better performance
         try:
             import uvloop
+
             asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         except ImportError:
             pass

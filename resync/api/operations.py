@@ -28,33 +28,38 @@ router = APIRouter(prefix="/api/v1/operations", tags=["Critical Operations"])
 # MODELS
 # ============================================================================
 
+
 class CreateResourceRequest(BaseModel):
     """Request para criar um recurso."""
-    
+
     name: str = Field(..., description="Nome do recurso", min_length=1, max_length=100)
-    description: Optional[str] = Field(None, description="Descrição do recurso", max_length=500)
-    metadata: Optional[dict] = Field(default_factory=dict, description="Metadados adicionais")
-    
+    description: Optional[str] = Field(
+        None, description="Descrição do recurso", max_length=500
+    )
+    metadata: Optional[dict] = Field(
+        default_factory=dict, description="Metadados adicionais"
+    )
+
     class Config:
         json_schema_extra = {
             "example": {
                 "name": "My Resource",
                 "description": "A sample resource",
-                "metadata": {"category": "test", "priority": "high"}
+                "metadata": {"category": "test", "priority": "high"},
             }
         }
 
 
 class ResourceResponse(BaseModel):
     """Response com dados do recurso criado."""
-    
+
     id: str = Field(..., description="ID único do recurso")
     name: str = Field(..., description="Nome do recurso")
     description: Optional[str] = Field(None, description="Descrição do recurso")
     metadata: dict = Field(default_factory=dict, description="Metadados")
     created_at: str = Field(..., description="Timestamp de criação")
     idempotency_key: str = Field(..., description="Chave de idempotência usada")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -63,32 +68,34 @@ class ResourceResponse(BaseModel):
                 "description": "A sample resource",
                 "metadata": {"category": "test", "priority": "high"},
                 "created_at": "2024-01-15T10:30:00Z",
-                "idempotency_key": "660e8400-e29b-41d4-a716-446655440001"
+                "idempotency_key": "660e8400-e29b-41d4-a716-446655440001",
             }
         }
 
 
 Currency = Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")]
+
+
 class TransactionRequest(BaseModel):
     """Request para criar uma transação."""
 
     amount: float = Field(..., description="Valor da transação", gt=0)
     currency: Currency = Field(default="USD", description="Moeda")
     description: str = Field(..., description="Descrição da transação", min_length=1)
-    
+
     class Config:
         json_schema_extra = {
             "example": {
                 "amount": 100.50,
                 "currency": "USD",
-                "description": "Payment for services"
+                "description": "Payment for services",
             }
         }
 
 
 class TransactionResponse(BaseModel):
     """Response com dados da transação."""
-    
+
     id: str = Field(..., description="ID único da transação")
     amount: float = Field(..., description="Valor da transação")
     currency: str = Field(..., description="Moeda")
@@ -96,7 +103,7 @@ class TransactionResponse(BaseModel):
     status: str = Field(..., description="Status da transação")
     created_at: str = Field(..., description="Timestamp de criação")
     idempotency_key: str = Field(..., description="Chave de idempotência")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -106,7 +113,7 @@ class TransactionResponse(BaseModel):
                 "description": "Payment for services",
                 "status": "completed",
                 "created_at": "2024-01-15T10:30:00Z",
-                "idempotency_key": "660e8400-e29b-41d4-a716-446655440001"
+                "idempotency_key": "660e8400-e29b-41d4-a716-446655440001",
             }
         }
 
@@ -114,6 +121,7 @@ class TransactionResponse(BaseModel):
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
+
 
 @router.post(
     "/resources",
@@ -138,71 +146,70 @@ class TransactionResponse(BaseModel):
       -H "Content-Type: application/json" \\
       -d '{"name": "My Resource", "description": "Test resource"}'
     ```
-    """
+    """,
 )
 async def create_resource(
     request: CreateResourceRequest,
     idempotency_key: str = Depends(require_idempotency_key),
     manager: IdempotencyManager = Depends(get_idempotency_manager),
-    correlation_id: str = Depends(get_correlation_id)
+    correlation_id: str = Depends(get_correlation_id),
 ) -> ResourceResponse:
     """Create a new resource with idempotency support.
-    
+
     Args:
         request: Resource creation request
         idempotency_key: Unique idempotency key
         manager: Idempotency manager
         correlation_id: Correlation ID for tracing
-        
+
     Returns:
         Created resource data
-        
+
     Raises:
         ValidationError: If request data is invalid
         ResourceConflictError: If operation is already in progress
     """
-    
+
     async def _create_resource() -> ResourceResponse:
         """Internal function to create resource."""
         logger.info(
             "Creating resource",
             resource_name=request.name,
             idempotency_key=idempotency_key,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
-        
+
         # Simulate resource creation
         # In production, this would interact with database
         resource_id = str(uuid4())
-        created_at = datetime.utcnow().isoformat() + 'Z'
-        
+        created_at = datetime.utcnow().isoformat() + "Z"
+
         # Simulate some processing time
         import asyncio
+
         await asyncio.sleep(0.1)
-        
+
         response = ResourceResponse(
             id=resource_id,
             name=request.name,
             description=request.description,
             metadata=request.metadata or {},
             created_at=created_at,
-            idempotency_key=idempotency_key
+            idempotency_key=idempotency_key,
         )
-        
+
         logger.info(
             "Resource created successfully",
             resource_id=resource_id,
             idempotency_key=idempotency_key,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
-        
+
         return response
-    
+
     # Execute with idempotency
     return await manager.execute_idempotent(
-        key=idempotency_key,
-        func=_create_resource,
-        ttl_seconds=86400  # 24 hours
+        key=idempotency_key, func=_create_resource, ttl_seconds=86400  # 24 hours
     )
 
 
@@ -228,30 +235,30 @@ async def create_resource(
       -H "Content-Type: application/json" \\
       -d '{"amount": 100.50, "currency": "USD", "description": "Payment"}'
     ```
-    """
+    """,
 )
 async def create_transaction(
     request: TransactionRequest,
     idempotency_key: str = Depends(require_idempotency_key),
     manager: IdempotencyManager = Depends(get_idempotency_manager),
-    correlation_id: str = Depends(get_correlation_id)
+    correlation_id: str = Depends(get_correlation_id),
 ) -> TransactionResponse:
     """Create a new transaction with idempotency support.
-    
+
     Args:
         request: Transaction creation request
         idempotency_key: Unique idempotency key
         manager: Idempotency manager
         correlation_id: Correlation ID for tracing
-        
+
     Returns:
         Created transaction data
-        
+
     Raises:
         ValidationError: If request data is invalid
         ResourceConflictError: If operation is already in progress
     """
-    
+
     async def _create_transaction() -> TransactionResponse:
         """Internal function to create transaction."""
         logger.info(
@@ -259,18 +266,19 @@ async def create_transaction(
             amount=request.amount,
             currency=request.currency,
             idempotency_key=idempotency_key,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
-        
+
         # Simulate transaction processing
         # In production, this would interact with payment gateway
         transaction_id = f"txn_{uuid4().hex[:16]}"
-        created_at = datetime.utcnow().isoformat() + 'Z'
-        
+        created_at = datetime.utcnow().isoformat() + "Z"
+
         # Simulate processing time
         import asyncio
+
         await asyncio.sleep(0.2)
-        
+
         response = TransactionResponse(
             id=transaction_id,
             amount=request.amount,
@@ -278,31 +286,29 @@ async def create_transaction(
             description=request.description,
             status="completed",
             created_at=created_at,
-            idempotency_key=idempotency_key
+            idempotency_key=idempotency_key,
         )
-        
+
         logger.info(
             "Transaction completed successfully",
             transaction_id=transaction_id,
             amount=request.amount,
             idempotency_key=idempotency_key,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
-        
+
         return response
-    
+
     # Execute with idempotency
     return await manager.execute_idempotent(
-        key=idempotency_key,
-        func=_create_transaction,
-        ttl_seconds=86400  # 24 hours
+        key=idempotency_key, func=_create_transaction, ttl_seconds=86400  # 24 hours
     )
 
 
 @router.get(
     "/idempotency-example",
     summary="Get idempotency usage example",
-    description="Returns documentation and examples for using idempotency keys"
+    description="Returns documentation and examples for using idempotency keys",
 )
 async def get_idempotency_example():
     """Get examples and documentation for idempotency usage."""
@@ -324,7 +330,7 @@ curl -X POST "http://localhost:8000/api/v1/operations/transactions" \\
   -H "X-Idempotency-Key: $(uuidgen)" \\
   -H "Content-Type: application/json" \\
   -d '{"amount": 100.50, "currency": "USD", "description": "Payment"}'
-                """.strip()
+                """.strip(),
             },
             "python": {
                 "create_resource": """
@@ -343,12 +349,12 @@ response = requests.post(
     }
 )
                 """.strip()
-            }
+            },
         },
         "behavior": {
             "first_request": "Creates the resource and returns 201 Created",
             "duplicate_request": "Returns cached result with same status code",
             "different_payload": "Returns 400 Bad Request (request mismatch)",
-            "in_progress": "Returns 409 Conflict (operation already in progress)"
-        }
+            "in_progress": "Returns 409 Conflict (operation already in progress)",
+        },
     }

@@ -68,7 +68,9 @@ class L1Cache:
         Initialize L1 cache.
         """
         if max_size > 0 and num_shards > max_size:
-            num_shards = 1  # Use a single shard for small caches to make eviction predictable
+            num_shards = (
+                1  # Use a single shard for small caches to make eviction predictable
+            )
         if num_shards <= 0:
             raise ValueError("num_shards must be a positive integer")
 
@@ -76,14 +78,12 @@ class L1Cache:
         self.num_shards = num_shards
         # Use cachetools LRUCache for better performance and built-in LRU functionality
         self.shards: List[LRUCache] = [
-            LRUCache(maxsize=max_size // num_shards if num_shards > 0 else max_size) 
+            LRUCache(maxsize=max_size // num_shards if num_shards > 0 else max_size)
             for _ in range(num_shards)
         ]
         self.shard_locks = [asyncio.Lock() for _ in range(num_shards)]
 
-    def _get_shard(
-        self, key: str
-    ) -> Tuple[LRUCache, asyncio.Lock]:
+    def _get_shard(self, key: str) -> Tuple[LRUCache, asyncio.Lock]:
         """Get the shard and lock for a given key."""
         shard_index = hash(key) % self.num_shards
         return self.shards[shard_index], self.shard_locks[shard_index]
@@ -189,7 +189,10 @@ class CacheHierarchy:
         if self.enable_encryption:
             # TODO: Implement proper encryption using the encryption service
             # For now, just log that encryption would happen
-            logger.debug("encryption_enabled_but_not_yet_implemented", value_type=type(value).__name__)
+            logger.debug(
+                "encryption_enabled_but_not_yet_implemented",
+                value_type=type(value).__name__,
+            )
             # This should use resync.core.encryption_service
         return value
 
@@ -198,7 +201,10 @@ class CacheHierarchy:
         if self.enable_encryption:
             # TODO: Implement proper decryption using the encryption service
             # For now, just log that decryption would happen
-            logger.debug("decryption_enabled_but_not_yet_implemented", value_type=type(value).__name__)
+            logger.debug(
+                "decryption_enabled_but_not_yet_implemented",
+                value_type=type(value).__name__,
+            )
             # This should use resync.core.encryption_service
         return value
 
@@ -325,7 +331,9 @@ def get_cache_hierarchy() -> CacheHierarchy:
             l1_max_size=settings.CACHE_HIERARCHY.L1_MAX_SIZE,
             l2_ttl_seconds=settings.CACHE_HIERARCHY.L2_TTL_SECONDS,
             l2_cleanup_interval=settings.CACHE_HIERARCHY.L2_CLEANUP_INTERVAL,
-            enable_encryption=getattr(settings.CACHE_HIERARCHY, 'CACHE_ENCRYPTION_ENABLED', False),
-            key_prefix=getattr(settings.CACHE_HIERARCHY, 'CACHE_KEY_PREFIX', 'cache:'),
+            enable_encryption=getattr(
+                settings.CACHE_HIERARCHY, "CACHE_ENCRYPTION_ENABLED", False
+            ),
+            key_prefix=getattr(settings.CACHE_HIERARCHY, "CACHE_KEY_PREFIX", "cache:"),
         )
     return cache_hierarchy

@@ -12,6 +12,7 @@ from enum import Enum
 
 class LLMProvider(str, Enum):
     """Supported LLM providers."""
+
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
@@ -22,21 +23,31 @@ class LLMProvider(str, Enum):
 class LLMRequest(BaseModel):
     """Validation model for LLM requests."""
 
-    prompt: str = Field(..., min_length=1, max_length=10000, description="The prompt to send to the LLM")
-    model: str = Field(..., regex=r"^[a-zA-Z0-9\-_/.]+$", description="The LLM model identifier")
-    max_tokens: int = Field(default=200, ge=1, le=4000, description="Maximum tokens in response")
-    temperature: float = Field(default=0.1, ge=0.0, le=2.0, description="Sampling temperature")
-    timeout: float = Field(default=30.0, ge=1.0, le=300.0, description="Request timeout in seconds")
+    prompt: str = Field(
+        ..., min_length=1, max_length=10000, description="The prompt to send to the LLM"
+    )
+    model: str = Field(
+        ..., regex=r"^[a-zA-Z0-9\-_/.]+$", description="The LLM model identifier"
+    )
+    max_tokens: int = Field(
+        default=200, ge=1, le=4000, description="Maximum tokens in response"
+    )
+    temperature: float = Field(
+        default=0.1, ge=0.0, le=2.0, description="Sampling temperature"
+    )
+    timeout: float = Field(
+        default=30.0, ge=1.0, le=300.0, description="Request timeout in seconds"
+    )
     provider: Optional[LLMProvider] = Field(default=None, description="LLM provider")
 
-    @validator('prompt')
+    @validator("prompt")
     def validate_prompt(cls, v):
         """Validate and clean prompt input."""
         if not v or not v.strip():
             raise ValueError("Prompt cannot be empty")
         return v.strip()
 
-    @validator('model')
+    @validator("model")
     def validate_model(cls, v):
         """Validate model identifier."""
         if not v or not v.strip():
@@ -45,8 +56,9 @@ class LLMRequest(BaseModel):
 
     class Config:
         """Pydantic configuration."""
+
         validate_assignment = True
-        extra = 'forbid'
+        extra = "forbid"
 
 
 class PaginationRequest(BaseModel):
@@ -54,8 +66,12 @@ class PaginationRequest(BaseModel):
 
     page: int = Field(default=1, ge=1, description="Page number (1-based)")
     page_size: int = Field(default=50, ge=1, le=1000, description="Items per page")
-    sort_by: Optional[str] = Field(default=None, regex=r"^[a-zA-Z_][a-zA-Z0-9_]*$", description="Sort field")
-    sort_order: str = Field(default="asc", regex=r"^(asc|desc)$", description="Sort order")
+    sort_by: Optional[str] = Field(
+        default=None, regex=r"^[a-zA-Z_][a-zA-Z0-9_]*$", description="Sort field"
+    )
+    sort_order: str = Field(
+        default="asc", regex=r"^(asc|desc)$", description="Sort order"
+    )
 
     @property
     def offset(self) -> int:
@@ -67,10 +83,12 @@ class SearchRequest(BaseModel):
     """Validation model for search requests."""
 
     query: str = Field(..., min_length=1, max_length=500, description="Search query")
-    filters: Optional[Dict[str, Any]] = Field(default=None, description="Search filters")
+    filters: Optional[Dict[str, Any]] = Field(
+        default=None, description="Search filters"
+    )
     limit: int = Field(default=100, ge=1, le=1000, description="Maximum results")
 
-    @validator('query')
+    @validator("query")
     def validate_query(cls, v):
         """Validate and clean search query."""
         if not v or not v.strip():
@@ -81,17 +99,24 @@ class SearchRequest(BaseModel):
 class FileUploadRequest(BaseModel):
     """Validation model for file uploads."""
 
-    filename: str = Field(..., min_length=1, max_length=255, description="Original filename")
-    content_type: str = Field(..., regex=r"^[a-zA-Z0-9\-]+/[a-zA-Z0-9\-]+$", description="MIME type")
-    size: int = Field(..., ge=1, le=50*1024*1024, description="File size in bytes")  # 50MB max
+    filename: str = Field(
+        ..., min_length=1, max_length=255, description="Original filename"
+    )
+    content_type: str = Field(
+        ..., regex=r"^[a-zA-Z0-9\-]+/[a-zA-Z0-9\-]+$", description="MIME type"
+    )
+    size: int = Field(
+        ..., ge=1, le=50 * 1024 * 1024, description="File size in bytes"
+    )  # 50MB max
 
-    @validator('filename')
+    @validator("filename")
     def validate_filename(cls, v):
         """Validate filename for security."""
         import os
+
         if os.path.basename(v) != v:
             raise ValueError("Filename cannot contain path separators")
-        if '..' in v:
+        if ".." in v:
             raise ValueError("Filename cannot contain '..'")
         return v
 
@@ -100,17 +125,21 @@ class APIKeyRequest(BaseModel):
     """Validation model for API key operations."""
 
     name: str = Field(..., min_length=1, max_length=100, description="API key name")
-    description: Optional[str] = Field(default=None, max_length=500, description="API key description")
+    description: Optional[str] = Field(
+        default=None, max_length=500, description="API key description"
+    )
     scopes: List[str] = Field(default_factory=list, description="API key permissions")
     expires_at: Optional[str] = Field(default=None, description="Expiration timestamp")
 
-    @validator('name')
+    @validator("name")
     def validate_name(cls, v):
         """Validate API key name."""
         if not v or not v.strip():
             raise ValueError("API key name cannot be empty")
-        if not v.replace('_', '').replace('-', '').isalnum():
-            raise ValueError("API key name can only contain letters, numbers, underscores, and hyphens")
+        if not v.replace("_", "").replace("-", "").isalnum():
+            raise ValueError(
+                "API key name can only contain letters, numbers, underscores, and hyphens"
+            )
         return v.strip()
 
 
@@ -119,15 +148,19 @@ class ConfigurationUpdate(BaseModel):
 
     key: str = Field(..., min_length=1, max_length=200, description="Configuration key")
     value: Any = Field(..., description="Configuration value")
-    value_type: str = Field(..., regex=r"^(str|int|float|bool|list|dict)$", description="Value type")
+    value_type: str = Field(
+        ..., regex=r"^(str|int|float|bool|list|dict)$", description="Value type"
+    )
 
-    @validator('key')
+    @validator("key")
     def validate_key(cls, v):
         """Validate configuration key."""
         if not v or not v.strip():
             raise ValueError("Configuration key cannot be empty")
-        if not all(c.isalnum() or c in '._-' for c in v):
-            raise ValueError("Configuration key can only contain letters, numbers, dots, underscores, and hyphens")
+        if not all(c.isalnum() or c in "._-" for c in v):
+            raise ValueError(
+                "Configuration key can only contain letters, numbers, dots, underscores, and hyphens"
+            )
         return v.strip()
 
 
@@ -151,17 +184,12 @@ def validate_input(data: Dict[str, Any], model_class) -> BaseModel:
         # Enhance error messages for better user experience
         enhanced_errors = []
         for error in e.errors():
-            field_path = '.'.join(str(loc) for loc in error['loc'])
-            enhanced_errors.append({
-                'field': field_path,
-                'message': error['msg'],
-                'type': error['type']
-            })
+            field_path = ".".join(str(loc) for loc in error["loc"])
+            enhanced_errors.append(
+                {"field": field_path, "message": error["msg"], "type": error["type"]}
+            )
 
-        raise ValidationError(
-            errors=enhanced_errors,
-            model=model_class
-        ) from e
+        raise ValidationError(errors=enhanced_errors, model=model_class) from e
 
 
 def create_validation_middleware():
@@ -187,13 +215,13 @@ def create_validation_middleware():
                     "error": "validation_error",
                     "details": [
                         {
-                            "field": '.'.join(str(loc) for loc in error['loc']),
-                            "message": error['msg'],
-                            "type": error['type']
+                            "field": ".".join(str(loc) for loc in error["loc"]),
+                            "message": error["msg"],
+                            "type": error["type"],
                         }
                         for error in e.errors()
-                    ]
-                }
+                    ],
+                },
             )
         except Exception as e:
             # Re-raise other exceptions

@@ -1,6 +1,5 @@
 """Basic unit tests for the standardized error handling system."""
 
-
 import pytest
 from fastapi.exceptions import RequestValidationError
 
@@ -31,7 +30,7 @@ def test_base_error_response_creation():
     error = BaseErrorResponse(
         error_code="TEST_ERROR",
         message="Test error message",
-        category=ErrorCategory.SYSTEM
+        category=ErrorCategory.SYSTEM,
     )
 
     assert error.error_code == "TEST_ERROR"
@@ -44,17 +43,11 @@ def test_base_error_response_creation():
 def test_validation_error_response_from_pydantic_errors():
     """Test validation error response creation from Pydantic errors."""
     pydantic_errors = [
-        {
-            "loc": ["field1"],
-            "msg": "Field required",
-            "type": "missing",
-            "input": None
-        }
+        {"loc": ["field1"], "msg": "Field required", "type": "missing", "input": None}
     ]
 
     error_response = ValidationErrorResponse.from_pydantic_errors(
-        pydantic_errors,
-        correlation_id="test-123"
+        pydantic_errors, correlation_id="test-123"
     )
 
     assert error_response.error_code == "VALIDATION_ERROR"
@@ -75,7 +68,9 @@ def test_error_response_builder():
     builder = ErrorResponseBuilder()
     builder.with_correlation_id("test-123")
 
-    validation_errors = [{"loc": ["field1"], "msg": "Field required", "type": "missing"}]
+    validation_errors = [
+        {"loc": ["field1"], "msg": "Field required", "type": "missing"}
+    ]
     error_response = builder.build_validation_error(validation_errors)
 
     assert error_response.error_code == "VALIDATION_ERROR"
@@ -94,14 +89,9 @@ def test_generate_correlation_id():
 
 def test_extract_validation_errors():
     """Test extracting validation errors from RequestValidationError."""
-    exc = RequestValidationError([
-        {
-            "loc": ["field1"],
-            "msg": "Field required",
-            "type": "missing",
-            "input": None
-        }
-    ])
+    exc = RequestValidationError(
+        [{"loc": ["field1"], "msg": "Field required", "type": "missing", "input": None}]
+    )
 
     errors = extract_validation_errors(exc)
     assert len(errors) == 1
@@ -147,7 +137,9 @@ def test_resync_exception_base_class():
     assert exc.error_code == "RESYNC_EXCEPTION"
     assert exc.error_category == "SYSTEM"
     assert exc.severity == "MEDIUM"
-    assert exc.user_friendly_message == "An error occurred while processing your request."
+    assert (
+        exc.user_friendly_message == "An error occurred while processing your request."
+    )
     assert len(exc.troubleshooting_hints) == 2
     assert exc.details == {}
     assert exc.timestamp is not None

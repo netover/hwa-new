@@ -323,7 +323,9 @@ class StressTester:
                         elif op_type == "get_agent":
                             # Try to get non-existent agent (expected to fail gracefully)
                             try:
-                                await manager.get_agent(f"non_existent_{worker_id}_{op_num}")
+                                await manager.get_agent(
+                                    f"non_existent_{worker_id}_{op_num}"
+                                )
                             except ValueError:
                                 pass  # Expected
                         elif op_type == "list_agents":

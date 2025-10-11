@@ -18,7 +18,7 @@ def parse_llm_json_response(
     text: str,
     required_keys: List[str],
     max_size: int = MAX_JSON_SIZE,
-    strict: bool = True
+    strict: bool = True,
 ) -> Dict[str, Any]:
     """
     Extracts, parses, and validates a JSON object from a string,
@@ -45,11 +45,11 @@ def parse_llm_json_response(
     if len(text) > MAX_TEXT_SIZE:
         raise ParsingError(f"Input text exceeds maximum size of {MAX_TEXT_SIZE} bytes")
 
-    if len(text.encode('utf-8')) > MAX_TEXT_SIZE:
+    if len(text.encode("utf-8")) > MAX_TEXT_SIZE:
         raise ParsingError(f"Input text exceeds maximum size of {MAX_TEXT_SIZE} bytes")
 
     # Sanitization: Remove null bytes and other potentially harmful characters
-    text = text.replace('\x00', '').replace('\ufeff', '')
+    text = text.replace("\x00", "").replace("\ufeff", "")
 
     # Basic cleanup: find the first '{' and last '}'
     start_index = text.find("{")
@@ -76,9 +76,7 @@ def parse_llm_json_response(
     # Check for required keys
     missing_keys = [key for key in required_keys if key not in data]
     if missing_keys:
-        raise ParsingError(
-            f"JSON is missing required keys: {', '.join(missing_keys)}"
-        )
+        raise ParsingError(f"JSON is missing required keys: {', '.join(missing_keys)}")
 
     # Optional strict validation: ensure no extra keys
     if strict and required_keys:

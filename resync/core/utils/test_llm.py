@@ -44,7 +44,9 @@ async def test_call_llm_raises_llmerror_after_retries_on_apierror(mocker):
 
     # Call the function and assert that it raises our custom LLMError
     with pytest.raises(LLMError) as excinfo:
-        await call_llm(prompt="test", model="test-model", max_retries=2, initial_backoff=0.01)
+        await call_llm(
+            prompt="test", model="test-model", max_retries=2, initial_backoff=0.01
+        )
 
     # Assertions
     assert "API error" in str(excinfo.value)
@@ -64,7 +66,9 @@ async def test_call_llm_raises_llmerror_after_retries_on_network_error(mocker):
 
     # Call the function and assert that it raises our custom LLMError
     with pytest.raises(LLMError) as excinfo:
-        await call_llm(prompt="test", model="test-model", max_retries=1, initial_backoff=0.01)
+        await call_llm(
+            prompt="test", model="test-model", max_retries=1, initial_backoff=0.01
+        )
 
     # Assertions
     assert "Connection error" in str(excinfo.value)

@@ -8,7 +8,7 @@ from litellm.exceptions import (
     ContextWindowExceededError,
     InvalidRequestError,
     RateLimitError,
-    APIError
+    APIError,
 )
 
 from ..exceptions import LLMError
@@ -20,24 +20,23 @@ from ..structured_logger import get_logger
 logger = get_logger(__name__)
 
 
-@circuit_breaker(
-    failure_threshold=3,
-    recovery_timeout=60,
-    name="llm_service"
-)
-@retry_with_backoff(
-    max_retries=3,
-    base_delay=1.0,
-    max_delay=30.0,
-    jitter=True
-)
+@circuit_breaker(failure_threshold=3, recovery_timeout=60, name="llm_service")
+@retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=30.0, jitter=True)
 @with_timeout(settings.LLM_TIMEOUT)
 @retry_on_exception(
     max_retries=3,
     delay=1.0,
     backoff=2.0,
-    exceptions=(AuthenticationError, RateLimitError, APIError, ConnectionError, TimeoutError, ValueError, Exception),
-    logger=logger
+    exceptions=(
+        AuthenticationError,
+        RateLimitError,
+        APIError,
+        ConnectionError,
+        TimeoutError,
+        ValueError,
+        Exception,
+    ),
+    logger=logger,
 )
 async def call_llm(
     prompt: str,
@@ -72,7 +71,7 @@ async def call_llm(
         LLMError: If the LLM call fails after all retry attempts or times out.
     """
     start_time = time.time()
-    
+
     # Use provided api_key or settings, handle default placeholder
     effective_api_key = api_key or settings.LLM_API_KEY
     if effective_api_key == "your_default_api_key_here":
@@ -82,14 +81,18 @@ async def call_llm(
         # Check if LiteLLM is available and has models configured
         try:
             from litellm import acompletion
+
             # Try to get router to check if models are available
             from resync.core.litellm_init import get_litellm_router
+
             router = get_litellm_router()
             if not router or len(router.model_list) == 0:
                 raise ImportError("No models available in LiteLLM router")
         except ImportError:
             # Fallback to simple mock response for development
-            logger.warning("LiteLLM not available or no models configured, using mock response")
+            logger.warning(
+                "LiteLLM not available or no models configured, using mock response"
+            )
             return "LLM service is currently unavailable. This is a mock response for development purposes."
 
         # Use LiteLLM's acompletion for enhanced functionality with timeout
@@ -104,10 +107,10 @@ async def call_llm(
                 # Additional LiteLLM features
                 metadata={
                     "user_id": getattr(settings, "APP_NAME", "resync"),
-                    "session_id": f"tws_{int(time.time())}"
-                }
+                    "session_id": f"tws_{int(time.time())}",
+                },
             ),
-            timeout=timeout
+            timeout=timeout,
         )
 
         # Validate response
@@ -124,9 +127,9 @@ async def call_llm(
 
         # Extract usage information for cost tracking
         usage = response.usage or {}
-        input_tokens = usage.get('prompt_tokens', 0)
-        output_tokens = usage.get('completion_tokens', 0)
-        
+        input_tokens = usage.get("prompt_tokens", 0)
+        output_tokens = usage.get("completion_tokens", 0)
+
         # Record successful call metrics
         total_time = time.time() - start_time
         logger.info(
@@ -134,7 +137,7 @@ async def call_llm(
             duration_seconds=round(total_time, 2),
             model=model,
             input_tokens=input_tokens,
-            output_tokens=output_tokens
+            output_tokens=output_tokens,
         )
 
         return content

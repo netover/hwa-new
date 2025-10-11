@@ -19,12 +19,13 @@ from collections import deque
 logger = logging.getLogger(__name__)
 
 # --- Type Definitions ---
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
 class ConnectionPoolStats:
     """Statistics for connection pool monitoring."""
+
     pool_name: str
     active_connections: int = 0
     idle_connections: int = 0
@@ -44,6 +45,7 @@ class ConnectionPoolStats:
 @dataclass
 class ConnectionPoolConfig:
     """Configuration for connection pools."""
+
     pool_name: str
     min_size: int = 5
     max_size: int = 20
@@ -63,7 +65,9 @@ class ConnectionPool(ABC, Generic[T]):
         self.stats = ConnectionPoolStats(pool_name=config.pool_name)
         self._lock = asyncio.Lock()  # For thread-safe operations
         self._stats_lock = asyncio.Lock()  # For thread-safe stats operations
-        self._wait_times: deque[float] = deque(maxlen=1000)  # Track connection acquisition times for metrics
+        self._wait_times: deque[float] = deque(
+            maxlen=1000
+        )  # Track connection acquisition times for metrics
 
     async def initialize(self) -> None:
         """Initialize the connection pool."""
@@ -79,7 +83,9 @@ class ConnectionPool(ABC, Generic[T]):
                 self._initialized = True
                 logger.info(f"Initialized {self.config.pool_name} connection pool")
             except Exception as e:
-                logger.error(f"Failed to initialize {self.config.pool_name} connection pool: {e}")
+                logger.error(
+                    f"Failed to initialize {self.config.pool_name} connection pool: {e}"
+                )
                 raise
 
     async def _setup_pool(self) -> None:
@@ -104,7 +110,9 @@ class ConnectionPool(ABC, Generic[T]):
                 self._shutdown = True
                 logger.info(f"Closed {self.config.pool_name} connection pool")
             except Exception as e:
-                logger.error(f"Error closing {self.config.pool_name} connection pool: {e}")
+                logger.error(
+                    f"Error closing {self.config.pool_name} connection pool: {e}"
+                )
                 raise
 
     async def _close_pool(self) -> None:
@@ -116,7 +124,9 @@ class ConnectionPool(ABC, Generic[T]):
             self._wait_times.append(wait_time)
             # Calculate average
             if self._wait_times:
-                self.stats.average_wait_time = sum(self._wait_times) / len(self._wait_times)
+                self.stats.average_wait_time = sum(self._wait_times) / len(
+                    self._wait_times
+                )
 
     async def increment_stat(self, stat_name: str, amount: int = 1) -> None:
         """Increment a statistic in a thread-safe manner."""

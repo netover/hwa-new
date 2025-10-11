@@ -25,6 +25,7 @@ def get_db_connection() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row  # Access columns by name
     return conn
 
+
 @asynccontextmanager
 async def get_db_connection_pool():
     """
@@ -44,7 +45,9 @@ async def get_db_connection_pool():
                 yield engine
         else:
             # Fallback to direct SQLite connection
-            logger.warning("Database connection pool not available, using direct connection")
+            logger.warning(
+                "Database connection pool not available, using direct connection"
+            )
             yield get_db_connection()
 
     except Exception as e:
@@ -288,7 +291,6 @@ def update_audit_status(memory_id: str, status: str) -> bool:
             logger.info("Updated memory %s status to %s.", memory_id, status)
             return True
         logger.warning("Memory %s not found for status update.", memory_id)
-        
 
 
 def delete_audit_record(memory_id: str) -> bool:
@@ -303,7 +305,6 @@ def delete_audit_record(memory_id: str) -> bool:
             logger.info("Deleted memory %s from audit queue.", memory_id)
             return True
         logger.warning("Memory %s not found for deletion from audit queue.", memory_id)
-        
 
 
 def is_memory_approved(memory_id: str) -> bool:
@@ -323,8 +324,6 @@ def is_memory_approved(memory_id: str) -> bool:
         )
         row = cursor.fetchone()
         return row is not None and row["status"] == "approved"
-
-        
 
 
 # Initialize the database on module import

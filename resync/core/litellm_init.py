@@ -16,10 +16,11 @@ from resync.settings import settings
 
 logger = logging.getLogger(__name__)
 
+
 def initialize_litellm() -> Any:
     """
     Initialize LiteLLM with configuration specific to Resync TWS application.
-    
+
     This function:
     1. Sets up LiteLLM with local and remote model configurations
     2. Configures caching using Redis
@@ -40,21 +41,25 @@ def initialize_litellm() -> Any:
             model_list=None,  # Will be loaded from config
             enable_pre_call_checks=True,
         )
-        
+
         # Override with app-specific settings for OpenRouter
-        if hasattr(settings, 'LLM_ENDPOINT') and settings.LLM_ENDPOINT:
+        if hasattr(settings, "LLM_ENDPOINT") and settings.LLM_ENDPOINT:
             os.environ["OPENAI_API_BASE"] = settings.LLM_ENDPOINT
 
-        if hasattr(settings, 'LLM_API_KEY') and settings.LLM_API_KEY:
+        if hasattr(settings, "LLM_API_KEY") and settings.LLM_API_KEY:
             os.environ["OPENAI_API_KEY"] = settings.LLM_API_KEY
 
         # Set OpenRouter specific environment variables
-        os.environ["OPENROUTER_API_KEY"] = settings.LLM_API_KEY if hasattr(settings, 'LLM_API_KEY') and settings.LLM_API_KEY else ""
-        
+        os.environ["OPENROUTER_API_KEY"] = (
+            settings.LLM_API_KEY
+            if hasattr(settings, "LLM_API_KEY") and settings.LLM_API_KEY
+            else ""
+        )
+
         logger.info("LiteLLM initialized successfully with TWS-specific configuration")
 
         return litellm_router
-        
+
     except ImportError:
         logger.warning("LiteLLM not installed, using fallback LLM implementation")
         return None
@@ -89,6 +94,7 @@ def calculate_completion_cost(completion_response: Any) -> float:
     """
     try:
         from litellm import completion_cost  # type: ignore
+
         return completion_cost(completion_response=completion_response)
     except Exception as e:
         logger.warning(f"Could not calculate completion cost: {e}")

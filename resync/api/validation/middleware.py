@@ -24,7 +24,7 @@ class ValidationMiddleware:
         sanitize_input: bool = True,
         enable_logging: bool = True,
         custom_validators: Optional[Dict[str, Callable]] = None,
-        error_handler: Optional[Callable] = None
+        error_handler: Optional[Callable] = None,
     ):
         """
         Initialize validation middleware.
@@ -167,9 +167,7 @@ class ValidationMiddleware:
         return True
 
     async def _validate_request(
-        self,
-        request: Request,
-        validation_model: Type[BaseModel]
+        self, request: Request, validation_model: Type[BaseModel]
     ) -> Optional[Dict[str, Any]]:
         """
         Validate request data against the validation model.
@@ -192,9 +190,7 @@ class ValidationMiddleware:
             return None
 
     async def _validate_body_data(
-        self,
-        request: Request,
-        validation_model: Type[BaseModel]
+        self, request: Request, validation_model: Type[BaseModel]
     ) -> Optional[Dict[str, Any]]:
         """
         Validate request body data.
@@ -248,9 +244,7 @@ class ValidationMiddleware:
             raise ValidationError.from_exception_data("body", [str(e)])
 
     def _validate_query_params(
-        self,
-        request: Request,
-        validation_model: Type[BaseModel]
+        self, request: Request, validation_model: Type[BaseModel]
     ) -> Optional[Dict[str, Any]]:
         """
         Validate query parameters.
@@ -292,13 +286,13 @@ class ValidationMiddleware:
         except ValidationError:
             raise
         except Exception as e:
-            logger.error("query_parameter_validation_error", error=str(e), exc_info=True)
+            logger.error(
+                "query_parameter_validation_error", error=str(e), exc_info=True
+            )
             raise ValidationError.from_exception_data("query_params", [str(e)])
 
     def _apply_custom_validators(
-        self,
-        data: Dict[str, Any],
-        request: Request
+        self, data: Dict[str, Any], request: Request
     ) -> Dict[str, Any]:
         """
         Apply custom validators to the data.
@@ -315,11 +309,17 @@ class ValidationMiddleware:
             try:
                 data = validator_func(data, request)
             except Exception as e:
-                logger.warning("custom_validator_failed", validator_name=validator_name, error=str(e))
+                logger.warning(
+                    "custom_validator_failed",
+                    validator_name=validator_name,
+                    error=str(e),
+                )
 
         return data
 
-    def _log_validation_success(self, request: Request, validated_data: Optional[Dict[str, Any]]) -> None:
+    def _log_validation_success(
+        self, request: Request, validated_data: Optional[Dict[str, Any]]
+    ) -> None:
         """
         Log successful validation.
 
@@ -331,13 +331,11 @@ class ValidationMiddleware:
             "validation_successful",
             method=request.method,
             path=request.url.path,
-            data_validated=validated_data is not None
+            data_validated=validated_data is not None,
         )
 
     async def _handle_validation_error(
-        self,
-        request: Request,
-        validation_error: ValidationError
+        self, request: Request, validation_error: ValidationError
     ) -> JSONResponse:
         """
         Handle validation errors.
@@ -356,7 +354,7 @@ class ValidationMiddleware:
                 "field": ".".join(str(loc) for loc in error["loc"]),
                 "message": error["msg"],
                 "type": error["type"],
-                "severity": ValidationSeverity.ERROR.value
+                "severity": ValidationSeverity.ERROR.value,
             }
             error_details.append(error_detail)
 
@@ -368,7 +366,7 @@ class ValidationMiddleware:
             severity=ValidationSeverity.ERROR,
             timestamp=datetime.utcnow(),
             path=request.url.path,
-            method=request.method
+            method=request.method,
         )
 
         # Log validation failure
@@ -377,7 +375,7 @@ class ValidationMiddleware:
                 "validation_failed",
                 method=request.method,
                 path=request.url.path,
-                error_count=len(error_details)
+                error_count=len(error_details),
             )
 
         # Use custom error handler if provided
@@ -388,15 +386,10 @@ class ValidationMiddleware:
                 logger.error(f"Custom error handler failed: {str(e)}", exc_info=True)
 
         # Return standard error response
-        return JSONResponse(
-            status_code=422,
-            content=error_response.dict()
-        )
+        return JSONResponse(status_code=422, content=error_response.dict())
 
     async def _handle_internal_error(
-        self,
-        request: Request,
-        error: Exception
+        self, request: Request, error: Exception
     ) -> JSONResponse:
         """
         Handle internal validation errors.
@@ -413,17 +406,16 @@ class ValidationMiddleware:
         error_response = ValidationErrorResponse(
             error="Internal validation error",
             message="An internal error occurred during validation.",
-            details=[{"message": str(error), "severity": ValidationSeverity.ERROR.value}],
+            details=[
+                {"message": str(error), "severity": ValidationSeverity.ERROR.value}
+            ],
             severity=ValidationSeverity.ERROR,
             timestamp=datetime.utcnow(),
             path=request.url.path,
-            method=request.method
+            method=request.method,
         )
 
-        return JSONResponse(
-            status_code=500,
-            content=error_response.dict()
-        )
+        return JSONResponse(status_code=500, content=error_response.dict())
 
 
 class ValidationConfig:
@@ -439,7 +431,7 @@ class ValidationConfig:
         error_handler: Optional[Callable] = None,
         skip_paths: Optional[List[str]] = None,
         rate_limit_validation: bool = False,
-        max_validation_errors: int = 50
+        max_validation_errors: int = 50,
     ):
         """
         Initialize validation configuration.
@@ -466,9 +458,7 @@ class ValidationConfig:
         self.max_validation_errors = max_validation_errors
 
 
-def create_validation_middleware(
-    config: ValidationConfig
-) -> ValidationMiddleware:
+def create_validation_middleware(config: ValidationConfig) -> ValidationMiddleware:
     """
     Create validation middleware from configuration.
 
@@ -484,7 +474,7 @@ def create_validation_middleware(
         sanitize_input=config.sanitize_input,
         enable_logging=config.enable_logging,
         custom_validators=config.custom_validators,
-        error_handler=config.error_handler
+        error_handler=config.error_handler,
     )
 
 
@@ -555,5 +545,5 @@ __all__ = [
     "ValidationConfig",
     "create_validation_middleware",
     "validate_json_body",
-    "validate_query_params"
+    "validate_query_params",
 ]

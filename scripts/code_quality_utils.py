@@ -25,10 +25,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
+
 # Type definitions
 @dataclass
 class PyflakesIssue:
     """Represents a single Pyflakes issue."""
+
     file_path: str
     line: int
     column: int
@@ -36,17 +38,25 @@ class PyflakesIssue:
     issue_type: str
     fixed: bool = False
 
+
 @dataclass
 class CodeQualityReport:
     """Report structure for code quality analysis."""
+
     total_issues: int = 0
     issues_by_type: Dict[str, int] = field(default_factory=dict)
-    issues_by_file: Dict[str, List[PyflakesIssue]] = field(default_factory=lambda: defaultdict(list))
+    issues_by_file: Dict[str, List[PyflakesIssue]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
     errors: List[str] = field(default_factory=list)
+
 
 # File operation utilities
 
-def backup_file(file_path: Union[str, Path], backup_suffix: str = '.backup') -> Optional[str]:
+
+def backup_file(
+    file_path: Union[str, Path], backup_suffix: str = ".backup"
+) -> Optional[str]:
     """
     Create a backup of the specified file.
 
@@ -73,7 +83,8 @@ def backup_file(file_path: Union[str, Path], backup_suffix: str = '.backup') -> 
     except Exception as e:
         raise PermissionError(f"Failed to create backup: {e}")
 
-def restore_file(file_path: Union[str, Path], backup_suffix: str = '.backup') -> bool:
+
+def restore_file(file_path: Union[str, Path], backup_suffix: str = ".backup") -> bool:
     """
     Restore a file from its backup.
 
@@ -97,8 +108,13 @@ def restore_file(file_path: Union[str, Path], backup_suffix: str = '.backup') ->
     except Exception:
         return False
 
-def safe_write_file(file_path: Union[str, Path], content: Union[str, List[str]],
-                   backup: bool = True, encoding: str = 'utf-8') -> bool:
+
+def safe_write_file(
+    file_path: Union[str, Path],
+    content: Union[str, List[str]],
+    backup: bool = True,
+    encoding: str = "utf-8",
+) -> bool:
     """
     Safely write content to a file with optional backup.
 
@@ -125,8 +141,13 @@ def safe_write_file(file_path: Union[str, Path], content: Union[str, List[str]],
 
     try:
         # Write to temporary file first
-        with tempfile.NamedTemporaryFile(mode='w', encoding=encoding, delete=False,
-                                       dir=file_path.parent, suffix='.tmp') as temp_file:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding=encoding,
+            delete=False,
+            dir=file_path.parent,
+            suffix=".tmp",
+        ) as temp_file:
             if isinstance(content, list):
                 temp_file.writelines(content)
             else:
@@ -146,7 +167,9 @@ def safe_write_file(file_path: Union[str, Path], content: Union[str, List[str]],
                 pass  # Best effort
         return False
 
+
 # Code analysis functions
+
 
 def parse_pyflakes_output(pyflakes_output: str) -> List[PyflakesIssue]:
     """
@@ -159,18 +182,20 @@ def parse_pyflakes_output(pyflakes_output: str) -> List[PyflakesIssue]:
         List of PyflakesIssue objects
     """
     issues = []
-    pattern = r'^(.+?):(\d+):(\d+):\s*(.+)'
+    pattern = r"^(.+?):(\d+):(\d+):\s*(.+)"
 
     issue_patterns = {
-        'unused_import': re.compile(r"'.+' imported but unused"),
-        'undefined_name': re.compile(r"undefined name '(.+)'"),
-        'fstring_placeholder': re.compile(r"f-string is missing placeholders"),
-        'forward_annotation': re.compile(r"syntax error in forward annotation"),
-        'unused_variable': re.compile(r"local variable '.+' is assigned to but never used"),
-        'redefinition': re.compile(r"redefinition of unused '(.+)' from line \d+"),
+        "unused_import": re.compile(r"'.+' imported but unused"),
+        "undefined_name": re.compile(r"undefined name '(.+)'"),
+        "fstring_placeholder": re.compile(r"f-string is missing placeholders"),
+        "forward_annotation": re.compile(r"syntax error in forward annotation"),
+        "unused_variable": re.compile(
+            r"local variable '.+' is assigned to but never used"
+        ),
+        "redefinition": re.compile(r"redefinition of unused '(.+)' from line \d+"),
     }
 
-    lines = pyflakes_output.strip().split('\n')
+    lines = pyflakes_output.strip().split("\n")
     for line in lines:
         line = line.strip()
         if not line:
@@ -185,7 +210,7 @@ def parse_pyflakes_output(pyflakes_output: str) -> List[PyflakesIssue]:
                 continue
 
             # Determine issue type
-            issue_type = 'unknown'
+            issue_type = "unknown"
             for type_name, pat in issue_patterns.items():
                 if pat.search(message):
                     issue_type = type_name
@@ -196,11 +221,12 @@ def parse_pyflakes_output(pyflakes_output: str) -> List[PyflakesIssue]:
                 line=line_num,
                 column=col_num,
                 message=message,
-                issue_type=issue_type
+                issue_type=issue_type,
             )
             issues.append(issue)
 
     return issues
+
 
 def categorize_issues(issues: List[PyflakesIssue]) -> CodeQualityReport:
     """
@@ -215,12 +241,16 @@ def categorize_issues(issues: List[PyflakesIssue]) -> CodeQualityReport:
     report = CodeQualityReport(total_issues=len(issues))
 
     for issue in issues:
-        report.issues_by_type[issue.issue_type] = report.issues_by_type.get(issue.issue_type, 0) + 1
+        report.issues_by_type[issue.issue_type] = (
+            report.issues_by_type.get(issue.issue_type, 0) + 1
+        )
         report.issues_by_file[issue.file_path].append(issue)
 
     return report
 
+
 # Import analysis utilities
+
 
 def detect_missing_imports(file_path: Union[str, Path]) -> List[str]:
     """
@@ -233,7 +263,7 @@ def detect_missing_imports(file_path: Union[str, Path]) -> List[str]:
         List of missing import names
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             source = f.read()
 
         tree = ast.parse(source, filename=str(file_path))
@@ -263,27 +293,132 @@ def detect_missing_imports(file_path: Union[str, Path]) -> List[str]:
 
         # Common built-ins that don't need imports
         builtins = {
-            'abs', 'all', 'any', 'ascii', 'bin', 'bool', 'bytearray', 'bytes', 'callable',
-            'chr', 'classmethod', 'compile', 'complex', 'delattr', 'dict', 'dir', 'divmod',
-            'enumerate', 'eval', 'exec', 'filter', 'float', 'format', 'frozenset', 'getattr',
-            'globals', 'hasattr', 'hash', 'help', 'hex', 'id', 'input', 'int', 'isinstance',
-            'issubclass', 'iter', 'len', 'list', 'locals', 'map', 'max', 'memoryview', 'min',
-            'next', 'object', 'oct', 'open', 'ord', 'pow', 'print', 'property', 'range',
-            'repr', 'reversed', 'round', 'set', 'setattr', 'slice', 'sorted', 'staticmethod',
-            'str', 'sum', 'super', 'tuple', 'type', 'vars', 'zip', '__import__', '__name__',
-            'Exception', 'BaseException', 'ValueError', 'TypeError', 'AttributeError',
-            'ImportError', 'NameError', 'KeyError', 'IndexError', 'StopIteration',
-            'GeneratorExit', 'KeyboardInterrupt', 'SystemExit', 'ArithmeticError',
-            'AssertionError', 'LookupError', 'OSError', 'EOFError', 'RuntimeError',
-            'NotImplementedError', 'SyntaxError', 'IndentationError', 'TabError',
-            'UnicodeError', 'UnicodeDecodeError', 'UnicodeEncodeError', 'UnicodeTranslateError',
-            'BufferError', 'BlockingIOError', 'ChildProcessError', 'ConnectionError',
-            'BrokenPipeError', 'ConnectionAbortedError', 'ConnectionRefusedError',
-            'ConnectionResetError', 'FileExistsError', 'FileNotFoundError', 'InterruptedError',
-            'IsADirectoryError', 'NotADirectoryError', 'PermissionError', 'ProcessLookupError',
-            'TimeoutError', 'Warning', 'UserWarning', 'DeprecationWarning', 'PendingDeprecationWarning',
-            'SyntaxWarning', 'RuntimeWarning', 'FutureWarning', 'ImportWarning', 'UnicodeWarning',
-            'BytesWarning', 'ResourceWarning', 'True', 'False', 'None'
+            "abs",
+            "all",
+            "any",
+            "ascii",
+            "bin",
+            "bool",
+            "bytearray",
+            "bytes",
+            "callable",
+            "chr",
+            "classmethod",
+            "compile",
+            "complex",
+            "delattr",
+            "dict",
+            "dir",
+            "divmod",
+            "enumerate",
+            "eval",
+            "exec",
+            "filter",
+            "float",
+            "format",
+            "frozenset",
+            "getattr",
+            "globals",
+            "hasattr",
+            "hash",
+            "help",
+            "hex",
+            "id",
+            "input",
+            "int",
+            "isinstance",
+            "issubclass",
+            "iter",
+            "len",
+            "list",
+            "locals",
+            "map",
+            "max",
+            "memoryview",
+            "min",
+            "next",
+            "object",
+            "oct",
+            "open",
+            "ord",
+            "pow",
+            "print",
+            "property",
+            "range",
+            "repr",
+            "reversed",
+            "round",
+            "set",
+            "setattr",
+            "slice",
+            "sorted",
+            "staticmethod",
+            "str",
+            "sum",
+            "super",
+            "tuple",
+            "type",
+            "vars",
+            "zip",
+            "__import__",
+            "__name__",
+            "Exception",
+            "BaseException",
+            "ValueError",
+            "TypeError",
+            "AttributeError",
+            "ImportError",
+            "NameError",
+            "KeyError",
+            "IndexError",
+            "StopIteration",
+            "GeneratorExit",
+            "KeyboardInterrupt",
+            "SystemExit",
+            "ArithmeticError",
+            "AssertionError",
+            "LookupError",
+            "OSError",
+            "EOFError",
+            "RuntimeError",
+            "NotImplementedError",
+            "SyntaxError",
+            "IndentationError",
+            "TabError",
+            "UnicodeError",
+            "UnicodeDecodeError",
+            "UnicodeEncodeError",
+            "UnicodeTranslateError",
+            "BufferError",
+            "BlockingIOError",
+            "ChildProcessError",
+            "ConnectionError",
+            "BrokenPipeError",
+            "ConnectionAbortedError",
+            "ConnectionRefusedError",
+            "ConnectionResetError",
+            "FileExistsError",
+            "FileNotFoundError",
+            "InterruptedError",
+            "IsADirectoryError",
+            "NotADirectoryError",
+            "PermissionError",
+            "ProcessLookupError",
+            "TimeoutError",
+            "Warning",
+            "UserWarning",
+            "DeprecationWarning",
+            "PendingDeprecationWarning",
+            "SyntaxWarning",
+            "RuntimeWarning",
+            "FutureWarning",
+            "ImportWarning",
+            "UnicodeWarning",
+            "BytesWarning",
+            "ResourceWarning",
+            "True",
+            "False",
+            "None",
         }
 
         missing = used_names - imported_names - builtins
@@ -291,6 +426,7 @@ def detect_missing_imports(file_path: Union[str, Path]) -> List[str]:
 
     except Exception:
         return []
+
 
 def detect_unused_imports(file_path: Union[str, Path]) -> List[str]:
     """
@@ -303,7 +439,7 @@ def detect_unused_imports(file_path: Union[str, Path]) -> List[str]:
         List of unused import names
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             source = f.read()
 
         tree = ast.parse(source, filename=str(file_path))
@@ -315,7 +451,7 @@ def detect_unused_imports(file_path: Union[str, Path]) -> List[str]:
         class ImportVisitor(ast.NodeVisitor):
             def visit_Import(self, node):
                 for alias in node.names:
-                    imported_names.add(alias.asname or alias.name.split('.')[0])
+                    imported_names.add(alias.asname or alias.name.split(".")[0])
                 self.generic_visit(node)
 
             def visit_ImportFrom(self, node):
@@ -343,7 +479,9 @@ def detect_unused_imports(file_path: Union[str, Path]) -> List[str]:
     except Exception:
         return []
 
+
 # String processing functions
+
 
 def fix_regex_patterns(text: str) -> str:
     """
@@ -362,6 +500,7 @@ def fix_regex_patterns(text: str) -> str:
 
     return fixed
 
+
 def validate_f_string(f_string: str) -> Tuple[bool, Optional[str]]:
     """
     Validate an f-string expression.
@@ -374,13 +513,13 @@ def validate_f_string(f_string: str) -> Tuple[bool, Optional[str]]:
     """
     try:
         # Remove the f prefix and parse as regular string
-        if f_string.startswith('f'):
+        if f_string.startswith("f"):
             string_content = f_string[1:]
         else:
             return False, "Not an f-string"
 
         # Try to compile the f-string
-        compile(f_string, '<string>', 'eval')
+        compile(f_string, "<string>", "eval")
         return True, None
 
     except SyntaxError as e:
@@ -388,7 +527,9 @@ def validate_f_string(f_string: str) -> Tuple[bool, Optional[str]]:
     except Exception as e:
         return False, f"Invalid f-string: {e}"
 
+
 # Progress tracking and reporting utilities
+
 
 class ProgressTracker:
     """Simple progress tracking utility."""
@@ -412,7 +553,10 @@ class ProgressTracker:
         current, total, percentage = self.get_progress()
         print(f"{self.description}: {current}/{total} ({percentage:.1f}%)")
 
-def generate_quality_report(issues: List[PyflakesIssue], output_file: Optional[str] = None) -> str:
+
+def generate_quality_report(
+    issues: List[PyflakesIssue], output_file: Optional[str] = None
+) -> str:
     """
     Generate a comprehensive code quality report.
 
@@ -426,7 +570,9 @@ def generate_quality_report(issues: List[PyflakesIssue], output_file: Optional[s
     report = CodeQualityReport(total_issues=len(issues))
 
     for issue in issues:
-        report.issues_by_type[issue.issue_type] = report.issues_by_type.get(issue.issue_type, 0) + 1
+        report.issues_by_type[issue.issue_type] = (
+            report.issues_by_type.get(issue.issue_type, 0) + 1
+        )
         report.issues_by_file[issue.file_path].append(issue)
 
     report_lines = [
@@ -456,14 +602,16 @@ def generate_quality_report(issues: List[PyflakesIssue], output_file: Optional[s
 
     if output_file:
         try:
-            with open(output_file, 'w', encoding='utf-8') as f:
+            with open(output_file, "w", encoding="utf-8") as f:
                 f.write(report_text)
         except Exception:
             pass  # Best effort
 
     return report_text
 
+
 # Validation functions
+
 
 def check_syntax(file_path: Union[str, Path]) -> Tuple[bool, Optional[str]]:
     """
@@ -476,7 +624,7 @@ def check_syntax(file_path: Union[str, Path]) -> Tuple[bool, Optional[str]]:
         Tuple of (is_valid, error_message)
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             source = f.read()
 
         ast.parse(source, filename=str(file_path))
@@ -486,6 +634,7 @@ def check_syntax(file_path: Union[str, Path]) -> Tuple[bool, Optional[str]]:
         return False, f"Syntax error at line {e.lineno}: {e.msg}"
     except Exception as e:
         return False, f"Error checking syntax: {e}"
+
 
 def verify_imports(file_path: Union[str, Path]) -> Tuple[bool, List[str]]:
     """
@@ -500,7 +649,7 @@ def verify_imports(file_path: Union[str, Path]) -> Tuple[bool, List[str]]:
     failed_imports = []
 
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             source = f.read()
 
         tree = ast.parse(source, filename=str(file_path))
@@ -508,7 +657,7 @@ def verify_imports(file_path: Union[str, Path]) -> Tuple[bool, List[str]]:
         class ImportChecker(ast.NodeVisitor):
             def visit_Import(self, node):
                 for alias in node.names:
-                    module_name = alias.name.split('.')[0]
+                    module_name = alias.name.split(".")[0]
                     try:
                         __import__(module_name)
                     except ImportError:
@@ -517,7 +666,7 @@ def verify_imports(file_path: Union[str, Path]) -> Tuple[bool, List[str]]:
 
             def visit_ImportFrom(self, node):
                 if node.module:
-                    module_name = node.module.split('.')[0]
+                    module_name = node.module.split(".")[0]
                     try:
                         __import__(module_name)
                     except ImportError:
@@ -532,18 +681,25 @@ def verify_imports(file_path: Union[str, Path]) -> Tuple[bool, List[str]]:
 
     return len(failed_imports) == 0, failed_imports
 
+
 # Error handling and logging utilities
+
 
 class CodeQualityError(Exception):
     """Base exception for code quality operations."""
 
+
 class FileOperationError(CodeQualityError):
     """Exception raised for file operation failures."""
+
 
 class AnalysisError(CodeQualityError):
     """Exception raised for analysis failures."""
 
-def setup_logging(level: int = logging.INFO, log_file: Optional[str] = None) -> logging.Logger:
+
+def setup_logging(
+    level: int = logging.INFO, log_file: Optional[str] = None
+) -> logging.Logger:
     """
     Setup logging for code quality operations.
 
@@ -554,14 +710,16 @@ def setup_logging(level: int = logging.INFO, log_file: Optional[str] = None) -> 
     Returns:
         Configured logger instance
     """
-    logger = logging.getLogger('code_quality')
+    logger = logging.getLogger("code_quality")
 
     if logger.handlers:
         return logger  # Already configured
 
     logger.setLevel(level)
 
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
 
     # Console handler
     console_handler = logging.StreamHandler()
@@ -570,14 +728,16 @@ def setup_logging(level: int = logging.INFO, log_file: Optional[str] = None) -> 
 
     # File handler if specified
     if log_file:
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
     return logger
 
-def log_operation(logger: logging.Logger, operation: str, success: bool,
-                 details: Optional[str] = None) -> None:
+
+def log_operation(
+    logger: logging.Logger, operation: str, success: bool, details: Optional[str] = None
+) -> None:
     """
     Log an operation result.
 

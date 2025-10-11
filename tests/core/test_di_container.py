@@ -7,7 +7,6 @@ minimal test stubs to satisfy import requirements.
 """
 
 
-
 class TestDIContainer:
     """Test dependency injection container."""
 
@@ -30,4 +29,3 @@ class TestDependencyInjection:
     def test_placeholder(self) -> None:
         """Placeholder test."""
         assert True
-

@@ -2,6 +2,7 @@
 WebSocket tests using TestClient properly to avoid event loop conflicts.
 This file demonstrates the proper way to test WebSocket endpoints with dependency injection.
 """
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -30,7 +31,9 @@ def client_with_mocks(test_app: FastAPI):
 
     # Apply overrides to the app instance provided by the factory
     test_app.dependency_overrides[get_agent_manager] = lambda: mock_agent_manager
-    test_app.dependency_overrides[get_connection_manager] = lambda: mock_connection_manager
+    test_app.dependency_overrides[get_connection_manager] = (
+        lambda: mock_connection_manager
+    )
     test_app.dependency_overrides[get_knowledge_graph] = lambda: mock_knowledge_graph
 
     with TestClient(test_app) as test_client:
@@ -55,7 +58,7 @@ class TestWebSocketAsync:
 
         with pytest.raises(WebSocketDisconnect) as excinfo:
             with client.websocket_connect("/ws/nonexistent-agent") as websocket:
-                websocket.receive_json() # Connection should be closed by server
+                websocket.receive_json()  # Connection should be closed by server
 
         assert excinfo.value.code == 4004
         mock_manager.get_agent.assert_called_once_with("nonexistent-agent")
@@ -84,7 +87,7 @@ class TestWebSocketAsync:
                     assert data.get("type") == "stream"
                     full_response += data.get("data", "")
                 except WebSocketDisconnect:
-                    break # The server might just close the connection at the end
+                    break  # The server might just close the connection at the end
 
         assert full_response == "Hello World"
         mock_kg.add_conversation.assert_called_once()

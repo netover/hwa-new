@@ -37,6 +37,7 @@ settings.BASE_DIR = Path(settings.BASE_DIR).resolve()
 
 class ApplicationSettings(BaseModel):
     """Pydantic model for application settings validation"""
+
     neo4j_uri: str = Field(..., alias="NEO4J_URI")
     neo4j_user: str = Field(..., alias="NEO4J_USER")
     neo4j_password: str = Field(..., alias="NEO4J_PASSWORD")
@@ -52,13 +53,13 @@ class ApplicationSettings(BaseModel):
     tws_password: str | None = Field(default=None, alias="TWS_PASSWORD")
     base_dir: Path = Field(default_factory=lambda: Path.cwd, alias="BASE_DIR")
 
-    @field_validator('tws_host', 'tws_port', 'tws_user', 'tws_password')
+    @field_validator("tws_host", "tws_port", "tws_user", "tws_password")
     @classmethod
     def validate_tws_required_fields(cls, v, values):
         """Validate TWS credentials are provided unless in mock mode"""
-        if not values.data.get('tws_mock_mode', False):
+        if not values.data.get("tws_mock_mode", False):
             if v is None or (isinstance(v, str) and not v.strip()):
-                raise ValueError('TWS credentials are required unless in mock mode')
+                raise ValueError("TWS credentials are required unless in mock mode")
         return v
 
 

@@ -10,16 +10,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 # Set up minimal environment variables for testing
-os.environ['ADMIN_USERNAME'] = 'admin'
-os.environ['ADMIN_PASSWORD'] = 'test123'
+os.environ["ADMIN_USERNAME"] = "admin"
+os.environ["ADMIN_PASSWORD"] = "test123"
+
 
 def test_cors_development():
     """Test CORS in development environment."""
     print("🧪 Testing Development Environment...")
 
     # Set development environment
-    os.environ['APP_ENV'] = 'development'
-    os.environ['CORS_ENVIRONMENT'] = 'development'
+    os.environ["APP_ENV"] = "development"
+    os.environ["CORS_ENVIRONMENT"] = "development"
 
     from resync.api.middleware.cors_middleware import (
         add_cors_middleware,
@@ -30,7 +31,7 @@ def test_cors_development():
 
     # Create development CORS policy and add middleware
     dev_policy = get_development_cors_config()
-    add_cors_middleware(app, environment='development', custom_policy=dev_policy)
+    add_cors_middleware(app, environment="development", custom_policy=dev_policy)
 
     @app.get("/test")
     def test_endpoint():
@@ -45,10 +46,13 @@ def test_cors_development():
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
 
     # Test preflight request
-    response = client.options("/test", headers={
-        "Origin": "http://localhost:3000",
-        "Access-Control-Request-Method": "GET"
-    })
+    response = client.options(
+        "/test",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
     assert "access-control-allow-origin" in response.headers
     assert "access-control-allow-methods" in response.headers
 
@@ -60,8 +64,8 @@ def test_cors_production():
     print("🧪 Testing Production Environment...")
 
     # Set production environment
-    os.environ['APP_ENV'] = 'production'
-    os.environ['CORS_ENVIRONMENT'] = 'production'
+    os.environ["APP_ENV"] = "production"
+    os.environ["CORS_ENVIRONMENT"] = "production"
 
     from resync.api.middleware.cors_middleware import (
         add_cors_middleware,
@@ -72,10 +76,10 @@ def test_cors_production():
 
     # Create production CORS policy with specific allowed origins
     prod_policy = get_production_cors_config(
-        allowed_origins=['https://app.example.com', 'https://api.example.com'],
-        allow_credentials=False
+        allowed_origins=["https://app.example.com", "https://api.example.com"],
+        allow_credentials=False,
     )
-    add_cors_middleware(app, environment='production', custom_policy=prod_policy)
+    add_cors_middleware(app, environment="production", custom_policy=prod_policy)
 
     @app.get("/test")
     def test_endpoint():
@@ -103,8 +107,8 @@ def test_cors_test_environment():
     print("🧪 Testing Test Environment...")
 
     # Set test environment
-    os.environ['APP_ENV'] = 'test'
-    os.environ['CORS_ENVIRONMENT'] = 'test'
+    os.environ["APP_ENV"] = "test"
+    os.environ["CORS_ENVIRONMENT"] = "test"
 
     from resync.api.middleware.cors_middleware import (
         add_cors_middleware,
@@ -115,7 +119,7 @@ def test_cors_test_environment():
 
     # Create test CORS policy and add middleware
     test_policy = get_test_cors_config()
-    add_cors_middleware(app, environment='test', custom_policy=test_policy)
+    add_cors_middleware(app, environment="test", custom_policy=test_policy)
 
     @app.get("/test")
     def test_endpoint():
@@ -143,8 +147,7 @@ def test_cors_headers_validation():
 
     # Test production policy restrictions
     policy = get_production_cors_config(
-        allowed_origins=["https://app.example.com"],
-        allow_credentials=False
+        allowed_origins=["https://app.example.com"], allow_credentials=False
     )
 
     # Validate policy settings
@@ -171,12 +174,11 @@ def test_cors_violation_detection():
 
     # Create production policy with logging
     prod_policy = get_production_cors_config(
-        allowed_origins=["https://app.example.com"],
-        allow_credentials=False
+        allowed_origins=["https://app.example.com"], allow_credentials=False
     )
     prod_policy.log_violations = True
 
-    add_cors_middleware(app, environment='production', custom_policy=prod_policy)
+    add_cors_middleware(app, environment="production", custom_policy=prod_policy)
 
     @app.get("/test")
     def test_endpoint():
@@ -185,10 +187,10 @@ def test_cors_violation_detection():
     client = TestClient(app)
 
     # Test with unauthorized origin
-    response = client.get("/test", headers={
-        "Origin": "https://unauthorized.com",
-        "User-Agent": "TestClient/1.0"
-    })
+    response = client.get(
+        "/test",
+        headers={"Origin": "https://unauthorized.com", "User-Agent": "TestClient/1.0"},
+    )
 
     # Should still get response (middleware logs but doesn't block)
     assert response.status_code == 200
@@ -206,10 +208,7 @@ def test_dynamic_origin_patterns():
     policy = CORSPolicy(
         environment=Environment.DEVELOPMENT,
         allowed_origins=[],
-        origin_regex_patterns=[
-            r"https://.*\.example\.com$",
-            r"https://api\..*\.com$"
-        ]
+        origin_regex_patterns=[r"https://.*\.example\.com$", r"https://api\..*\.com$"],
     )
 
     # Test pattern matching
@@ -240,7 +239,7 @@ def test_preflight_request_handling():
     app = FastAPI()
 
     dev_policy = get_development_cors_config()
-    add_cors_middleware(app, environment='development', custom_policy=dev_policy)
+    add_cors_middleware(app, environment="development", custom_policy=dev_policy)
 
     @app.post("/test")
     def test_endpoint():
@@ -249,11 +248,14 @@ def test_preflight_request_handling():
     client = TestClient(app)
 
     # Test preflight request
-    response = client.options("/test", headers={
-        "Origin": "http://localhost:3000",
-        "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "Content-Type, Authorization"
-    })
+    response = client.options(
+        "/test",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type, Authorization",
+        },
+    )
 
     # Note: OPTIONS requests return 405 for endpoints that don't explicitly handle OPTIONS
     # The important thing is that CORS headers are present
@@ -299,10 +301,7 @@ def test_policy_validation():
 
     # Test production policy with wildcard (should fail)
     try:
-        policy = CORSPolicy(
-            environment=Environment.PRODUCTION,
-            allowed_origins=["*"]
-        )
+        policy = CORSPolicy(environment=Environment.PRODUCTION, allowed_origins=["*"])
         raise AssertionError("Should have raised ValueError for wildcard in production")
     except ValueError as e:
         assert "Wildcard origins are not allowed in production" in str(e)
@@ -310,7 +309,7 @@ def test_policy_validation():
     # Test production policy with valid origins (should succeed)
     policy = CORSPolicy(
         environment=Environment.PRODUCTION,
-        allowed_origins=["https://app.example.com", "https://api.example.com"]
+        allowed_origins=["https://app.example.com", "https://api.example.com"],
     )
     assert policy.environment == Environment.PRODUCTION
     assert "https://app.example.com" in policy.allowed_origins
@@ -319,7 +318,7 @@ def test_policy_validation():
     try:
         policy = CORSPolicy(
             environment=Environment.DEVELOPMENT,
-            allowed_methods=["GET", "INVALID_METHOD"]
+            allowed_methods=["GET", "INVALID_METHOD"],
         )
         raise AssertionError("Should have raised ValueError for invalid method")
     except ValueError as e:
@@ -377,6 +376,7 @@ def main():
     except Exception as e:
         print(f"❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

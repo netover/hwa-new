@@ -7,7 +7,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocketDisconnect
 from fastapi.testclient import TestClient
 
 from resync.core.exceptions import DatabaseError
@@ -36,7 +36,9 @@ class TestAsyncKnowledgeGraph:
     @pytest.fixture
     def mock_driver(self):
         """Provides a mock for the neo4j driver."""
-        with patch("resync.core.knowledge_graph.AsyncGraphDatabase.driver") as mock_driver_class:
+        with patch(
+            "resync.core.knowledge_graph.AsyncGraphDatabase.driver"
+        ) as mock_driver_class:
             mock_driver_instance = AsyncMock()
             mock_session = AsyncMock()
             mock_result = AsyncMock()
@@ -66,6 +68,7 @@ class TestAsyncKnowledgeGraph:
         """Test that knowledge graph operations don't block the event loop."""
         # This test now uses the patched driver directly
         from resync.core.knowledge_graph import AsyncKnowledgeGraph
+
         kg = AsyncKnowledgeGraph()
 
         tasks = [
@@ -97,9 +100,24 @@ class TestIaAuditorIntegration:
         kg = AsyncMock(spec=IKnowledgeGraph)
         # Add required fields for validation
         kg.get_all_recent_conversations.return_value = [
-            {"id": "mem_1", "rating": 5, "user_query": "q1", "agent_response": "r1"},  # Skipped (high rating)
-            {"id": "mem_2", "rating": 2, "user_query": "q2", "agent_response": "r2"},  # Processed
-            {"id": "mem_3", "rating": 1, "user_query": "q3", "agent_response": "r3"},  # Processed
+            {
+                "id": "mem_1",
+                "rating": 5,
+                "user_query": "q1",
+                "agent_response": "r1",
+            },  # Skipped (high rating)
+            {
+                "id": "mem_2",
+                "rating": 2,
+                "user_query": "q2",
+                "agent_response": "r2",
+            },  # Processed
+            {
+                "id": "mem_3",
+                "rating": 1,
+                "user_query": "q3",
+                "agent_response": "r3",
+            },  # Processed
         ]
         kg.is_memory_already_processed.return_value = False
         kg.is_memory_approved.return_value = False
@@ -124,7 +142,9 @@ class TestIaAuditorIntegration:
     @pytest.mark.asyncio
     async def test_ia_auditor_delete_flow(self, mock_kg, mock_aq, mock_lock):
         """Test the auditor flow where a memory is deleted."""
-        mock_llm = AsyncMock(return_value='{"is_incorrect": true, "confidence": 0.95, "reason": "Bad"}')
+        mock_llm = AsyncMock(
+            return_value='{"is_incorrect": true, "confidence": 0.95, "reason": "Bad"}'
+        )
 
         # Only mem_3 should be deleted as others have high ratings
         mock_kg.get_all_recent_conversations.return_value = [
@@ -133,10 +153,12 @@ class TestIaAuditorIntegration:
             {"id": "mem_3", "rating": 1, "user_query": "q3", "agent_response": "r3"},
         ]
 
-        with patch("resync.core.ia_auditor.call_llm", mock_llm), \
-             patch("resync.core.ia_auditor.knowledge_graph", mock_kg), \
-             patch("resync.core.ia_auditor.audit_queue", mock_aq), \
-             patch("resync.core.ia_auditor.audit_lock", mock_lock):
+        with (
+            patch("resync.core.ia_auditor.call_llm", mock_llm),
+            patch("resync.core.ia_auditor.knowledge_graph", mock_kg),
+            patch("resync.core.ia_auditor.audit_queue", mock_aq),
+            patch("resync.core.ia_auditor.audit_lock", mock_lock),
+        ):
             result = await analyze_and_flag_memories()
 
             assert result["deleted"] == 1
@@ -148,13 +170,17 @@ class TestIaAuditorIntegration:
     @pytest.mark.asyncio
     async def test_ia_auditor_flag_flow(self, mock_kg, mock_aq, mock_lock):
         """Test the auditor flow where a memory is flagged for review."""
-        mock_llm = AsyncMock(return_value='{"is_incorrect": true, "confidence": 0.7, "reason": "Needs review"}')
+        mock_llm = AsyncMock(
+            return_value='{"is_incorrect": true, "confidence": 0.7, "reason": "Needs review"}'
+        )
 
         # mem_2 and mem_3 should be processed and flagged
-        with patch("resync.core.ia_auditor.call_llm", mock_llm), \
-             patch("resync.core.ia_auditor.knowledge_graph", mock_kg), \
-             patch("resync.core.ia_auditor.audit_queue", mock_aq), \
-             patch("resync.core.ia_auditor.audit_lock", mock_lock):
+        with (
+            patch("resync.core.ia_auditor.call_llm", mock_llm),
+            patch("resync.core.ia_auditor.knowledge_graph", mock_kg),
+            patch("resync.core.ia_auditor.audit_queue", mock_aq),
+            patch("resync.core.ia_auditor.audit_lock", mock_lock),
+        ):
             result = await analyze_and_flag_memories()
 
             assert result["deleted"] == 0
@@ -167,11 +193,15 @@ class TestIaAuditorIntegration:
     async def test_knowledge_graph_failure(self, mock_aq, mock_lock):
         """Test behavior when knowledge graph fails."""
         mock_kg_fail = AsyncMock(spec=IKnowledgeGraph)
-        mock_kg_fail.get_all_recent_conversations.side_effect = DatabaseError("DB error")
+        mock_kg_fail.get_all_recent_conversations.side_effect = DatabaseError(
+            "DB error"
+        )
 
-        with patch("resync.core.ia_auditor.knowledge_graph", mock_kg_fail), \
-             patch("resync.core.ia_auditor.audit_queue", mock_aq), \
-             patch("resync.core.ia_auditor.audit_lock", mock_lock):
+        with (
+            patch("resync.core.ia_auditor.knowledge_graph", mock_kg_fail),
+            patch("resync.core.ia_auditor.audit_queue", mock_aq),
+            patch("resync.core.ia_auditor.audit_lock", mock_lock),
+        ):
             result = await analyze_and_flag_memories()
 
         assert result["deleted"] == 0
@@ -186,16 +216,21 @@ class TestIaAuditorIntegration:
         mock_llm = AsyncMock(return_value='{"is_incorrect": false, "confidence": 0.9}')
 
         # Use a rating that will be processed
-        large_memory_batch = [{"id": f"mem_{i}", "rating": 2, "user_query": "q", "agent_response": "r"} for i in range(500)]
+        large_memory_batch = [
+            {"id": f"mem_{i}", "rating": 2, "user_query": "q", "agent_response": "r"}
+            for i in range(500)
+        ]
         mock_kg_stress.get_all_recent_conversations.return_value = large_memory_batch
         mock_kg_stress.is_memory_already_processed.return_value = False
         mock_kg_stress.is_memory_approved.return_value = False
         mock_kg_stress.is_memory_flagged.return_value = False
 
-        with patch("resync.core.ia_auditor.call_llm", mock_llm), \
-             patch("resync.core.ia_auditor.knowledge_graph", mock_kg_stress), \
-             patch("resync.core.ia_auditor.audit_queue", mock_aq), \
-             patch("resync.core.ia_auditor.audit_lock", mock_lock):
+        with (
+            patch("resync.core.ia_auditor.call_llm", mock_llm),
+            patch("resync.core.ia_auditor.knowledge_graph", mock_kg_stress),
+            patch("resync.core.ia_auditor.audit_queue", mock_aq),
+            patch("resync.core.ia_auditor.audit_lock", mock_lock),
+        ):
             start_time = time.time()
             result = await analyze_and_flag_memories()
             end_time = time.time()
@@ -211,7 +246,9 @@ class TestEndToEndIntegration:
     """Complete end-to-end integration tests simulating full user interaction flow."""
 
     @pytest.mark.asyncio
-    async def test_complete_user_interaction_flow(self, test_app: FastAPI, client: TestClient):
+    async def test_complete_user_interaction_flow(
+        self, test_app: FastAPI, client: TestClient
+    ):
         """Test the complete user interaction flow: WebSocket → AgentManager → ... → Auditor."""
         mock_agent = AsyncMock()
         mock_agent.stream = MagicMock(return_value=create_text_stream("Test response"))
@@ -234,7 +271,9 @@ class TestEndToEndIntegration:
         mock_run_auditor.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_end_to_end_agent_not_found(self, test_app: FastAPI, client: TestClient):
+    async def test_end_to_end_agent_not_found(
+        self, test_app: FastAPI, client: TestClient
+    ):
         """Test end-to-end flow when an agent is not found."""
         mock_agent_manager = AsyncMock(spec=IAgentManager)
         mock_agent_manager.get_agent.return_value = None
@@ -250,15 +289,21 @@ class TestEndToEndIntegration:
         # but TestClient doesn't expose it easily. The code is sufficient here.
 
     @pytest.mark.asyncio
-    async def test_concurrent_websocket_connections(self, test_app: FastAPI, client: TestClient):
+    async def test_concurrent_websocket_connections(
+        self, test_app: FastAPI, client: TestClient
+    ):
         """Test handling multiple concurrent WebSocket connections."""
         mock_conn_manager = AsyncMock(spec=IConnectionManager)
-        test_app.dependency_overrides[get_connection_manager] = lambda: mock_conn_manager
+        test_app.dependency_overrides[get_connection_manager] = (
+            lambda: mock_conn_manager
+        )
 
         async def simulate_connection(user_id):
             # Each connection needs its own TestClient instance to be isolated
             with TestClient(test_app) as local_client:
-                with local_client.websocket_connect(f"/ws/test-agent?user_id={user_id}") as websocket:
+                with local_client.websocket_connect(
+                    f"/ws/test-agent?user_id={user_id}"
+                ) as websocket:
                     websocket.send_text(f"Question from {user_id}")
                     data = websocket.receive_text()
                     assert "Test response" in data

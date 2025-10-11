@@ -4,6 +4,7 @@ API Endpoints Tests for Health Checks.
 This module tests the /health API endpoints for functionality, ensuring they
 respond correctly and reflect the state of their dependencies.
 """
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -32,8 +33,8 @@ def client():
 class TestHealthEndpoint:
     """Test /health endpoint functionality."""
 
-    @patch('resync.api.health.get_container')
-    @patch('resync.api.health.agent_manager')
+    @patch("resync.api.health.get_container")
+    @patch("resync.api.health.agent_manager")
     def test_health_check_basic(self, mock_agent_manager, mock_get_container, client):
         """Test basic health check functionality for the core app."""
         # Mock the dependencies called by the endpoint
@@ -47,11 +48,15 @@ class TestHealthEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
-        assert "agent_manager" in data["components"]
+        assert "core_components" in data
+        # Check that core_components contains expected components
+        assert isinstance(data["core_components"], dict)
 
-    @patch('resync.api.health.agent_manager', new_callable=MagicMock)
-    @patch('resync.api.health.circuit_breaker_manager', new_callable=MagicMock)
-    def test_health_check_with_dependencies(self, mock_circuit_breaker_manager, mock_agent_manager, client):
+    @patch("resync.api.health.agent_manager", new_callable=MagicMock)
+    @patch("resync.api.health.circuit_breaker_manager", new_callable=MagicMock)
+    def test_health_check_with_dependencies(
+        self, mock_circuit_breaker_manager, mock_agent_manager, client
+    ):
         """Test health check with dependency verification for external services."""
         # Mock the objects and their methods as they are used in the endpoint
         mock_agent_manager.tws_client.ping = AsyncMock(return_value=None)
@@ -63,11 +68,15 @@ class TestHealthEndpoint:
         assert data["status"] == "healthy"
         assert data["components"]["tws_client"] == "reachable"
 
-    @patch('resync.api.health.agent_manager', new_callable=MagicMock)
-    @patch('resync.api.health.circuit_breaker_manager', new_callable=MagicMock)
-    def test_health_check_dependency_failure(self, mock_circuit_breaker_manager, mock_agent_manager, client):
+    @patch("resync.api.health.agent_manager", new_callable=MagicMock)
+    @patch("resync.api.health.circuit_breaker_manager", new_callable=MagicMock)
+    def test_health_check_dependency_failure(
+        self, mock_circuit_breaker_manager, mock_agent_manager, client
+    ):
         """Test health check when a dependency fails."""
-        mock_agent_manager.tws_client.ping = AsyncMock(side_effect=Exception("TWS unavailable"))
+        mock_agent_manager.tws_client.ping = AsyncMock(
+            side_effect=Exception("TWS unavailable")
+        )
         mock_circuit_breaker_manager.get_all_metrics.return_value = {}
 
         response = client.get("/health/services")

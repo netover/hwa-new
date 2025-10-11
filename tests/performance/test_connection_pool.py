@@ -332,6 +332,7 @@ class TestConcurrentLoadHandling:
     async def test_concurrent_request_handling(self):
         """Test handling of many concurrent requests."""
 
+    @staticmethod
     async def make_concurrent_requests(n_requests):
         """Make multiple concurrent requests."""
         # Use TestClient for FastAPI testing without server
@@ -352,7 +353,7 @@ class TestConcurrentLoadHandling:
         # Test with increasing concurrency
         for concurrency in [10, 50, 100]:
             start_time = time.time()
-            responses = await make_concurrent_requests(concurrency)
+            responses = await self.make_concurrent_requests(concurrency)
             end_time = time.time()
 
             # Calculate success rate

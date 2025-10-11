@@ -5,7 +5,12 @@ from typing import Any
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import (
+    HTMLResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi import status
 from pydantic import BaseModel, Field
 
@@ -20,7 +25,11 @@ from resync.settings import settings
 
 # Import CQRS components
 from resync.cqrs.dispatcher import dispatcher
-from resync.cqrs.queries import GetWorkstationsStatusQuery, GetJobsStatusQuery, CheckTWSConnectionQuery
+from resync.cqrs.queries import (
+    GetWorkstationsStatusQuery,
+    GetJobsStatusQuery,
+    CheckTWSConnectionQuery,
+)
 
 # Import endpoint utilities for cross-cutting concerns
 
@@ -83,26 +92,26 @@ class TWSMetricsResponse(BaseModel):
 
 class APIRouterEnhanced:
     """Enhanced API router with improved routing and error handling."""
-    
+
     def __init__(self) -> None:
         self.router = APIRouter()
 
     def handle_error(self, e: Exception, operation: str) -> HTTPException:
         """
         Enhanced error handling for API operations.
-        
+
         Args:
             e: Exception that occurred
             operation: Operation that caused the exception
-        
+
         Returns:
             HTTPException with appropriate status code and message
         """
         logger.error(f"Error during {operation}: {e}", exc_info=True)
-        
+
         if isinstance(e, HTTPException):
             return e
-        
+
         # Map specific errors to appropriate HTTP status codes
         error_lower = str(e).lower()
         if "timeout" in error_lower or "connection" in error_lower:
@@ -126,26 +135,26 @@ class APIRouterEnhanced:
         else:
             status_code = 500  # Internal Server Error
             detail = f"An error occurred during {operation}: {str(e)}"
-        
+
         return HTTPException(status_code=status_code, detail=detail)
 
 
 def handle_error(e: Exception, operation: str) -> HTTPException:
     """
     Global error handling function for API operations.
-    
+
     Args:
         e: Exception that occurred
         operation: Operation that caused the exception
-    
+
     Returns:
         HTTPException with appropriate status code and message
     """
     logger.error(f"Error during {operation}: {e}", exc_info=True)
-    
+
     if isinstance(e, HTTPException):
         return e
-    
+
     # Map specific errors to appropriate HTTP status codes
     error_lower = str(e).lower()
     if "timeout" in error_lower or "connection" in error_lower:
@@ -169,7 +178,7 @@ def handle_error(e: Exception, operation: str) -> HTTPException:
     else:
         status_code = 500  # Internal Server Error
         detail = f"An error occurred during {operation}: {str(e)}"
-    
+
     return HTTPException(status_code=status_code, detail=detail)
 
 
@@ -212,6 +221,7 @@ async def get_all_agents(
 async def test_endpoint(request: Request) -> dict[str, str]:
     return {"message": "Test endpoint working"}
 
+
 # --- System Status Endpoints ---
 @api_router.get("/status")
 async def get_system_status(request: Request) -> dict[str, list[dict[str, str]]]:
@@ -224,14 +234,34 @@ async def get_system_status(request: Request) -> dict[str, list[dict[str, str]]]
         "workstations": [
             {"id": "TWS_MASTER", "name": "Master Domain Manager", "status": "ONLINE"},
             {"id": "TWS_AGENT1", "name": "Agent Workstation 1", "status": "ONLINE"},
-            {"id": "TWS_AGENT2", "name": "Agent Workstation 2", "status": "OFFLINE"}
+            {"id": "TWS_AGENT2", "name": "Agent Workstation 2", "status": "OFFLINE"},
         ],
         "jobs": [
-            {"id": "JOB001", "name": "Daily Backup", "status": "SUCC", "workstation": "TWS_AGENT1"},
-            {"id": "JOB002", "name": "Data Processing", "status": "ABEND", "workstation": "TWS_AGENT2"},
-            {"id": "JOB003", "name": "Report Generation", "status": "SUCC", "workstation": "TWS_AGENT1"},
-            {"id": "JOB004", "name": "System Cleanup", "status": "RUNNING", "workstation": "TWS_MASTER"}
-        ]
+            {
+                "id": "JOB001",
+                "name": "Daily Backup",
+                "status": "SUCC",
+                "workstation": "TWS_AGENT1",
+            },
+            {
+                "id": "JOB002",
+                "name": "Data Processing",
+                "status": "ABEND",
+                "workstation": "TWS_AGENT2",
+            },
+            {
+                "id": "JOB003",
+                "name": "Report Generation",
+                "status": "SUCC",
+                "workstation": "TWS_AGENT1",
+            },
+            {
+                "id": "JOB004",
+                "name": "System Cleanup",
+                "status": "RUNNING",
+                "workstation": "TWS_MASTER",
+            },
+        ],
     }
 
 
@@ -248,10 +278,13 @@ async def get_workstations_status_cqrs(
     try:
         query = GetWorkstationsStatusQuery()
         result = await dispatcher.execute_query(query)  # type: ignore[no-untyped-call]
-        
+
         if not result.success:
-            raise HTTPException(status_code=500, detail=result.error or "Failed to retrieve workstation statuses")
-        
+            raise HTTPException(
+                status_code=500,
+                detail=result.error or "Failed to retrieve workstation statuses",
+            )
+
         return result.data  # type: ignore[no-any-return]
     except Exception as e:
         logger.error("Failed to get TWS workstation statuses: %s", e, exc_info=True)
@@ -270,10 +303,13 @@ async def get_jobs_status_cqrs(
     try:
         query = GetJobsStatusQuery()
         result = await dispatcher.execute_query(query)  # type: ignore[no-untyped-call]
-        
+
         if not result.success:
-            raise HTTPException(status_code=500, detail=result.error or "Failed to retrieve job statuses")
-        
+            raise HTTPException(
+                status_code=500,
+                detail=result.error or "Failed to retrieve job statuses",
+            )
+
         return result.data  # type: ignore[no-any-return]
     except Exception as e:
         logger.error("Failed to get TWS job statuses: %s", e, exc_info=True)
@@ -292,43 +328,48 @@ def get_app_health(request: Request) -> dict[str, str]:
 @public_rate_limit
 async def get_tws_health(
     request: Request,
-    auto_enable: bool = Query(default=False, description="Auto-enable connection if valid"),
+    auto_enable: bool = Query(
+        default=False, description="Auto-enable connection if valid"
+    ),
     tws_client: ITWSClient = tws_client_dependency,
 ) -> dict[str, Any]:
     """
     Performs a quick check to verify the connection to the TWS server is active.
-    
+
     Args:
         auto_enable: Whether to auto-enable the connection if validation is successful
     """
     try:
         query = CheckTWSConnectionQuery()
         result = await dispatcher.execute_query(query)  # type: ignore[no-untyped-call]
-        
+
         if not result.success:
             logger.error("TWS connection check failed: %s", result.error)
             return {
                 "status": "error",
                 "message": "A verificação da conexão com o TWS falhou.",
                 "auto_enable": auto_enable,
-                "auto_enable_applied": False
+                "auto_enable_applied": False,
             }
-        
+
         is_connected = result.data.get("connected", False) if result.data else False
         if is_connected:
             # If auto_enable is true, ensure the connection is properly enabled
             if auto_enable:
                 # This would implement the auto-enable logic
-                logger.info("TWS connection validation successful with auto_enable: %s", auto_enable)
-            
+                logger.info(
+                    "TWS connection validation successful with auto_enable: %s",
+                    auto_enable,
+                )
+
             # Record TWS status success metrics
             runtime_metrics.tws_status_requests_success.increment()  # type: ignore[no-untyped-call]
-            
+
             return {
                 "status": "ok",
                 "message": "Conexão com o TWS bem-sucedida.",
                 "auto_enable": auto_enable,
-                "auto_enable_applied": auto_enable  # In a real implementation, this would reflect if changes were applied
+                "auto_enable_applied": auto_enable,  # In a real implementation, this would reflect if changes were applied
             }
         else:
             # Record TWS status failure metrics
@@ -337,7 +378,7 @@ async def get_tws_health(
                 "status": "error",
                 "message": "A verificação da conexão com o TWS falhou.",
                 "auto_enable": auto_enable,
-                "auto_enable_applied": False
+                "auto_enable_applied": False,
             }
     except Exception as e:
         logger.error("TWS health check failed: %s", e, exc_info=True)
@@ -355,7 +396,9 @@ class ConnectionValidationRequest(BaseModel):
     tws_password: Optional[str] = None
 
 
-@api_router.post("/v2/validate-connection", summary="Validate TWS Connection Parameters")
+@api_router.post(
+    "/v2/validate-connection", summary="Validate TWS Connection Parameters"
+)
 @authenticated_rate_limit
 async def validate_connection(
     request: ConnectionValidationRequest,
@@ -363,11 +406,11 @@ async def validate_connection(
 ) -> dict[str, Any]:
     """
     Validates TWS connection parameters with optional auto-enable feature.
-    
+
     Args:
         request: Connection validation parameters
         tws_client: TWS client for validation
-        
+
     Returns:
         Validation result with connection status
     """
@@ -377,16 +420,16 @@ async def validate_connection(
             host=request.tws_host,
             port=request.tws_port,
             user=request.tws_user,
-            password=request.tws_password
+            password=request.tws_password,
         )
-        
+
         # Record validation metrics
         runtime_metrics.connection_validations_total.increment()
         if validation_result.get("valid", False):
             runtime_metrics.connection_validation_success.increment()
         else:
             runtime_metrics.connection_validation_failure.increment()
-        
+
         # If auto_enable is true, update the service to use the validated settings
         if request.auto_enable and validation_result.get("valid", False):
             # Update the TWS client with new settings
@@ -398,13 +441,14 @@ async def validate_connection(
                 tws_client.user = request.tws_user
             if request.tws_password:
                 tws_client.password = request.tws_password
-        
+
         return {
             "status": "success" if validation_result.get("valid", False) else "error",
             "valid": validation_result.get("valid", False),
             "message": validation_result.get("message", ""),
             "auto_enable": request.auto_enable,
-            "auto_enable_applied": request.auto_enable and validation_result.get("valid", False)
+            "auto_enable_applied": request.auto_enable
+            and validation_result.get("valid", False),
         }
     except Exception as e:
         logger.error("Connection validation failed: %s", e, exc_info=True)
@@ -416,7 +460,7 @@ async def validate_connection(
             "valid": False,
             "message": f"Connection validation failed: {str(e)}",
             "auto_enable": request.auto_enable,
-            "auto_enable_applied": False
+            "auto_enable_applied": False,
         }
 
 
@@ -452,7 +496,11 @@ async def sensitive_endpoint(request: Request, data: dict[str, Any]) -> dict[str
     encrypted = encryption_service.encrypt(data["data"])
     from resync.core.logger import log_with_correlation
 
-    log_with_correlation(logging.INFO, "Processing sensitive data (encrypted successfully)", component="api")
+    log_with_correlation(
+        logging.INFO,
+        "Processing sensitive data (encrypted successfully)",
+        component="api",
+    )
     return {"encrypted": encrypted}
 
 
@@ -498,20 +546,20 @@ async def execute_endpoint(request: Request, data: ExecuteRequest) -> ExecuteRes
 async def files_endpoint(request: Request, path: str) -> FilesResponse:
     """Files endpoint with enhanced path traversal protection."""
     import os
-    
+
     # Define the base directory for allowed access
-    allowed_base = settings.BASE_DIR / "uploads"  
-    
+    allowed_base = settings.BASE_DIR / "uploads"
+
     # URL decode the path
     decoded_path = unquote(path)
-    
+
     # Normalize path to prevent directory traversal
     normalized_path = os.path.normpath(decoded_path)
-    
+
     # Construct the requested path safely
     requested_path = allowed_base / normalized_path
     requested_path = requested_path.resolve()
-    
+
     # Compat: Python 3.8 não possui is_relative_to
     try:
         is_inside = requested_path.is_relative_to(allowed_base)  # py>=3.9
@@ -522,15 +570,17 @@ async def files_endpoint(request: Request, path: str) -> FilesResponse:
         except ValueError:
             is_inside = False
     if not is_inside:
-        raise HTTPException(status_code=400, detail="Invalid path: path traversal detected")
-    
+        raise HTTPException(
+            status_code=400, detail="Invalid path: path traversal detected"
+        )
+
     # Verify the file exists and is not a directory
     if requested_path.is_dir():
         raise HTTPException(status_code=400, detail="Cannot access directories")
-    
+
     if not requested_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     return FilesResponse(path=str(requested_path.relative_to(settings.BASE_DIR)))
 
 
@@ -660,13 +710,18 @@ async def login_page(request: Request) -> HTMLResponse:
 # Token endpoint for JWT authentication
 @api_router.post("/token", include_in_schema=False)
 @public_rate_limit
-async def login_for_access_token(request: Request,
-                                username: str = Form(...),
-                                password: str = Form(...)) -> Response:
+async def login_for_access_token(
+    request: Request, username: str = Form(...), password: str = Form(...)
+) -> Response:
     """
     OAuth2 compatible token login, get an access token for future requests.
     """
-    from resync.api.auth import authenticate_admin, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+    from resync.api.auth import (
+        authenticate_admin,
+        create_access_token,
+        ACCESS_TOKEN_EXPIRE_MINUTES,
+    )
+
     user = await authenticate_admin(username, password)
     if not user:
         raise HTTPException(
@@ -678,21 +733,39 @@ async def login_for_access_token(request: Request,
     access_token = create_access_token(data={"sub": username})
     # Define também como cookie HttpOnly para mitigar XSS (mantém JSON para compat)
     from fastapi import Response
-    resp = Response(content='{"access_token": "' + access_token + '", "token_type": "bearer"}', media_type="application/json")
-    resp.set_cookie("access_token", access_token, httponly=True, secure=True, samesite="lax", max_age=ACCESS_TOKEN_EXPIRE_MINUTES*60 if "ACCESS_TOKEN_EXPIRE_MINUTES" in globals() else 1800, path="/")
+
+    resp = Response(
+        content='{"access_token": "' + access_token + '", "token_type": "bearer"}',
+        media_type="application/json",
+    )
+    resp.set_cookie(
+        "access_token",
+        access_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=(
+            ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            if "ACCESS_TOKEN_EXPIRE_MINUTES" in globals()
+            else 1800
+        ),
+        path="/",
+    )
     return resp
 
 
-@api_router.post("/llm/optimize", summary="Optimize LLM query with TWS-specific optimizations", 
-                 response_model=LLMQueryResponse)
+@api_router.post(
+    "/llm/optimize",
+    summary="Optimize LLM query with TWS-specific optimizations",
+    response_model=LLMQueryResponse,
+)
 @authenticated_rate_limit
 async def optimize_llm_query(
-    request: Request,
-    query_data: LLMQueryRequest
+    request: Request, query_data: LLMQueryRequest
 ) -> LLMQueryResponse:
     """
     Optimize an LLM query using TWS-specific optimizations.
-    
+
     This endpoint uses the LLM optimizer to enhance query processing
     with caching, model selection, and TWS-specific template matching.
     """
@@ -701,20 +774,21 @@ async def optimize_llm_query(
             query=query_data.query,
             context=query_data.context,
             use_cache=query_data.use_cache,
-            stream=query_data.stream
+            stream=query_data.stream,
         )
-        
+
         return LLMQueryResponse(
             optimized=True,
             query=query_data.query,
             response=response,
-            cache_used=bool(query_data.use_cache)  # melhor aproximação até termos flag de hit real
+            cache_used=bool(
+                query_data.use_cache
+            ),  # melhor aproximação até termos flag de hit real
         )
     except Exception as e:
         logger.error(f"LLM optimization failed: {e}", exc_info=True)
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to optimize LLM query: {str(e)}"
+            status_code=500, detail=f"Failed to optimize LLM query: {str(e)}"
         )
 
 
@@ -753,7 +827,9 @@ async def get_tws_alerts(request: Request, limit: int = 10) -> list[dict[str, An
 
 @api_router.get("/monitoring/health", summary="Get TWS System Health")
 @authenticated_rate_limit
-async def get_tws_health_monitoring(request: Request) -> TWSMetricsResponse:  # Renamed to avoid conflict
+async def get_tws_health_monitoring(
+    request: Request,
+) -> TWSMetricsResponse:  # Renamed to avoid conflict
     """
     Returns overall TWS system health status.
     """
@@ -804,13 +880,19 @@ class ExecuteRunbookRequest(BaseModel):
 
 @api_router.post("/runbooks/execute", summary="Execute an Incident Response Runbook")
 @authenticated_rate_limit
-async def execute_runbook(request: Request, runbook_data: ExecuteRunbookRequest) -> dict[str, Any]:
+async def execute_runbook(
+    request: Request, runbook_data: ExecuteRunbookRequest
+) -> dict[str, Any]:
     """
     Executes an incident response runbook with the provided context.
     """
-    result = runbook_registry.execute_runbook(runbook_data.runbook_name, runbook_data.context)
+    result = runbook_registry.execute_runbook(
+        runbook_data.runbook_name, runbook_data.context
+    )
     if result is None:
-        raise HTTPException(status_code=404, detail=f"Runbook '{runbook_data.runbook_name}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Runbook '{runbook_data.runbook_name}' not found"
+        )
     return result
 
 
@@ -830,7 +912,9 @@ async def acknowledge_alert(request: Request, alert_id: str) -> dict[str, bool]:
     """
     Acknowledges an active alert by ID.
     """
-    success = alerting_system.acknowledge_alert(alert_id, request.headers.get("x-forwarded-for", "unknown"))
+    success = alerting_system.acknowledge_alert(
+        alert_id, request.headers.get("x-forwarded-for", "unknown")
+    )
     return {"success": success}
 
 
@@ -845,32 +929,40 @@ class AddAlertRuleRequest(BaseModel):
 
 @api_router.post("/alerts/rules", summary="Add an Alert Rule")
 @authenticated_rate_limit
-async def add_alert_rule(request: Request, rule_data: AddAlertRuleRequest) -> dict[str, str]:
+async def add_alert_rule(
+    request: Request, rule_data: AddAlertRuleRequest
+) -> dict[str, str]:
     """
     Adds a new alert rule to the system.
     """
     from resync.core.alerting import AlertRule, AlertSeverity
+
     severity_map = {
         "info": AlertSeverity.INFO,
         "warning": AlertSeverity.WARNING,
         "critical": AlertSeverity.CRITICAL,
-        "emergency": AlertSeverity.EMERGENCY
+        "emergency": AlertSeverity.EMERGENCY,
     }
-    
+
     if rule_data.severity not in severity_map:
-        raise HTTPException(status_code=400, detail=f"Invalid severity: {rule_data.severity}")
-    
+        raise HTTPException(
+            status_code=400, detail=f"Invalid severity: {rule_data.severity}"
+        )
+
     rule = AlertRule(
         name=rule_data.name,
         description=rule_data.description,
         metric_name=rule_data.metric_name,
         condition=rule_data.condition,
         threshold=rule_data.threshold,
-        severity=severity_map[rule_data.severity]
+        severity=severity_map[rule_data.severity],
     )
-    
+
     alerting_system.add_rule(rule)
-    return {"status": "success", "message": f"Alert rule '{rule_data.name}' added successfully"}
+    return {
+        "status": "success",
+        "message": f"Alert rule '{rule_data.name}' added successfully",
+    }
 
 
 # --- Benchmarking Endpoints ---
@@ -888,10 +980,12 @@ class RunBenchmarkRequest(BaseModel):
 
 @api_router.post("/benchmark/run", summary="Run a performance benchmark")
 @authenticated_rate_limit
-async def run_benchmark(request: Request, benchmark_data: RunBenchmarkRequest) -> dict[str, Any]:
+async def run_benchmark(
+    request: Request, benchmark_data: RunBenchmarkRequest
+) -> dict[str, Any]:
     """
     Run a performance benchmark for the system.
-    
+
     Args:
         benchmark_data: Configuration for the benchmark to run
     """
@@ -899,48 +993,64 @@ async def run_benchmark(request: Request, benchmark_data: RunBenchmarkRequest) -
         # Get required services from DI container
         tws_client = await app_container.get(ITWSClient)
         agent_manager = await app_container.get(IAgentManager)
-        
+
         # Create benchmark runner
         benchmark_runner = await create_benchmark_runner(agent_manager, tws_client)
-        
+
         # Run specific benchmark based on name
         if benchmark_data.benchmark_name == "comprehensive":
             results = await benchmark_runner.run_comprehensive_benchmark()
-            return {"status": "success", "benchmark_name": benchmark_data.benchmark_name, "results": results}
+            return {
+                "status": "success",
+                "benchmark_name": benchmark_data.benchmark_name,
+                "results": results,
+            }
         elif benchmark_data.benchmark_name == "tws_status":
             result = await benchmark_runner.benchmark.run_benchmark(
                 name="TWS Status Check",
                 operation="tws_status",
                 func=benchmark_runner._benchmark_tws_status,
-                iterations=benchmark_data.iterations,
-                warmup_rounds=benchmark_data.warmup_rounds
+                iterations=benchmark_data.iterations or 100,
+                warmup_rounds=benchmark_data.warmup_rounds or 10,
             )
-            return {"status": "success", "benchmark_name": benchmark_data.benchmark_name, "result": result.__dict__}
+            return {
+                "status": "success",
+                "benchmark_name": benchmark_data.benchmark_name,
+                "result": result.__dict__,
+            }
         elif benchmark_data.benchmark_name == "agent_creation":
             result = await benchmark_runner.benchmark.run_benchmark(
                 name="Agent Creation",
                 operation="create_agent",
                 func=benchmark_runner._benchmark_agent_creation,
-                iterations=benchmark_data.iterations,
-                warmup_rounds=benchmark_data.warmup_rounds
+                iterations=benchmark_data.iterations or 100,
+                warmup_rounds=benchmark_data.warmup_rounds or 10,
             )
-            return {"status": "success", "benchmark_name": benchmark_data.benchmark_name, "result": result.__dict__}
+            return {
+                "status": "success",
+                "benchmark_name": benchmark_data.benchmark_name,
+                "result": result.__dict__,
+            }
         else:
             raise HTTPException(
-                status_code=400, 
-                detail=f"Unknown benchmark name: {benchmark_data.benchmark_name}. Available: comprehensive, tws_status, agent_creation"
+                status_code=400,
+                detail=f"Unknown benchmark name: {benchmark_data.benchmark_name}. Available: comprehensive, tws_status, agent_creation",
             )
     except Exception as e:
         logger.error(f"Benchmark execution failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Benchmark execution failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Benchmark execution failed: {str(e)}"
+        )
 
 
 @api_router.get("/benchmark/results", summary="Get benchmark results history")
 @authenticated_rate_limit
-async def get_benchmark_results(request: Request, operation: Optional[str] = None) -> dict[str, Any]:
+async def get_benchmark_results(
+    request: Request, operation: Optional[str] = None
+) -> dict[str, Any]:
     """
     Get historical benchmark results.
-    
+
     Args:
         operation: Optional operation name to filter results
     """
@@ -949,15 +1059,26 @@ async def get_benchmark_results(request: Request, operation: Optional[str] = Non
         # For now we'll create a new runner to access the benchmark - in practice this would be a shared instance
         tws_client = await app_container.get(ITWSClient)
         agent_manager = await app_container.get(IAgentManager)
-        
+
         benchmark_runner = await create_benchmark_runner(agent_manager, tws_client)
-        
+
         if operation:
-            historical_results = benchmark_runner.benchmark.get_historical_performance(operation)
-            return {"operation": operation, "results": [result.__dict__ for result in historical_results]}
+            historical_results = benchmark_runner.benchmark.get_historical_performance(
+                operation
+            )
+            return {
+                "operation": operation,
+                "results": [result.__dict__ for result in historical_results],
+            }
         else:
             # Return all results
-            return {"all_results": [result.__dict__ for result in benchmark_runner.benchmark.results]}
+            return {
+                "all_results": [
+                    result.__dict__ for result in benchmark_runner.benchmark.results
+                ]
+            }
     except Exception as e:
         logger.error(f"Getting benchmark results failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Getting benchmark results failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Getting benchmark results failed: {str(e)}"
+        )

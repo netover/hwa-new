@@ -17,11 +17,14 @@ logger = logging.getLogger(__name__)
 def _get_settings():
     """Lazy import of settings to avoid circular imports."""
     from resync.settings import settings
+
     return settings
+
 
 @dataclass
 class WebSocketConnectionInfo:
     """Information about a WebSocket connection."""
+
     client_id: str
     websocket: WebSocket
     connected_at: datetime
@@ -48,9 +51,11 @@ class WebSocketConnectionInfo:
         if self.connection_errors > 5:
             self.is_healthy = False
 
+
 @dataclass
 class WebSocketPoolStats:
     """Statistics for WebSocket connection pool."""
+
     total_connections: int = 0
     active_connections: int = 0
     healthy_connections: int = 0
@@ -63,6 +68,7 @@ class WebSocketPoolStats:
     connection_errors: int = 0
     cleanup_cycles: int = 0
     last_cleanup: Optional[datetime] = None
+
 
 class WebSocketPoolManager:
     """Enhanced WebSocket connection manager with pooling capabilities."""
@@ -139,7 +145,9 @@ class WebSocketPoolManager:
         async with self._lock:
             for client_id, conn_info in self.connections.items():
                 # Check for stale connections (no activity for timeout period)
-                time_since_activity = (current_time - conn_info.last_activity).total_seconds()
+                time_since_activity = (
+                    current_time - conn_info.last_activity
+                ).total_seconds()
                 if time_since_activity > _get_settings().WS_CONNECTION_TIMEOUT:
                     connections_to_remove.append(client_id)
                     logger.warning(f"Removing stale WebSocket connection: {client_id}")
@@ -147,18 +155,28 @@ class WebSocketPoolManager:
                 # Check for unhealthy connections
                 elif not conn_info.is_healthy:
                     connections_to_remove.append(client_id)
-                    logger.warning(f"Removing unhealthy WebSocket connection: {client_id}")
-                
+                    logger.warning(
+                        f"Removing unhealthy WebSocket connection: {client_id}"
+                    )
+
                 # Additional check: enforce max connection duration to prevent long-lived connections
                 else:
                     try:
-                        connection_duration = (current_time - conn_info.connected_at).total_seconds()
-                        max_duration = getattr(settings, "WS_MAX_CONNECTION_DURATION", 3600)  # Default 1 hour
+                        connection_duration = (
+                            current_time - conn_info.connected_at
+                        ).total_seconds()
+                        max_duration = getattr(
+                            _get_settings(), "WS_MAX_CONNECTION_DURATION", 3600
+                        )  # Default 1 hour
                         if connection_duration > max_duration:
                             connections_to_remove.append(client_id)
-                            logger.info(f"Removing long-lived WebSocket connection: {client_id} (duration: {connection_duration:.1f}s, max: {max_duration}s)")
+                            logger.info(
+                                f"Removing long-lived WebSocket connection: {client_id} (duration: {connection_duration:.1f}s, max: {max_duration}s)"
+                            )
                     except Exception as e:
-                        logger.error(f"Error checking connection duration for {client_id}: {e}")
+                        logger.error(
+                            f"Error checking connection duration for {client_id}: {e}"
+                        )
                         connections_to_remove.append(client_id)
 
             # Remove stale/unhealthy connections
@@ -173,7 +191,7 @@ class WebSocketPoolManager:
             runtime_metrics.record_counter(
                 "websocket_pool.cleanup_cycles",
                 len(connections_to_remove),
-                {"reason": "stale_or_unhealthy_or_long_lived"}
+                {"reason": "stale_or_unhealthy_or_long_lived"},
             )
 
     async def _close_all_connections(self) -> None:
@@ -199,7 +217,9 @@ class WebSocketPoolManager:
 
         # Check pool size limit
         if len(self.connections) >= _get_settings().WS_POOL_MAX_SIZE:
-            logger.warning(f"WebSocket pool at capacity. Rejecting connection for {client_id}")
+            logger.warning(
+                f"WebSocket pool at capacity. Rejecting connection for {client_id}"
+            )
             await websocket.close(code=1013, reason="Server at capacity")
             self.stats.connection_errors += 1
             return
@@ -211,7 +231,7 @@ class WebSocketPoolManager:
             client_id=client_id,
             websocket=websocket,
             connected_at=current_time,
-            last_activity=current_time
+            last_activity=current_time,
         )
 
         async with self._lock:
@@ -224,11 +244,17 @@ class WebSocketPoolManager:
                 self.stats.peak_connections = self.stats.active_connections
 
         logger.info(f"WebSocket connection accepted: {client_id}")
-        logger.info(f"Total active WebSocket connections: {self.stats.active_connections}")
+        logger.info(
+            f"Total active WebSocket connections: {self.stats.active_connections}"
+        )
 
         # Record connection metrics
-        runtime_metrics.record_counter("websocket_pool.connections_accepted", 1, {"client_id": client_id})
-        runtime_metrics.record_gauge("websocket_pool.active_connections", self.stats.active_connections)
+        runtime_metrics.record_counter(
+            "websocket_pool.connections_accepted", 1, {"client_id": client_id}
+        )
+        runtime_metrics.record_gauge(
+            "websocket_pool.active_connections", self.stats.active_connections
+        )
 
     async def disconnect(self, client_id: str) -> None:
         """
@@ -264,11 +290,17 @@ class WebSocketPoolManager:
             self.stats.active_connections = len(self.connections)
 
             logger.info(f"WebSocket connection removed: {client_id}")
-            logger.info(f"Total active WebSocket connections: {self.stats.active_connections}")
+            logger.info(
+                f"Total active WebSocket connections: {self.stats.active_connections}"
+            )
 
             # Record disconnection metrics
-            runtime_metrics.record_counter("websocket_pool.connections_closed", 1, {"client_id": client_id})
-            runtime_metrics.record_gauge("websocket_pool.active_connections", self.stats.active_connections)
+            runtime_metrics.record_counter(
+                "websocket_pool.connections_closed", 1, {"client_id": client_id}
+            )
+            runtime_metrics.record_gauge(
+                "websocket_pool.active_connections", self.stats.active_connections
+            )
 
     async def send_personal_message(self, message: str, client_id: str) -> bool:
         """
@@ -290,15 +322,21 @@ class WebSocketPoolManager:
             await conn_info.websocket.send_text(message)
             conn_info.update_activity()
             conn_info.message_count += 1
-            conn_info.bytes_sent += len(message.encode('utf-8'))
+            conn_info.bytes_sent += len(message.encode("utf-8"))
 
             # Update statistics
             self.stats.total_messages_sent += 1
-            self.stats.total_bytes_sent += len(message.encode('utf-8'))
+            self.stats.total_bytes_sent += len(message.encode("utf-8"))
 
             # Record message metrics
-            runtime_metrics.record_counter("websocket_pool.messages_sent", 1, {"client_id": client_id})
-            runtime_metrics.record_counter("websocket_pool.bytes_sent", len(message.encode('utf-8')), {"client_id": client_id})
+            runtime_metrics.record_counter(
+                "websocket_pool.messages_sent", 1, {"client_id": client_id}
+            )
+            runtime_metrics.record_counter(
+                "websocket_pool.bytes_sent",
+                len(message.encode("utf-8")),
+                {"client_id": client_id},
+            )
 
             return True
 
@@ -326,7 +364,9 @@ class WebSocketPoolManager:
             logger.info("Broadcast requested, but no active WebSocket connections")
             return 0
 
-        logger.info(f"Broadcasting message to {len(self.connections)} WebSocket clients")
+        logger.info(
+            f"Broadcasting message to {len(self.connections)} WebSocket clients"
+        )
 
         # Create tasks to send messages concurrently
         tasks = []
@@ -351,7 +391,9 @@ class WebSocketPoolManager:
         logger.info(f"Message successfully broadcast to {successful_sends} clients")
         return successful_sends
 
-    async def _send_message_with_error_handling(self, client_id: str, message: str) -> bool:
+    async def _send_message_with_error_handling(
+        self, client_id: str, message: str
+    ) -> bool:
         """Send message with proper error handling and connection cleanup."""
         conn_info = self.connections.get(client_id)
         if not conn_info:
@@ -361,7 +403,7 @@ class WebSocketPoolManager:
             await conn_info.websocket.send_text(message)
             conn_info.update_activity()
             conn_info.message_count += 1
-            conn_info.bytes_sent += len(message.encode('utf-8'))
+            conn_info.bytes_sent += len(message.encode("utf-8"))
             return True
 
         except (WebSocketDisconnect, ConnectionError) as e:
@@ -372,7 +414,9 @@ class WebSocketPoolManager:
             return False
         except RuntimeError as e:
             if "websocket state" in str(e).lower():
-                logger.warning(f"WebSocket in wrong state during broadcast to {client_id}: {e}")
+                logger.warning(
+                    f"WebSocket in wrong state during broadcast to {client_id}: {e}"
+                )
                 conn_info.mark_error()
                 return False
             else:
@@ -396,7 +440,9 @@ class WebSocketPoolManager:
             logger.info("JSON broadcast requested, but no active WebSocket connections")
             return 0
 
-        logger.info(f"Broadcasting JSON data to {len(self.connections)} WebSocket clients")
+        logger.info(
+            f"Broadcasting JSON data to {len(self.connections)} WebSocket clients"
+        )
 
         # Create tasks to send JSON data concurrently
         tasks = []
@@ -421,7 +467,9 @@ class WebSocketPoolManager:
         logger.info(f"JSON data successfully broadcast to {successful_sends} clients")
         return successful_sends
 
-    async def _send_json_with_error_handling(self, client_id: str, data: Dict[str, Any]) -> bool:
+    async def _send_json_with_error_handling(
+        self, client_id: str, data: Dict[str, Any]
+    ) -> bool:
         """Send JSON data with proper error handling and connection cleanup."""
         conn_info = self.connections.get(client_id)
         if not conn_info:
@@ -434,22 +482,29 @@ class WebSocketPoolManager:
 
             # Estimate bytes sent (rough approximation)
             import json
+
             json_str = json.dumps(data)
-            conn_info.bytes_sent += len(json_str.encode('utf-8'))
+            conn_info.bytes_sent += len(json_str.encode("utf-8"))
             return True
 
         except (WebSocketDisconnect, ConnectionError) as e:
-            logger.warning(f"Connection issue during JSON broadcast to {client_id}: {e}")
+            logger.warning(
+                f"Connection issue during JSON broadcast to {client_id}: {e}"
+            )
             conn_info.mark_error()
             # Remove connection after disconnection
             await self._remove_connection(client_id)
             return False
         except ValueError as e:
-            logger.error(f"JSON serialization error during broadcast to {client_id}: {e}")
+            logger.error(
+                f"JSON serialization error during broadcast to {client_id}: {e}"
+            )
             return False
         except RuntimeError as e:
             if "websocket state" in str(e).lower():
-                logger.warning(f"WebSocket in wrong state during JSON broadcast to {client_id}: {e}")
+                logger.warning(
+                    f"WebSocket in wrong state during JSON broadcast to {client_id}: {e}"
+                )
                 conn_info.mark_error()
                 return False
             else:
@@ -478,9 +533,13 @@ class WebSocketPoolManager:
 
         try:
             # Check if we have too many unhealthy connections
-            unhealthy_ratio = self.stats.unhealthy_connections / max(1, self.stats.active_connections)
+            unhealthy_ratio = self.stats.unhealthy_connections / max(
+                1, self.stats.active_connections
+            )
             if unhealthy_ratio > 0.5:  # More than 50% unhealthy connections
-                logger.warning(f"WebSocket pool unhealthy: {unhealthy_ratio:.1%} connections are unhealthy")
+                logger.warning(
+                    f"WebSocket pool unhealthy: {unhealthy_ratio:.1%} connections are unhealthy"
+                )
                 return False
 
             # Check for connection leaks (connections that should be closed but aren't)
@@ -488,21 +547,29 @@ class WebSocketPoolManager:
             current_time = datetime.now()
 
             for _client_id, conn_info in self.connections.items():
-                time_since_activity = (current_time - conn_info.last_activity).total_seconds()
+                time_since_activity = (
+                    current_time - conn_info.last_activity
+                ).total_seconds()
                 if time_since_activity > _get_settings().WS_CONNECTION_TIMEOUT * 2:
                     stale_connections += 1
 
             if stale_connections > 0:
-                logger.warning(f"WebSocket pool has {stale_connections} stale connections")
+                logger.warning(
+                    f"WebSocket pool has {stale_connections} stale connections"
+                )
 
-            return stale_connections < self.stats.active_connections * 0.1  # Less than 10% stale
+            return (
+                stale_connections < self.stats.active_connections * 0.1
+            )  # Less than 10% stale
 
         except Exception as e:
             logger.error(f"WebSocket pool health check failed: {e}")
             return False
 
+
 # Global WebSocket pool manager instance
 _websocket_pool_manager: Optional[WebSocketPoolManager] = None
+
 
 async def get_websocket_pool_manager() -> WebSocketPoolManager:
     """Get the global WebSocket pool manager instance."""
@@ -513,6 +580,7 @@ async def get_websocket_pool_manager() -> WebSocketPoolManager:
         await _websocket_pool_manager.initialize()
 
     return _websocket_pool_manager
+
 
 async def shutdown_websocket_pool_manager() -> None:
     """Shutdown the global WebSocket pool manager."""

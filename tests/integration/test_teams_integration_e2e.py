@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from resync.core.di_container import DIContainer
+from resync.core.di_container import DIContainer, ServiceScope
 from resync.core.fastapi_di import inject_container
 from resync.core.teams_integration import TeamsConfig, TeamsIntegration
 
@@ -25,7 +25,7 @@ def test_app():
         config = TeamsConfig(
             enabled=True,
             webhook_url="https://test.webhook.office.com/webhook",
-            channel_name="Test Channel"
+            channel_name="Test Channel",
         )
         return TeamsIntegration(config)
 
@@ -53,8 +53,7 @@ def test_teams_integration_fixture():
     # Configure with Teams integration
     async def teams_factory():
         config = TeamsConfig(
-            enabled=True,
-            webhook_url="https://test.webhook.office.com/webhook"
+            enabled=True, webhook_url="https://test.webhook.office.com/webhook"
         )
         return TeamsIntegration(config)
 
@@ -72,7 +71,7 @@ def test_teams_integration_fixture():
     asyncio.run(test_resolution())
 
 
-@patch('aiohttp.ClientSession')
+@patch("aiohttp.ClientSession")
 def test_teams_integration_http_endpoints(mock_session_class):
     """Test Teams integration through HTTP endpoints."""
     # Setup mock session
@@ -89,8 +88,7 @@ def test_teams_integration_http_endpoints(mock_session_class):
     # Configure container with Teams integration
     async def teams_factory():
         config = TeamsConfig(
-            enabled=True,
-            webhook_url="https://test.webhook.office.com/webhook"
+            enabled=True, webhook_url="https://test.webhook.office.com/webhook"
         )
         return TeamsIntegration(config)
 
@@ -117,8 +115,7 @@ def test_teams_integration_dependency_injection():
     # Configure with Teams integration
     async def teams_factory():
         config = TeamsConfig(
-            enabled=True,
-            webhook_url="https://test.webhook.office.com/webhook"
+            enabled=True, webhook_url="https://test.webhook.office.com/webhook"
         )
         return TeamsIntegration(config)
 
@@ -130,7 +127,10 @@ def test_teams_integration_dependency_injection():
     async def test_async_resolution():
         teams_service = await test_container.get(TeamsIntegration)
         assert isinstance(teams_service, TeamsIntegration)
-        assert teams_service.config.webhook_url == "https://test.webhook.office.com/webhook"
+        assert (
+            teams_service.config.webhook_url
+            == "https://test.webhook.office.com/webhook"
+        )
 
     # Run the async test
     asyncio.run(test_async_resolution())

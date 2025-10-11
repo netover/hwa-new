@@ -2,6 +2,7 @@
 LLM wrapper module that integrates the TWS-optimized LLM functionality
 with the agent system using the LLM optimizer.
 """
+
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -20,7 +21,7 @@ class OptimizedLLMWrapper:
     Wrapper class that provides optimized LLM capabilities
     for use with the agent system.
     """
-    
+
     def __init__(self):
         self.optimizer = llm_optimizer
 
@@ -33,30 +34,28 @@ class OptimizedLLMWrapper:
     ) -> str:
         """
         Get optimized LLM response using the TWS optimizer.
-        
+
         Args:
             query: User query or prompt
             context: Additional context for the query
             use_cache: Whether to use response caching
             stream: Whether to stream the response
-            
+
         Returns:
             Optimized LLM response
         """
         try:
             response = await self.optimizer.get_optimized_response(
-                query=query,
-                context=context or {},
-                use_cache=use_cache,
-                stream=stream
+                query=query, context=context or {}, use_cache=use_cache, stream=stream
             )
             return response
         except Exception as e:
             logger.error("llm_optimization_failed", error=str(e), exc_info=True)
             # Fallback to direct LLM call if optimization fails
             from resync.core.utils.llm import call_llm
+
             return await call_llm(query, model="gpt-3.5-turbo")
-    
+
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics from the optimizer."""
         return self.optimizer.get_cache_stats()

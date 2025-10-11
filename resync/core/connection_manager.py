@@ -80,7 +80,11 @@ class ConnectionManager:
         # Use pool manager for enhanced broadcasting with monitoring
         if self._pool_manager and self._pool_manager.connections:
             successful_sends = await self._pool_manager.broadcast(message)
-            logger.info("broadcast_completed", successful_sends=successful_sends, message="clients received the message")
+            logger.info(
+                "broadcast_completed",
+                successful_sends=successful_sends,
+                message="clients received the message",
+            )
             return
 
         # Fallback to legacy broadcasting for backward compatibility
@@ -120,7 +124,11 @@ class ConnectionManager:
         # Use pool manager for enhanced JSON broadcasting with monitoring
         if self._pool_manager and self._pool_manager.connections:
             successful_sends = await self._pool_manager.broadcast_json(data)
-            logger.info("json_broadcast_completed", successful_sends=successful_sends, message="clients received the data")
+            logger.info(
+                "json_broadcast_completed",
+                successful_sends=successful_sends,
+                message="clients received the data",
+            )
             return
 
         # Fallback to legacy JSON broadcasting for backward compatibility
@@ -176,7 +184,9 @@ class ConnectionManager:
                 "total_messages_received": stats.total_messages_received,
                 "connection_errors": stats.connection_errors,
                 "cleanup_cycles": stats.cleanup_cycles,
-                "last_cleanup": stats.last_cleanup.isoformat() if stats.last_cleanup else None,
+                "last_cleanup": (
+                    stats.last_cleanup.isoformat() if stats.last_cleanup else None
+                ),
             }
         else:
             # Fallback to basic stats if pool manager not available

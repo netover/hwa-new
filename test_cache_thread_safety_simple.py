@@ -5,8 +5,9 @@ Simple test script to verify thread-safe component cache operations.
 import asyncio
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger(__name__)
+
 
 async def test_thread_safe_cache():
     """Test thread-safe cache operations with mock components."""
@@ -27,7 +28,9 @@ async def test_thread_safe_cache():
                 message=f"Update {i} from writer {task_id}",
             )
 
-            await service._update_cached_component(f"test_component_{task_id}", component)
+            await service._update_cached_component(
+                f"test_component_{task_id}", component
+            )
             logger.info(f"Writer {task_id} updated test_component_{task_id}")
             await asyncio.sleep(0.01)
 
@@ -58,6 +61,7 @@ async def test_thread_safe_cache():
 
     return True
 
+
 async def main():
     """Main test function."""
     logger.info("Testing thread-safe cache operations...")
@@ -72,10 +76,12 @@ async def main():
     except Exception as e:
         logger.error(f"❌ Test failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
     return True
+
 
 if __name__ == "__main__":
     asyncio.run(main())

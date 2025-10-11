@@ -19,8 +19,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 # Set up minimal environment variables for testing
-os.environ['ADMIN_USERNAME'] = 'admin'
-os.environ['ADMIN_PASSWORD'] = 'test123'
+os.environ["ADMIN_USERNAME"] = "admin"
+os.environ["ADMIN_PASSWORD"] = "test123"
 
 
 def test_environment_parameter_handling() -> None:
@@ -51,7 +51,9 @@ def test_environment_parameter_handling() -> None:
     cors_middleware = LoggingCORSMiddleware(
         app=app,
         policy=dev_policy,
-        allow_origins=dev_policy.allowed_origins if not dev_policy.allow_all_origins else ["*"],
+        allow_origins=(
+            dev_policy.allowed_origins if not dev_policy.allow_all_origins else ["*"]
+        ),
         allow_methods=dev_policy.allowed_methods,
         allow_headers=dev_policy.allowed_headers,
         allow_credentials=dev_policy.allow_credentials,
@@ -72,7 +74,7 @@ def test_production_regex_security() -> None:
     try:
         CORSPolicy(
             environment=Environment.PRODUCTION,
-            origin_regex_patterns=[r"https://.*\.example\.com$"]
+            origin_regex_patterns=[r"https://.*\.example\.com$"],
         )
         raise AssertionError("Should have raised ValueError for regex in production")
     except ValueError as e:
@@ -81,12 +83,13 @@ def test_production_regex_security() -> None:
     # Test 2: Regex patterns should be allowed in development
     policy = CORSPolicy(
         environment=Environment.DEVELOPMENT,
-        origin_regex_patterns=[r"https://.*\.example\.com$"]
+        origin_regex_patterns=[r"https://.*\.example\.com$"],
     )
     assert len(policy.origin_regex_patterns) == 1
 
     # Test 3: Default production policy should not have regex patterns
     from resync.api.middleware.cors_config import cors_config
+
     prod_policy = cors_config.get_policy(Environment.PRODUCTION)
     assert len(prod_policy.origin_regex_patterns) == 0
 
@@ -108,16 +111,28 @@ def test_cors_header_validation() -> None:
     cors_middleware = LoggingCORSMiddleware(
         app=app,
         policy=dev_config,
-        allow_origins=dev_config.allowed_origins if not dev_config.allow_all_origins else ["*"],
+        allow_origins=(
+            dev_config.allowed_origins if not dev_config.allow_all_origins else ["*"]
+        ),
         allow_methods=dev_config.allowed_methods,
         allow_headers=dev_config.allowed_headers,
         allow_credentials=dev_config.allow_credentials,
         max_age=dev_config.max_age,
     )
     # Remove internal attributes that shouldn't be passed to constructor
-    middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
-                      if k not in ['app', 'dispatch_func', '_cors_middleware',
-                                   '_cors_violations', '_cors_requests', '_preflight_requests']}
+    middleware_dict = {
+        k: v
+        for k, v in cors_middleware.__dict__.items()
+        if k
+        not in [
+            "app",
+            "dispatch_func",
+            "_cors_middleware",
+            "_cors_violations",
+            "_cors_requests",
+            "_preflight_requests",
+        ]
+    }
     app.add_middleware(type(cors_middleware), **middleware_dict)  # type: ignore[arg-type]
 
     @app.get("/test")
@@ -141,29 +156,48 @@ def test_cors_header_validation() -> None:
     assert "access-control-allow-credentials" in response.headers
 
     # Test 2: Preflight request detailed header validation
-    response = client.options("/test", headers={
-        "Origin": "http://localhost:3000",
-        "Access-Control-Request-Method": "GET",
-        "Access-Control-Request-Headers": "Content-Type, Authorization"
-    })
+    response = client.options(
+        "/test",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "Content-Type, Authorization",
+        },
+    )
 
     # Note: OPTIONS requests return 405 when method not explicitly handled by FastAPI,
     # but CORS headers should still be present
-    assert response.status_code == 405  # FastAPI returns 405 for OPTIONS on GET-only endpoints
+    assert (
+        response.status_code == 405
+    )  # FastAPI returns 405 for OPTIONS on GET-only endpoints
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
-    assert response.headers["access-control-allow-methods"] == "GET, POST, PUT, DELETE, OPTIONS"
-    assert response.headers["access-control-allow-headers"] == "Content-Type, Authorization, X-Requested-With"
+    assert (
+        response.headers["access-control-allow-methods"]
+        == "GET, POST, PUT, DELETE, OPTIONS"
+    )
+    assert (
+        response.headers["access-control-allow-headers"]
+        == "Content-Type, Authorization, X-Requested-With"
+    )
     assert response.headers["access-control-max-age"] == "86400"
 
     # Test 3: Preflight for different methods
-    response = client.options("/test", headers={
-        "Origin": "http://localhost:3000",
-        "Access-Control-Request-Method": "POST"
-    })
+    response = client.options(
+        "/test",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
     # Note: OPTIONS requests return 405 when method not explicitly handled by FastAPI,
     # but CORS headers should still be present
-    assert response.status_code == 405  # FastAPI returns 405 for OPTIONS on GET-only endpoints
-    assert response.headers["access-control-allow-methods"] == "GET, POST, PUT, DELETE, OPTIONS"
+    assert (
+        response.status_code == 405
+    )  # FastAPI returns 405 for OPTIONS on GET-only endpoints
+    assert (
+        response.headers["access-control-allow-methods"]
+        == "GET, POST, PUT, DELETE, OPTIONS"
+    )
 
     print("[PASS] CORS header validation works correctly")
 
@@ -173,8 +207,8 @@ def test_cors_test_environment() -> None:
     print("[TEST] Testing Test Environment...")
 
     # Set test environment
-    os.environ['APP_ENV'] = 'test'
-    os.environ['CORS_ENVIRONMENT'] = 'test'
+    os.environ["APP_ENV"] = "test"
+    os.environ["CORS_ENVIRONMENT"] = "test"
 
     from resync.api.middleware.cors_middleware import (
         LoggingCORSMiddleware,
@@ -188,7 +222,9 @@ def test_cors_test_environment() -> None:
     cors_middleware = LoggingCORSMiddleware(
         app=app,
         policy=test_config,
-        allow_origins=test_config.allowed_origins if not test_config.allow_all_origins else ["*"],
+        allow_origins=(
+            test_config.allowed_origins if not test_config.allow_all_origins else ["*"]
+        ),
         allow_methods=test_config.allowed_methods,
         allow_headers=test_config.allowed_headers,
         allow_credentials=test_config.allow_credentials,
@@ -197,7 +233,7 @@ def test_cors_test_environment() -> None:
 
     # Just verify that the middleware can be created successfully
     assert cors_middleware is not None
-    assert hasattr(cors_middleware, 'policy')
+    assert hasattr(cors_middleware, "policy")
     assert cors_middleware.policy is test_config
 
     print("[PASS] Test environment CORS middleware created successfully")
@@ -216,22 +252,33 @@ def test_cors_edge_cases() -> None:
     # Test 1: DNS rebinding protection
     app = FastAPI()
     prod_config = get_production_cors_config(
-        allowed_origins=["https://app.example.com"],
-        allow_credentials=False
+        allowed_origins=["https://app.example.com"], allow_credentials=False
     )
     cors_middleware = LoggingCORSMiddleware(
         app=app,
         policy=prod_config,
-        allow_origins=prod_config.allowed_origins if not prod_config.allow_all_origins else ["*"],
+        allow_origins=(
+            prod_config.allowed_origins if not prod_config.allow_all_origins else ["*"]
+        ),
         allow_methods=prod_config.allowed_methods,
         allow_headers=prod_config.allowed_headers,
         allow_credentials=prod_config.allow_credentials,
         max_age=prod_config.max_age,
     )
     # Remove internal attributes that shouldn't be passed to constructor
-    middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
-                      if k not in ['app', 'dispatch_func', '_cors_middleware',
-                                   '_cors_violations', '_cors_requests', '_preflight_requests']}
+    middleware_dict = {
+        k: v
+        for k, v in cors_middleware.__dict__.items()
+        if k
+        not in [
+            "app",
+            "dispatch_func",
+            "_cors_middleware",
+            "_cors_violations",
+            "_cors_requests",
+            "_preflight_requests",
+        ]
+    }
     app.add_middleware(type(cors_middleware), **middleware_dict)  # type: ignore[arg-type]
 
     @app.get("/test")
@@ -258,7 +305,7 @@ def test_cors_edge_cases() -> None:
         "https://app.example.com.evil.com",
         "https://evil.com",
         "http://app.example.com:3000",  # Different port
-        "http://localhost:3000"
+        "http://localhost:3000",
     ]
 
     for origin in malicious_origins:
@@ -273,16 +320,28 @@ def test_cors_edge_cases() -> None:
     cors_middleware2 = LoggingCORSMiddleware(
         app=app2,
         policy=dev_config,
-        allow_origins=dev_config.allowed_origins if not dev_config.allow_all_origins else ["*"],
+        allow_origins=(
+            dev_config.allowed_origins if not dev_config.allow_all_origins else ["*"]
+        ),
         allow_methods=dev_config.allowed_methods,
         allow_headers=dev_config.allowed_headers,
         allow_credentials=dev_config.allow_credentials,
         max_age=dev_config.max_age,
     )
     # Remove internal attributes that shouldn't be passed to constructor
-    middleware_dict = {k: v for k, v in cors_middleware2.__dict__.items()
-                      if k not in ['app', 'dispatch_func', '_cors_middleware',
-                                   '_cors_violations', '_cors_requests', '_preflight_requests']}
+    middleware_dict = {
+        k: v
+        for k, v in cors_middleware2.__dict__.items()
+        if k
+        not in [
+            "app",
+            "dispatch_func",
+            "_cors_middleware",
+            "_cors_violations",
+            "_cors_requests",
+            "_preflight_requests",
+        ]
+    }
     app2.add_middleware(type(cors_middleware2), **middleware_dict)  # type: ignore[arg-type]
 
     @app2.get("/test")
@@ -316,22 +375,36 @@ def test_configurable_origins() -> None:
     custom_policy = CORSPolicy(
         environment=Environment.PRODUCTION,
         allowed_origins=custom_origins,
-        allow_credentials=False
+        allow_credentials=False,
     )
 
     cors_middleware = LoggingCORSMiddleware(
         app=app,
         policy=custom_policy,
-        allow_origins=custom_policy.allowed_origins if not custom_policy.allow_all_origins else ["*"],
+        allow_origins=(
+            custom_policy.allowed_origins
+            if not custom_policy.allow_all_origins
+            else ["*"]
+        ),
         allow_methods=custom_policy.allowed_methods,
         allow_headers=custom_policy.allowed_headers,
         allow_credentials=custom_policy.allow_credentials,
         max_age=custom_policy.max_age,
     )
     # Remove internal attributes that shouldn't be passed to constructor
-    middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
-                      if k not in ['app', 'dispatch_func', '_cors_middleware',
-                                   '_cors_violations', '_cors_requests', '_preflight_requests']}
+    middleware_dict = {
+        k: v
+        for k, v in cors_middleware.__dict__.items()
+        if k
+        not in [
+            "app",
+            "dispatch_func",
+            "_cors_middleware",
+            "_cors_violations",
+            "_cors_requests",
+            "_preflight_requests",
+        ]
+    }
     app.add_middleware(type(cors_middleware), **middleware_dict)  # type: ignore[arg-type]
 
     @app.get("/test")
@@ -367,24 +440,35 @@ def test_cors_violation_logging() -> None:
 
     # Create production policy with logging enabled
     prod_config = get_production_cors_config(
-        allowed_origins=["https://app.example.com"],
-        allow_credentials=False
+        allowed_origins=["https://app.example.com"], allow_credentials=False
     )
     prod_config.log_violations = True
 
     cors_middleware = LoggingCORSMiddleware(
         app=app,
         policy=prod_config,
-        allow_origins=prod_config.allowed_origins if not prod_config.allow_all_origins else ["*"],
+        allow_origins=(
+            prod_config.allowed_origins if not prod_config.allow_all_origins else ["*"]
+        ),
         allow_methods=prod_config.allowed_methods,
         allow_headers=prod_config.allowed_headers,
         allow_credentials=prod_config.allow_credentials,
         max_age=prod_config.max_age,
     )
     # Remove internal attributes that shouldn't be passed to constructor
-    middleware_dict = {k: v for k, v in cors_middleware.__dict__.items()
-                      if k not in ['app', 'dispatch_func', '_cors_middleware',
-                                   '_cors_violations', '_cors_requests', '_preflight_requests']}
+    middleware_dict = {
+        k: v
+        for k, v in cors_middleware.__dict__.items()
+        if k
+        not in [
+            "app",
+            "dispatch_func",
+            "_cors_middleware",
+            "_cors_violations",
+            "_cors_requests",
+            "_preflight_requests",
+        ]
+    }
     app.add_middleware(type(cors_middleware), **middleware_dict)  # type: ignore[arg-type]
 
     @app.get("/test")
@@ -394,10 +478,10 @@ def test_cors_violation_logging() -> None:
     client = TestClient(app)
 
     # Test with unauthorized origin should be logged
-    response = client.get("/test", headers={
-        "Origin": "https://unauthorized.com",
-        "User-Agent": "TestClient/1.0"
-    })
+    response = client.get(
+        "/test",
+        headers={"Origin": "https://unauthorized.com", "User-Agent": "TestClient/1.0"},
+    )
 
     # Request should succeed but no CORS header
     assert response.status_code == 200
@@ -451,6 +535,7 @@ def main() -> None:
     except Exception as e:
         print(f"[FAIL] Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

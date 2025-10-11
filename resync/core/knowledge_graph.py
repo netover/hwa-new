@@ -25,8 +25,15 @@ class AsyncKnowledgeGraph:
             )
             logger.info("neo4j_driver_initialized")
         except (neo4j_exceptions.ServiceUnavailable, neo4j_exceptions.AuthError) as e:
-            logger.critical("failed_to_initialize_neo4j_driver", error=str(e), exc_info=True)
+            logger.critical(
+                "failed_to_initialize_neo4j_driver", error=str(e), exc_info=True
+            )
             raise KnowledgeGraphError("Could not connect to Neo4j database.") from e
+
+    @property
+    def client(self) -> Any:
+        """Gets the underlying Neo4j driver client."""
+        return self.driver
 
     async def close(self):
         """Fecha a conexão com o driver do Neo4j."""
@@ -53,7 +60,9 @@ class AsyncKnowledgeGraph:
                 return str(record["node_id"])
         except neo4j_exceptions.Neo4jError as e:
             logger.error("error_adding_content_to_kg", error=str(e), exc_info=True)
-            raise KnowledgeGraphError("Failed to store content in knowledge graph.") from e
+            raise KnowledgeGraphError(
+                "Failed to store content in knowledge graph."
+            ) from e
 
     async def get_relevant_context(self, user_query: str, top_k: int = 10) -> str:
         """
@@ -80,13 +89,26 @@ class AsyncKnowledgeGraph:
             async with self.driver.session() as session:
                 result = await session.run(query, params)
                 records = await result.data()
-                return "\n".join([f"- {record['text']} (Score: {record['score']:.2f})" for record in records])
+                return "\n".join(
+                    [
+                        f"- {record['text']} (Score: {record['score']:.2f})"
+                        for record in records
+                    ]
+                )
         except neo4j_exceptions.Neo4jError as e:
-            logger.error("error_fetching_relevant_context_from_kg", error=str(e), exc_info=True)
-            raise KnowledgeGraphError("Failed to query knowledge graph for context.") from e
+            logger.error(
+                "error_fetching_relevant_context_from_kg", error=str(e), exc_info=True
+            )
+            raise KnowledgeGraphError(
+                "Failed to query knowledge graph for context."
+            ) from e
 
     async def add_conversation(
-        self, user_query: str, agent_response: str, agent_id: str, context: Optional[Dict[str, Any]] = None
+        self,
+        user_query: str,
+        agent_response: str,
+        agent_id: str,
+        context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Stores a conversation between a user and an agent."""
         query = """
@@ -103,7 +125,9 @@ class AsyncKnowledgeGraph:
             "user_query": user_query,
             "agent_response": agent_response,
             "agent_id": agent_id,
-            "model_used": context.get("model_used", "unknown") if context else "unknown",
+            "model_used": (
+                context.get("model_used", "unknown") if context else "unknown"
+            ),
         }
 
         try:
@@ -114,7 +138,9 @@ class AsyncKnowledgeGraph:
                 return str(record["conversation_id"])
         except neo4j_exceptions.Neo4jError as e:
             logger.error("error_adding_conversation_to_kg", error=str(e), exc_info=True)
-            raise KnowledgeGraphError("Failed to store conversation in knowledge graph.") from e
+            raise KnowledgeGraphError(
+                "Failed to store conversation in knowledge graph."
+            ) from e
 
     async def search_similar_issues(
         self, query: str, limit: int = 5
@@ -200,7 +226,9 @@ class AsyncKnowledgeGraph:
                 record = await result.single()
                 return record["flagged"] if record else False
         except neo4j_exceptions.Neo4jError as e:
-            logger.error("error_checking_if_memory_is_flagged", error=str(e), exc_info=True)
+            logger.error(
+                "error_checking_if_memory_is_flagged", error=str(e), exc_info=True
+            )
             raise KnowledgeGraphError("Failed to check memory flag status.") from e
 
     async def is_memory_approved(self, memory_id: str) -> bool:
@@ -213,7 +241,9 @@ class AsyncKnowledgeGraph:
                 record = await result.single()
                 return record["approved"] if record else False
         except neo4j_exceptions.Neo4jError as e:
-            logger.error("error_checking_if_memory_is_approved", error=str(e), exc_info=True)
+            logger.error(
+                "error_checking_if_memory_is_approved", error=str(e), exc_info=True
+            )
             raise KnowledgeGraphError("Failed to check memory approval status.") from e
 
     async def delete_memory(self, memory_id: str) -> None:
@@ -257,7 +287,9 @@ class AsyncKnowledgeGraph:
                 record = await result.single()
                 return record["processed"] if record else False
         except neo4j_exceptions.Neo4jError as e:
-            logger.error("error_checking_if_memory_is_processed", error=str(e), exc_info=True)
+            logger.error(
+                "error_checking_if_memory_is_processed", error=str(e), exc_info=True
+            )
             raise KnowledgeGraphError("Failed to check memory processed status.") from e
 
     async def atomic_check_and_flag(
@@ -270,7 +302,11 @@ class AsyncKnowledgeGraph:
             c.flag_confidence = $confidence, c.processed = true
         RETURN c.processed AS was_already_processed
         """
-        params = {"memory_id": int(memory_id), "reason": reason, "confidence": confidence}
+        params = {
+            "memory_id": int(memory_id),
+            "reason": reason,
+            "confidence": confidence,
+        }
 
         try:
             async with self.driver.session() as session:
@@ -280,7 +316,9 @@ class AsyncKnowledgeGraph:
                 return not record["was_already_processed"]
         except neo4j_exceptions.Neo4jError as e:
             logger.error("error_in_atomic_check_and_flag", error=str(e), exc_info=True)
-            raise KnowledgeGraphError("Failed to atomically check and flag memory.") from e
+            raise KnowledgeGraphError(
+                "Failed to atomically check and flag memory."
+            ) from e
 
     async def atomic_check_and_delete(self, memory_id: str) -> bool:
         """Atomically checks if memory is already processed, and if not, deletes it."""
@@ -300,5 +338,9 @@ class AsyncKnowledgeGraph:
                 # Return True if it was NOT already processed (i.e., we just processed it)
                 return not record["was_already_processed"]
         except neo4j_exceptions.Neo4jError as e:
-            logger.error("error_in_atomic_check_and_delete", error=str(e), exc_info=True)
-            raise KnowledgeGraphError("Failed to atomically check and delete memory.") from e
+            logger.error(
+                "error_in_atomic_check_and_delete", error=str(e), exc_info=True
+            )
+            raise KnowledgeGraphError(
+                "Failed to atomically check and delete memory."
+            ) from e

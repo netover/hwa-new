@@ -16,7 +16,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from resync.core.agent_manager import AgentManager
 from resync.core.audit_queue import AsyncAuditQueue
 from resync.core.connection_manager import ConnectionManager
-from resync.core.di_container import DIContainer, ServiceScope, container
+from resync.core.di_container import DIContainer, ServiceLifetime, container
 from resync.core.file_ingestor import create_file_ingestor
 from resync.core.interfaces import (
     IAgentManager,
@@ -33,7 +33,9 @@ from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
 
 # --- Logging Setup ---
-logger = logging.getLogger(__name__)
+from resync.core.structured_logger import get_logger
+
+logger = get_logger(__name__)
 
 # --- Type Variables ---
 T = TypeVar("T")
@@ -85,21 +87,23 @@ def configure_container(app_container: DIContainer = container) -> DIContainer:
     """
     try:
         # Register interfaces and implementations
-        app_container.register(IAgentManager, AgentManager, ServiceScope.SINGLETON)
+        app_container.register(IAgentManager, AgentManager, ServiceLifetime.SINGLETON)
         app_container.register(
-            IConnectionManager, ConnectionManager, ServiceScope.SINGLETON
+            IConnectionManager, ConnectionManager, ServiceLifetime.SINGLETON
         )
-        app_container.register(IKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON)
-        app_container.register(IAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
+        app_container.register(
+            IKnowledgeGraph, AsyncKnowledgeGraph, ServiceLifetime.SINGLETON
+        )
+        app_container.register(IAuditQueue, AsyncAuditQueue, ServiceLifetime.SINGLETON)
 
         # Register TWS client with factory
         app_container.register_factory(
-            ITWSClient, get_tws_client_factory, ServiceScope.SINGLETON
+            ITWSClient, get_tws_client_factory, ServiceLifetime.SINGLETON
         )
 
         # Register Teams integration with factory
         app_container.register_factory(
-            TeamsIntegration, get_teams_integration_factory, ServiceScope.SINGLETON
+            TeamsIntegration, get_teams_integration_factory, ServiceLifetime.SINGLETON
         )
 
         # Register FileIngestor - depends on KnowledgeGraph
@@ -109,18 +113,22 @@ def configure_container(app_container: DIContainer = container) -> DIContainer:
             return create_file_ingestor(knowledge_graph)
 
         app_container.register_factory(
-            IFileIngestor, file_ingestor_factory, ServiceScope.SINGLETON
+            IFileIngestor, file_ingestor_factory, ServiceLifetime.SINGLETON
         )
 
         # Register concrete types (for when the concrete type is requested directly)
-        app_container.register(AgentManager, AgentManager, ServiceScope.SINGLETON)
-        app_container.register(ConnectionManager, ConnectionManager, ServiceScope.SINGLETON)
+        app_container.register(AgentManager, AgentManager, ServiceLifetime.SINGLETON)
         app_container.register(
-            AsyncKnowledgeGraph, AsyncKnowledgeGraph, ServiceScope.SINGLETON
+            ConnectionManager, ConnectionManager, ServiceLifetime.SINGLETON
         )
-        app_container.register(AsyncAuditQueue, AsyncAuditQueue, ServiceScope.SINGLETON)
+        app_container.register(
+            AsyncKnowledgeGraph, AsyncKnowledgeGraph, ServiceLifetime.SINGLETON
+        )
+        app_container.register(
+            AsyncAuditQueue, AsyncAuditQueue, ServiceLifetime.SINGLETON
+        )
         app_container.register_factory(
-            OptimizedTWSClient, get_tws_client_factory, ServiceScope.SINGLETON
+            OptimizedTWSClient, get_tws_client_factory, ServiceLifetime.SINGLETON
         )
 
         logger.info("DI container configured with all service registrations")
@@ -146,11 +154,22 @@ def get_service(service_type: Type[T]) -> Callable[[], T]:
         try:
             return container.get(service_type)
         except KeyError:
-            logger.error("service_not_registered_in_container", service_type=service_type.__name__)
-            raise RuntimeError(f"Required service {service_type.__name__} is not available in the DI container")
+            logger.error(
+                "service_not_registered_in_container",
+                service_type=service_type.__name__,
+            )
+            raise RuntimeError(
+                f"Required service {service_type.__name__} is not available in the DI container"
+            )
         except Exception as e:
-            logger.error("error_resolving_service", service_type=service_type.__name__, error=str(e))
-            raise RuntimeError(f"Error resolving service {service_type.__name__}: {str(e)}")
+            logger.error(
+                "error_resolving_service",
+                service_type=service_type.__name__,
+                error=str(e),
+            )
+            raise RuntimeError(
+                f"Error resolving service {service_type.__name__}: {str(e)}"
+            )
 
     # Set the return annotation for FastAPI to use
     _get_service.__annotations__ = {"return": service_type}
@@ -268,14 +287,18 @@ def with_injection(func: Callable) -> Callable:
                     kwargs[param.name] = param.default
 
     if inspect.iscoroutinefunction(func):
+
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             inject_dependencies(kwargs)
             return await func(*args, **kwargs)
+
         return async_wrapper
     else:
+
         @wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             inject_dependencies(kwargs)
             return func(*args, **kwargs)
+
         return sync_wrapper

@@ -105,6 +105,7 @@ class TestImprovedAsyncCache:
     @pytest.mark.asyncio
     async def test_concurrent_access(self, cache: ImprovedAsyncCache) -> None:
         """Testa acesso concorrente."""
+
         async def worker(worker_id: int) -> None:
             for i in range(10):
                 key = f"worker_{worker_id}_{i}"
@@ -123,9 +124,11 @@ class TestImprovedAsyncCache:
 
 if __name__ == "__main__":
     # Executar testes diretamente
-    asyncio.run(asyncio.gather(
-        TestImprovedAsyncCache().test_basic_operations(
-            ImprovedAsyncCache(default_ttl=60, enable_metrics=True)
+    asyncio.run(
+        asyncio.gather(
+            TestImprovedAsyncCache().test_basic_operations(
+                ImprovedAsyncCache(default_ttl=60, enable_metrics=True)
+            )
         )
-    ))
+    )
     print("Testes básicos executados com sucesso!")

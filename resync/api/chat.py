@@ -105,42 +105,55 @@ async def _get_optimized_response(
     query: str,
     context: dict[str, Any] | None = None,
     use_cache: bool = True,
-    stream: bool = False
+    stream: bool = False,
 ) -> str:
     """
     Get response using the TWS-optimized LLM optimizer.
-    
+
     This is used for queries that might benefit from special TWS-specific
     optimizations like template matching, caching, and model selection.
     """
     try:
         response = await optimized_llm.get_response(
-            query=query,
-            context=context or {},
-            use_cache=use_cache,
-            stream=stream
+            query=query, context=context or {}, use_cache=use_cache, stream=stream
         )
         return response
     except Exception as e:
-        logger.error(f"LLM optimization failed, falling back to regular processing: {e}")
+        logger.error(
+            f"LLM optimization failed, falling back to regular processing: {e}"
+        )
         # Return the original query to be handled by the normal agent flow
         return query
 
 
-async def _stream_agent_response(
-    websocket: WebSocket, agent: Agent, query: str
-) -> str:
+async def _stream_agent_response(websocket: WebSocket, agent: Agent, query: str) -> str:
     """Streams the agent's response to the WebSocket and returns the full message."""
     response_message = ""
     try:
         # Try to use stream method if available
-        stream_method = getattr(agent, 'stream', None)
+        stream_method = getattr(agent, "stream", None)
         if stream_method is not None and callable(stream_method):
-            async for chunk in stream_method(query):
-                response_message += chunk
-                await websocket.send_json(
-                    {"type": "stream", "sender": "agent", "message": chunk}
-                )
+            try:
+                stream_result = stream_method(query)
+                # Check if it's an async iterable
+                try:
+                    if hasattr(stream_result, '__aiter__'):
+                        async for chunk in stream_result:
+                            chunk_str = str(chunk) if not isinstance(chunk, str) else chunk
+                            response_message += chunk_str
+                            await websocket.send_json(
+                                {"type": "stream", "sender": "agent", "message": chunk_str}
+                            )
+                    else:
+                        # Treat as single response
+                        response_message = str(stream_result)
+                except (TypeError, AttributeError):
+                    # If not actually async iterable, treat as single response
+                    response_message = str(stream_result)
+            except Exception as e:
+                logger.warning(f"Streaming failed, falling back to regular response: {e}")
+                response = await agent.arun(query)
+                response_message = str(response)
         else:
             # Fallback to regular run method
             response = await agent.arun(query)
@@ -175,9 +188,9 @@ async def _finalize_and_store_interaction(
     logger.info(f"Agent '{agent_id}' full response: {full_response}")
 
     # Safe access to agent attributes - FIXED
-    agent_name = getattr(agent, 'name', 'Unknown Agent')
-    agent_description = getattr(agent, 'description', 'No description')
-    agent_model = getattr(agent, 'llm_model', getattr(agent, 'model', 'Unknown Model'))
+    agent_name = getattr(agent, "name", "Unknown Agent")
+    agent_description = getattr(agent, "description", "No description")
+    agent_model = getattr(agent, "llm_model", getattr(agent, "model", "Unknown Model"))
 
     # Store the interaction in the Knowledge Graph
     await knowledge_graph.add_conversation(
@@ -206,19 +219,20 @@ async def _handle_agent_interaction(
     """Handles the core logic of agent interaction, RAG, and auditing."""
     sanitized_data = sanitize_input(data)
     # Send the user's message back to the UI for display
-    await websocket.send_json({"type": "message", "sender": "user", "message": sanitized_data})
+    await websocket.send_json(
+        {"type": "message", "sender": "user", "message": sanitized_data}
+    )
 
     # Check if query would benefit from LLM optimization
     # For certain TWS-specific queries, we can use the optimized approach
     if _should_use_llm_optimization(data):
         logger.info(f"Using LLM optimization for query from agent {agent_id}")
-        
+
         # Get optimized response
         optimized_response = await _get_optimized_response(
-            query=data,
-            context={"agent_id": agent_id, "user_query": sanitized_data}
+            query=data, context={"agent_id": agent_id, "user_query": sanitized_data}
         )
-        
+
         # Send the optimized response
         await websocket.send_json(
             {
@@ -229,7 +243,7 @@ async def _handle_agent_interaction(
                 "is_final": True,
             }
         )
-        
+
         # Store the optimized interaction
         await _finalize_and_store_interaction(
             websocket=websocket,
@@ -241,7 +255,9 @@ async def _handle_agent_interaction(
         )
     else:
         # 1. Get context and create the enhanced query for the agent
-        enhanced_query = await _get_enhanced_query(knowledge_graph, sanitized_data, data)
+        enhanced_query = await _get_enhanced_query(
+            knowledge_graph, sanitized_data, data
+        )
 
         # 2. Stream the agent's response to the client and get the full response
         full_response = await _stream_agent_response(websocket, agent, enhanced_query)
@@ -260,18 +276,34 @@ async def _handle_agent_interaction(
 def _should_use_llm_optimization(query: str) -> bool:
     """Determine if a query would benefit from LLM optimization."""
     query_lower = query.lower()
-    
+
     # Use optimization for specific TWS-related queries
     tws_indicators = [
-        "status", "estado", "job", "tws", "system", "health", "saúde", 
-        "sistema", "dependency", "dependenc", "troubleshoot", "problem",
-        "analyze", "failure", "error", "erro", "falha"
+        "status",
+        "estado",
+        "job",
+        "tws",
+        "system",
+        "health",
+        "saúde",
+        "sistema",
+        "dependency",
+        "dependenc",
+        "troubleshoot",
+        "problem",
+        "analyze",
+        "failure",
+        "error",
+        "erro",
+        "falha",
     ]
-    
+
     return any(indicator in query_lower for indicator in tws_indicators)
 
 
-async def _setup_websocket_session(websocket: WebSocket, agent_id: SafeAgentID) -> Agent:
+async def _setup_websocket_session(
+    websocket: WebSocket, agent_id: SafeAgentID
+) -> Agent:
     """Handles WebSocket connection setup and agent retrieval."""
     await websocket.accept()
     logger.info(f"WebSocket connection established for agent {agent_id}")
@@ -290,7 +322,9 @@ async def _setup_websocket_session(websocket: WebSocket, agent_id: SafeAgentID) 
         "message": f"Conectado ao agente: {getattr(agent, 'name', 'Unknown Agent')}. Digite sua mensagem...",
     }
     await websocket.send_json(welcome_data)
-    logger.info(f"Agent '{getattr(agent, 'name', 'Unknown Agent')}' ready for WebSocket communication")
+    logger.info(
+        f"Agent '{getattr(agent, 'name', 'Unknown Agent')}' ready for WebSocket communication"
+    )
     return agent  # type: ignore[no-any-return]
 
 
@@ -325,28 +359,45 @@ async def websocket_endpoint(
         agent = await _setup_websocket_session(websocket, agent_id)
         await _message_processing_loop(websocket, agent, agent_id, knowledge_graph)
     except WebSocketDisconnect:
-        logger.info(f"Client disconnected from agent '{agent_id}'. Reason: {websocket.state.reason} (Code: {websocket.state.code})")
+        logger.info(
+            f"Client disconnected from agent '{agent_id}'. Reason: {websocket.state.reason} (Code: {websocket.state.code})"
+        )
     except (LLMError, ToolExecutionError, AgentExecutionError) as e:
-        logger.error(f"Agent-related error in WebSocket for agent '{agent_id}': {e}", exc_info=True)
-        await send_error_message(websocket, f"Ocorreu um erro com o agente: {e.message}")
+        logger.error(
+            f"Agent-related error in WebSocket for agent '{agent_id}': {e}",
+            exc_info=True,
+        )
+        await send_error_message(
+            websocket, f"Ocorreu um erro com o agente: {e.message}"
+        )
     except Exception:
-        logger.critical(f"Unhandled exception in WebSocket for agent '{agent_id}'", exc_info=True)
+        logger.critical(
+            f"Unhandled exception in WebSocket for agent '{agent_id}'", exc_info=True
+        )
         try:
-            await send_error_message(websocket, "Ocorreu um erro inesperado no servidor.")
+            await send_error_message(
+                websocket, "Ocorreu um erro inesperado no servidor."
+            )
         finally:
             pass
 
 
-async def _validate_input(raw_data: str, agent_id: SafeAgentID, websocket: WebSocket) -> dict[str, bool]:
+async def _validate_input(
+    raw_data: str, agent_id: SafeAgentID, websocket: WebSocket
+) -> dict[str, bool]:
     """Validate input data for size and potential injection attempts."""
     # Input validation and size check
     if len(raw_data) > 10000:  # Limit message size to 10KB
-        await send_error_message(websocket, "Mensagem muito longa. Máximo de 10.000 caracteres permitido.")
+        await send_error_message(
+            websocket, "Mensagem muito longa. Máximo de 10.000 caracteres permitido."
+        )
         return {"is_valid": False}
 
     # Additional validation: check for potential injection attempts
     if "<script>" in raw_data or "javascript:" in raw_data.lower():
-        logger.warning(f"Potential injection attempt detected from agent '{agent_id}': {raw_data[:100]}...")
+        logger.warning(
+            f"Potential injection attempt detected from agent '{agent_id}': {raw_data[:100]}..."
+        )
         await send_error_message(websocket, "Conteúdo não permitido detectado.")
         return {"is_valid": False}
 

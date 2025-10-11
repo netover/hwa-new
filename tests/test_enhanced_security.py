@@ -14,7 +14,7 @@ from resync.api.validation.enhanced_security import (
     ThreatType,
     SecurityEventLog,
     SecurityEventType,
-    SecurityEventSeverity
+    SecurityEventSeverity,
 )
 
 
@@ -89,8 +89,12 @@ class TestEnhancedSecurityValidator:
     async def test_validate_password_weak_passwords(self, security_validator):
         """Test validation of weak passwords."""
         # Test with a password that exactly matches "password" which is in the weak passwords list
-        test_password = "Password123!"  # Contains uppercase, lowercase, digit, and special char
-        result = await security_validator.validate_password_strength(test_password, SecurityLevel.MEDIUM)
+        test_password = (
+            "Password123!"  # Contains uppercase, lowercase, digit, and special char
+        )
+        result = await security_validator.validate_password_strength(
+            test_password, SecurityLevel.MEDIUM
+        )
         assert isinstance(result, InputValidationResult)
         # This test is more about ensuring the function works, not necessarily that it detects "password"
         # as weak since we're comparing the full string, not substrings
@@ -99,13 +103,17 @@ class TestEnhancedSecurityValidator:
     async def test_validate_email_security(self, security_validator):
         """Test email validation with security checks."""
         # Valid email
-        result = await security_validator.validate_email_security("test@example.com", SecurityLevel.MEDIUM)
+        result = await security_validator.validate_email_security(
+            "test@example.com", SecurityLevel.MEDIUM
+        )
         assert isinstance(result, InputValidationResult)
         assert result.is_valid is True
         assert result.sanitized_value is not None
 
         # Invalid email
-        result = await security_validator.validate_email_security("invalid-email", SecurityLevel.MEDIUM)
+        result = await security_validator.validate_email_security(
+            "invalid-email", SecurityLevel.MEDIUM
+        )
         assert isinstance(result, InputValidationResult)
         assert result.is_valid is False
 
@@ -122,7 +130,7 @@ class TestEnhancedSecurityValidator:
     async def test_validate_csrf_token(self, security_validator):
         """Test CSRF token validation."""
         token = secrets.token_urlsafe(32)
-        
+
         # Valid token
         result = await security_validator.validate_csrf_token(token, token)
         assert isinstance(result, InputValidationResult)
@@ -139,7 +147,7 @@ class TestEnhancedSecurityValidator:
         """Test JWT token validation."""
         # This would require actual JWT generation, so we'll test the validation logic
         secret_key = "test_secret"
-        
+
         # Invalid format
         is_valid, payload, error = await security_validator.validate_jwt_token(
             "invalid.token.here", secret_key
@@ -203,7 +211,10 @@ class TestEnhancedSecurityValidator:
             security_validator._detect_threats("<script>alert('xss')</script>")
             == ThreatType.XSS
         )
-        assert security_validator._detect_threats("javascript:alert('xss')") == ThreatType.XSS
+        assert (
+            security_validator._detect_threats("javascript:alert('xss')")
+            == ThreatType.XSS
+        )
 
         # SQL injection patterns
         assert (
@@ -252,7 +263,9 @@ class TestEnhancedSecurityValidator:
         assert await security_validator.verify_password(password, hashed) is True
 
         # Verify incorrect password
-        assert await security_validator.verify_password("wrong_password", hashed) is False
+        assert (
+            await security_validator.verify_password("wrong_password", hashed) is False
+        )
 
     @pytest.mark.asyncio
     async def test_generate_session_id(self, security_validator):
@@ -276,7 +289,7 @@ class TestEnhancedSecurityValidator:
             severity=SecurityEventSeverity.WARNING,
             source_ip="192.168.1.1",
             user_id="test_user",
-            details={"reason": "invalid_credentials"}
+            details={"reason": "invalid_credentials"},
         )
 
         # This should not raise an exception

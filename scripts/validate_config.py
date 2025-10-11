@@ -58,7 +58,9 @@ def main():
         print("\n   Exemplo de .env valido:")
         print("   ADMIN_USERNAME=admin")
         print("   ADMIN_PASSWORD=MinhaS3nh@Forte")
-        print("   SECRET_KEY=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')")
+        print(
+            "   SECRET_KEY=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+        )
         print("   REDIS_URL=redis://localhost:6379")
         print("   TWS_HOST=localhost")
         print("   TWS_PORT=31111")

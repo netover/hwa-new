@@ -540,8 +540,11 @@ class ChaosEngineer:
                             try:
                                 await cache.set("test_key", "test_value")
                                 anomalies.append("Cache set should have failed")
-                            except Exception:
-                                pass  # Expected
+                            except Exception as e:
+                                # Expected failure in chaos test - cache should be broken
+                                logger.debug(
+                                    f"Expected cache failure in chaos test: {e}"
+                                )
 
                         await cache.stop()
                         operations += 1

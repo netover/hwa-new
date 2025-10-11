@@ -18,12 +18,14 @@ from .common import (
 
 class SortOrder(str, Enum):
     """Valid sort orders."""
+
     ASC = "asc"
     DESC = "desc"
 
 
 class FilterOperator(str, Enum):
     """Valid filter operators."""
+
     EQUALS = "eq"
     NOT_EQUALS = "ne"
     GREATER_THAN = "gt"
@@ -45,18 +47,19 @@ class PaginationParams(BaseValidatedModel):
         default=1,
         ge=NumericConstraints.MIN_PAGE,
         le=NumericConstraints.MAX_PAGE,
-        description="Page number (1-based)"
+        description="Page number (1-based)",
     )
 
     page_size: int = Field(
         default=10,
         ge=NumericConstraints.MIN_PAGE_SIZE,
         le=NumericConstraints.MAX_PAGE_SIZE,
-        description="Number of items per page"
+        description="Number of items per page",
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("page_size")
@@ -65,6 +68,7 @@ class PaginationParams(BaseValidatedModel):
         if v > 100 and v <= NumericConstraints.MAX_PAGE_SIZE:
             # Allow large page sizes but log a warning
             import logging
+
             logging.warning(f"Large page size requested: {v}")
         return v
 
@@ -80,38 +84,23 @@ class PaginationParams(BaseValidatedModel):
 class SearchParams(BaseValidatedModel):
     """Search query parameters."""
 
-    query: constr(
-        min_length=1,
-        max_length=200,
-        strip_whitespace=True
-    ) = Field(
-        ...,
-        description="Search query string"
+    query: constr(min_length=1, max_length=200, strip_whitespace=True) = Field(
+        ..., description="Search query string"
     )
 
     search_fields: Optional[List[str]] = Field(
-        None,
-        description="Specific fields to search in",
-        max_length=10
+        None, description="Specific fields to search in", max_length=10
     )
 
-    fuzzy: bool = Field(
-        default=False,
-        description="Enable fuzzy search"
-    )
+    fuzzy: bool = Field(default=False, description="Enable fuzzy search")
 
-    case_sensitive: bool = Field(
-        default=False,
-        description="Case-sensitive search"
-    )
+    case_sensitive: bool = Field(default=False, description="Case-sensitive search")
 
-    whole_words: bool = Field(
-        default=False,
-        description="Match whole words only"
-    )
+    whole_words: bool = Field(default=False, description="Match whole words only")
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("query")
@@ -129,7 +118,7 @@ class SearchParams(BaseValidatedModel):
             r"(\b(union|select|insert|update|delete|drop|create|alter|exec|execute)\b)",
             r"(\b(or|and)\b.*=.*)",
             r"('|\")(.*)(or|and)(.*)('|\")",
-            r"(;|--|/\*|\*/|xp_)"
+            r"(;|--|/\*|\*/|xp_)",
         ]
 
         for pattern in sql_patterns:
@@ -160,19 +149,16 @@ class FilterParams(BaseValidatedModel):
     """Filter query parameters."""
 
     filters: Optional[List[Dict[str, Any]]] = Field(
-        default_factory=list,
-        description="List of filter conditions",
-        max_length=20
+        default_factory=list, description="List of filter conditions", max_length=20
     )
 
     filter_logic: str = Field(
-        default="and",
-        pattern=r"^(and|or)$",
-        description="Logic to combine filters"
+        default="and", pattern=r"^(and|or)$", description="Logic to combine filters"
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("filters")
@@ -185,7 +171,9 @@ class FilterParams(BaseValidatedModel):
             # Validate filter structure
             required_keys = {"field", "operator", "value"}
             if not all(key in filter_condition for key in required_keys):
-                raise ValueError(f"Filter at index {i} missing required keys: {required_keys}")
+                raise ValueError(
+                    f"Filter at index {i} missing required keys: {required_keys}"
+                )
 
             # Validate field name
             field = filter_condition["field"]
@@ -206,14 +194,21 @@ class FilterParams(BaseValidatedModel):
             # Check for malicious content in string values
             if isinstance(value, str):
                 if ValidationPatterns.SCRIPT_PATTERN.search(value):
-                    raise ValueError(f"Filter value contains malicious content: {value}")
+                    raise ValueError(
+                        f"Filter value contains malicious content: {value}"
+                    )
 
             # Check for SQL injection in field names and values
             if isinstance(field, str):
-                sql_patterns = [r"(\b(union|select|insert|update|delete|drop|create|alter)\b)", r"(;|--|/\*|\*/)"]
+                sql_patterns = [
+                    r"(\b(union|select|insert|update|delete|drop|create|alter)\b)",
+                    r"(;|--|/\*|\*/)",
+                ]
                 for pattern in sql_patterns:
                     if re.search(pattern, field, re.IGNORECASE):
-                        raise ValueError(f"Filter field contains invalid patterns: {field}")
+                        raise ValueError(
+                            f"Filter field contains invalid patterns: {field}"
+                        )
 
         return v
 
@@ -222,19 +217,16 @@ class SortParams(BaseValidatedModel):
     """Sorting query parameters."""
 
     sort_by: Optional[List[str]] = Field(
-        default_factory=list,
-        description="Fields to sort by",
-        max_length=5
+        default_factory=list, description="Fields to sort by", max_length=5
     )
 
     sort_order: Optional[List[SortOrder]] = Field(
-        default_factory=list,
-        description="Sort order for each field",
-        max_length=5
+        default_factory=list, description="Sort order for each field", max_length=5
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("sort_by")
@@ -269,23 +261,20 @@ class DateRangeParams(BaseValidatedModel):
     """Date range query parameters."""
 
     start_date: Optional[datetime] = Field(
-        None,
-        description="Start date (ISO 8601 format)"
+        None, description="Start date (ISO 8601 format)"
     )
 
-    end_date: Optional[datetime] = Field(
-        None,
-        description="End date (ISO 8601 format)"
-    )
+    end_date: Optional[datetime] = Field(None, description="End date (ISO 8601 format)")
 
     date_field: str = Field(
         default="created_at",
         pattern=r"^(created_at|updated_at|timestamp|date)$",
-        description="Date field to filter on"
+        description="Date field to filter on",
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("end_date")
@@ -303,54 +292,36 @@ class AgentQueryParams(BaseValidatedModel):
     """Agent-specific query parameters."""
 
     agent_id: Optional[StringConstraints.AGENT_ID] = Field(
-        None,
-        description="Filter by agent ID"
+        None, description="Filter by agent ID"
     )
 
     name: Optional[constr(min_length=1, max_length=100)] = Field(
-        None,
-        description="Filter by agent name (partial match)"
+        None, description="Filter by agent name (partial match)"
     )
 
-    type: Optional[str] = Field(
-        None,
-        description="Filter by agent type"
-    )
+    type: Optional[str] = Field(None, description="Filter by agent type")
 
-    status: Optional[str] = Field(
-        None,
-        description="Filter by agent status"
-    )
+    status: Optional[str] = Field(None, description="Filter by agent status")
 
     tools: Optional[List[str]] = Field(
-        None,
-        description="Filter by tools",
-        max_length=10
+        None, description="Filter by tools", max_length=10
     )
 
     model_name: Optional[StringConstraints.MODEL_NAME] = Field(
-        None,
-        description="Filter by model name"
+        None, description="Filter by model name"
     )
 
-    memory_enabled: Optional[bool] = Field(
-        None,
-        description="Filter by memory setting"
-    )
+    memory_enabled: Optional[bool] = Field(None, description="Filter by memory setting")
 
-    include_inactive: bool = Field(
-        default=False,
-        description="Include inactive agents"
-    )
+    include_inactive: bool = Field(default=False, description="Include inactive agents")
 
     tags: Optional[List[constr(min_length=1, max_length=50)]] = Field(
-        None,
-        description="Filter by tags",
-        max_length=5
+        None, description="Filter by tags", max_length=5
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("name", "type", "status", "model_name")
@@ -382,36 +353,28 @@ class SystemQueryParams(BaseValidatedModel):
     """System monitoring query parameters."""
 
     metric_types: Optional[List[str]] = Field(
-        None,
-        description="Types of metrics to retrieve",
-        max_length=10
+        None, description="Types of metrics to retrieve", max_length=10
     )
 
     time_range: Optional[str] = Field(
-        None,
-        pattern=r"^(1h|6h|24h|7d|30d|90d)$",
-        description="Time range for metrics"
+        None, pattern=r"^(1h|6h|24h|7d|30d|90d)$", description="Time range for metrics"
     )
 
     aggregation: str = Field(
         default="avg",
         pattern=r"^(avg|min|max|sum|count)$",
-        description="Aggregation method"
+        description="Aggregation method",
     )
 
-    include_alerts: bool = Field(
-        default=True,
-        description="Include system alerts"
-    )
+    include_alerts: bool = Field(default=True, description="Include system alerts")
 
     severity_filter: Optional[List[str]] = Field(
-        None,
-        description="Filter by alert severity",
-        max_length=3
+        None, description="Filter by alert severity", max_length=3
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("metric_types", "severity_filter")
@@ -433,36 +396,28 @@ class AuditQueryParams(BaseValidatedModel):
     status: str = Field(
         default="pending",
         pattern=r"^(pending|approved|rejected|all)$",
-        description="Audit status filter"
+        description="Audit status filter",
     )
 
-    query: Optional[constr(
-        min_length=1,
-        max_length=200,
-        strip_whitespace=True
-    )] = Field(
-        None,
-        description="Search query"
+    query: Optional[constr(min_length=1, max_length=200, strip_whitespace=True)] = (
+        Field(None, description="Search query")
     )
 
     user_id: Optional[StringConstraints.SAFE_TEXT] = Field(
-        None,
-        description="Filter by user ID"
+        None, description="Filter by user ID"
     )
 
     agent_id: Optional[StringConstraints.AGENT_ID] = Field(
-        None,
-        description="Filter by agent ID"
+        None, description="Filter by agent ID"
     )
 
     severity: Optional[List[str]] = Field(
-        None,
-        description="Filter by severity levels",
-        max_items=3
+        None, description="Filter by severity levels", max_items=3
     )
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("query")
@@ -477,35 +432,26 @@ class FileQueryParams(BaseValidatedModel):
     """File-related query parameters."""
 
     file_types: Optional[List[str]] = Field(
-        None,
-        description="Filter by file types",
-        max_length=10
+        None, description="Filter by file types", max_length=10
     )
 
     size_min: Optional[int] = Field(
-        None,
-        ge=0,
-        description="Minimum file size in bytes"
+        None, ge=0, description="Minimum file size in bytes"
     )
 
     size_max: Optional[int] = Field(
-        None,
-        ge=0,
-        description="Maximum file size in bytes"
+        None, ge=0, description="Maximum file size in bytes"
     )
 
     uploaded_by: Optional[StringConstraints.SAFE_TEXT] = Field(
-        None,
-        description="Filter by uploader"
+        None, description="Filter by uploader"
     )
 
-    status: Optional[str] = Field(
-        None,
-        description="Filter by file processing status"
-    )
+    status: Optional[str] = Field(None, description="Filter by file processing status")
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
     @validator("size_max")
@@ -527,7 +473,9 @@ class FileQueryParams(BaseValidatedModel):
             elif isinstance(v, list):
                 for item in v:
                     if ValidationPatterns.SCRIPT_PATTERN.search(item):
-                        raise ValueError(f"List item contains malicious content: {item}")
+                        raise ValueError(
+                            f"List item contains malicious content: {item}"
+                        )
         return v
 
 
@@ -537,6 +485,7 @@ class CombinedQueryParams(PaginationParams, SearchParams, SortParams, DateRangeP
 
     class Config:
         """Pydantic configuration."""
+
         extra = "forbid"
 
 
@@ -553,5 +502,5 @@ __all__ = [
     "FileQueryParams",
     "CombinedQueryParams",
     "SortOrder",
-    "FilterOperator"
+    "FilterOperator",
 ]

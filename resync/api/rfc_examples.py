@@ -30,16 +30,17 @@ router = APIRouter(prefix="/api/v1/examples", tags=["RFC Examples"])
 # MODELS
 # ============================================================================
 
+
 class Book(BaseModel):
     """Modelo de exemplo: Livro."""
-    
+
     id: str = Field(..., description="ID único do livro")
     title: str = Field(..., description="Título do livro")
     author: str = Field(..., description="Autor do livro")
     isbn: Optional[str] = Field(None, description="ISBN")
     published_year: Optional[int] = Field(None, description="Ano de publicação")
     created_at: str = Field(..., description="Data de criação")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -48,7 +49,7 @@ class Book(BaseModel):
                 "author": "Robert C. Martin",
                 "isbn": "978-0132350884",
                 "published_year": 2008,
-                "created_at": "2024-01-15T10:30:00Z"
+                "created_at": "2024-01-15T10:30:00Z",
             }
         }
 
@@ -58,13 +59,17 @@ class BookOut(Book):
 
 
 ISBN = Annotated[str, StringConstraints(pattern=r"^[\d-]+$")]
+
+
 class BookCreate(BaseModel):
     """Request para criar livro."""
 
     title: str = Field(..., description="Título do livro", min_length=1, max_length=200)
     author: str = Field(..., description="Autor do livro", min_length=1, max_length=100)
     isbn: Optional[ISBN] = Field(None, description="ISBN")
-    published_year: Optional[int] = Field(None, description="Ano de publicação", ge=1000, le=9999)
+    published_year: Optional[int] = Field(
+        None, description="Ano de publicação", ge=1000, le=9999
+    )
 
 
 # Simulação de banco de dados em memória
@@ -75,7 +80,7 @@ _books_db: List[Book] = [
         author="Robert C. Martin",
         isbn="978-0132350884",
         published_year=2008,
-        created_at=datetime.utcnow().isoformat() + 'Z'
+        created_at=datetime.utcnow().isoformat() + "Z",
     ),
     Book(
         id=str(uuid4()),
@@ -83,7 +88,7 @@ _books_db: List[Book] = [
         author="Andrew Hunt",
         isbn="978-0201616224",
         published_year=1999,
-        created_at=datetime.utcnow().isoformat() + 'Z'
+        created_at=datetime.utcnow().isoformat() + "Z",
     ),
 ]
 
@@ -91,6 +96,7 @@ _books_db: List[Book] = [
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
+
 
 @router.get(
     "/books",
@@ -121,31 +127,31 @@ _books_db: List[Book] = [
       }
     }
     ```
-    """
+    """,
 )
 async def list_books(
     request: Request,
     page: int = Query(1, ge=1, description="Número da página"),
     page_size: int = Query(10, ge=1, le=100, description="Tamanho da página"),
-    author: Optional[str] = Query(None, description="Filtrar por autor")
+    author: Optional[str] = Query(None, description="Filtrar por autor"),
 ):
     """Lista livros com paginação e HATEOAS."""
-    
+
     # Filtrar livros
     books = _books_db
     if author:
         books = [b for b in books if author.lower() in b.author.lower()]
-    
+
     # Calcular paginação
     total = len(books)
     start = (page - 1) * page_size
     end = start + page_size
     items = books[start:end]
-    
+
     # Adicionar links HATEOAS a cada item
     builder = LinkBuilder()
     items_with_links = []
-    
+
     for book in items:
         book_dict = book.model_dump()
         book_dict["_links"] = {
@@ -156,31 +162,31 @@ async def list_books(
                 path=f"/api/v1/examples/books/{book.id}",
                 rel="update",
                 method="PUT",
-                title="Update book"
+                title="Update book",
             ).model_dump(),
             "delete": builder.build_link(
                 path=f"/api/v1/examples/books/{book.id}",
                 rel="delete",
                 method="DELETE",
-                title="Delete book"
+                title="Delete book",
             ).model_dump(),
         }
         items_with_links.append(book_dict)
-    
+
     # Criar resposta paginada com links
     query_params = {}
     if author:
         query_params["author"] = author
-    
+
     response = create_paginated_response(
         items=items_with_links,
         total=total,
         page=page,
         page_size=page_size,
         base_path="/api/v1/examples/books",
-        query_params=query_params
+        query_params=query_params,
     )
-    
+
     return response
 
 
@@ -222,20 +228,19 @@ async def list_books(
       "timestamp": "2024-01-15T10:30:00Z"
     }
     ```
-    """
+    """,
 )
 async def get_book(book_id: str):
     """Obtém livro por ID com links HATEOAS."""
-    
+
     # Buscar livro
     book = next((b for b in _books_db if b.id == book_id), None)
-    
+
     if not book:
         raise ResourceNotFoundError(
-            message=f"Book with ID '{book_id}' not found",
-            details={"book_id": book_id}
+            message=f"Book with ID '{book_id}' not found", details={"book_id": book_id}
         )
-    
+
     # Adicionar links HATEOAS
     builder = LinkBuilder()
     book_dict = book.model_dump()
@@ -247,19 +252,19 @@ async def get_book(book_id: str):
             path=f"/api/v1/examples/books/{book_id}",
             rel="update",
             method="PUT",
-            title="Update this book"
+            title="Update this book",
         ).model_dump(),
         "delete": builder.build_link(
             path=f"/api/v1/examples/books/{book_id}",
             rel="delete",
             method="DELETE",
-            title="Delete this book"
+            title="Delete this book",
         ).model_dump(),
         "collection": builder.build_collection_link(
             path="/api/v1/examples/books"
         ).model_dump(),
     }
-    
+
     return book_dict
 
 
@@ -300,11 +305,11 @@ async def get_book(book_id: str):
       ]
     }
     ```
-    """
+    """,
 )
 async def create_book(book_data: BookCreate):
     """Cria um novo livro."""
-    
+
     # Validação customizada
     if book_data.published_year and book_data.published_year > datetime.now().year:
         raise ValidationError(
@@ -312,10 +317,10 @@ async def create_book(book_data: BookCreate):
             details={
                 "field": "published_year",
                 "value": book_data.published_year,
-                "max_allowed": datetime.now().year
-            }
+                "max_allowed": datetime.now().year,
+            },
         )
-    
+
     # Criar livro
     book = Book(
         id=str(uuid4()),
@@ -323,11 +328,11 @@ async def create_book(book_data: BookCreate):
         author=book_data.author,
         isbn=book_data.isbn,
         published_year=book_data.published_year,
-        created_at=datetime.utcnow().isoformat() + 'Z'
+        created_at=datetime.utcnow().isoformat() + "Z",
     )
-    
+
     _books_db.append(book)
-    
+
     # Adicionar links HATEOAS
     builder = LinkBuilder()
     book_dict = book.model_dump()
@@ -336,26 +341,18 @@ async def create_book(book_data: BookCreate):
             path=f"/api/v1/examples/books/{book.id}"
         ).model_dump(),
         "update": builder.build_link(
-            path=f"/api/v1/examples/books/{book.id}",
-            rel="update",
-            method="PUT"
+            path=f"/api/v1/examples/books/{book.id}", rel="update", method="PUT"
         ).model_dump(),
         "delete": builder.build_link(
-            path=f"/api/v1/examples/books/{book.id}",
-            rel="delete",
-            method="DELETE"
+            path=f"/api/v1/examples/books/{book.id}", rel="delete", method="DELETE"
         ).model_dump(),
         "collection": builder.build_collection_link(
             path="/api/v1/examples/books"
         ).model_dump(),
     }
-    
-    logger.info(
-        "Book created",
-        book_id=book.id,
-        title=book.title
-    )
-    
+
+    logger.info("Book created", book_id=book.id, title=book.title)
+
     return book_dict
 
 
@@ -369,36 +366,31 @@ async def create_book(book_data: BookCreate):
     **Características**:
     - Status 204 No Content em sucesso
     - Erro RFC 7807 se não encontrado
-    """
+    """,
 )
 async def delete_book(book_id: str):
     """Deleta um livro."""
-    
+
     # Buscar índice do livro
     index = next((i for i, b in enumerate(_books_db) if b.id == book_id), None)
-    
+
     if index is None:
         raise ResourceNotFoundError(
-            message=f"Book with ID '{book_id}' not found",
-            details={"book_id": book_id}
+            message=f"Book with ID '{book_id}' not found", details={"book_id": book_id}
         )
-    
+
     # Remover livro
     deleted_book = _books_db.pop(index)
-    
-    logger.info(
-        "Book deleted",
-        book_id=book_id,
-        title=deleted_book.title
-    )
-    
+
+    logger.info("Book deleted", book_id=book_id, title=deleted_book.title)
+
     return None
 
 
 @router.get(
     "/rfc-examples",
     summary="Get RFC implementation examples",
-    description="Returns documentation about RFC 7807 and RFC 8288 implementation"
+    description="Returns documentation about RFC 7807 and RFC 8288 implementation",
 )
 async def get_rfc_examples():
     """Retorna exemplos de implementação RFC."""
@@ -416,14 +408,14 @@ async def get_rfc_examples():
                     "instance": "URI identifying the specific occurrence",
                     "correlation_id": "For distributed tracing",
                     "timestamp": "ISO 8601 timestamp",
-                    "errors": "Array of validation errors (optional)"
+                    "errors": "Array of validation errors (optional)",
                 },
                 "examples": {
                     "validation_error": "/api/v1/examples/books (POST with invalid data)",
                     "not_found": "/api/v1/examples/books/invalid-id",
-                    "business_error": "/api/v1/examples/books (POST with future year)"
-                }
-            }
+                    "business_error": "/api/v1/examples/books (POST with future year)",
+                },
+            },
         },
         "rfc_8288": {
             "name": "Web Linking (HATEOAS)",
@@ -435,14 +427,14 @@ async def get_rfc_examples():
                     "rel": "Relation type (self, next, prev, etc.)",
                     "method": "HTTP method",
                     "title": "Human-readable description",
-                    "type": "Media type"
+                    "type": "Media type",
                 },
                 "examples": {
                     "pagination": "/api/v1/examples/books?page=1",
                     "resource_links": "/api/v1/examples/books/{id}",
-                    "crud_operations": "All endpoints include CRUD links"
-                }
-            }
+                    "crud_operations": "All endpoints include CRUD links",
+                },
+            },
         },
         "testing": {
             "list_books": "GET /api/v1/examples/books?page=1&page_size=5",
@@ -450,6 +442,6 @@ async def get_rfc_examples():
             "create_book": "POST /api/v1/examples/books",
             "delete_book": "DELETE /api/v1/examples/books/{id}",
             "trigger_404": "GET /api/v1/examples/books/invalid-id",
-            "trigger_validation": "POST /api/v1/examples/books with empty body"
-        }
+            "trigger_validation": "POST /api/v1/examples/books with empty body",
+        },
     }

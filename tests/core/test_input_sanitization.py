@@ -37,7 +37,10 @@ class TestInputSanitizer:
     def test_sanitize_path_invalid(self):
         """Test path sanitization with invalid paths."""
         # Test with path traversal attempt which resolves to an absolute path
-        with pytest.raises(ValueError, match="Absolute paths outside allowed directories are not permitted"):
+        with pytest.raises(
+            ValueError,
+            match="Absolute paths outside allowed directories are not permitted",
+        ):
             InputSanitizer.sanitize_path("../../etc/passwd")
 
         # Test with null bytes - this raises a ValueError from the OS/pathlib level first
@@ -89,6 +92,7 @@ class TestInputSanitizer:
     def test_validate_path_exists(self):
         """Test path existence validation."""
         import tempfile
+
         with tempfile.NamedTemporaryFile() as tmp:
             tmp_path = Path(tmp.name)
             result = InputSanitizer.validate_path_exists(tmp_path, must_exist=True)
@@ -100,4 +104,3 @@ class TestInputSanitizer:
 
             result = InputSanitizer.validate_path_exists(nonexistent, must_exist=False)
             assert result == nonexistent.resolve()
-

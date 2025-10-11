@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 from resync.core.migration_managers import (
     CacheMigrationManager,
     TWSMigrationManager,
-    RateLimitMigrationManager
+    RateLimitMigrationManager,
 )
 from resync.settings import Settings
 
@@ -61,6 +61,7 @@ class TestCacheMigrationManager:
 
         # Simular erro no novo cache
         original_get = migration_manager.new_cache.get
+
         async def failing_get(key):
             if key == "failing_key":
                 raise Exception("Simulated error")
@@ -191,8 +192,8 @@ class TestRateLimitMigrationManager:
         await migration_manager.acquire()
 
         stats = migration_manager.get_stats()
-        assert 'migration_mode' in stats
-        assert 'new_limiter_stats' in stats
+        assert "migration_mode" in stats
+        assert "new_limiter_stats" in stats
 
 
 @pytest.mark.asyncio
@@ -203,7 +204,7 @@ async def test_migration_managers_integration():
         tws_migration_manager,
         rate_limit_migration_manager,
         initialize_migration_managers,
-        shutdown_migration_managers
+        shutdown_migration_managers,
     )
 
     try:
@@ -232,10 +233,10 @@ def test_settings_migration_flags():
     settings = Settings()
 
     # Verificar que as flags existem
-    assert hasattr(settings, 'MIGRATION_USE_NEW_CACHE')
-    assert hasattr(settings, 'MIGRATION_USE_NEW_TWS')
-    assert hasattr(settings, 'MIGRATION_USE_NEW_RATE_LIMIT')
-    assert hasattr(settings, 'MIGRATION_ENABLE_METRICS')
+    assert hasattr(settings, "MIGRATION_USE_NEW_CACHE")
+    assert hasattr(settings, "MIGRATION_USE_NEW_TWS")
+    assert hasattr(settings, "MIGRATION_USE_NEW_RATE_LIMIT")
+    assert hasattr(settings, "MIGRATION_ENABLE_METRICS")
 
     # Verificar valores padrão
     assert settings.MIGRATION_USE_NEW_CACHE is False

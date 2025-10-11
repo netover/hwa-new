@@ -1,6 +1,7 @@
 """
 Query implementations for TWS operations in the CQRS pattern.
 """
+
 from dataclasses import dataclass
 from typing import List
 from resync.cqrs.base import IQuery
@@ -39,6 +40,7 @@ class GetJobStatusQuery(IQuery):
     """
     Query to retrieve the status of a specific TWS job.
     """
+
     job_id: str
 
 
@@ -47,6 +49,7 @@ class GetJobStatusBatchQuery(IQuery):
     """
     Query to retrieve the status of multiple TWS jobs in a batch.
     """
+
     job_ids: List[str]
 
 
@@ -62,6 +65,7 @@ class SearchJobsQuery(IQuery):
     """
     Query to search for jobs based on specific criteria.
     """
+
     search_term: str
     limit: int = 10
 

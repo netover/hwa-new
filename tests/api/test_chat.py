@@ -20,15 +20,22 @@ def mock_chat_dependencies():
     mock_conn_mgr = AsyncMock()
     mock_kg = AsyncMock()
 
-    with app.dependency_overrides.items() as overrides:
-        overrides[get_agent_manager] = lambda: mock_agent_mgr
-        overrides[get_connection_manager] = lambda: mock_conn_mgr
-        overrides[get_knowledge_graph] = lambda: mock_kg
+    # Store original overrides
+    original_overrides = app.dependency_overrides.copy()
+
+    try:
+        app.dependency_overrides[get_agent_manager] = lambda: mock_agent_mgr
+        app.dependency_overrides[get_connection_manager] = lambda: mock_conn_mgr
+        app.dependency_overrides[get_knowledge_graph] = lambda: mock_kg
         yield {
             "agent_manager": mock_agent_mgr,
             "connection_manager": mock_conn_mgr,
             "knowledge_graph": mock_kg,
         }
+    finally:
+        # Restore original overrides
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(original_overrides)
 
 
 async def test_handle_agent_interaction_mocks_async_iterator(mock_chat_dependencies):
@@ -64,7 +71,9 @@ async def test_handle_agent_interaction_mocks_async_iterator(mock_chat_dependenc
 
     # Check that send_json was called for each chunk in the stream.
     stream_calls = [
-        call for call in mock_websocket.send_json.call_args_list if call.args[0]["type"] == "stream"
+        call
+        for call in mock_websocket.send_json.call_args_list
+        if call.args[0]["type"] == "stream"
     ]
     assert len(stream_calls) == len(stream_chunks)
     assert stream_calls[0].args[0]["message"] == "Hello"

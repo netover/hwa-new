@@ -24,7 +24,7 @@ async def test_teams_integration_initialization():
         enabled=True,
         webhook_url="https://test.webhook.office.com/webhook",
         channel_name="Test Channel",
-        bot_name="Test Bot"
+        bot_name="Test Bot",
     )
     teams_integration_custom = TeamsIntegration(custom_config)
     assert teams_integration_custom.config == custom_config
@@ -43,7 +43,7 @@ async def test_teams_notification_formatting():
         job_id="TEST123",
         job_status="ABEND",
         instance_name="TWS_TEST",
-        additional_data={"test_key": "test_value"}
+        additional_data={"test_key": "test_value"},
     )
 
     # Format the notification
@@ -65,8 +65,14 @@ async def test_teams_notification_formatting():
 
     # Verify title and message are in the body
     body_items = content["body"]
-    assert any(item.get("text") == "Test Notification" for item in body_items if "text" in item)
-    assert any(item.get("text") == "This is a test message" for item in body_items if "text" in item)
+    assert any(
+        item.get("text") == "Test Notification" for item in body_items if "text" in item
+    )
+    assert any(
+        item.get("text") == "This is a test message"
+        for item in body_items
+        if "text" in item
+    )
 
 
 @pytest.mark.asyncio
@@ -75,10 +81,7 @@ async def test_teams_send_notification_disabled():
     config = TeamsConfig(enabled=False)
     teams_integration = TeamsIntegration(config)
 
-    notification = TeamsNotification(
-        title="Test",
-        message="Test message"
-    )
+    notification = TeamsNotification(title="Test", message="Test message")
 
     # Should return False when disabled
     result = await teams_integration.send_notification(notification)
@@ -91,17 +94,14 @@ async def test_teams_send_notification_no_webhook():
     config = TeamsConfig(enabled=True, webhook_url=None)
     teams_integration = TeamsIntegration(config)
 
-    notification = TeamsNotification(
-        title="Test",
-        message="Test message"
-    )
+    notification = TeamsNotification(title="Test", message="Test message")
 
     # Should raise NotificationError when no webhook URL
     with pytest.raises(Exception):  # Using generic Exception since it might be wrapped
         await teams_integration.send_notification(notification)
 
 
-@patch('aiohttp.ClientSession')
+@patch("aiohttp.ClientSession")
 @pytest.mark.asyncio
 async def test_teams_send_notification_success(mock_session_class):
     """Test successful notification sending."""
@@ -112,16 +112,12 @@ async def test_teams_send_notification_success(mock_session_class):
 
     # Setup Teams integration
     config = TeamsConfig(
-        enabled=True,
-        webhook_url="https://test.webhook.office.com/webhook"
+        enabled=True, webhook_url="https://test.webhook.office.com/webhook"
     )
     teams_integration = TeamsIntegration(config)
 
     # Create notification
-    notification = TeamsNotification(
-        title="Test Success",
-        message="Test message"
-    )
+    notification = TeamsNotification(title="Test Success", message="Test message")
 
     # Send notification
     result = await teams_integration.send_notification(notification)
@@ -131,7 +127,7 @@ async def test_teams_send_notification_success(mock_session_class):
     mock_session.post.assert_called_once()
 
 
-@patch('aiohttp.ClientSession')
+@patch("aiohttp.ClientSession")
 @pytest.mark.asyncio
 async def test_teams_send_notification_failure(mock_session_class):
     """Test failed notification sending."""
@@ -142,16 +138,12 @@ async def test_teams_send_notification_failure(mock_session_class):
 
     # Setup Teams integration
     config = TeamsConfig(
-        enabled=True,
-        webhook_url="https://test.webhook.office.com/webhook"
+        enabled=True, webhook_url="https://test.webhook.office.com/webhook"
     )
     teams_integration = TeamsIntegration(config)
 
     # Create notification
-    notification = TeamsNotification(
-        title="Test Failure",
-        message="Test message"
-    )
+    notification = TeamsNotification(title="Test Failure", message="Test message")
 
     # Send notification
     result = await teams_integration.send_notification(notification)
@@ -184,7 +176,7 @@ async def test_teams_job_monitoring():
     config = TeamsConfig(
         enabled=True,
         enable_job_notifications=True,
-        job_status_filters=["ABEND", "ERROR"]
+        job_status_filters=["ABEND", "ERROR"],
     )
     teams_integration = TeamsIntegration(config)
 
@@ -199,7 +191,7 @@ async def test_teams_job_monitoring():
         "start_time": "2023-01-01T10:00:00Z",
         "end_time": "2023-01-01T10:05:00Z",
         "duration": "5 minutes",
-        "owner": "test_user"
+        "owner": "test_user",
     }
 
     # Monitor job status
@@ -216,19 +208,13 @@ async def test_teams_conversation_learning():
 
     # Test learning from conversation
     test_message = "This is a test conversation message"
-    context = {
-        "sender": "test_user",
-        "timestamp": "2023-01-01T10:00:00Z"
-    }
+    context = {"sender": "test_user", "timestamp": "2023-01-01T10:00:00Z"}
 
     # Should not raise exception
     await teams_integration.learn_from_conversation(test_message, context)
 
     # Test when conversation learning is enabled
-    config = TeamsConfig(
-        enabled=True,
-        enable_conversation_learning=True
-    )
+    config = TeamsConfig(enabled=True, enable_conversation_learning=True)
     teams_integration_with_learning = TeamsIntegration(config)
 
     # Should not raise exception

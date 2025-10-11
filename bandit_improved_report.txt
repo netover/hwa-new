@@ -1,0 +1,649 @@
+Run started:2025-10-10 21:40:39.133718
+
+Test results:
+>> Issue: [B108:hardcoded_tmp_directory] Probable insecure usage of temp file/directory.
+   Severity: Medium   Confidence: Medium
+   CWE: CWE-377 (https://cwe.mitre.org/data/definitions/377.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b108_hardcoded_tmp_directory.html
+   Location: resync\core\__init__.py:111:47
+110	            "has_internet": self._check_internet_access(),
+111	            "temp_dir": os.environ.get("TEMP", "/tmp"),
+112	        }
+
+--------------------------------------------------
+>> Issue: [B403:blacklist] Consider possible security implications associated with pickle module.
+   Severity: Low   Confidence: High
+   CWE: CWE-502 (https://cwe.mitre.org/data/definitions/502.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b403-import-pickle
+   Location: resync\core\async_cache.py:747:12
+746	            # Test if value is pickle-able (basic serializability check)
+747	            import pickle
+748	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\chaos_engineering.py:175:29
+174	                        # Random operations to create race conditions
+175	                        op = random.choice(["set", "get", "delete"])
+176	                        key = f"fuzz_key_{worker_id}_{i}_{random.randint(0, 10)}"
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\chaos_engineering.py:176:58
+175	                        op = random.choice(["set", "get", "delete"])
+176	                        key = f"fuzz_key_{worker_id}_{i}_{random.randint(0, 10)}"
+177	                        value = f"fuzz_value_{worker_id}_{i}"
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\chaos_engineering.py:180:56
+179	                        if op == "set":
+180	                            await cache.set(key, value, random.randint(1, 30))
+181	                        elif op == "get":
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\chaos_engineering.py:320:43
+319	                    "ia_audit_reason": "chaos_test",
+320	                    "ia_audit_confidence": random.random(),
+321	                }
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\chaos_engineering.py:473:20
+472	                if (
+473	                    random.random() < 0.1 and "agent" in name
+474	                ):  # 10% failure rate for agent-related
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\chaos_engineering.py:996:16
+995	                # Validate required fields are present
+996	                assert hasattr(config, "id")
+997	                assert hasattr(config, "name")
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\chaos_engineering.py:997:16
+996	                assert hasattr(config, "id")
+997	                assert hasattr(config, "name")
+998	
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'TOKEN_EXPIRED'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b105_hardcoded_password_string.html
+   Location: resync\core\exceptions.py:32:20
+31	    INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
+32	    TOKEN_EXPIRED = "TOKEN_EXPIRED"
+33	    TOKEN_INVALID = "TOKEN_INVALID"
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'TOKEN_INVALID'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b105_hardcoded_password_string.html
+   Location: resync\core\exceptions.py:33:20
+32	    TOKEN_EXPIRED = "TOKEN_EXPIRED"
+33	    TOKEN_INVALID = "TOKEN_INVALID"
+34	    
+
+--------------------------------------------------
+>> Issue: [B108:hardcoded_tmp_directory] Probable insecure usage of temp file/directory.
+   Severity: Medium   Confidence: Medium
+   CWE: CWE-377 (https://cwe.mitre.org/data/definitions/377.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b108_hardcoded_tmp_directory.html
+   Location: resync\core\health_service_complete.py:321:86
+320	                settings.BASE_DIR / "logs",
+321	                settings.BASE_DIR / "temp" if hasattr(settings, 'TEMP_DIR') else Path("/tmp")
+322	            ]
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\redis_init.py:134:29
+133	                    backoff = min(max_backoff, base_backoff * (2 ** attempt))
+134	                    jitter = random.uniform(0, 0.1 * backoff)  # Add jitter
+135	                    total_wait = backoff + jitter
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\resilience.py:289:43
+288	                if self.config.jitter:
+289	                    delay = delay * (0.5 + random.random() * 0.5)
+290	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:209:36
+208	                nonlocal operations_completed, errors
+209	                await asyncio.sleep(random.uniform(0, profile.ramp_up_seconds))
+210	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:216:34
+215	                        # Mix of operations
+216	                        op_type = random.choice(["set", "get", "delete"])
+217	                        key = f"stress_key_{user_id}_{op_num}_{random.randint(0, 100)}"
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:217:63
+216	                        op_type = random.choice(["set", "get", "delete"])
+217	                        key = f"stress_key_{user_id}_{op_num}_{random.randint(0, 100)}"
+218	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:220:77
+219	                        if op_type == "set":
+220	                            value = f"stress_value_{user_id}_{op_num}_{'x' * random.randint(10, 100)}"
+221	                            await cache.set(key, value, random.randint(60, 300))
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:221:56
+220	                            value = f"stress_value_{user_id}_{op_num}_{'x' * random.randint(10, 100)}"
+221	                            await cache.set(key, value, random.randint(60, 300))
+222	                        elif op_type == "get":
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:237:40
+236	                    # Think time between operations
+237	                    await asyncio.sleep(random.uniform(*profile.think_time_range))
+238	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:315:34
+314	                        # Mix of operations
+315	                        op_type = random.choice(
+316	                            ["get_metrics", "get_agent", "list_agents"]
+317	                        )
+318	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:343:40
+342	
+343	                    await asyncio.sleep(random.uniform(*profile.think_time_range))
+344	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:416:34
+415	                        # Mix of audit operations
+416	                        op_type = random.choice(
+417	                            ["batch_insert", "get_metrics", "sweep"]
+418	                        )
+419	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:427:59
+426	                                    "ia_audit_reason": "stress_test",
+427	                                    "ia_audit_confidence": random.random(),
+428	                                }
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:458:40
+457	
+458	                    await asyncio.sleep(random.uniform(*profile.think_time_range))
+459	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random
+   Location: resync\core\stress_testing.py:631:52
+630	                for i in range(10):
+631	                    key = f"stress_{worker_id}_{i}_{random.randint(0, 100)}"
+632	                    await cache.set(key, f"value_{worker_id}_{i}")
+
+--------------------------------------------------
+>> Issue: [B108:hardcoded_tmp_directory] Probable insecure usage of temp file/directory.
+   Severity: Medium   Confidence: Medium
+   CWE: CWE-377 (https://cwe.mitre.org/data/definitions/377.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b108_hardcoded_tmp_directory.html
+   Location: resync\core\utils\test_agent_manager.py:29:29
+28	    """
+29	    non_existent_path = Path("/tmp/non_existent_config.json")
+30	    with pytest.raises(MissingConfigError):
+
+--------------------------------------------------
+>> Issue: [B108:hardcoded_tmp_directory] Probable insecure usage of temp file/directory.
+   Severity: Medium   Confidence: Medium
+   CWE: CWE-377 (https://cwe.mitre.org/data/definitions/377.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b108_hardcoded_tmp_directory.html
+   Location: resync\core\utils\test_agent_manager.py:67:59
+66	    """Tests that the method returns gracefully if the default path doesn't exist."""
+67	    mocker.patch("resync.settings.AGENT_CONFIG_PATH", Path("/tmp/non_existent_path.json"))
+68	    # Should not raise an exception, just log an error and return
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_agent_manager.py:70:4
+69	    await agent_manager.load_agents_from_config()
+70	    assert agent_manager.agents == {}
+71	    assert agent_manager.agent_configs == []
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_agent_manager.py:71:4
+70	    assert agent_manager.agents == {}
+71	    assert agent_manager.agent_configs == []
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_ia_auditor.py:40:4
+39	    # Assert
+40	    assert result is None
+41	    assert "Skipping memory test-mem-123 due to LLM failure" in caplog.text
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_ia_auditor.py:41:4
+40	    assert result is None
+41	    assert "Skipping memory test-mem-123 due to LLM failure" in caplog.text
+42	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_ia_auditor.py:58:4
+57	    # Assert
+58	    assert result is None
+59	    assert "Could not acquire lock for memory test-mem-123" in caplog.text
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_ia_auditor.py:59:4
+58	    assert result is None
+59	    assert "Could not acquire lock for memory test-mem-123" in caplog.text
+60	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_ia_auditor.py:78:4
+77	    # Assert
+78	    assert result is None
+79	    assert "Database or KnowledgeGraph error analyzing memory test-mem-123" in caplog.text
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_ia_auditor.py:79:4
+78	    assert result is None
+79	    assert "Database or KnowledgeGraph error analyzing memory test-mem-123" in caplog.text
+80	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_ia_auditor.py:94:4
+93	    # Assert
+94	    assert result["error"] == "database_fetch_failed"
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_json_parser.py:12:4
+11	    expected = {"key1": "value1", "key2": 123}
+12	    assert parse_llm_json_response(text, required_keys) == expected
+13	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_json_parser.py:21:4
+20	        parse_llm_json_response(text, required_keys)
+21	    assert "missing required keys: key2" in str(excinfo.value)
+22	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_json_parser.py:30:4
+29	        parse_llm_json_response(text, required_keys)
+30	    assert "Invalid JSON format" in str(excinfo.value)
+31	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_json_parser.py:39:4
+38	        parse_llm_json_response(text, required_keys)
+39	    assert "No valid JSON object found" in str(excinfo.value)
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_llm.py:32:4
+31	    # Assertions
+32	    assert result == "Mocked LLM Response"
+33	    mock_acompletion.assert_called_once()
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_llm.py:50:4
+49	    # Assertions
+50	    assert "API error" in str(excinfo.value)
+51	    assert isinstance(excinfo.value.__cause__, APIError)
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_llm.py:51:4
+50	    assert "API error" in str(excinfo.value)
+51	    assert isinstance(excinfo.value.__cause__, APIError)
+52	    # max_retries=2 means 1 initial call + 2 retries = 3 calls
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_llm.py:53:4
+52	    # max_retries=2 means 1 initial call + 2 retries = 3 calls
+53	    assert mock_acompletion.call_count == 3
+54	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_llm.py:70:4
+69	    # Assertions
+70	    assert "Connection error" in str(excinfo.value)
+71	    assert isinstance(excinfo.value.__cause__, ConnectionError)
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_llm.py:71:4
+70	    assert "Connection error" in str(excinfo.value)
+71	    assert isinstance(excinfo.value.__cause__, ConnectionError)
+72	    # max_retries=1 means 1 initial call + 1 retry = 2 calls
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_llm.py:73:4
+72	    # max_retries=1 means 1 initial call + 1 retry = 2 calls
+73	    assert mock_acompletion.call_count == 2
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_tws_tools.py:42:4
+41	
+42	    assert "Falha de comunicação com o TWS" in str(excinfo.value)
+43	    assert isinstance(excinfo.value.__cause__, TWSConnectionError)
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_tws_tools.py:43:4
+42	    assert "Falha de comunicação com o TWS" in str(excinfo.value)
+43	    assert isinstance(excinfo.value.__cause__, TWSConnectionError)
+44	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_tws_tools.py:59:4
+58	
+59	    assert "Erro ao processar os dados de status do TWS" in str(excinfo.value)
+60	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\core\utils\test_tws_tools.py:76:4
+75	
+76	    assert "Ocorreu um erro inesperado ao analisar as falhas do TWS" in str(
+77	        excinfo.value
+78	    )
+
+--------------------------------------------------
+>> Issue: [B107:hardcoded_password_default] Possible hardcoded password: 'testpass'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b107_hardcoded_password_default.html
+   Location: resync\services\tws_client_factory.py:241:4
+240	    @staticmethod
+241	    def create_for_testing(
+242	        hostname: str = "localhost",
+243	        port: int = 1619,
+244	        username: str = "testuser",
+245	        password: str = "testpass"
+246	    ) -> BaseTWSClient:
+247	        """Cria cliente para testes com valores padrão."""
+248	        config = TWSConfig(
+249	            hostname=hostname,
+250	            port=port,
+251	            username=username,
+252	            password=password,
+253	            mock_mode=True,
+254	            timeout=5  # Timeout menor para testes
+255	        )
+256	        return TWSClientFactory.create(config)
+257	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\test_agents.py:63:4
+62	    # Assert: Check the response
+63	    assert response.status_code == 200
+64	    response_data = response.json()
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\test_agents.py:65:4
+64	    response_data = response.json()
+65	    assert len(response_data) == 2
+66	    assert response_data[0]["id"] == "test-agent-1"
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\test_agents.py:66:4
+65	    assert len(response_data) == 2
+66	    assert response_data[0]["id"] == "test-agent-1"
+67	    assert response_data[1]["id"] == "test-agent-2"
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\test_agents.py:67:4
+66	    assert response_data[0]["id"] == "test-agent-1"
+67	    assert response_data[1]["id"] == "test-agent-2"
+68	
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\test_agents.py:81:4
+80	    # Assert
+81	    assert response.status_code == 200
+82	    assert response.json()["id"] == "test-agent-1"
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\test_agents.py:82:4
+81	    assert response.status_code == 200
+82	    assert response.json()["id"] == "test-agent-1"
+83	    mock_agent_manager.get_agent_config.assert_called_once_with("test-agent-1")
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\test_agents.py:97:4
+96	    # Assert: The global exception handler should catch NotFoundError and return 404
+97	    assert response.status_code == 404
+98	    assert response.json() == {
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html
+   Location: resync\test_agents.py:98:4
+97	    assert response.status_code == 404
+98	    assert response.json() == {
+99	        "detail": "Agent with ID 'non-existent-agent' not found.",
+100	        "type": "NotFoundError",
+101	    }
+
+--------------------------------------------------
+
+Code scanned:
+	Total lines of code: 38482
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 57
+		Medium: 4
+		High: 0
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 0
+		Medium: 7
+		High: 54
+Files skipped (0):

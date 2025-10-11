@@ -44,19 +44,21 @@ class RedisConnectionPool(ConnectionPool[AsyncRedis]):
                 health_check_interval=self.config.health_check_interval,
                 retry_on_timeout=True,
             )
-            
+
             # Create Redis client with the connection pool
             self._client = redis.Redis(
                 connection_pool=self._connection_pool,
                 socket_connect_timeout=self.config.connection_timeout,
                 socket_timeout=self.config.connection_timeout,
-                health_check_interval=self.config.health_check_interval
+                health_check_interval=self.config.health_check_interval,
             )
 
             # Test the connection
             await self._client.ping()
 
-            logger.info(f"Redis connection pool '{self.config.pool_name}' initialized with {self.config.min_size}-{self.config.max_size} connections")
+            logger.info(
+                f"Redis connection pool '{self.config.pool_name}' initialized with {self.config.min_size}-{self.config.max_size} connections"
+            )
         except Exception as e:
             logger.error(f"Failed to setup Redis connection pool: {e}")
             raise DatabaseError(f"Failed to setup Redis connection pool: {e}") from e
@@ -74,22 +76,22 @@ class RedisConnectionPool(ConnectionPool[AsyncRedis]):
 
         try:
             # Record pool request
-            await self.increment_stat('pool_hits')
+            await self.increment_stat("pool_hits")
 
             # Yield the Redis client (connection pooling is handled internally by Redis-py)
             yield self._client
 
         except RedisConnectionError as e:
-            await self.increment_stat('connection_errors')
-            await self.increment_stat('pool_misses')
+            await self.increment_stat("connection_errors")
+            await self.increment_stat("pool_misses")
             logger.error(f"Redis connection error: {e}")
             raise DatabaseError(f"Redis connection error: {e}") from e
         except RedisError as e:
-            await self.increment_stat('pool_misses')
+            await self.increment_stat("pool_misses")
             logger.error(f"Redis error: {e}")
             raise DatabaseError(f"Redis error: {e}") from e
         except Exception as e:
-            await self.increment_stat('pool_misses')
+            await self.increment_stat("pool_misses")
             logger.error(f"Failed to get Redis connection: {e}")
             raise DatabaseError(f"Failed to acquire Redis connection: {e}") from e
         finally:
@@ -97,7 +99,9 @@ class RedisConnectionPool(ConnectionPool[AsyncRedis]):
             await self.update_wait_time(wait_time)
 
             # Record connection metrics
-            logger.debug(f"Redis connection acquired in {wait_time:.3f}s for pool {self.config.pool_name}")
+            logger.debug(
+                f"Redis connection acquired in {wait_time:.3f}s for pool {self.config.pool_name}"
+            )
 
     async def _close_pool(self) -> None:
         """Close the Redis connection pool."""

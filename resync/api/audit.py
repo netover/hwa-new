@@ -29,6 +29,7 @@ router = APIRouter(prefix="/api/audit", tags=["audit"])
 
 class AuditAction(str, Enum):
     """Enum for different audit actions."""
+
     LOGIN = "login"
     LOGOUT = "logout"
     API_ACCESS = "api_access"
@@ -41,34 +42,41 @@ class AuditAction(str, Enum):
 
 class AuditRecordResponse(BaseModel):
     """Response model for audit records."""
+
     id: str = Field(..., description="Unique audit record ID")
     timestamp: str = Field(..., description="ISO format timestamp of the audit event")
     user_id: str = Field(..., description="ID of the user performing the action")
     action: AuditAction = Field(..., description="Type of action being audited")
-    details: Dict[str, Any] = Field(..., description="Additional details about the action")
-    correlation_id: Optional[str] = Field(None, description="Correlation ID for tracking requests")
+    details: Dict[str, Any] = Field(
+        ..., description="Additional details about the action"
+    )
+    correlation_id: Optional[str] = Field(
+        None, description="Correlation ID for tracking requests"
+    )
     ip_address: Optional[str] = Field(None, description="IP address of the requester")
-    user_agent: Optional[str] = Field(None, description="User agent string of the requester")
+    user_agent: Optional[str] = Field(
+        None, description="User agent string of the requester"
+    )
 
 
 class AuditLogger:
     """Handle audit logging with proper structure and correlation."""
-    
+
     def __init__(self):
         self.logger = logging.getLogger("audit")
-        
+
     def generate_audit_log(
-        self, 
-        user_id: str, 
-        action: AuditAction, 
-        details: Dict[str, Any], 
+        self,
+        user_id: str,
+        action: AuditAction,
+        details: Dict[str, Any],
         correlation_id: Optional[str] = None,
         ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None
+        user_agent: Optional[str] = None,
     ) -> AuditRecordResponse:
         """
         Generate an audit log entry with proper structure.
-        
+
         Args:
             user_id: ID of the user performing the action
             action: Type of action being audited
@@ -76,13 +84,13 @@ class AuditLogger:
             correlation_id: Correlation ID for tracking requests
             ip_address: IP address of the requester
             user_agent: User agent string of the requester
-            
+
         Returns:
             AuditRecordResponse with the audit information
         """
         timestamp = datetime.utcnow().isoformat()
         audit_id = f"audit_{timestamp}_{user_id[:8]}_{action}"
-        
+
         # Create the audit record
         audit_record = AuditRecordResponse(
             id=audit_id,
@@ -92,9 +100,9 @@ class AuditLogger:
             details=details,
             correlation_id=correlation_id,
             ip_address=ip_address,
-            user_agent=user_agent
+            user_agent=user_agent,
         )
-        
+
         # Log the audit event with correlation
         log_with_correlation(
             logging.INFO,
@@ -103,31 +111,29 @@ class AuditLogger:
             user_id=user_id,
             action=action,
             details=details,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
-        
+
         # Also log to the audit-specific logger
         self.logger.info(
             f"AUDIT: {action} by {user_id} at {timestamp}",
-            extra={
-                "audit_record": audit_record.dict()
-            }
+            extra={"audit_record": audit_record.dict()},
         )
-        
+
         return audit_record
 
 
 def generate_audit_log(
-    user_id: str, 
-    action: AuditAction, 
-    details: Dict[str, Any], 
+    user_id: str,
+    action: AuditAction,
+    details: Dict[str, Any],
     correlation_id: Optional[str] = None,
     ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None
+    user_agent: Optional[str] = None,
 ) -> AuditRecordResponse:
     """
     Generate an audit log entry with proper structure.
-    
+
     Args:
         user_id: ID of the user performing the action
         action: Type of action being audited
@@ -135,7 +141,7 @@ def generate_audit_log(
         correlation_id: Correlation ID for tracking requests
         ip_address: IP address of the requester
         user_agent: User agent string of the requester
-        
+
     Returns:
         AuditRecordResponse with the audit information
     """
@@ -148,22 +154,22 @@ def generate_audit_log(
 class ReviewAction(BaseModel):
     memory_id: str
     action: str  # "approve" or "reject"
-    
-    @field_validator('action')
+
+    @field_validator("action")
     @classmethod
     def validate_action(cls, v: str) -> str:
         """
         Validate the review action.
-        
+
         Args:
             v: The action to validate
-            
+
         Returns:
             The validated action
         """
-        valid_actions = {'approve', 'reject'}
+        valid_actions = {"approve", "reject"}
         if v.lower() not in valid_actions:
-            raise ValueError(f'Invalid action: {v}. Must be one of {valid_actions}')
+            raise ValueError(f"Invalid action: {v}. Must be one of {valid_actions}")
         return v.lower()
 
 
@@ -184,9 +190,17 @@ def get_flagged_memories(
     Retrieves memories from the audit queue based on status and search query.
     """
     # Get the current user from request state
-    user_id = getattr(request.state, 'user_id', 'system') if hasattr(request.state, 'user_id') else 'system'
-    correlation_id = getattr(request.state, 'correlation_id', None) if hasattr(request.state, 'correlation_id') else None
-    
+    user_id = (
+        getattr(request.state, "user_id", "system")
+        if hasattr(request.state, "user_id")
+        else "system"
+    )
+    correlation_id = (
+        getattr(request.state, "correlation_id", None)
+        if hasattr(request.state, "correlation_id")
+        else None
+    )
+
     try:
         if status == "all":
             memories = audit_queue.get_all_audits_sync()
@@ -205,19 +219,23 @@ def get_flagged_memories(
 
         # Log the audit event for successful retrieval
         log_audit_event(
-            action="retrieve_flagged_memories", 
-            user_id=user_id, 
-            details={"status_filter": status, "query_present": query is not None, "result_count": len(memories)},
-            correlation_id=correlation_id
+            action="retrieve_flagged_memories",
+            user_id=user_id,
+            details={
+                "status_filter": status,
+                "query_present": query is not None,
+                "result_count": len(memories),
+            },
+            correlation_id=correlation_id,
         )
-        
+
         return memories
     except Exception as e:
         log_audit_event(
-            action="retrieve_flagged_memories_error", 
-            user_id=user_id, 
+            action="retrieve_flagged_memories_error",
+            user_id=user_id,
             details={"status_filter": status, "error": str(e)},
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
         raise HTTPException(
             status_code=500, detail=f"Error retrieving flagged memories: {e}"
@@ -236,39 +254,51 @@ async def review_memory(
     """
     # Get the current user from request state (this would need to come from auth)
     # For now, using a placeholder - in production, this should come from auth
-    user_id = getattr(request.state, 'user_id', 'system') if hasattr(request.state, 'user_id') else 'system'
-    correlation_id = getattr(request.state, 'correlation_id', None) if hasattr(request.state, 'correlation_id') else None
-    
+    user_id = (
+        getattr(request.state, "user_id", "system")
+        if hasattr(request.state, "user_id")
+        else "system"
+    )
+    correlation_id = (
+        getattr(request.state, "correlation_id", None)
+        if hasattr(request.state, "correlation_id")
+        else None
+    )
+
     if review.action == "approve":
         try:
             if not audit_queue.update_audit_status_sync(review.memory_id, "approved"):
                 log_audit_event(
-                    action="review_attempt_failed", 
-                    user_id=user_id, 
-                    details={"memory_id": review.memory_id, "attempted_action": "approve", "reason": "not_found"},
-                    correlation_id=correlation_id
+                    action="review_attempt_failed",
+                    user_id=user_id,
+                    details={
+                        "memory_id": review.memory_id,
+                        "attempted_action": "approve",
+                        "reason": "not_found",
+                    },
+                    correlation_id=correlation_id,
                 )
                 raise HTTPException(status_code=404, detail="Audit record not found.")
 
             await knowledge_graph.client.add_observations(
                 review.memory_id, ["MANUALLY_APPROVED_BY_ADMIN"]
             )
-            
+
             # Log the successful audit event
             log_audit_event(
-                action="memory_approved", 
-                user_id=user_id, 
+                action="memory_approved",
+                user_id=user_id,
                 details={"memory_id": review.memory_id},
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
-            
+
             return {"status": "approved", "memory_id": review.memory_id}
         except Exception as e:
             log_audit_event(
-                action="approval_error", 
-                user_id=user_id, 
+                action="approval_error",
+                user_id=user_id,
                 details={"memory_id": review.memory_id, "error": str(e)},
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
             raise HTTPException(
                 status_code=500, detail=f"Error approving memory: {e}"
@@ -278,30 +308,34 @@ async def review_memory(
         try:
             if not audit_queue.update_audit_status_sync(review.memory_id, "rejected"):
                 log_audit_event(
-                    action="review_attempt_failed", 
-                    user_id=user_id, 
-                    details={"memory_id": review.memory_id, "attempted_action": "reject", "reason": "not_found"},
-                    correlation_id=correlation_id
+                    action="review_attempt_failed",
+                    user_id=user_id,
+                    details={
+                        "memory_id": review.memory_id,
+                        "attempted_action": "reject",
+                        "reason": "not_found",
+                    },
+                    correlation_id=correlation_id,
                 )
                 raise HTTPException(status_code=404, detail="Audit record not found.")
 
             await knowledge_graph.client.delete(review.memory_id)
-            
+
             # Log the successful audit event
             log_audit_event(
-                action="memory_rejected", 
-                user_id=user_id, 
+                action="memory_rejected",
+                user_id=user_id,
                 details={"memory_id": review.memory_id},
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
-            
+
             return {"status": "rejected", "memory_id": review.memory_id}
         except Exception as e:
             log_audit_event(
-                action="rejection_error", 
-                user_id=user_id, 
+                action="rejection_error",
+                user_id=user_id,
                 details={"memory_id": review.memory_id, "error": str(e)},
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
             raise HTTPException(
                 status_code=500, detail=f"Error rejecting memory: {e}"
@@ -319,27 +353,35 @@ def get_audit_metrics(
     Returns metrics for the audit queue (total pending, approved, rejected).
     """
     # Get the current user from request state
-    user_id = getattr(request.state, 'user_id', 'system') if hasattr(request.state, 'user_id') else 'system'
-    correlation_id = getattr(request.state, 'correlation_id', None) if hasattr(request.state, 'correlation_id') else None
-    
+    user_id = (
+        getattr(request.state, "user_id", "system")
+        if hasattr(request.state, "user_id")
+        else "system"
+    )
+    correlation_id = (
+        getattr(request.state, "correlation_id", None)
+        if hasattr(request.state, "correlation_id")
+        else None
+    )
+
     try:
         metrics = audit_queue.get_audit_metrics_sync()
-        
+
         # Log the audit event for successful metrics retrieval
         log_audit_event(
-            action="retrieve_audit_metrics", 
-            user_id=user_id, 
+            action="retrieve_audit_metrics",
+            user_id=user_id,
             details=metrics,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
-        
+
         return metrics
     except Exception as e:
         log_audit_event(
-            action="retrieve_audit_metrics_error", 
-            user_id=user_id, 
+            action="retrieve_audit_metrics_error",
+            user_id=user_id,
             details={"error": str(e)},
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
         raise HTTPException(
             status_code=500, detail=f"Error retrieving audit metrics: {e}"
@@ -359,9 +401,17 @@ def get_audit_logs(
     Retrieves audit logs with optional filtering and pagination.
     """
     # Get the current user from request state
-    current_user_id = getattr(request.state, 'user_id', 'system') if hasattr(request.state, 'user_id') else 'system'
-    correlation_id = getattr(request.state, 'correlation_id', None) if hasattr(request.state, 'correlation_id') else None
-    
+    current_user_id = (
+        getattr(request.state, "user_id", "system")
+        if hasattr(request.state, "user_id")
+        else "system"
+    )
+    correlation_id = (
+        getattr(request.state, "correlation_id", None)
+        if hasattr(request.state, "correlation_id")
+        else None
+    )
+
     try:
         # For now, we'll just log that this endpoint was accessed
         # In a real implementation, this would fetch audit logs from the database
@@ -372,21 +422,21 @@ def get_audit_logs(
             "user_id_filter": user_id,
         }
         log_audit_event(
-            action="retrieve_audit_logs", 
-            user_id=current_user_id, 
+            action="retrieve_audit_logs",
+            user_id=current_user_id,
             details=details,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
-        
+
         # This would normally return actual audit logs from the database
         # For now, return an empty list as a placeholder
         return []
     except Exception as e:
         log_audit_event(
-            action="retrieve_audit_logs_error", 
-            user_id=current_user_id, 
+            action="retrieve_audit_logs_error",
+            user_id=current_user_id,
             details={"error": str(e)},
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
         raise HTTPException(
             status_code=500, detail=f"Error retrieving audit logs: {e}"
@@ -398,65 +448,75 @@ async def create_audit_log(
     request: Request,
     audit_data: AuditRecordResponse,
     idempotency_key: Optional[str] = Depends(require_idempotency_key),
-    manager: IdempotencyManager = Depends(get_idempotency_manager)
+    manager: IdempotencyManager = Depends(get_idempotency_manager),
 ) -> AuditRecordResponse:
     """
     Create a new audit log entry with idempotency support.
-    
+
     This endpoint requires an X-Idempotency-Key header to prevent duplicate
     audit log entries. The same key will return the same result.
-    
+
     Args:
         request: FastAPI request object
         audit_data: Audit record data
         idempotency_key: Unique key for idempotent operation
         manager: Idempotency manager instance
-        
+
     Returns:
         Created audit record
-        
+
     Raises:
         ValidationError: If idempotency key is invalid
         ResourceConflictError: If operation is already in progress
     """
     # Get the current user from request state
-    current_user_id = getattr(request.state, 'user_id', 'system') if hasattr(request.state, 'user_id') else 'system'
-    correlation_id = getattr(request.state, 'correlation_id', None) if hasattr(request.state, 'correlation_id') else None
-    
+    current_user_id = (
+        getattr(request.state, "user_id", "system")
+        if hasattr(request.state, "user_id")
+        else "system"
+    )
+    correlation_id = (
+        getattr(request.state, "correlation_id", None)
+        if hasattr(request.state, "correlation_id")
+        else None
+    )
+
     async def _create_audit_log() -> AuditRecordResponse:
         """Internal function to create audit log."""
         try:
             # Log the audit event
             log_audit_event(
-                action="create_audit_log", 
-                user_id=current_user_id, 
+                action="create_audit_log",
+                user_id=current_user_id,
                 details={
                     "target_user_id": audit_data.user_id,
                     "target_action": audit_data.action,
                     "target_details": audit_data.details,
-                    "idempotency_key": idempotency_key
+                    "idempotency_key": idempotency_key,
                 },
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
-            
+
             # In a real implementation, we would store this in the audit database
             # For now, we'll just return the data that was provided
             return audit_data
         except Exception as e:
             log_audit_event(
-                action="create_audit_log_error", 
-                user_id=current_user_id, 
+                action="create_audit_log_error",
+                user_id=current_user_id,
                 details={"error": str(e), "idempotency_key": idempotency_key},
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
             raise HTTPException(
                 status_code=500, detail=f"Error creating audit log: {e}"
             ) from e
-    
+
     # Execute with idempotency
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail="Idempotency key is required")
+
     return await manager.execute_idempotent(
         key=idempotency_key,
         func=_create_audit_log,
-        ttl_seconds=3600  # 1 hour TTL for audit logs
+        ttl_seconds=3600,  # 1 hour TTL for audit logs
     )
-

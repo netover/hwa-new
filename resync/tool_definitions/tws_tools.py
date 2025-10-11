@@ -64,14 +64,20 @@ class TWSStatusTool(TWSToolReadOnly):
             )
         except TWSConnectionError as e:
             logger.error("TWS connection error in TWSStatusTool: %s", e, exc_info=True)
-            raise ToolConnectionError("Falha de comunicação com o TWS ao obter o status do sistema.") from e
+            raise ToolConnectionError(
+                "Falha de comunicação com o TWS ao obter o status do sistema."
+            ) from e
         except ValueError as e:
             logger.error("Value error in TWSStatusTool: %s", e, exc_info=True)
-            raise ToolProcessingError("Erro ao processar os dados de status do TWS.") from e
+            raise ToolProcessingError(
+                "Erro ao processar os dados de status do TWS."
+            ) from e
         except Exception as e:
             logger.error("Unexpected error in TWSStatusTool: %s", e, exc_info=True)
             # Catch-all for other unexpected errors
-            raise ToolExecutionError("Ocorreu um erro inesperado ao obter o status do TWS.") from e
+            raise ToolExecutionError(
+                "Ocorreu um erro inesperado ao obter o status do TWS."
+            ) from e
 
 
 class TWSTroubleshootingTool(TWSToolReadOnly):
@@ -82,7 +88,9 @@ class TWSTroubleshootingTool(TWSToolReadOnly):
         Analyzes failed jobs and down workstations to identify root causes.
         """
         if not self.tws_client:
-            raise ToolExecutionError("TWS client not available for TWSTroubleshootingTool.")
+            raise ToolExecutionError(
+                "TWS client not available for TWSTroubleshootingTool."
+            )
 
         try:
             logger.info("TWSTroubleshootingTool: Fetching system status for analysis.")
@@ -94,30 +102,50 @@ class TWSTroubleshootingTool(TWSToolReadOnly):
             ]
 
             if not failed_jobs and not down_workstations:
-                return "Nenhuma falha crítica encontrada. O ambiente TWS parece estável."
+                return (
+                    "Nenhuma falha crítica encontrada. O ambiente TWS parece estável."
+                )
 
             analysis = "Análise de Problemas no TWS:\n"
             if failed_jobs:
                 analysis += f"- Jobs com Falha ({len(failed_jobs)}): "
-                analysis += ", ".join([f"{j.name} (workstation: {j.workstation})" for j in failed_jobs])
+                analysis += ", ".join(
+                    [f"{j.name} (workstation: {j.workstation})" for j in failed_jobs]
+                )
                 analysis += "\n"
 
             if down_workstations:
                 analysis += f"- Workstations com Problemas ({len(down_workstations)}): "
-                analysis += ", ".join([f"{w.name} (status: {w.status})" for w in down_workstations])
+                analysis += ", ".join(
+                    [f"{w.name} (status: {w.status})" for w in down_workstations]
+                )
                 analysis += "\n"
 
             return analysis
 
         except TWSConnectionError as e:
-            logger.error("TWS connection error in TWSTroubleshootingTool: %s", e, exc_info=True)
-            raise ToolConnectionError("Falha de comunicação com o TWS ao analisar as falhas.") from e
+            logger.error(
+                "TWS connection error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
+            raise ToolConnectionError(
+                "Falha de comunicação com o TWS ao analisar as falhas."
+            ) from e
         except (ValueError, AttributeError) as e:
-            logger.error("Data or processing error in TWSTroubleshootingTool: %s", e, exc_info=True)
-            raise ToolProcessingError("Erro ao processar os dados de falhas do TWS.") from e
+            logger.error(
+                "Data or processing error in TWSTroubleshootingTool: %s",
+                e,
+                exc_info=True,
+            )
+            raise ToolProcessingError(
+                "Erro ao processar os dados de falhas do TWS."
+            ) from e
         except Exception as e:
-            logger.error("Unexpected error in TWSTroubleshootingTool: %s", e, exc_info=True)
-            raise ToolExecutionError("Ocorreu um erro inesperado ao analisar as falhas do TWS.") from e
+            logger.error(
+                "Unexpected error in TWSTroubleshootingTool: %s", e, exc_info=True
+            )
+            raise ToolExecutionError(
+                "Ocorreu um erro inesperado ao analisar as falhas do TWS."
+            ) from e
 
 
 # --- Tool Instantiation ---

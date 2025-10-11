@@ -28,7 +28,10 @@ async def get_tws_client() -> AsyncGenerator[OptimizedTWSClient | MockTWSClient,
 
         if settings.TWS_MOCK_MODE:
             logger.info("TWS_MOCK_MODE is enabled. Returning MockTWSClient.")
-            if not hasattr(agent_manager, "_mock_tws_client") or agent_manager._mock_tws_client is None:
+            if (
+                not hasattr(agent_manager, "_mock_tws_client")
+                or agent_manager._mock_tws_client is None
+            ):
                 agent_manager._mock_tws_client = MockTWSClient()
             client = agent_manager._mock_tws_client
         else:

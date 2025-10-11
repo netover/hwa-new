@@ -20,9 +20,7 @@ class InputSanitizer:
 
     @staticmethod
     def sanitize_environment_value(
-        env_var_name: str,
-        default_value: Any,
-        value_type: Type = str
+        env_var_name: str, default_value: Any, value_type: Type = str
     ) -> Any:
         """
         Sanitize and validate environment variable values.
@@ -47,7 +45,7 @@ class InputSanitizer:
             elif value_type == bool:
                 # Handle boolean conversion from string
                 if isinstance(raw_value, str):
-                    return raw_value.lower() in ('true', '1', 'yes', 'on')
+                    return raw_value.lower() in ("true", "1", "yes", "on")
                 return bool(raw_value)
             else:
                 # For other types, try to convert using the type constructor
@@ -55,7 +53,9 @@ class InputSanitizer:
         except (ValueError, TypeError):
             # If conversion fails, return the default value
             logger = logging.getLogger(__name__)
-            logger.warning(f"Invalid value for environment variable {env_var_name}: {raw_value}. Using default: {default_value}")
+            logger.warning(
+                f"Invalid value for environment variable {env_var_name}: {raw_value}. Using default: {default_value}"
+            )
             return default_value
 
     @staticmethod
@@ -107,9 +107,13 @@ class InputSanitizer:
             if isinstance(value, str):
                 sanitized[clean_key] = InputSanitizer.sanitize_string(value)
             elif isinstance(value, dict):
-                sanitized[clean_key] = InputSanitizer.sanitize_dict(value, max_depth, current_depth + 1)
+                sanitized[clean_key] = InputSanitizer.sanitize_dict(
+                    value, max_depth, current_depth + 1
+                )
             elif isinstance(value, list):
-                sanitized[clean_key] = InputSanitizer.sanitize_list(value, max_depth, current_depth + 1)
+                sanitized[clean_key] = InputSanitizer.sanitize_list(
+                    value, max_depth, current_depth + 1
+                )
             elif isinstance(value, (int, float, bool)):
                 sanitized[clean_key] = value
             else:
@@ -139,9 +143,13 @@ class InputSanitizer:
             if isinstance(item, str):
                 sanitized.append(InputSanitizer.sanitize_string(item))
             elif isinstance(item, dict):
-                sanitized.append(InputSanitizer.sanitize_dict(item, max_depth, current_depth + 1))
+                sanitized.append(
+                    InputSanitizer.sanitize_dict(item, max_depth, current_depth + 1)
+                )
             elif isinstance(item, list):
-                sanitized.append(InputSanitizer.sanitize_list(item, max_depth, current_depth + 1))
+                sanitized.append(
+                    InputSanitizer.sanitize_list(item, max_depth, current_depth + 1)
+                )
             elif isinstance(item, (int, float, bool)):
                 sanitized.append(item)
             else:

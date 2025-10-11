@@ -53,10 +53,10 @@ async def get_idempotency_key(
     x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key")
 ) -> Optional[str]:
     """Extrai idempotency key do header.
-    
+
     Args:
         x_idempotency_key: Header X-Idempotency-Key
-        
+
     Returns:
         Idempotency key ou None
     """
@@ -67,13 +67,13 @@ async def require_idempotency_key(
     x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key")
 ) -> str:
     """Extrai e valida idempotency key obrigatória.
-    
+
     Args:
         x_idempotency_key: Header X-Idempotency-Key
-        
+
     Returns:
         Idempotency key
-        
+
     Raises:
         ValidationError: Se key não foi fornecida
     """
@@ -82,27 +82,28 @@ async def require_idempotency_key(
             message="Idempotency key is required for this operation",
             details={
                 "header": "X-Idempotency-Key",
-                "hint": "Include X-Idempotency-Key header with a unique UUID"
-            }
+                "hint": "Include X-Idempotency-Key header with a unique UUID",
+            },
         )
-    
+
     # Validar formato (deve ser UUID v4)
     import re
+
     uuid_pattern = re.compile(
-        r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-        re.IGNORECASE
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        re.IGNORECASE,
     )
-    
+
     if not uuid_pattern.match(x_idempotency_key):
         raise ValidationError(
             message="Invalid idempotency key format",
             details={
                 "header": "X-Idempotency-Key",
                 "expected": "UUID v4 format",
-                "received": x_idempotency_key
-            }
+                "received": x_idempotency_key,
+            },
         )
-    
+
     return x_idempotency_key
 
 
@@ -127,7 +128,7 @@ async def initialize_idempotency_manager(redis_client):
         logger.error(
             "idempotency_manager_initialization_failed",
             error=str(e),
-            redis_available=False
+            redis_available=False,
         )
         # Create in-memory fallback
 
@@ -136,30 +137,33 @@ async def initialize_idempotency_manager(redis_client):
 # CORRELATION ID DEPENDENCIES
 # ============================================================================
 
+
 async def get_correlation_id(
     x_correlation_id: Optional[str] = Header(None, alias="X-Correlation-ID"),
-    request: Optional[Request] = None
+    request: Optional[Request] = None,
 ) -> str:
     """Obtém ou gera correlation ID.
-    
+
     Args:
         x_correlation_id: Header X-Correlation-ID
         request: Request object
-        
+
     Returns:
         Correlation ID
     """
     if x_correlation_id:
         return x_correlation_id
-    
+
     # Tentar obter do contexto
     from resync.core.context import get_correlation_id as get_ctx_correlation_id
+
     ctx_id = get_ctx_correlation_id()
     if ctx_id:
         return ctx_id
-    
+
     # Gerar novo
     import uuid
+
     return str(uuid.uuid4())
 
 
@@ -171,13 +175,13 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Optional[dict]:
     """Obtém usuário atual (placeholder).
-    
+
     Args:
         credentials: Credenciais de autenticação injetadas pelo FastAPI.
-        
+
     Returns:
         Um dicionário representando o usuário ou None se não autenticado.
     """
@@ -185,30 +189,30 @@ async def get_current_user(
     if credentials:
         # Validar token e retornar usuário
         pass
-    
+
     return None
 
 
 async def require_authentication(
-    user: Optional[dict] = Depends(get_current_user)
+    user: Optional[dict] = Depends(get_current_user),
 ) -> dict:
     """Garante que um usuário esteja autenticado.
-    
+
     Args:
         user: O usuário obtido da dependência `get_current_user`.
-        
+
     Returns:
         Dados do usuário
-        
+
     Raises:
         AuthenticationError: Se o usuário não estiver autenticado.
     """
     if not user:
         raise AuthenticationError(
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"}
+            message="Authentication required",
+            details={"headers": {"WWW-Authenticate": "Bearer"}}
         )
-    
+
     return user
 
 
@@ -216,12 +220,13 @@ async def require_authentication(
 # RATE LIMITING DEPENDENCIES
 # ============================================================================
 
+
 async def check_rate_limit(request: Request) -> None:
     """Verifica rate limit (placeholder).
-    
+
     Args:
         request: Request object
-        
+
     Raises:
         RateLimitError: Se o limite de taxa for excedido.
     """

@@ -24,8 +24,10 @@ class TestCSPIntegration:
             response = client.get(endpoint)
 
             # Should have CSP headers regardless of response status
-            assert "Content-Security-Policy" in response.headers or \
-                   "Content-Security-Policy-Report-Only" in response.headers
+            assert (
+                "Content-Security-Policy" in response.headers
+                or "Content-Security-Policy-Report-Only" in response.headers
+            )
 
             # Should have additional security headers
             assert "X-Content-Type-Options" in response.headers
@@ -47,7 +49,7 @@ class TestCSPIntegration:
                 "column-number": 20,
                 "source-file": "http://testserver/revisao",
                 "status-code": 200,
-                "script-sample": ""
+                "script-sample": "",
             }
         }
 
@@ -63,11 +65,11 @@ class TestCSPIntegration:
         html_content = response.text
 
         # Should have script tags with nonce attributes
-        assert 'nonce=' in html_content
-        assert 'script' in html_content
+        assert "nonce=" in html_content
+        assert "script" in html_content
 
         # Should have the specific script files from templates
-        assert 'revisao.js' in html_content
+        assert "revisao.js" in html_content
 
     def test_static_files_allowed_by_csp(self, client):
         """Test that static files are accessible under CSP policy."""
@@ -90,8 +92,10 @@ class TestCSPIntegration:
             response = client.get(endpoint)
 
             # Should have CSP headers
-            assert "Content-Security-Policy" in response.headers or \
-                   "Content-Security-Policy-Report-Only" in response.headers
+            assert (
+                "Content-Security-Policy" in response.headers
+                or "Content-Security-Policy-Report-Only" in response.headers
+            )
 
     def test_csp_policy_varies_by_environment(self, client):
         """Test that CSP policy changes based on environment settings."""
@@ -99,7 +103,9 @@ class TestCSPIntegration:
 
         # Get the CSP header
         csp_header = response.headers.get("Content-Security-Policy", "")
-        csp_report_only = response.headers.get("Content-Security-Policy-Report-Only", "")
+        csp_report_only = response.headers.get(
+            "Content-Security-Policy-Report-Only", ""
+        )
 
         # Should have one or the other
         assert csp_header or csp_report_only
@@ -125,6 +131,7 @@ class TestCSPIntegration:
 
             # Find nonce values in script tags
             import re
+
             nonce_matches = re.findall(r'nonce="([^"]+)"', html_content)
             nonces.extend(nonce_matches)
 
@@ -138,8 +145,9 @@ class TestCSPIntegration:
         """Test that CSP policy would block unsafe content."""
         response = client.get("/revisao")
 
-        csp_header = response.headers.get("Content-Security-Policy", "") or \
-                    response.headers.get("Content-Security-Policy-Report-Only", "")
+        csp_header = response.headers.get(
+            "Content-Security-Policy", ""
+        ) or response.headers.get("Content-Security-Policy-Report-Only", "")
 
         # Should not allow unsafe-inline for scripts
         assert "script-src" in csp_header
@@ -148,7 +156,10 @@ class TestCSPIntegration:
         assert "nonce-" in csp_header
 
         # Should not allow external script sources by default
-        assert "https:" not in csp_header or "script-src" not in csp_header.split("https:")[0]
+        assert (
+            "https:" not in csp_header
+            or "script-src" not in csp_header.split("https:")[0]
+        )
 
     def test_security_headers_completeness(self, client):
         """Test that all expected security headers are present."""

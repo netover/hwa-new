@@ -18,7 +18,7 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
@@ -72,9 +72,7 @@ class InMemoryCacheStorage(CacheStorage):
 
     def __init__(self, num_shards: int = 16):
         self.num_shards = num_shards
-        self.shards: list[dict[str, CacheEntry]] = [
-            {} for _ in range(num_shards)
-        ]
+        self.shards: list[dict[str, CacheEntry]] = [{} for _ in range(num_shards)]
         self.locks = [asyncio.Lock() for _ in range(num_shards)]
 
     def _get_shard(self, key: str) -> tuple[dict, asyncio.Lock]:
@@ -144,9 +142,7 @@ class CacheTTLManager:
     async def start_cleanup_task(self, storage: CacheStorage) -> None:
         """Inicia tarefa de limpeza periódica."""
         if self._cleanup_task is None:
-            self._cleanup_task = asyncio.create_task(
-                self._periodic_cleanup(storage)
-            )
+            self._cleanup_task = asyncio.create_task(self._periodic_cleanup(storage))
             logger.info("cache_ttl_cleanup_started", interval=self.cleanup_interval)
 
     async def stop_cleanup_task(self) -> None:
@@ -224,13 +220,13 @@ class CacheMetricsCollector:
             hit_rate = self.hits / total_requests if total_requests > 0 else 0
 
             return {
-                'hits': self.hits,
-                'misses': self.misses,
-                'sets': self.sets,
-                'deletes': self.deletes,
-                'evictions': self.evictions,
-                'hit_rate': hit_rate,
-                'total_requests': total_requests
+                "hits": self.hits,
+                "misses": self.misses,
+                "sets": self.sets,
+                "deletes": self.deletes,
+                "evictions": self.evictions,
+                "hit_rate": hit_rate,
+                "total_requests": total_requests,
             }
 
 
@@ -245,7 +241,7 @@ class ImprovedAsyncCache:
         default_ttl: float = 3600,
         max_size: Optional[int] = None,
         cleanup_interval: float = 60.0,
-        enable_metrics: bool = True
+        enable_metrics: bool = True,
     ):
         self.storage = storage or InMemoryCacheStorage()
         self.default_ttl = default_ttl
@@ -286,12 +282,7 @@ class ImprovedAsyncCache:
 
         return value
 
-    async def set(
-        self,
-        key: str,
-        value: Any,
-        ttl: Optional[float] = None
-    ) -> None:
+    async def set(self, key: str, value: Any, ttl: Optional[float] = None) -> None:
         """Armazena valor no cache."""
         effective_ttl = ttl or self.default_ttl
         await self.storage.set(key, value, effective_ttl)
@@ -337,10 +328,10 @@ class ImprovedAsyncCache:
         metrics = await self.get_metrics()
 
         return {
-            'total_keys': len(keys),
-            'max_size': self.max_size,
-            'default_ttl': self.default_ttl,
-            'initialized': self._initialized,
-            'metrics_enabled': self.metrics is not None,
-            **metrics
+            "total_keys": len(keys),
+            "max_size": self.max_size,
+            "default_ttl": self.default_ttl,
+            "initialized": self._initialized,
+            "metrics_enabled": self.metrics is not None,
+            **metrics,
         }

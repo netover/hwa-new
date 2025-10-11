@@ -7,7 +7,6 @@ minimal test stubs to satisfy import requirements.
 """
 
 
-
 class TestCircuitBreaker:
     """Test circuit breaker functionality."""
 
@@ -46,4 +45,3 @@ class TestResiliencePatterns:
     def test_placeholder(self) -> None:
         """Placeholder test."""
         assert True
-

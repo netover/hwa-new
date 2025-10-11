@@ -20,7 +20,7 @@ async def test_teams_integration():
         enabled=False,
         webhook_url="https://test.webhook.office.com/webhook",
         channel_name="Test Channel",
-        bot_name="Test Bot"
+        bot_name="Test Bot",
     )
 
     teams_integration = TeamsIntegration(config)
@@ -33,7 +33,7 @@ async def test_teams_integration():
         severity="info",
         job_id="TEST123",
         job_status="ABEND",
-        instance_name="TWS_TEST"
+        instance_name="TWS_TEST",
     )
 
     # Test formatting

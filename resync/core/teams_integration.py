@@ -32,8 +32,12 @@ class TeamsConfig:
     enable_conversation_learning: bool = False
     enable_job_notifications: bool = False
     monitored_tws_instances: List[str] = field(default_factory=list)
-    job_status_filters: List[str] = field(default_factory=lambda: ["ABEND", "ERROR", "FAILED"])
-    notification_types: List[str] = field(default_factory=lambda: ["job_status", "alerts", "performance"])
+    job_status_filters: List[str] = field(
+        default_factory=lambda: ["ABEND", "ERROR", "FAILED"]
+    )
+    notification_types: List[str] = field(
+        default_factory=lambda: ["job_status", "alerts", "performance"]
+    )
 
 
 @dataclass
@@ -75,11 +79,21 @@ class TeamsIntegration:
             config.channel_name = teams_settings.get("channel_name")
             config.bot_name = teams_settings.get("bot_name", "Resync Bot")
             config.avatar_url = teams_settings.get("avatar_url")
-            config.enable_conversation_learning = teams_settings.get("enable_conversation_learning", False)
-            config.enable_job_notifications = teams_settings.get("enable_job_notifications", False)
-            config.monitored_tws_instances = teams_settings.get("monitored_tws_instances", [])
-            config.job_status_filters = teams_settings.get("job_status_filters", ["ABEND", "ERROR", "FAILED"])
-            config.notification_types = teams_settings.get("notification_types", ["job_status", "alerts", "performance"])
+            config.enable_conversation_learning = teams_settings.get(
+                "enable_conversation_learning", False
+            )
+            config.enable_job_notifications = teams_settings.get(
+                "enable_job_notifications", False
+            )
+            config.monitored_tws_instances = teams_settings.get(
+                "monitored_tws_instances", []
+            )
+            config.job_status_filters = teams_settings.get(
+                "job_status_filters", ["ABEND", "ERROR", "FAILED"]
+            )
+            config.notification_types = teams_settings.get(
+                "notification_types", ["job_status", "alerts", "performance"]
+            )
 
         return config
 
@@ -87,12 +101,14 @@ class TeamsIntegration:
         """Get or create aiohttp client session."""
         async with self._session_lock:
             if self.session is None or self.session.closed:
-                connector = aiohttp.TCPConnector(limit=100, limit_per_host=30, ttl_dns_cache=300)
+                connector = aiohttp.TCPConnector(
+                    limit=100, limit_per_host=30, ttl_dns_cache=300
+                )
                 timeout = aiohttp.ClientTimeout(total=30, connect=10)
                 self.session = aiohttp.ClientSession(
                     connector=connector,
                     timeout=timeout,
-                    headers={"Content-Type": "application/json"}
+                    headers={"Content-Type": "application/json"},
                 )
             return self.session
 
@@ -120,7 +136,9 @@ class TeamsIntegration:
             return False
 
         if not self.config.webhook_url:
-            logger.warning("teams_notification_failed", reason="webhook_url_not_configured")
+            logger.warning(
+                "teams_notification_failed", reason="webhook_url_not_configured"
+            )
             raise NotificationError("Teams webhook URL not configured")
 
         try:
@@ -129,21 +147,35 @@ class TeamsIntegration:
 
             # Send to Teams webhook
             session = await self._get_session()
-            async with session.post(self.config.webhook_url, json=teams_message) as response:
+            async with session.post(
+                self.config.webhook_url, json=teams_message
+            ) as response:
                 if response.status in [200, 201, 202, 204]:
                     logger.info("teams_notification_sent", title=notification.title)
                     return True
                 else:
                     error_text = await response.text()
-                    logger.error("teams_notification_failed", status=response.status, error=error_text)
+                    logger.error(
+                        "teams_notification_failed",
+                        status=response.status,
+                        error=error_text,
+                    )
                     return False
 
         except aiohttp.ClientError as e:
-            logger.error("teams_notification_network_error", error=str(e), exc_info=True)
-            raise NotificationError(f"Network error sending Teams notification: {e}") from e
+            logger.error(
+                "teams_notification_network_error", error=str(e), exc_info=True
+            )
+            raise NotificationError(
+                f"Network error sending Teams notification: {e}"
+            ) from e
         except Exception as e:
-            logger.error("teams_notification_unexpected_error", error=str(e), exc_info=True)
-            raise NotificationError(f"Unexpected error sending Teams notification: {e}") from e
+            logger.error(
+                "teams_notification_unexpected_error", error=str(e), exc_info=True
+            )
+            raise NotificationError(
+                f"Unexpected error sending Teams notification: {e}"
+            ) from e
 
     def _format_teams_message(self, notification: TeamsNotification) -> Dict[str, Any]:
         """Format notification as Microsoft Teams message card.
@@ -171,55 +203,42 @@ class TeamsIntegration:
                                 "size": "Large",
                                 "weight": "Bolder",
                                 "text": notification.title,
-                                "wrap": True
+                                "wrap": True,
                             },
                             {
                                 "type": "TextBlock",
                                 "text": notification.message,
-                                "wrap": True
-                            }
+                                "wrap": True,
+                            },
                         ],
-                        "actions": []
-                    }
+                        "actions": [],
+                    },
                 }
-            ]
+            ],
         }
 
         # Add additional information if available
         facts = []
 
         if notification.instance_name:
-            facts.append({
-                "title": "Instance",
-                "value": notification.instance_name
-            })
+            facts.append({"title": "Instance", "value": notification.instance_name})
 
         if notification.job_id:
-            facts.append({
-                "title": "Job ID",
-                "value": notification.job_id
-            })
+            facts.append({"title": "Job ID", "value": notification.job_id})
 
         if notification.job_status:
-            facts.append({
-                "title": "Job Status",
-                "value": notification.job_status
-            })
+            facts.append({"title": "Job Status", "value": notification.job_status})
 
         # Add timestamp
-        facts.append({
-            "title": "Timestamp",
-            "value": notification.timestamp.isoformat()
-        })
+        facts.append(
+            {"title": "Timestamp", "value": notification.timestamp.isoformat()}
+        )
 
         # Add facts to card if any exist
         if facts:
-            message_card["attachments"][0]["content"]["body"].extend([
-                {
-                    "type": "FactSet",
-                    "facts": facts
-                }
-            ])
+            message_card["attachments"][0]["content"]["body"].extend(
+                [{"type": "FactSet", "facts": facts}]
+            )
 
         # Add additional data if provided
         if notification.additional_data:
@@ -229,27 +248,29 @@ class TeamsIntegration:
                     {
                         "type": "TextBlock",
                         "text": "**Additional Information:**",
-                        "weight": "Bolder"
+                        "weight": "Bolder",
                     }
-                ]
+                ],
             }
 
             for key, value in notification.additional_data.items():
-                additional_section["items"].append({
-                    "type": "TextBlock",
-                    "text": f"{key}: {value}",
-                    "wrap": True
-                })
+                additional_section["items"].append(
+                    {"type": "TextBlock", "text": f"{key}: {value}", "wrap": True}
+                )
 
             message_card["attachments"][0]["content"]["body"].append(additional_section)
 
         # Add custom styling
         if self.config.bot_name:
-            message_card["attachments"][0]["content"]["$schema"] = "http://adaptivecards.io/schemas/adaptive-card.json"
+            message_card["attachments"][0]["content"][
+                "$schema"
+            ] = "http://adaptivecards.io/schemas/adaptive-card.json"
 
         return message_card
 
-    async def monitor_job_status(self, job_data: Dict[str, Any], instance_name: str) -> None:
+    async def monitor_job_status(
+        self, job_data: Dict[str, Any], instance_name: str
+    ) -> None:
         """Monitor job status and send notifications for configured job status changes.
 
         Args:
@@ -260,8 +281,10 @@ class TeamsIntegration:
             return
 
         # Check if this instance is being monitored
-        if (self.config.monitored_tws_instances and
-            instance_name not in self.config.monitored_tws_instances):
+        if (
+            self.config.monitored_tws_instances
+            and instance_name not in self.config.monitored_tws_instances
+        ):
             return
 
         # Check if job status matches filters
@@ -271,7 +294,7 @@ class TeamsIntegration:
             notification = create_job_status_notification(
                 job_data, instance_name, self.config.job_status_filters
             )
-            
+
             if notification is None:
                 return
 
@@ -282,7 +305,9 @@ class TeamsIntegration:
             except Exception as e:
                 logger.error("job_status_notification_unexpected_error", error=str(e))
 
-    async def learn_from_conversation(self, message: str, context: Dict[str, Any]) -> None:
+    async def learn_from_conversation(
+        self, message: str, context: Dict[str, Any]
+    ) -> None:
         """Learn from Teams conversation for AI enhancement.
 
         Args:
@@ -308,22 +333,24 @@ class TeamsIntegration:
             "conversation_learning": self.config.enable_conversation_learning,
             "job_notifications": self.config.enable_job_notifications,
             "monitored_instances": len(self.config.monitored_tws_instances),
-            "last_check": datetime.now().isoformat()
+            "last_check": datetime.now().isoformat(),
         }
 
         if self.config.enabled and self.config.webhook_url:
             try:
                 # Test webhook connectivity
                 session = await self._get_session()
-                async with session.get(self.config.webhook_url, timeout=aiohttp.ClientTimeout(total=5)) as response:
-                    status["webhook_accessible"] = response.status in [200, 405]  # 405 is expected for GET on webhook
+                async with session.get(
+                    self.config.webhook_url, timeout=aiohttp.ClientTimeout(total=5)
+                ) as response:
+                    status["webhook_accessible"] = response.status in [
+                        200,
+                        405,
+                    ]  # 405 is expected for GET on webhook
             except Exception as e:
                 status["webhook_accessible"] = False
                 status["webhook_error"] = str(e)
-                logger.warning(
-                    "teams_webhook_health_check_failed",
-                    error=str(e)
-                )
+                logger.warning("teams_webhook_health_check_failed", error=str(e))
 
         return status
 

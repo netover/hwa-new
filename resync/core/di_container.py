@@ -49,71 +49,83 @@ class ServiceScope:
         """Set service in current scope."""
         self._services[interface] = instance
 
+
 class DIContainer:
     """Thread-safe DI container with proper lifecycle management."""
-    
+
     def __init__(self):
         self._factories: Dict[type, tuple[Callable, ServiceLifetime]] = {}
         self._singletons: Dict[type, Any] = {}
         self._locks: Dict[type, asyncio.Lock] = {}
         self._global_lock = asyncio.Lock()
-    
+
     def register(
         self,
         interface: type[T],
         factory: Callable[[], T],
-        lifetime: ServiceLifetime = ServiceLifetime.SINGLETON
+        lifetime: ServiceLifetime = ServiceLifetime.SINGLETON,
     ):
         """Register service factory."""
         self._factories[interface] = (factory, lifetime)
         if lifetime == ServiceLifetime.SINGLETON:
             self._locks[interface] = asyncio.Lock()
-    
+
     def register_instance(self, interface: type[T], instance: T):
         """Register pre-created instance."""
         self._singletons[interface] = instance
         self._factories[interface] = (lambda: instance, ServiceLifetime.SINGLETON)
-    
+
+    def register_factory(
+        self,
+        interface: type[T],
+        factory: Callable[..., T],
+        lifetime: ServiceLifetime = ServiceLifetime.SINGLETON,
+    ):
+        """Register a factory function to create service instances."""
+        self._factories[interface] = (factory, lifetime)
+        if lifetime == ServiceLifetime.SINGLETON:
+            self._locks[interface] = asyncio.Lock()
+
     async def get(self, interface: type[T]) -> T:
         """
         Resolve service with double-checked locking pattern.
         """
         if interface not in self._factories:
             raise ValueError(f"Service {interface.__name__} not registered")
-        
+
         factory, lifetime = self._factories[interface]
-        
+
         if lifetime == ServiceLifetime.SINGLETON:
             # Double-checked locking for singletons
             if interface in self._singletons:
                 return self._singletons[interface]
-            
+
             async with self._locks[interface]:
                 # Check again after acquiring lock
                 if interface in self._singletons:
                     return self._singletons[interface]
-                
+
                 instance = await self._create_instance(factory)
                 self._singletons[interface] = instance
                 return instance
-        
+
         elif lifetime == ServiceLifetime.TRANSIENT:
             # Always create new instance
             return await self._create_instance(factory)
-        
+
         else:  # SCOPED
             # Get from current scope (request context)
             scope = await self._get_current_scope()
             if interface not in scope:
                 scope[interface] = await self._create_instance(factory)
             return scope[interface]
-    
+
     async def _create_instance(self, factory: Callable) -> Any:
         """Create instance handling async factories."""
         if asyncio.iscoroutinefunction(factory):
             return await factory()
         return factory()
-    
+
     async def _get_current_scope(self) -> Dict[type, Any]:
         """Get or create scope for current request/context."""
         # Use context vars for scope isolation
@@ -131,6 +143,7 @@ container = DIContainer()
 def register_default_services():
     """Register default services with the container."""
     from resync.core.audit_queue import AsyncAuditQueue, IAuditQueue
+
     container.register(IAuditQueue, AsyncAuditQueue, lifetime=ServiceLifetime.SINGLETON)
 
 

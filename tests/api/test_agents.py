@@ -7,13 +7,17 @@ from resync.core.agent_manager import AgentConfig
 from resync.core.fastapi_di import get_agent_manager
 from resync.main import app
 
+
 # Use the TestClient with our main FastAPI app
 # Patch the rate limit decorator to skip rate limiting during tests
 def mock_rate_limit_decorator(func):
     return func
 
-with patch('resync.lifespan.initialize_redis_with_retry'), \
-     patch('resync.core.rate_limiter.critical_rate_limit', mock_rate_limit_decorator):
+
+with (
+    patch("resync.lifespan.initialize_redis_with_retry"),
+    patch("resync.core.rate_limiter.critical_rate_limit", mock_rate_limit_decorator),
+):
     client = TestClient(app)
 
 # --- Sample Data for Mocking ---
@@ -63,7 +67,7 @@ def test_list_all_agents_success(mock_agent_manager):
     ]
 
     # Act: Make a request to the endpoint
-    response = client.get("/api/v1/agents/")
+    response = client.get("/api/v1/agents/all")
 
     # Assert: Check the response
     assert response.status_code == 200
@@ -104,21 +108,16 @@ def test_get_agent_details_not_found(mock_agent_manager):
     assert response.status_code == 404
     response_data = response.json()
 
-    # Assert the RFC 7807 Problem Details format with custom extensions
-    assert "type" in response_data
-    assert "title" in response_data
-    assert "status" in response_data
-    assert "detail" in response_data
-    assert "instance" in response_data
+    # Assert the custom error response format
+    assert "error_code" in response_data
+    assert "message" in response_data
     assert "correlation_id" in response_data
     assert "timestamp" in response_data
-    assert "error_code" in response_data
     assert "severity" in response_data
+    assert "category" in response_data
 
     # Check specific values for the NotFoundError
-    assert response_data["status"] == 404
     assert response_data["error_code"] == "RESOURCE_NOT_FOUND"
-    assert "Resource Not Found" in response_data["title"]
-    assert "Not Found" in response_data["detail"]
-    assert response_data["instance"] == "/api/v1/agents/non-existent-agent"
-    assert response_data["severity"] == "info"
+    assert "not found" in response_data["message"].lower()
+    assert response_data["category"] == "BUSINESS_LOGIC"
+    assert response_data["severity"] == "MEDIUM"

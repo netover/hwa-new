@@ -105,7 +105,7 @@ class RuntimeMetrics:
         self.llm_duration = MetricHistogram()
         self.llm_tokens = MetricCounter()
         self.error_rate = MetricHistogram()
-        
+
         # Error metrics
         self.error_counts = {}  # Dictionary to track counts by error type
         self.error_lock = threading.Lock()  # Lock for error tracking
@@ -115,27 +115,33 @@ class RuntimeMetrics:
         self.tws_status_requests_failed = MetricCounter()
         self.tws_workstations_total = MetricGauge()
         self.tws_jobs_total = MetricGauge()
-        
+
         # Connection validation metrics
         self.connection_validations_total = MetricCounter()
         self.connection_validation_success = MetricCounter()
         self.connection_validation_failure = MetricCounter()
         self.health_check_with_auto_enable = MetricCounter()
-        
+
         # SLO-related metrics
         self.api_response_time = MetricHistogram()  # Track response times for SLO
         self.api_error_rate = MetricGauge()  # Track error rate percentage
         self.system_availability = MetricGauge()  # Track system availability percentage
-        self.tws_connection_success_rate = MetricGauge()  # Track TWS connection success rate
+        self.tws_connection_success_rate = (
+            MetricGauge()
+        )  # Track TWS connection success rate
         self.ai_agent_response_time = MetricHistogram()  # Track AI agent response times
 
         # Correlation tracking
         self._correlation_context: Dict[str, Dict[str, Any]] = {}
-        self._correlation_lock = threading.Lock()  # Fast operations, safe to use threading.Lock
+        self._correlation_lock = (
+            threading.Lock()
+        )  # Fast operations, safe to use threading.Lock
 
         # Health monitoring
         self._health_checks: Dict[str, Dict[str, Any]] = {}
-        self._health_lock = threading.Lock()  # Fast operations, safe to use threading.Lock
+        self._health_lock = (
+            threading.Lock()
+        )  # Fast operations, safe to use threading.Lock
 
         logger.info("RuntimeMetrics initialized")
 
@@ -203,7 +209,7 @@ class RuntimeMetrics:
             if error_type not in self.error_counts:
                 self.error_counts[error_type] = MetricCounter()
             self.error_counts[error_type].increment()
-        
+
         # Also record in histogram for processing time analysis
         self.error_rate.observe(processing_time)
 
@@ -214,7 +220,7 @@ class RuntimeMetrics:
         with self.error_lock:
             for error_type, counter in self.error_counts.items():
                 error_metrics[error_type] = counter.value
-        
+
         return {
             "agent": {
                 "initializations": self.agent_initializations.value,
@@ -250,7 +256,11 @@ class RuntimeMetrics:
             },
             "slo": {
                 "api_error_rate": self._calculate_error_rate(),  # Calculated based on system metrics
-                "api_response_time": self.api_response_time.samples[-1] if self.api_response_time.samples else 0,  # Most recent response time
+                "api_response_time": (
+                    self.api_response_time.samples[-1]
+                    if self.api_response_time.samples
+                    else 0
+                ),  # Most recent response time
                 "availability": self.system_availability.get(),  # Should be updated by health checks
                 "cache_hit_ratio": self._calculate_cache_hit_ratio(),  # Same as cache hit_rate
                 "tws_connection_success_rate": self.tws_connection_success_rate.get(),  # Should be updated by TWS connection monitoring
@@ -261,9 +271,16 @@ class RuntimeMetrics:
 
     def _calculate_error_rate(self) -> float:
         """Calculate the overall error rate as a percentage."""
-        total_requests = self.agent_initializations.value + self.tws_status_requests_success.value + self.tws_status_requests_failed.value
+        total_requests = (
+            self.agent_initializations.value
+            + self.tws_status_requests_success.value
+            + self.tws_status_requests_failed.value
+        )
         if total_requests > 0:
-            return (self.agent_creation_failures.value + self.tws_status_requests_failed.value) / total_requests
+            return (
+                self.agent_creation_failures.value
+                + self.tws_status_requests_failed.value
+            ) / total_requests
         return 0.0
 
     def _calculate_cache_hit_ratio(self) -> float:
@@ -273,7 +290,11 @@ class RuntimeMetrics:
             return self.cache_hits.value / total_cache_ops
         return 0.0
 
-    def update_slo_metrics(self, availability: Optional[float] = None, tws_connection_success_rate: Optional[float] = None):
+    def update_slo_metrics(
+        self,
+        availability: Optional[float] = None,
+        tws_connection_success_rate: Optional[float] = None,
+    ):
         """Update SLO-related metrics that are calculated externally."""
         if availability is not None:
             self.system_availability.set(availability)
@@ -331,9 +352,9 @@ def track_llm_metrics(func):
             runtime_metrics.llm_duration.observe(duration)
 
             # Try to extract token usage from result if available
-            if hasattr(result, 'usage') and result.usage:
-                input_tokens = getattr(result.usage, 'prompt_tokens', 0)
-                output_tokens = getattr(result.usage, 'completion_tokens', 0)
+            if hasattr(result, "usage") and result.usage:
+                input_tokens = getattr(result.usage, "prompt_tokens", 0)
+                output_tokens = getattr(result.usage, "completion_tokens", 0)
                 runtime_metrics.llm_tokens.increment(input_tokens + output_tokens)
 
             return result
@@ -355,9 +376,9 @@ def track_llm_metrics(func):
             runtime_metrics.llm_duration.observe(duration)
 
             # Try to extract token usage from result if available
-            if hasattr(result, 'usage') and result.usage:
-                input_tokens = getattr(result.usage, 'prompt_tokens', 0)
-                output_tokens = getattr(result.usage, 'completion_tokens', 0)
+            if hasattr(result, "usage") and result.usage:
+                input_tokens = getattr(result.usage, "prompt_tokens", 0)
+                output_tokens = getattr(result.usage, "completion_tokens", 0)
                 runtime_metrics.llm_tokens.increment(input_tokens + output_tokens)
 
             return result

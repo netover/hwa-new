@@ -7,7 +7,6 @@ minimal test stubs to satisfy import requirements.
 """
 
 
-
 class TestConnectionPoolPerformance:
     """Test connection pool performance characteristics."""
 
@@ -30,4 +29,3 @@ class TestLatencyMetrics:
     def test_placeholder(self) -> None:
         """Placeholder test."""
         assert True
-

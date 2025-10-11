@@ -46,6 +46,7 @@ class OptimizeLLMQueryResponse(BaseModel):
 
 class TWSMetricsResponse(BaseModel):
     """Response model for TWS metrics endpoint"""
+
     api_performance: Dict[str, Any]
     cache_stats: Dict[str, Any]
     llm_usage: Dict[str, Any]
@@ -55,6 +56,7 @@ class TWSMetricsResponse(BaseModel):
 
 class TWSAlert(BaseModel):
     """Model for TWS alerts"""
+
     timestamp: str
     severity: str
     message: str
@@ -63,6 +65,7 @@ class TWSAlert(BaseModel):
 
 class TWSHealthResponse(BaseModel):
     """Response model for TWS health monitoring"""
+
     status: str
     critical_alerts: int
     warning_alerts: int
@@ -204,7 +207,11 @@ async def sensitive_endpoint(request: Request, data: Dict[str, Any]) -> Dict[str
     encrypted = encryption_service.encrypt(data["data"])
     from resync.core.logger import log_with_correlation
 
-    log_with_correlation(logging.INFO, "Processing sensitive data (encrypted successfully)", component="api")
+    log_with_correlation(
+        logging.INFO,
+        "Processing sensitive data (encrypted successfully)",
+        component="api",
+    )
     return {"encrypted": encrypted}
 
 
@@ -262,6 +269,7 @@ async def files_endpoint(request: Request, path: str) -> Dict[str, str]:
 
     # Normalize the path to remove any potential traversal patterns
     import os
+
     normalized_path = os.path.normpath(decoded_path)
 
     # Ensure the normalized path doesn't try to go up directories
@@ -375,40 +383,40 @@ async def login(request: Request, email: str = Form(...)):
     return response
 
 
-@api_router.post("/llm/optimize", summary="Optimize LLM query with TWS-specific optimizations")
+@api_router.post(
+    "/llm/optimize", summary="Optimize LLM query with TWS-specific optimizations"
+)
 @authenticated_rate_limit
 async def optimize_llm_query(
-    request: Request,
-    query_data: OptimizeLLMQueryRequest
+    request: Request, query_data: OptimizeLLMQueryRequest
 ) -> OptimizeLLMQueryResponse:
     """
     Optimize an LLM query using TWS-specific optimizations.
-    
+
     This endpoint uses the LLM optimizer to enhance query processing
     with caching, model selection, and TWS-specific template matching.
     """
     try:
         if not query_data.query:
             raise HTTPException(status_code=400, detail="Query is required")
-        
+
         response = await optimized_llm.get_response(
             query=query_data.query,
             context=query_data.context,
             use_cache=query_data.use_cache,
-            stream=query_data.stream
+            stream=query_data.stream,
         )
-        
+
         return OptimizeLLMQueryResponse(
             optimized=True,
             query=query_data.query,
             response=response,
-            cache_used=not query_data.use_cache  # Simplified - in real implementation would check cache hit
+            cache_used=not query_data.use_cache,  # Simplified - in real implementation would check cache hit
         )
     except Exception as e:
         logger.error(f"LLM optimization failed: {e}", exc_info=True)
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to optimize LLM query: {str(e)}"
+            status_code=500, detail=f"Failed to optimize LLM query: {str(e)}"
         )
 
 
@@ -432,13 +440,13 @@ async def get_tws_metrics(request: Request) -> TWSMetricsResponse:
     """
     # Return the performance report from the monitor
     performance_report = tws_monitor.get_performance_report()
-    
+
     return TWSMetricsResponse(
         api_performance=performance_report.get("api_performance", {}),
         cache_stats=performance_report.get("cache_stats", {}),
         llm_usage=performance_report.get("llm_usage", {}),
         circuit_breaker_status=performance_report.get("circuit_breaker_status", {}),
-        memory_usage=performance_report.get("memory_usage", {})
+        memory_usage=performance_report.get("memory_usage", {}),
     )
 
 
@@ -458,7 +466,9 @@ async def get_tws_alerts(request: Request, limit: int = 10) -> List[TWSAlert]:
 
 @api_router.get("/monitoring/health", summary="Get TWS System Health")
 @authenticated_rate_limit
-async def get_tws_health_monitoring(request: Request) -> TWSHealthResponse:  # Renamed to avoid conflict
+async def get_tws_health_monitoring(
+    request: Request,
+) -> TWSHealthResponse:  # Renamed to avoid conflict
     """
     Returns overall TWS system health status.
     """
@@ -480,5 +490,5 @@ async def get_tws_health_monitoring(request: Request) -> TWSHealthResponse:  # R
         status=status,
         critical_alerts=len(critical_alerts),
         warning_alerts=len(warning_alerts),
-        last_updated=performance_report.get("current_metrics", {}).get("timestamp")
+        last_updated=performance_report.get("current_metrics", {}).get("timestamp"),
     )

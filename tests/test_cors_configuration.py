@@ -48,55 +48,45 @@ class TestCORSPolicy:
 
     def test_cors_policy_wildcard_in_production_fails(self):
         """Test that wildcard origins are rejected in production."""
-        with pytest.raises(ValueError, match="Wildcard origins are not allowed in production"):
-            CORSPolicy(
-                environment=Environment.PRODUCTION,
-                allowed_origins=["*"]
-            )
+        with pytest.raises(
+            ValueError, match="Wildcard origins are not allowed in production"
+        ):
+            CORSPolicy(environment=Environment.PRODUCTION, allowed_origins=["*"])
 
     def test_cors_policy_invalid_origin_format(self):
         """Test that invalid origin formats are rejected."""
         with pytest.raises(ValueError, match="Invalid origin format"):
             CORSPolicy(
-                environment=Environment.DEVELOPMENT,
-                allowed_origins=["invalid-origin"]
+                environment=Environment.DEVELOPMENT, allowed_origins=["invalid-origin"]
             )
 
     def test_cors_policy_invalid_method(self):
         """Test that invalid HTTP methods are rejected."""
         with pytest.raises(ValueError, match="Invalid HTTP method"):
             CORSPolicy(
-                environment=Environment.DEVELOPMENT,
-                allowed_methods=["INVALID_METHOD"]
+                environment=Environment.DEVELOPMENT, allowed_methods=["INVALID_METHOD"]
             )
 
     def test_cors_policy_invalid_max_age(self):
         """Test that invalid max_age values are rejected."""
         with pytest.raises(ValueError, match="max_age must be non-negative"):
-            CORSPolicy(
-                environment=Environment.DEVELOPMENT,
-                max_age=-1
-            )
+            CORSPolicy(environment=Environment.DEVELOPMENT, max_age=-1)
 
         with pytest.raises(ValueError, match="max_age should not exceed 7 days"):
-            CORSPolicy(
-                environment=Environment.DEVELOPMENT,
-                max_age=86400 * 8  # 8 days
-            )
+            CORSPolicy(environment=Environment.DEVELOPMENT, max_age=86400 * 8)  # 8 days
 
     def test_cors_policy_invalid_regex_pattern(self):
         """Test that invalid regex patterns are rejected."""
         with pytest.raises(ValueError, match="Invalid regex pattern"):
             CORSPolicy(
-                environment=Environment.DEVELOPMENT,
-                origin_regex_patterns=["[invalid"]
+                environment=Environment.DEVELOPMENT, origin_regex_patterns=["[invalid"]
             )
 
     def test_origin_validation_exact_match(self):
         """Test exact origin matching."""
         policy = CORSPolicy(
             environment=Environment.DEVELOPMENT,
-            allowed_origins=["https://example.com", "http://localhost:3000"]
+            allowed_origins=["https://example.com", "http://localhost:3000"],
         )
 
         assert policy.is_origin_allowed("https://example.com") is True
@@ -105,10 +95,7 @@ class TestCORSPolicy:
 
     def test_origin_validation_wildcard(self):
         """Test wildcard origin matching."""
-        policy = CORSPolicy(
-            environment=Environment.DEVELOPMENT,
-            allow_all_origins=True
-        )
+        policy = CORSPolicy(environment=Environment.DEVELOPMENT, allow_all_origins=True)
 
         assert policy.is_origin_allowed("https://any-origin.com") is True
         assert policy.is_origin_allowed("http://localhost:3000") is True
@@ -118,7 +105,10 @@ class TestCORSPolicy:
         policy = CORSPolicy(
             environment=Environment.DEVELOPMENT,
             allowed_origins=[],
-            origin_regex_patterns=[r"https://.*\.example\.com", r"http://localhost:\d+"]
+            origin_regex_patterns=[
+                r"https://.*\.example\.com",
+                r"http://localhost:\d+",
+            ],
         )
 
         assert policy.is_origin_allowed("https://app.example.com") is True
@@ -135,7 +125,7 @@ class TestCORSPolicy:
             allowed_methods=["GET", "POST"],
             allowed_headers=["Content-Type"],
             allow_credentials=True,
-            max_age=3600
+            max_age=3600,
         )
 
         config_dict = policy.get_cors_config_dict()
@@ -164,7 +154,10 @@ class TestCORSConfig:
         assert config.production.allow_credentials is False
 
         # Test should have specific origins
-        assert config.test.allowed_origins == ["http://localhost:3000", "http://localhost:8000"]
+        assert config.test.allowed_origins == [
+            "http://localhost:3000",
+            "http://localhost:8000",
+        ]
 
     def test_get_policy_by_environment(self):
         """Test retrieving policy by environment."""
@@ -196,7 +189,7 @@ class TestCORSConfig:
 
         new_dev_policy = CORSPolicy(
             environment=Environment.DEVELOPMENT,
-            allowed_origins=["https://specific-origin.com"]
+            allowed_origins=["https://specific-origin.com"],
         )
 
         config.update_policy("development", new_dev_policy)
@@ -207,7 +200,9 @@ class TestCORSConfig:
         config = CORSConfig()
 
         with pytest.raises(ValueError, match="Unknown environment"):
-            config.update_policy("invalid", CORSPolicy(environment=Environment.DEVELOPMENT))
+            config.update_policy(
+                "invalid", CORSPolicy(environment=Environment.DEVELOPMENT)
+            )
 
 
 class TestCORSMiddleware:
@@ -225,7 +220,7 @@ class TestCORSMiddleware:
             allow_methods=["GET", "POST"],
             allow_headers=["Content-Type"],
             allow_credentials=False,
-            max_age=86400
+            max_age=86400,
         )
 
         assert middleware.policy == policy
@@ -241,11 +236,7 @@ class TestCORSMiddleware:
         app = FastAPI()
         policy = CORSPolicy(environment=Environment.DEVELOPMENT)
 
-        middleware = LoggingCORSMiddleware(
-            app=app,
-            policy=policy,
-            allow_origins=["*"]
-        )
+        middleware = LoggingCORSMiddleware(app=app, policy=policy, allow_origins=["*"])
 
         # Create a mock request without origin header
         request = Mock()
@@ -258,6 +249,7 @@ class TestCORSMiddleware:
         # Mock call_next to return a response
         async def mock_call_next(req):
             from fastapi.responses import JSONResponse
+
             return JSONResponse(content={"status": "ok"})
 
         # Process the request
@@ -271,14 +263,11 @@ class TestCORSMiddleware:
         """Test middleware handling of allowed cross-origin requests."""
         app = FastAPI()
         policy = CORSPolicy(
-            environment=Environment.DEVELOPMENT,
-            allowed_origins=["https://allowed.com"]
+            environment=Environment.DEVELOPMENT, allowed_origins=["https://allowed.com"]
         )
 
         middleware = LoggingCORSMiddleware(
-            app=app,
-            policy=policy,
-            allow_origins=["https://allowed.com"]
+            app=app, policy=policy, allow_origins=["https://allowed.com"]
         )
 
         # Create a mock request with allowed origin
@@ -292,6 +281,7 @@ class TestCORSMiddleware:
         # Mock call_next to return a response
         async def mock_call_next(req):
             from fastapi.responses import JSONResponse
+
             return JSONResponse(content={"status": "ok"})
 
         # Process the request
@@ -305,10 +295,7 @@ class TestCORSMiddleware:
         app = FastAPI()
         policy = CORSPolicy(environment=Environment.DEVELOPMENT)
 
-        middleware = LoggingCORSMiddleware(
-            app=app,
-            policy=policy
-        )
+        middleware = LoggingCORSMiddleware(app=app, policy=policy)
 
         # Simulate some requests
         middleware._cors_requests = 100
@@ -349,8 +336,7 @@ class TestCORSHelpers:
         """Test production CORS configuration helper with custom settings."""
         origins = ["https://app.example.com", "https://api.example.com"]
         config = get_production_cors_config(
-            allowed_origins=origins,
-            allow_credentials=True
+            allowed_origins=origins, allow_credentials=True
         )
 
         assert config.environment == Environment.PRODUCTION
@@ -363,7 +349,10 @@ class TestCORSHelpers:
         config = get_test_cors_config()
 
         assert config.environment == Environment.TEST
-        assert config.allowed_origins == ["http://localhost:3000", "http://localhost:8000"]
+        assert config.allowed_origins == [
+            "http://localhost:3000",
+            "http://localhost:8000",
+        ]
         assert config.allow_credentials is True
         assert config.log_violations is True
 
@@ -375,10 +364,7 @@ class TestCORSIntegration:
         """Test creating CORS middleware for FastAPI app."""
         app = FastAPI()
 
-        middleware = create_cors_middleware(
-            app=app,
-            environment="development"
-        )
+        middleware = create_cors_middleware(app=app, environment="development")
 
         assert isinstance(middleware, LoggingCORSMiddleware)
         assert middleware.policy.environment == Environment.DEVELOPMENT
@@ -414,8 +400,8 @@ class TestCORSIntegration:
             "/test",
             headers={
                 "Origin": "http://localhost:3000",
-                "Access-Control-Request-Method": "GET"
-            }
+                "Access-Control-Request-Method": "GET",
+            },
         )
 
         assert response.status_code == 200
@@ -424,7 +410,7 @@ class TestCORSIntegration:
 
     def test_cors_policy_environment_from_settings(self):
         """Test CORS policy loaded from settings."""
-        with patch('resync.api.middleware.cors_middleware.settings') as mock_settings:
+        with patch("resync.api.middleware.cors_middleware.settings") as mock_settings:
             mock_settings.CORS_ENVIRONMENT = "production"
             mock_settings.CORS_ENABLED = True
 
@@ -440,9 +426,7 @@ class TestCORSSecurity:
 
     def test_production_policy_strict_security(self):
         """Test that production policy enforces strict security."""
-        policy = get_production_cors_config(
-            allowed_origins=["https://app.example.com"]
-        )
+        policy = get_production_cors_config(allowed_origins=["https://app.example.com"])
 
         # Should not allow wildcards
         assert policy.allow_all_origins is False
@@ -460,11 +444,11 @@ class TestCORSSecurity:
         policy = CORSPolicy(
             environment=Environment.PRODUCTION,
             allowed_origins=["https://allowed.com"],
-            log_violations=True
+            log_violations=True,
         )
 
         # Mock logger to capture log calls
-        with patch('resync.api.middleware.cors_config.logger'):
+        with patch("resync.api.middleware.cors_config.logger"):
             # This would be called during middleware processing
             # For now, just verify the policy is configured for logging
             assert policy.log_violations is True
@@ -476,8 +460,8 @@ class TestCORSSecurity:
             allowed_origins=[],
             origin_regex_patterns=[
                 r"https://.*\.example\.com$",
-                r"https://api\..*\.com$"
-            ]
+                r"https://api\..*\.com$",
+            ],
         )
 
         # Should match regex patterns
@@ -491,11 +475,14 @@ class TestCORSSecurity:
 
 
 # Integration tests for different environments
-@pytest.mark.parametrize("environment,expected_allow_all", [
-    ("development", True),
-    ("production", False),
-    ("test", False),
-])
+@pytest.mark.parametrize(
+    "environment,expected_allow_all",
+    [
+        ("development", True),
+        ("production", False),
+        ("test", False),
+    ],
+)
 def test_environment_specific_cors_policies(environment, expected_allow_all):
     """Test that CORS policies are correctly configured for each environment."""
 

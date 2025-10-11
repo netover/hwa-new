@@ -50,9 +50,7 @@ async def _validate_memory_for_analysis(mem: Dict[str, Any]) -> bool:
         return False
 
     if not mem.get("user_query") or not mem.get("agent_response"):
-        logger.debug(
-            "memory_missing_required_fields", memory_id=memory_id
-        )
+        logger.debug("memory_missing_required_fields", memory_id=memory_id)
         return False
 
     # Skip if memory is already approved by human
@@ -99,9 +97,7 @@ async def _get_llm_analysis(
         logger.error("llm_network_error", error=str(e), exc_info=True)
         raise LLMError("Network error during memory audit analysis") from e
     except ParsingError as e:
-        logger.error(
-            "llm_json_parsing_failed", error=str(e), exc_info=True
-        )
+        logger.error("llm_json_parsing_failed", error=str(e), exc_info=True)
         # Return None to indicate a non-critical failure for this memory
         return None
     except Exception as e:
@@ -125,7 +121,7 @@ async def _perform_action_on_memory(
             "deleting_memory",
             memory_id=memory_id,
             confidence=confidence,
-            reason=analysis.get('reason', 'N/A')
+            reason=analysis.get("reason", "N/A"),
         )
         success = await knowledge_graph.atomic_check_and_delete(memory_id)
         return ("delete", memory_id) if success else None
@@ -136,10 +132,7 @@ async def _perform_action_on_memory(
     ):
         reason = str(analysis.get("reason", "N/A"))
         logger.warning(
-            "flagging_memory",
-            memory_id=memory_id,
-            confidence=confidence,
-            reason=reason
+            "flagging_memory", memory_id=memory_id, confidence=confidence, reason=reason
         )
         success = await knowledge_graph.atomic_check_and_flag(
             memory_id, reason, confidence
@@ -164,15 +157,11 @@ async def analyze_memory(
 
             # Check if memory is already flagged or approved before LLM analysis
             if await knowledge_graph.is_memory_flagged(memory_id):
-                logger.debug(
-                    "memory_already_flagged_by_ia", memory_id=memory_id
-                )
+                logger.debug("memory_already_flagged_by_ia", memory_id=memory_id)
                 return None
 
             if await knowledge_graph.is_memory_approved(memory_id):
-                logger.debug(
-                    "memory_already_approved_by_human", memory_id=memory_id
-                )
+                logger.debug("memory_already_approved_by_human", memory_id=memory_id)
                 return None
 
             analysis = await _get_llm_analysis(

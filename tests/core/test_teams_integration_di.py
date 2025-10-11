@@ -20,13 +20,11 @@ async def test_teams_integration_di_registration():
             enabled=True,
             webhook_url="https://test.webhook.office.com/webhook",
             channel_name="Test Channel",
-            bot_name="Test Bot"
+            bot_name="Test Bot",
         )
         return TeamsIntegration(config)
 
-    container.register_factory(
-        TeamsIntegration, teams_factory, ServiceScope.SINGLETON
-    )
+    container.register_factory(TeamsIntegration, teams_factory, ServiceScope.SINGLETON)
 
     # Get service from container
     teams_service = await container.get(TeamsIntegration)
@@ -53,14 +51,11 @@ async def test_teams_integration_multiple_resolutions():
         nonlocal factory_call_count
         factory_call_count += 1
         config = TeamsConfig(
-            enabled=True,
-            webhook_url="https://test.webhook.office.com/webhook"
+            enabled=True, webhook_url="https://test.webhook.office.com/webhook"
         )
         return TeamsIntegration(config)
 
-    container.register_factory(
-        TeamsIntegration, teams_factory, ServiceScope.SINGLETON
-    )
+    container.register_factory(TeamsIntegration, teams_factory, ServiceScope.SINGLETON)
 
     # Get service multiple times
     teams_service1 = await container.get(TeamsIntegration)
@@ -80,13 +75,12 @@ async def test_teams_integration_shutdown():
     """Test Teams integration shutdown."""
     # Create Teams integration
     config = TeamsConfig(
-        enabled=True,
-        webhook_url="https://test.webhook.office.com/webhook"
+        enabled=True, webhook_url="https://test.webhook.office.com/webhook"
     )
     teams_integration = TeamsIntegration(config)
 
     # Mock the aiohttp session
-    with patch('aiohttp.ClientSession') as mock_session_class:
+    with patch("aiohttp.ClientSession") as mock_session_class:
         mock_session = AsyncMock()
         mock_session_class.return_value = mock_session
 

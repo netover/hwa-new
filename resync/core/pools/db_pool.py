@@ -13,7 +13,12 @@ from typing import AsyncIterator, Optional
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import QueuePool
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    create_async_engine,
+    async_sessionmaker,
+)
 
 from resync.core.exceptions import DatabaseError
 from resync.core.pools.base_pool import ConnectionPool, ConnectionPoolConfig
@@ -44,7 +49,7 @@ class DatabaseConnectionPool(ConnectionPool[AsyncEngine]):
                 pool_pre_ping=True,  # Verify connections are alive before use
                 pool_recycle=self.config.max_lifetime,  # Recycle connections after max lifetime
                 echo=False,  # Turn off SQL echo in production
-                pool_timeout=self.config.connection_timeout
+                pool_timeout=self.config.connection_timeout,
             )
 
             # Create async sessionmaker for creating sessions
@@ -52,10 +57,12 @@ class DatabaseConnectionPool(ConnectionPool[AsyncEngine]):
                 self._async_engine,
                 expire_on_commit=False,
                 class_=None,
-                sync_session_class=None
+                sync_session_class=None,
             )
 
-            logger.info(f"Database connection pool '{self.config.pool_name}' initialized with {self.config.min_size}-{self.config.max_size} connections")
+            logger.info(
+                f"Database connection pool '{self.config.pool_name}' initialized with {self.config.min_size}-{self.config.max_size} connections"
+            )
         except Exception as e:
             logger.error(f"Failed to setup database connection pool: {e}")
             raise DatabaseError(f"Failed to setup database connection pool: {e}") from e
@@ -71,7 +78,7 @@ class DatabaseConnectionPool(ConnectionPool[AsyncEngine]):
 
         try:
             # Record pool request
-            await self.increment_stat('pool_hits')
+            await self.increment_stat("pool_hits")
 
             # Ensure sessionmaker is available
             if not self._async_sessionmaker:
@@ -88,38 +95,46 @@ class DatabaseConnectionPool(ConnectionPool[AsyncEngine]):
                             success = True
                         except SQLAlchemyError as e:
                             await session.rollback()
-                            await self.increment_stat('connection_errors')
+                            await self.increment_stat("connection_errors")
                             logger.warning(f"Database error in session: {e}")
-                            raise DatabaseError(f"Database operation failed: {e}") from e
+                            raise DatabaseError(
+                                f"Database operation failed: {e}"
+                            ) from e
                         except Exception as e:
                             await session.rollback()
-                            await self.increment_stat('connection_errors')
-                            logger.error(f"Unexpected error in session: {e}", exc_info=True)
+                            await self.increment_stat("connection_errors")
+                            logger.error(
+                                f"Unexpected error in session: {e}", exc_info=True
+                            )
                             raise
             except asyncio.TimeoutError:
-                await self.increment_stat('pool_exhaustions')
+                await self.increment_stat("pool_exhaustions")
                 raise DatabaseError(
                     f"Timeout acquiring connection from pool '{self.config.pool_name}' "
                     f"after {self.config.connection_timeout}s"
                 )
 
         except DatabaseError:
-            await self.increment_stat('pool_misses')
+            await self.increment_stat("pool_misses")
             raise
         except Exception as e:
-            await self.increment_stat('pool_misses')
+            await self.increment_stat("pool_misses")
             logger.error(f"Failed to get database connection: {e}")
             raise DatabaseError(f"Failed to acquire database connection: {e}") from e
         finally:
             # Record connection metrics
             wait_time = time.time() - start_time
             await self.update_wait_time(wait_time)
-            
+
             # Only record success metric if operation succeeded
             if success:
-                logger.debug(f"Connection acquired successfully in {wait_time:.3f}s for pool {self.config.pool_name}")
+                logger.debug(
+                    f"Connection acquired successfully in {wait_time:.3f}s for pool {self.config.pool_name}"
+                )
             else:
-                logger.debug(f"Connection acquisition failed after {wait_time:.3f}s for pool {self.config.pool_name}")
+                logger.debug(
+                    f"Connection acquisition failed after {wait_time:.3f}s for pool {self.config.pool_name}"
+                )
 
     async def _close_pool(self) -> None:
         """Close the database connection pool."""

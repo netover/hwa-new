@@ -7,7 +7,6 @@ minimal test stubs to satisfy import requirements.
 """
 
 
-
 class TestConnectionPoolConfig:
     """Test connection pool configuration."""
 

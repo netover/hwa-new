@@ -28,19 +28,21 @@ from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class CircuitBreakerState(Enum):
     """Estados possíveis do Circuit Breaker"""
-    CLOSED = "closed"      # Funcionando normalmente
-    OPEN = "open"          # Bloqueando chamadas
+
+    CLOSED = "closed"  # Funcionando normalmente
+    OPEN = "open"  # Bloqueando chamadas
     HALF_OPEN = "half_open"  # Testando recuperação
 
 
 @dataclass
 class CircuitBreakerConfig:
     """Configuração do Circuit Breaker"""
+
     failure_threshold: int = 5
     recovery_timeout: int = 60  # segundos
     expected_exception: type = Exception
@@ -50,6 +52,7 @@ class CircuitBreakerConfig:
 @dataclass
 class CircuitBreakerMetrics:
     """Métricas do Circuit Breaker"""
+
     total_calls: int = 0
     successful_calls: int = 0
     failed_calls: int = 0
@@ -77,15 +80,10 @@ class CircuitBreaker:
             "Circuit breaker initialized",
             name=config.name,
             failure_threshold=config.failure_threshold,
-            recovery_timeout=config.recovery_timeout
+            recovery_timeout=config.recovery_timeout,
         )
 
-    async def call(
-        self,
-        func: Callable[..., Awaitable[T]],
-        *args,
-        **kwargs
-    ) -> T:
+    async def call(self, func: Callable[..., Awaitable[T]], *args, **kwargs) -> T:
         """
         Executa função através do circuit breaker
 
@@ -109,7 +107,7 @@ class CircuitBreaker:
                     logger.warning(
                         "Circuit breaker is OPEN, blocking call",
                         name=self.config.name,
-                        calls_blocked=self.metrics.total_calls
+                        calls_blocked=self.metrics.total_calls,
                     )
                     raise CircuitBreakerError(
                         f"Circuit breaker '{self.config.name}' is OPEN"
@@ -119,7 +117,7 @@ class CircuitBreaker:
                     self.metrics.state_changes += 1
                     logger.info(
                         "Circuit breaker transitioning to HALF_OPEN",
-                        name=self.config.name
+                        name=self.config.name,
                     )
 
         try:
@@ -155,7 +153,7 @@ class CircuitBreaker:
             self.metrics.state_changes += 1
             logger.info(
                 "Circuit breaker reset to CLOSED after successful test",
-                name=self.config.name
+                name=self.config.name,
             )
 
     async def _on_failure(self):
@@ -172,7 +170,7 @@ class CircuitBreaker:
                     "Circuit breaker opened due to consecutive failures",
                     name=self.config.name,
                     failures=self.metrics.consecutive_failures,
-                    threshold=self.config.failure_threshold
+                    threshold=self.config.failure_threshold,
                 )
 
     def get_metrics(self) -> Dict[str, Any]:
@@ -186,17 +184,27 @@ class CircuitBreaker:
             "consecutive_failures": self.metrics.consecutive_failures,
             "success_rate": (
                 self.metrics.successful_calls / self.metrics.total_calls
-                if self.metrics.total_calls > 0 else 0
+                if self.metrics.total_calls > 0
+                else 0
             ),
-            "last_failure_time": self.metrics.last_failure_time.isoformat() if self.metrics.last_failure_time else None,
-            "last_success_time": self.metrics.last_success_time.isoformat() if self.metrics.last_success_time else None,
-            "state_changes": self.metrics.state_changes
+            "last_failure_time": (
+                self.metrics.last_failure_time.isoformat()
+                if self.metrics.last_failure_time
+                else None
+            ),
+            "last_success_time": (
+                self.metrics.last_success_time.isoformat()
+                if self.metrics.last_success_time
+                else None
+            ),
+            "state_changes": self.metrics.state_changes,
         }
 
 
 @dataclass
 class RetryConfig:
     """Configuração para retry com backoff"""
+
     max_retries: int = 3
     base_delay: float = 1.0
     max_delay: float = 60.0
@@ -208,6 +216,7 @@ class RetryConfig:
 @dataclass
 class RetryMetrics:
     """Métricas de retry"""
+
     total_attempts: int = 0
     successful_attempts: int = 0
     failed_attempts: int = 0
@@ -226,12 +235,7 @@ class RetryWithBackoff:
         self.config = config
         self.metrics = RetryMetrics()
 
-    async def execute(
-        self,
-        func: Callable[..., Awaitable[T]],
-        *args,
-        **kwargs
-    ) -> T:
+    async def execute(self, func: Callable[..., Awaitable[T]], *args, **kwargs) -> T:
         """
         Executa função com retry automático
 
@@ -260,7 +264,7 @@ class RetryWithBackoff:
                     logger.info(
                         "Operation succeeded after retry",
                         attempt=attempt,
-                        max_retries=self.config.max_retries
+                        max_retries=self.config.max_retries,
                     )
 
                 return result
@@ -274,14 +278,14 @@ class RetryWithBackoff:
                         "Operation failed after all retry attempts",
                         attempts=attempt + 1,
                         max_retries=self.config.max_retries,
-                        error=str(e)
+                        error=str(e),
                     )
                     raise e
 
                 # Calcular delay com backoff exponencial
                 delay = min(
-                    self.config.base_delay * (self.config.exponential_base ** attempt),
-                    self.config.max_delay
+                    self.config.base_delay * (self.config.exponential_base**attempt),
+                    self.config.max_delay,
                 )
 
                 # Adicionar jitter para evitar thundering herd
@@ -295,7 +299,7 @@ class RetryWithBackoff:
                     attempt=attempt + 1,
                     max_retries=self.config.max_retries,
                     delay=delay,
-                    error=str(e)
+                    error=str(e),
                 )
 
                 await asyncio.sleep(delay)
@@ -311,12 +315,15 @@ class RetryWithBackoff:
             "failed_attempts": self.metrics.failed_attempts,
             "success_rate": (
                 self.metrics.successful_attempts / self.metrics.total_attempts
-                if self.metrics.total_attempts > 0 else 0
+                if self.metrics.total_attempts > 0
+                else 0
             ),
             "average_retry_delay": (
-                self.metrics.total_retry_delay / (self.metrics.total_attempts - self.metrics.successful_attempts)
-                if self.metrics.total_attempts > self.metrics.successful_attempts else 0
-            )
+                self.metrics.total_retry_delay
+                / (self.metrics.total_attempts - self.metrics.successful_attempts)
+                if self.metrics.total_attempts > self.metrics.successful_attempts
+                else 0
+            ),
         }
 
 
@@ -329,7 +336,7 @@ class TimeoutManager:
     async def with_timeout(
         coro: Awaitable[T],
         timeout_seconds: float,
-        timeout_exception: Optional[Exception] = None
+        timeout_exception: Optional[Exception] = None,
     ) -> T:
         """
         Executa coroutine com timeout
@@ -356,11 +363,12 @@ class TimeoutManager:
 
 # Decoradores para facilitar uso dos padrões
 
+
 def circuit_breaker(
     failure_threshold: int = 5,
     recovery_timeout: int = 60,
     expected_exception: type = Exception,
-    name: str = None
+    name: str = None,
 ):
     """
     Decorador para aplicar Circuit Breaker
@@ -371,13 +379,14 @@ def circuit_breaker(
         expected_exception: Tipo de exceção que conta como falha
         name: Nome do circuit breaker (padrão: nome da função)
     """
+
     def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         circuit_name = name or f"{func.__module__}.{func.__name__}"
         config = CircuitBreakerConfig(
             failure_threshold=failure_threshold,
             recovery_timeout=recovery_timeout,
             expected_exception=expected_exception,
-            name=circuit_name
+            name=circuit_name,
         )
         breaker = CircuitBreaker(config)
 
@@ -398,7 +407,7 @@ def retry_with_backoff(
     max_delay: float = 60.0,
     exponential_base: float = 2.0,
     jitter: bool = True,
-    expected_exceptions: tuple = (Exception,)
+    expected_exceptions: tuple = (Exception,),
 ):
     """
     Decorador para aplicar retry com exponential backoff
@@ -411,6 +420,7 @@ def retry_with_backoff(
         jitter: Se deve adicionar jitter ao delay
         expected_exceptions: Tipos de exceção que devem ser retentados
     """
+
     def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         config = RetryConfig(
             max_retries=max_retries,
@@ -418,7 +428,7 @@ def retry_with_backoff(
             max_delay=max_delay,
             exponential_base=exponential_base,
             jitter=jitter,
-            expected_exceptions=expected_exceptions
+            expected_exceptions=expected_exceptions,
         )
         retry = RetryWithBackoff(config)
 
@@ -441,19 +451,21 @@ def with_timeout(timeout_seconds: float, timeout_exception: Optional[Exception] 
         timeout_seconds: Timeout em segundos
         timeout_exception: Exceção customizada para timeout
     """
+
     def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @wraps(func)
         async def wrapper(*args, **kwargs) -> T:
             return await TimeoutManager.with_timeout(
-                func(*args, **kwargs),
-                timeout_seconds,
-                timeout_exception
+                func(*args, **kwargs), timeout_seconds, timeout_exception
             )
+
         return wrapper
+
     return decorator
 
 
 # Funções utilitárias para monitoramento
+
 
 def get_all_circuit_breakers() -> Dict[str, CircuitBreaker]:
     """
@@ -463,6 +475,7 @@ def get_all_circuit_breakers() -> Dict[str, CircuitBreaker]:
     funciona apenas para circuit breakers criados via decoradores.
     """
     import gc
+
     breakers = {}
 
     for obj in gc.get_objects():
@@ -477,30 +490,22 @@ def get_circuit_breaker_metrics() -> Dict[str, Dict[str, Any]]:
     Retorna métricas de todos os circuit breakers
     """
     breakers = get_all_circuit_breakers()
-    return {
-        name: breaker.get_metrics()
-        for name, breaker in breakers.items()
-    }
+    return {name: breaker.get_metrics() for name, breaker in breakers.items()}
 
 
 # Configurações padrão para diferentes tipos de serviço
 
 DEFAULT_HTTP_CONFIG = CircuitBreakerConfig(
-    failure_threshold=3,
-    recovery_timeout=30,
-    name="http_service"
+    failure_threshold=3, recovery_timeout=30, name="http_service"
 )
 
 DEFAULT_DATABASE_CONFIG = CircuitBreakerConfig(
-    failure_threshold=5,
-    recovery_timeout=60,
-    name="database_service"
+    failure_threshold=5, recovery_timeout=60, name="database_service"
 )
 
 DEFAULT_EXTERNAL_API_CONFIG = CircuitBreakerConfig(
-    failure_threshold=2,
-    recovery_timeout=120,
-    name="external_api"
+    failure_threshold=2, recovery_timeout=120, name="external_api"
+)
 
 
 class CircuitBreakerManager:
@@ -516,9 +521,7 @@ class CircuitBreakerManager:
         self._lock = asyncio.Lock()
 
     async def register_breaker(
-        self,
-        name: str,
-        config: Optional[CircuitBreakerConfig] = None
+        self, name: str, config: Optional[CircuitBreakerConfig] = None
     ) -> CircuitBreaker:
         """Register a new circuit breaker."""
 
@@ -540,11 +543,7 @@ class CircuitBreakerManager:
             return self._breakers.get(name)
 
     async def call(
-        self,
-        breaker_name: str,
-        func: Callable[..., Awaitable[T]],
-        *args,
-        **kwargs
+        self, breaker_name: str, func: Callable[..., Awaitable[T]], *args, **kwargs
     ) -> T:
         """Execute function through named circuit breaker."""
 
@@ -592,4 +591,3 @@ class CircuitBreakerManager:
 
 # Global circuit breaker manager instance
 circuit_breaker_manager = CircuitBreakerManager()
-)
