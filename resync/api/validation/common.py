@@ -5,7 +5,7 @@ import re
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Pattern, Union
+from typing import Any, Pattern
 
 from pydantic import BaseModel, Field, validator
 from pydantic.types import constr
@@ -16,12 +16,12 @@ class ValidationErrorResponse(BaseModel):
 
     error: str = "Validation failed"
     message: str = "Request validation failed. Please check the provided data."
-    details: List[Dict[str, Any]] = []
+    details: list[dict[str, Any]] = []
     severity: str = "error"
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    request_id: Optional[str] = None
-    path: Optional[str] = None
-    method: Optional[str] = None
+    request_id: str | None = None
+    path: str | None = None
+    method: str | None = None
     error_code: str = "VALIDATION_ERROR"
 
     def add_error(

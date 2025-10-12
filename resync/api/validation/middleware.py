@@ -4,10 +4,10 @@ import json
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Type
 
+import structlog
 from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
-import structlog
 
 from .common import ValidationErrorResponse, ValidationSeverity
 

@@ -7,17 +7,15 @@ Este módulo demonstra o uso completo de:
 - Respostas padronizadas
 """
 
-from typing import List, Optional, Annotated, Dict, Any
 from datetime import datetime
+from typing import Annotated, Any, Dict, List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Query, Request, status
 from pydantic import BaseModel, Field, StringConstraints
 
-from resync.api.models.responses import (
-    create_paginated_response,
-)
 from resync.api.models.links import LinkBuilder
+from resync.api.models.responses import create_paginated_response
 from resync.core.exceptions import ResourceNotFoundError, ValidationError
 from resync.core.structured_logger import get_logger
 

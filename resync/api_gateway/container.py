@@ -7,13 +7,16 @@ and dependencies of services, reducing tight coupling between modules.  # type: 
 
 from __future__ import annotations  # type: ignore
 
-from typing import Any, Protocol  # type: ignore
+import logging  # type: ignore
 from abc import abstractmethod  # type: ignore
 from contextlib import asynccontextmanager  # type: ignore
-import logging  # type: ignore
+from typing import Any, Protocol  # type: ignore
 
-from resync.core.interfaces import ITWSClient, IAgentManager, IKnowledgeGraph  # type: ignore[attr-defined]
-from resync.api_gateway.services import ServiceFactory, ITWSService, IAgentService, IKnowledgeService  # type: ignore
+from resync.api_gateway.services import (IAgentService,  # type: ignore
+                                         IKnowledgeService, ITWSService,
+                                         ServiceFactory)
+from resync.core.interfaces import (  # type: ignore[attr-defined]
+    IAgentManager, IKnowledgeGraph, ITWSClient)
 
 
 class IContainer(Protocol):  # type: ignore

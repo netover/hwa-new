@@ -4,6 +4,7 @@ Query implementations for TWS operations in the CQRS pattern.
 
 from dataclasses import dataclass
 from typing import List
+
 from resync.cqrs.base import IQuery
 
 

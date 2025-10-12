@@ -16,14 +16,10 @@ from redis.asyncio import Redis as AsyncRedis
 from redis.exceptions import RedisError
 
 from resync.core.audit_lock import DistributedAuditLock
-from resync.core.exceptions import (
-    AuditError,
-    DatabaseError,
-    DataParsingError,
-    FileProcessingError,
-)
-from resync.settings import settings
+from resync.core.exceptions import (AuditError, DatabaseError,
+                                    DataParsingError, FileProcessingError)
 from resync.core.structured_logger import get_logger
+from resync.settings import settings
 
 logger = get_logger(__name__)
 

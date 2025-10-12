@@ -2,21 +2,15 @@
 Query handlers for TWS operations in the CQRS pattern.
 """
 
-from resync.cqrs.base import IQueryHandler, QueryResult
-from resync.cqrs.queries import (
-    GetSystemStatusQuery,
-    GetWorkstationsStatusQuery,
-    GetJobsStatusQuery,
-    GetCriticalPathStatusQuery,
-    GetJobStatusQuery,
-    GetJobStatusBatchQuery,
-    GetSystemHealthQuery,
-    SearchJobsQuery,
-    GetPerformanceMetricsQuery,
-    CheckTWSConnectionQuery,
-)
-from resync.core.interfaces import ITWSClient
 from resync.core.cache_hierarchy import get_cache_hierarchy
+from resync.core.interfaces import ITWSClient
+from resync.cqrs.base import IQueryHandler, QueryResult
+from resync.cqrs.queries import (CheckTWSConnectionQuery,
+                                 GetCriticalPathStatusQuery,
+                                 GetJobsStatusQuery, GetJobStatusBatchQuery,
+                                 GetJobStatusQuery, GetPerformanceMetricsQuery,
+                                 GetSystemHealthQuery, GetSystemStatusQuery,
+                                 GetWorkstationsStatusQuery, SearchJobsQuery)
 
 
 class GetSystemStatusQueryHandler(IQueryHandler[GetSystemStatusQuery, QueryResult]):

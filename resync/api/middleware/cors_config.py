@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import logging
 import re
+import socket
 from enum import Enum
 from typing import List, Union
 from urllib.parse import urlparse
-import socket
 
 from pydantic import BaseModel, Field, validator
 
@@ -148,7 +148,6 @@ class CORSPolicy(BaseModel):
     def validate_regex_pattern(cls, v, values):
         """Validate regex patterns are compilable and not allowed in production."""
         environment = values.get("environment")
-
 
         try:
             re.compile(v)

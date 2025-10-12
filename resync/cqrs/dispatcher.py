@@ -3,18 +3,41 @@ CQRS dispatcher for routing commands and queries to their respective handlers.
 """
 
 from typing import Dict, Type
-from resync.cqrs.base import (
-    ICommand,
-    IQuery,
-    ICommandHandler,
-    IQueryHandler,
-    CommandResult,
-    QueryResult,
-)
-from resync.cqrs.commands import *
-from resync.cqrs.queries import *
-from resync.cqrs.command_handlers import *
-from resync.cqrs.query_handlers import *
+
+from resync.cqrs.base import (CommandResult, ICommand, ICommandHandler, IQuery,
+                              IQueryHandler, QueryResult)
+from resync.cqrs.command_handlers import (ExecuteJobCommandHandler,
+                                          GetCriticalPathStatusCommandHandler,
+                                          GetJobsStatusCommandHandler,
+                                          GetJobStatusBatchCommandHandler,
+                                          GetSystemHealthCommandHandler,
+                                          GetSystemStatusCommandHandler,
+                                          GetWorkstationsStatusCommandHandler,
+                                          UpdateJobStatusCommandHandler)
+from resync.cqrs.commands import (ExecuteJobCommand,
+                                  GetCriticalPathStatusCommand,
+                                  GetJobsStatusCommand,
+                                  GetJobStatusBatchCommand,
+                                  GetSystemHealthCommand,
+                                  GetSystemStatusCommand,
+                                  GetWorkstationsStatusCommand,
+                                  UpdateJobStatusCommand)
+from resync.cqrs.queries import (CheckTWSConnectionQuery,
+                                 GetCriticalPathStatusQuery,
+                                 GetJobsStatusQuery, GetJobStatusBatchQuery,
+                                 GetJobStatusQuery, GetPerformanceMetricsQuery,
+                                 GetSystemHealthQuery, GetSystemStatusQuery,
+                                 GetWorkstationsStatusQuery, SearchJobsQuery)
+from resync.cqrs.query_handlers import (CheckTWSConnectionQueryHandler,
+                                        GetCriticalPathStatusQueryHandler,
+                                        GetJobsStatusQueryHandler,
+                                        GetJobStatusBatchQueryHandler,
+                                        GetJobStatusQueryHandler,
+                                        GetPerformanceMetricsQueryHandler,
+                                        GetSystemHealthQueryHandler,
+                                        GetSystemStatusQueryHandler,
+                                        GetWorkstationsStatusQueryHandler,
+                                        SearchJobsQueryHandler)
 
 
 class CQRSDispatcher:

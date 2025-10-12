@@ -1,11 +1,13 @@
 # resync/core/enhanced_cache.py - VERSÃO MELHORADA
 from __future__ import annotations
+
 import asyncio
-import time
 import logging
-from typing import Any, Optional, Dict
-from dataclasses import dataclass, field
+import time
 from collections import OrderedDict
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
+
 import psutil
 
 logger = logging.getLogger(__name__)

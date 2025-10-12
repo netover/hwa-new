@@ -4,18 +4,16 @@ Este módulo demonstra o uso de idempotency keys em operações que não devem
 ser duplicadas, como criação de recursos, transações, etc.
 """
 
-from typing import Optional, Annotated
 from datetime import datetime
+from typing import Annotated, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field, StringConstraints
 
-from resync.api.dependencies import (
-    get_idempotency_manager,
-    require_idempotency_key,
-    get_correlation_id,
-)
+from resync.api.dependencies import (get_correlation_id,
+                                     get_idempotency_manager,
+                                     require_idempotency_key)
 from resync.core.idempotency import IdempotencyManager
 from resync.core.structured_logger import get_logger
 

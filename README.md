@@ -3,6 +3,90 @@
 ## Overview
 Resync is an AI-powered interface for HCL Workload Automation (HWA), formerly known as IBM Tivoli Workload Scheduler (TWS). It transforms complex TWS operations into an intuitive chat interface powered by artificial intelligence, providing real-time monitoring, status queries, and diagnostic capabilities in natural language.
 
+## Portabilidade de Encoding no Windows
+
+### Guia Rápido
+1. **Ative UTF-8**: Use `PYTHONIOENCODING=utf-8` e `python -X utf8` para evitar UnicodeEncodeError.
+2. **Evite emoji em logs críticos**: Use `symbol(ok, sys.stdout)` para fallback automático.
+3. **Prefira Windows Terminal**: Suporte nativo a Unicode vs. cmd.exe/cp1252.
+4. **Teste localmente**: Simule cp1252 para validar fallbacks.
+
+### Sintoma → Causa → Correção
+
+| Sintoma | Causa | Correção |
+|---------|-------|----------|
+| UnicodeEncodeError ao imprimir ✅/❌ | Console cp1252 não suporta emoji | Use `symbol(ok, sys.stdout)` ou force UTF-8 |
+| Logs corrompidos em CI Windows | Encoding inconsistente | Adicione `PYTHONIOENCODING=utf-8` em CI |
+| Emojis não aparecem | Terminal sem suporte Unicode | Use ASCII fallbacks ou Windows Terminal |
+| Erros de encoding em testes | sys.stdout.encoding não UTF-8 | Configure PYTHONIOENCODING=utf-8 nos testes |
+
+### Configuração Recomendada
+
+#### PowerShell:
+```powershell
+$env:PYTHONIOENCODING="utf-8"
+python -X utf8 -m pytest
+```
+
+#### cmd.exe:
+```cmd
+set PYTHONIOENCODING=utf-8
+python -X utf8 -m pytest
+```
+
+#### CI/GitHub Actions:
+```yaml
+env:
+  PYTHONIOENCODING: utf-8
+```
+
+#### Desenvolvimento Local:
+```bash
+# Ativar UTF-8
+export PYTHONIOENCODING=utf-8
+python -X utf8 -m resync.main
+
+# Ou diretamente
+PYTHONIOENCODING=utf-8 python -X utf8 -m resync.main
+```
+
+## 🚀 Performance & Security Optimizations
+
+### Performance Enhancements
+
+Resync has been optimized for high-performance production deployments:
+
+- **Async-First Architecture**: Full asyncio implementation for non-blocking I/O
+- **Connection Pooling**: Optimized database and Redis connection pools
+- **Smart Caching**: Multi-layer caching with TTL and compression
+- **Task Management**: Priority-based task scheduling with configurable workers
+- **Memory Management**: Efficient memory usage with configurable limits
+
+### Security Features
+
+Comprehensive security hardening including:
+
+- **Security Headers**: HSTS, CSP, X-Frame-Options, and more
+- **Rate Limiting**: Configurable request limits with burst handling
+- **Input Validation**: Comprehensive input sanitization and validation
+- **Threat Protection**: User-agent blocking and path-based filtering
+- **Cryptography**: Secure password hashing and token generation
+- **Audit Logging**: Complete audit trail for security events
+
+### Configuration
+
+Performance and security settings are centralized in:
+- `resync/core/performance_config.py` - Performance tuning
+- `resync/core/security_hardening.py` - Security hardening
+- `resync/core/constants.py` - Application constants
+
+### Boas Práticas de Logging
+
+- Use níveis de logging (INFO/ERROR) em vez de emoji para semântica
+- Campos estruturados (`extra={'status': 'ok|err'}`) são preferíveis
+- Emojis devem ser "nice-to-have" com fallback automático
+- Teste logs em diferentes encodings antes de deploy
+
 ## Security Improvements
 
 ### Credential Management

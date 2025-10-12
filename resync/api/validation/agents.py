@@ -8,11 +8,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field, model_validator, validator
 from pydantic.types import constr
 
-from .common import (
-    NumericConstraints,
-    StringConstraints,
-    ValidationPatterns,
-)
+from .common import NumericConstraints, StringConstraints, ValidationPatterns
 
 
 class AgentType(str, Enum):

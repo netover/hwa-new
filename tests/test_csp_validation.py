@@ -72,70 +72,47 @@ class TestCSPValidation:
         )
         assert validate_csp_report(malformed_json) is False
 
-    def test_safe_uri_validation_valid_http(self):
-        """Test validation of safe HTTP URI."""
-        assert _is_safe_uri("http://example.com/page") is True
+    @pytest.mark.parametrize(
+        "uri,expected",
+        [
+            # Valid URIs
+            ("http://example.com/page", True),
+            ("https://example.com/page", True),
+            ("self", True),
+            ("none", True),
+            ("unsafe-inline", True),
+            ("unsafe-eval", True),
+            # Data URIs
+            ("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==", True),
+            # Invalid URIs
+            ("data:text/plain;base64," + "A" * 2000, False),  # Too long
+            ("http://192.168.1.1/page", False),  # Private IP
+            ("http://10.0.0.1/page", False),  # Private IP
+            ("http://172.16.0.1/page", False),  # Private IP
+            ("http://127.0.0.1/page", False),  # Private IP
+            ("http://localhost/page", False),  # Localhost
+            ("http://[::1]/page", False),  # IPv6 localhost
+        ],
+    )
+    def test_safe_uri_validation(self, uri, expected):
+        """Test validation of URIs for CSP safety."""
+        assert _is_safe_uri(uri) is expected
 
-    def test_safe_uri_validation_valid_https(self):
-        """Test validation of safe HTTPS URI."""
-        assert _is_safe_uri("https://example.com/page") is True
-
-    def test_safe_uri_validation_special_values(self):
-        """Test validation of special CSP values."""
-        assert _is_safe_uri("self") is True
-        assert _is_safe_uri("none") is True
-        assert _is_safe_uri("unsafe-inline") is True
-        assert _is_safe_uri("unsafe-eval") is True
-
-    def test_safe_uri_validation_data_uri(self):
-        """Test validation of data URIs."""
-        short_data_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
-        assert _is_safe_uri(short_data_uri) is True
-
-    def test_safe_uri_validation_data_uri_too_long(self):
-        """Test validation of overly long data URIs."""
-        long_data_uri = (
-            "data:text/plain;base64," + "A" * 2000
-        )  # Longer than 1000 char limit
-        assert _is_safe_uri(long_data_uri) is False
-
-    def test_safe_uri_validation_private_ip(self):
-        """Test validation of private IP addresses."""
-        assert _is_safe_uri("http://192.168.1.1/page") is False
-        assert _is_safe_uri("http://10.0.0.1/page") is False
-        assert _is_safe_uri("http://172.16.0.1/page") is False
-        assert _is_safe_uri("http://127.0.0.1/page") is False
-
-    def test_safe_uri_validation_localhost(self):
-        """Test validation of localhost variations."""
-        assert _is_safe_uri("http://localhost/page") is False
-        assert _is_safe_uri("http://[::1]/page") is False
-
-    def test_safe_directive_value_valid(self):
-        """Test validation of safe directive values."""
-        assert _is_safe_directive_value("default-src 'self'") is True
-        assert _is_safe_directive_value("script-src 'self' 'nonce-abc123'") is True
-
-    def test_safe_directive_value_dangerous_script_tag(self):
-        """Test validation of directive values with dangerous script tags."""
-        assert (
-            _is_safe_directive_value("script-src 'self' <script>alert('xss')</script>")
-            is False
-        )
-
-    def test_safe_directive_value_javascript_protocol(self):
-        """Test validation of directive values with javascript: protocol."""
-        assert (
-            _is_safe_directive_value("script-src 'self' javascript:alert('xss')")
-            is False
-        )
-
-    def test_safe_directive_value_on_event_handler(self):
-        """Test validation of directive values with event handlers."""
-        assert (
-            _is_safe_directive_value("script-src 'self' onclick='alert(\"xss\")'")
-            is False
-        )
+    @pytest.mark.parametrize(
+        "directive_value,expected",
+        [
+            # Valid directive values
+            ("default-src 'self'", True),
+            ("script-src 'self' 'nonce-abc123'", True),
+            # Invalid directive values
+            ("script-src 'self' <script>alert('xss')</script>", False),
+            ("script-src 'self' javascript:alert('xss')", False),
+            ("script-src 'self' onclick='alert(\"xss\")'", False),
+        ],
+    )
+    def test_safe_directive_value(self, directive_value, expected):
+        """Test validation of CSP directive values for safety."""
+        assert _is_safe_directive_value(directive_value) is expected
 
     def test_sanitize_csp_report_string_fields(self):
         """Test sanitization of string fields."""

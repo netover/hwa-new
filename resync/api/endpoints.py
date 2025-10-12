@@ -1,41 +1,52 @@
+"""API endpoints for the Resync application.
+
+This module defines all the REST API endpoints for the Resync application,
+providing interfaces for TWS integration, health monitoring, authentication,
+audit logging, and administrative functions.
+
+The endpoints are organized into logical groups:
+- Authentication endpoints (/auth)
+- Health monitoring endpoints (/health)
+- TWS integration endpoints (/status)
+- Audit and logging endpoints (/audit)
+- Administrative endpoints (/admin)
+"""
+
 from __future__ import annotations
 
 import logging
 from typing import Any
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from starlette.responses import HTMLResponse
-from fastapi.responses import (
-    PlainTextResponse,
-    RedirectResponse,
-    Response,
-)
-from fastapi import status
+from fastapi import (APIRouter, Depends, Form, HTTPException, Query, Request,
+                     status)
+from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
+from starlette.responses import HTMLResponse
 
+from resync.api.utils.error_handlers import handle_api_error
 from resync.core.agent_manager import AgentConfig
+from resync.core.alerting import alerting_system
 from resync.core.fastapi_di import get_agent_manager, get_tws_client
 from resync.core.interfaces import IAgentManager, ITWSClient
 from resync.core.llm_wrapper import optimized_llm  # type: ignore[attr-defined]
 from resync.core.metrics import runtime_metrics  # type: ignore[attr-defined]
-from resync.core.rate_limiter import authenticated_rate_limit, public_rate_limit  # type: ignore[attr-defined]
+from resync.core.rate_limiter import (  # type: ignore[attr-defined]
+    authenticated_rate_limit, public_rate_limit)
+# Import new monitoring and observability components
+from resync.core.runbooks import runbook_registry
 from resync.core.tws_monitor import tws_monitor  # type: ignore[attr-defined]
-from resync.settings import settings
-
 # Import CQRS components
 from resync.cqrs.dispatcher import dispatcher
-from resync.cqrs.queries import (
-    GetWorkstationsStatusQuery,
-    GetJobsStatusQuery,
-    CheckTWSConnectionQuery,
-)
+from resync.cqrs.queries import (CheckTWSConnectionQuery, GetJobsStatusQuery,
+                                 GetWorkstationsStatusQuery)
+from resync.settings import settings
+
+# Import monitoring endpoints
+from resync.api.circuit_breaker_metrics import router as circuit_breaker_router
 
 # Import endpoint utilities for cross-cutting concerns
 
-# Import new monitoring and observability components
-from resync.core.runbooks import runbook_registry
-from resync.core.alerting import alerting_system
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -90,96 +101,7 @@ class TWSMetricsResponse(BaseModel):
     last_updated: str | None
 
 
-class APIRouterEnhanced:
-    """Enhanced API router with improved routing and error handling."""
-
-    def __init__(self) -> None:
-        self.router = APIRouter()
-
-    def handle_error(self, e: Exception, operation: str) -> HTTPException:
-        """
-        Enhanced error handling for API operations.
-
-        Args:
-            e: Exception that occurred
-            operation: Operation that caused the exception
-
-        Returns:
-            HTTPException with appropriate status code and message
-        """
-        logger.error(f"Error during {operation}: {e}", exc_info=True)
-
-        if isinstance(e, HTTPException):
-            return e
-
-        # Map specific errors to appropriate HTTP status codes
-        error_lower = str(e).lower()
-        if "timeout" in error_lower or "connection" in error_lower:
-            status_code = 504  # Gateway Timeout
-            detail = f"Request timeout during {operation}"
-        elif "auth" in error_lower or "unauthorized" in error_lower:
-            status_code = 401  # Unauthorized
-            detail = "Authentication required for this operation"
-        elif "forbidden" in error_lower:
-            status_code = 403  # Forbidden
-            detail = "Access forbidden for this operation"
-        elif "not found" in error_lower or "404" in error_lower:
-            status_code = 404  # Not Found
-            detail = f"Resource not found during {operation}"
-        elif "validation" in error_lower or "invalid" in error_lower:
-            status_code = 422  # Unprocessable Entity
-            detail = f"Validation error during {operation}: {str(e)}"
-        elif "conflict" in error_lower or "duplicate" in error_lower:
-            status_code = 409  # Conflict
-            detail = f"Conflict during {operation}: {str(e)}"
-        else:
-            status_code = 500  # Internal Server Error
-            detail = f"An error occurred during {operation}: {str(e)}"
-
-        return HTTPException(status_code=status_code, detail=detail)
-
-
-def handle_error(e: Exception, operation: str) -> HTTPException:
-    """
-    Global error handling function for API operations.
-
-    Args:
-        e: Exception that occurred
-        operation: Operation that caused the exception
-
-    Returns:
-        HTTPException with appropriate status code and message
-    """
-    logger.error(f"Error during {operation}: {e}", exc_info=True)
-
-    if isinstance(e, HTTPException):
-        return e
-
-    # Map specific errors to appropriate HTTP status codes
-    error_lower = str(e).lower()
-    if "timeout" in error_lower or "connection" in error_lower:
-        status_code = 504  # Gateway Timeout
-        detail = f"Request timeout during {operation}"
-    elif "auth" in error_lower or "unauthorized" in error_lower:
-        status_code = 401  # Unauthorized
-        detail = "Authentication required for this operation"
-    elif "forbidden" in error_lower:
-        status_code = 403  # Forbidden
-        detail = "Access forbidden for this operation"
-    elif "not found" in error_lower or "404" in error_lower:
-        status_code = 404  # Not Found
-        detail = f"Resource not found during {operation}"
-    elif "validation" in error_lower or "invalid" in error_lower:
-        status_code = 422  # Unprocessable Entity
-        detail = f"Validation error during {operation}: {str(e)}"
-    elif "conflict" in error_lower or "duplicate" in error_lower:
-        status_code = 409  # Conflict
-        detail = f"Conflict during {operation}: {str(e)}"
-    else:
-        status_code = 500  # Internal Server Error
-        detail = f"An error occurred during {operation}: {str(e)}"
-
-    return HTTPException(status_code=status_code, detail=detail)
+# Error handling is now centralized in resync.api.utils.error_handlers
 
 
 # --- HTML serving endpoint for the main dashboard ---
@@ -288,7 +210,7 @@ async def get_workstations_status_cqrs(
         return result.data
     except Exception as e:
         logger.error("Failed to get TWS workstation statuses: %s", e, exc_info=True)
-        raise handle_error(e, "TWS workstation statuses retrieval")
+        raise handle_api_error(e, "TWS workstation statuses retrieval")
 
 
 @api_router.get("/status/jobs")
@@ -313,7 +235,7 @@ async def get_jobs_status_cqrs(
         return result.data
     except Exception as e:
         logger.error("Failed to get TWS job statuses: %s", e, exc_info=True)
-        raise handle_error(e, "TWS job statuses retrieval")
+        raise handle_api_error(e, "TWS job statuses retrieval")
 
 
 # --- Health Check Endpoints ---
@@ -384,7 +306,7 @@ async def get_tws_health(
         logger.error("TWS health check failed: %s", e, exc_info=True)
         # Record TWS status failure metrics on exception
         runtime_metrics.tws_status_requests_failed.increment()
-        raise handle_error(e, "TWS health check")
+        raise handle_api_error(e, "TWS health check")
 
 
 # --- Connection Validation Endpoint ---
@@ -716,11 +638,8 @@ async def login_for_access_token(
     """
     OAuth2 compatible token login, get an access token for future requests.
     """
-    from resync.api.auth import (
-        authenticate_admin,
-        create_access_token,
-        ACCESS_TOKEN_EXPIRE_MINUTES,
-    )
+    from resync.api.auth import (ACCESS_TOKEN_EXPIRE_MINUTES,
+                                 authenticate_admin, create_access_token)
 
     user = await authenticate_admin(username, password)
     if not user:
@@ -735,7 +654,7 @@ async def login_for_access_token(
     from fastapi import Response
 
     resp = Response(
-        content='{"access_token": "' + access_token + '", "token_type": "bearer"}',
+        content=f'{{"access_token": "{access_token}", "token_type": "bearer"}}',
         media_type="application/json",
     )
     resp.set_cookie(
@@ -965,11 +884,11 @@ async def add_alert_rule(
     }
 
 
+from pydantic import BaseModel
+
 # --- Benchmarking Endpoints ---
 from resync.core.benchmarking import create_benchmark_runner
 from resync.core.container import app_container
-from pydantic import BaseModel
-from typing import Optional
 
 
 class RunBenchmarkRequest(BaseModel):
@@ -1082,3 +1001,7 @@ async def get_benchmark_results(
         raise HTTPException(
             status_code=500, detail=f"Getting benchmark results failed: {str(e)}"
         )
+
+
+# Register circuit breaker metrics endpoints
+api_router.include_router(circuit_breaker_router)

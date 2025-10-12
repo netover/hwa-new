@@ -5,11 +5,12 @@ Este módulo fornece algoritmos eficientes de rate limiting para controle de tr�
 com suporte a concorrência e métricas detalhadas.
 """
 
-import time
 import asyncio
+import time
 from collections import deque
-from typing import Callable, Any, Optional
 from functools import wraps
+from typing import Any, Callable, Optional
+
 import structlog
 
 logger = structlog.get_logger(__name__)

@@ -5,9 +5,10 @@ This module provides pre-built validation models and utilities for
 common input validation scenarios in the application.
 """
 
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, validator, ValidationError
 from enum import Enum
+from typing import Any, Dict, List, Optional, Type
+
+from pydantic import BaseModel, Field, ValidationError, validator
 
 
 class LLMProvider(str, Enum):
@@ -27,7 +28,7 @@ class LLMRequest(BaseModel):
         ..., min_length=1, max_length=10000, description="The prompt to send to the LLM"
     )
     model: str = Field(
-        ..., regex=r"^[a-zA-Z0-9\-_/.]+$", description="The LLM model identifier"
+        ..., description="The LLM model identifier", regex=r"^[a-zA-Z0-9\-_/.]+$"
     )
     max_tokens: int = Field(
         default=200, ge=1, le=4000, description="Maximum tokens in response"
@@ -41,14 +42,14 @@ class LLMRequest(BaseModel):
     provider: Optional[LLMProvider] = Field(default=None, description="LLM provider")
 
     @validator("prompt")
-    def validate_prompt(cls, v):
+    def validate_prompt(cls, v: str):
         """Validate and clean prompt input."""
         if not v or not v.strip():
             raise ValueError("Prompt cannot be empty")
         return v.strip()
 
     @validator("model")
-    def validate_model(cls, v):
+    def validate_model(cls, v: str):
         """Validate model identifier."""
         if not v or not v.strip():
             raise ValueError("Model cannot be empty")
@@ -67,10 +68,10 @@ class PaginationRequest(BaseModel):
     page: int = Field(default=1, ge=1, description="Page number (1-based)")
     page_size: int = Field(default=50, ge=1, le=1000, description="Items per page")
     sort_by: Optional[str] = Field(
-        default=None, regex=r"^[a-zA-Z_][a-zA-Z0-9_]*$", description="Sort field"
+        default=None, description="Sort field", regex=r"^[a-zA-Z_][a-zA-Z0-9_]*$"
     )
     sort_order: str = Field(
-        default="asc", regex=r"^(asc|desc)$", description="Sort order"
+        default="asc", description="Sort order", regex=r"^(asc|desc)$"
     )
 
     @property
@@ -89,7 +90,7 @@ class SearchRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=1000, description="Maximum results")
 
     @validator("query")
-    def validate_query(cls, v):
+    def validate_query(cls, v: str):
         """Validate and clean search query."""
         if not v or not v.strip():
             raise ValueError("Search query cannot be empty")
@@ -103,14 +104,14 @@ class FileUploadRequest(BaseModel):
         ..., min_length=1, max_length=255, description="Original filename"
     )
     content_type: str = Field(
-        ..., regex=r"^[a-zA-Z0-9\-]+/[a-zA-Z0-9\-]+$", description="MIME type"
+        ..., description="MIME type", regex=r"^[a-zA-Z0-9\-]+/[a-zA-Z0-9\-]+$"
     )
     size: int = Field(
         ..., ge=1, le=50 * 1024 * 1024, description="File size in bytes"
     )  # 50MB max
 
     @validator("filename")
-    def validate_filename(cls, v):
+    def validate_filename(cls, v: str):
         """Validate filename for security."""
         import os
 
@@ -132,7 +133,7 @@ class APIKeyRequest(BaseModel):
     expires_at: Optional[str] = Field(default=None, description="Expiration timestamp")
 
     @validator("name")
-    def validate_name(cls, v):
+    def validate_name(cls, v: str):
         """Validate API key name."""
         if not v or not v.strip():
             raise ValueError("API key name cannot be empty")
@@ -149,11 +150,11 @@ class ConfigurationUpdate(BaseModel):
     key: str = Field(..., min_length=1, max_length=200, description="Configuration key")
     value: Any = Field(..., description="Configuration value")
     value_type: str = Field(
-        ..., regex=r"^(str|int|float|bool|list|dict)$", description="Value type"
+        ..., description="Value type", regex=r"^(str|int|float|bool|list|dict)$"
     )
 
     @validator("key")
-    def validate_key(cls, v):
+    def validate_key(cls, v: str):
         """Validate configuration key."""
         if not v or not v.strip():
             raise ValueError("Configuration key cannot be empty")
@@ -164,7 +165,7 @@ class ConfigurationUpdate(BaseModel):
         return v.strip()
 
 
-def validate_input(data: Dict[str, Any], model_class) -> BaseModel:
+def validate_input(data: Dict[str, Any], model_class: Type[BaseModel]) -> BaseModel:
     """
     Validate input data against a Pydantic model.
 
@@ -202,7 +203,7 @@ def create_validation_middleware():
     from fastapi import Request
     from fastapi.responses import JSONResponse
 
-    async def validation_middleware(request: Request, call_next):
+    async def validation_middleware(request: Request, call_next: Any):
         """Middleware to validate requests and provide better error responses."""
         try:
             response = await call_next(request)

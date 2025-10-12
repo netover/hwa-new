@@ -4,27 +4,23 @@ import logging
 import re
 import traceback
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from functools import lru_cache
+from typing import Any, Dict, FrozenSet, List, Optional, Pattern, Union
 
 from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from functools import lru_cache
-from typing import FrozenSet, Pattern
 
-from resync.models.error_models import (
-    AuthenticationErrorResponse,
-    AuthorizationErrorResponse,
-    BaseErrorResponse,
-    BusinessLogicErrorResponse,
-    ErrorCategory,
-    ErrorSeverity,
-    ExternalServiceErrorResponse,
-    RateLimitErrorResponse,
-    SystemErrorResponse,
-    ValidationErrorResponse,
-)
+from resync.models.error_models import (AuthenticationErrorResponse,
+                                        AuthorizationErrorResponse,
+                                        BaseErrorResponse,
+                                        BusinessLogicErrorResponse,
+                                        ErrorCategory, ErrorSeverity,
+                                        ExternalServiceErrorResponse,
+                                        RateLimitErrorResponse,
+                                        SystemErrorResponse,
+                                        ValidationErrorResponse)
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -345,21 +341,18 @@ def create_error_response_from_exception(
     correlation_id: Optional[str] = None,
 ) -> BaseErrorResponse:
     """Create standardized error response from any exception with security considerations."""
-    from resync.core.exceptions_enhanced import (
-        ResyncException as EnhancedResyncException,
-        DatabaseError as EnhancedDatabaseError,
-        LLMError as EnhancedLLMError,
-        NotFoundError as EnhancedNotFoundError,
-        TWSConnectionError as EnhancedTWSConnectionError,
-    )
-
-    from resync.core.exceptions import (
-        DatabaseError,
-        LLMError,
-        NotFoundError,
-        ResyncException as BaseResyncException,
-        TWSConnectionError,
-    )
+    from resync.core.exceptions import DatabaseError, LLMError, NotFoundError
+    from resync.core.exceptions import ResyncException as BaseResyncException
+    from resync.core.exceptions import TWSConnectionError
+    from resync.core.exceptions_enhanced import \
+        DatabaseError as EnhancedDatabaseError
+    from resync.core.exceptions_enhanced import LLMError as EnhancedLLMError
+    from resync.core.exceptions_enhanced import \
+        NotFoundError as EnhancedNotFoundError
+    from resync.core.exceptions_enhanced import \
+        ResyncException as EnhancedResyncException
+    from resync.core.exceptions_enhanced import \
+        TWSConnectionError as EnhancedTWSConnectionError
 
     builder = ErrorResponseBuilder()
 
@@ -484,7 +477,8 @@ def _handle_business_logic_exception(
     is_production: bool,
 ) -> BaseErrorResponse:
     """Handle business logic exceptions."""
-    from resync.core.exceptions_enhanced import NotFoundError as EnhancedNotFoundError
+    from resync.core.exceptions_enhanced import \
+        NotFoundError as EnhancedNotFoundError
 
     if isinstance(exception, EnhancedNotFoundError):
         return builder.build_business_logic_error(
@@ -585,10 +579,10 @@ def register_exception_handlers(app):  # type: ignore
     """Register standardized exception handlers for the FastAPI application."""
     from fastapi.exceptions import RequestValidationError
     from starlette.exceptions import HTTPException as StarletteHTTPException
+
     from resync.core.exceptions import ResyncException as BaseResyncException
-    from resync.core.exceptions_enhanced import (
-        ResyncException as EnhancedResyncException,
-    )
+    from resync.core.exceptions_enhanced import \
+        ResyncException as EnhancedResyncException
 
     # Register handler for validation errors
     @app.exception_handler(RequestValidationError)  # type: ignore

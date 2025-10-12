@@ -1,3 +1,17 @@
+"""Application settings and configuration management.
+
+This module defines all application settings using Pydantic BaseSettings,
+providing centralized configuration management with environment variable
+support, validation, and type safety.
+
+Settings are organized into logical groups:
+- Database and Redis configuration
+- TWS integration settings
+- Security and authentication
+- Logging and monitoring
+- AI/ML model configurations
+"""
+
 from __future__ import annotations
 
 import os

@@ -7,15 +7,14 @@ for security and compliance purposes.
 
 import logging
 from datetime import datetime
-from typing import Dict, Any, List, Optional
-from urllib.parse import urlparse
 from enum import Enum
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from fastapi import Request
 from pydantic import BaseModel
 
 from resync.core.logger import log_with_correlation
-
 
 logger = logging.getLogger(__name__)
 

@@ -13,7 +13,8 @@ import asyncio
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar, Optional, Any
+from typing import Any, Generic, Optional, TypeVar
+
 import structlog
 
 logger = structlog.get_logger(__name__)

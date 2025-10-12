@@ -6,10 +6,10 @@ Este módulo implementa helpers para criar links seguindo o padrão RFC 8288
 Referência: https://tools.ietf.org/html/rfc8288
 """
 
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 from urllib.parse import urlencode
-from pydantic import BaseModel, Field
 
+from pydantic import BaseModel, Field
 
 # ============================================================================
 # MODELS

@@ -9,17 +9,10 @@ import logging
 from typing import Any, Callable, List, Optional, Type, TypeVar, Union
 
 import httpx
-from tenacity import (
-    RetryCallState,
-    before_sleep_log,
-    retry,
-    retry_if_exception_type,
-    retry_if_result,
-    stop_after_attempt,
-    stop_after_delay,
-    wait_exponential,
-    wait_fixed,
-)
+from tenacity import (RetryCallState, before_sleep_log, retry,
+                      retry_if_exception_type, retry_if_result,
+                      stop_after_attempt, stop_after_delay, wait_exponential,
+                      wait_fixed)
 
 logger = logging.getLogger(__name__)
 

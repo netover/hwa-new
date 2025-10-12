@@ -1,29 +1,41 @@
+"""TWS (Tivoli Workload Scheduler) service integration.
+
+This module provides comprehensive integration with IBM Tivoli Workload Scheduler,
+including job monitoring, workstation status, critical path analysis, and
+real-time data retrieval through optimized HTTP client connections.
+"""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import re
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, List
+from typing import Any, AsyncGenerator
 
 import httpx
 
 from resync.core.cache_hierarchy import get_cache_hierarchy
+from resync.core.circuit_breaker import adaptive_tws_api_breaker
 from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.core.exceptions import TWSConnectionError
-from resync.core.resilience import circuit_breaker, retry_with_backoff, with_timeout
-from resync.models.tws import (
-    CriticalJob,
-    JobStatus,
-    SystemStatus,
-    WorkstationStatus,
-)
+from resync.core.resilience import (circuit_breaker, retry_with_backoff,
+                                    with_timeout)
+from resync.models.tws import (CriticalJob, JobStatus, SystemStatus,
+                               WorkstationStatus)
+from resync.services.http_client_factory import create_async_http_client
 from resync.settings import settings  # New import
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
 
 # Regex para validar job_ids, permitindo alfanuméricos, underscores e hifens.
+
+# NOTE: Circuit Breaker Evolution
+# This service now supports both traditional circuit breakers (via decorators)
+# and adaptive circuit breakers with latency monitoring (via adaptive_tws_api_breaker).
+# For new implementations, consider using adaptive_tws_api_breaker.call_with_latency()
+# for better observability and automatic threshold adaptation.
 SAFE_JOB_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 # --- Constants ---
@@ -70,22 +82,10 @@ class OptimizedTWSClient:
             logger.info("Using connection pool manager for TWS HTTP client")
         else:
             # Legacy direct httpx client for backward compatibility
-            self.client = httpx.AsyncClient(
+            self.client = create_async_http_client(
                 base_url=self.base_url,
                 auth=self.auth,
                 verify=True,  # Development: TWS often uses self-signed certs
-                timeout=httpx.Timeout(
-                    connect=getattr(settings, "TWS_CONNECT_TIMEOUT", 10.0),
-                    read=getattr(settings, "TWS_READ_TIMEOUT", 30.0),
-                    write=getattr(settings, "TWS_WRITE_TIMEOUT", 30.0),
-                    pool=getattr(settings, "TWS_POOL_TIMEOUT", 5.0),
-                ),
-                limits=httpx.Limits(
-                    max_connections=getattr(settings, "TWS_MAX_CONNECTIONS", 100),
-                    max_keepalive_connections=getattr(
-                        settings, "TWS_MAX_KEEPALIVE", 20
-                    ),
-                ),
             )
 
         # Caching layer to reduce redundant API calls - using a direct Redis cache
@@ -106,24 +106,10 @@ class OptimizedTWSClient:
                 )
                 # Fallback to direct client if pool not available
                 if not hasattr(self, "client"):
-                    self.client = httpx.AsyncClient(
+                    self.client = create_async_http_client(
                         base_url=self.base_url,
                         auth=self.auth,
                         verify=True,
-                        timeout=httpx.Timeout(
-                            connect=getattr(settings, "TWS_CONNECT_TIMEOUT", 10.0),
-                            read=getattr(settings, "TWS_READ_TIMEOUT", 30.0),
-                            write=getattr(settings, "TWS_WRITE_TIMEOUT", 30.0),
-                            pool=getattr(settings, "TWS_POOL_TIMEOUT", 5.0),
-                        ),
-                        limits=httpx.Limits(
-                            max_connections=getattr(
-                                settings, "TWS_MAX_CONNECTIONS", 100
-                            ),
-                            max_keepalive_connections=getattr(
-                                settings, "TWS_MAX_KEEPALIVE", 20
-                            ),
-                        ),
                     )
                 return self.client
         else:
@@ -220,7 +206,7 @@ class OptimizedTWSClient:
             raise TWSConnectionError("TWS server ping timed out", original_exception=e)
         except httpx.RequestError as e:
             logger.error(f"TWS server ping failed: {e}")
-            raise TWSConnectionError(f"TWS server unreachable", original_exception=e)
+            raise TWSConnectionError("TWS server unreachable", original_exception=e)
         except Exception as e:
             logger.error(f"Unexpected error during TWS ping: {e}")
             raise TWSConnectionError(
@@ -246,7 +232,7 @@ class OptimizedTWSClient:
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
     @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
-    async def get_workstations_status(self) -> List[WorkstationStatus]:
+    async def get_workstations_status(self) -> list[WorkstationStatus]:
         """Retrieves the status of all workstations, utilizing the cache."""
         cache_key = "workstations_status"
         cached_data = await self.cache.get(cache_key)
@@ -272,7 +258,7 @@ class OptimizedTWSClient:
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
     @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
-    async def get_jobs_status(self) -> List[JobStatus]:
+    async def get_jobs_status(self) -> list[JobStatus]:
         """Retrieves the status of all jobs, utilizing the cache."""
         cache_key = "jobs_status"
         cached_data = await self.cache.get(cache_key)
@@ -287,7 +273,7 @@ class OptimizedTWSClient:
             )  # ttl not supported in current cache implementation
             return jobs
 
-    async def get_critical_path_status(self) -> List[CriticalJob]:
+    async def get_critical_path_status(self) -> list[CriticalJob]:
         """Retrieves the status of jobs in the critical path, utilizing the cache."""
         cache_key = "critical_path_status"
         cached_data = await self.cache.get(cache_key)
@@ -321,9 +307,9 @@ class OptimizedTWSClient:
         jobs_task = asyncio.create_task(self.get_jobs_status())
         critical_jobs_task = asyncio.create_task(self.get_critical_path_status())
 
-        workstations: List[WorkstationStatus] | Exception
-        jobs: List[JobStatus] | Exception
-        critical_jobs: List[CriticalJob] | Exception
+        workstations: list[WorkstationStatus] | Exception
+        jobs: list[JobStatus] | Exception
+        critical_jobs: list[CriticalJob] | Exception
         workstations, jobs, critical_jobs = await asyncio.gather(
             workstations_task, jobs_task, critical_jobs_task, return_exceptions=True
         )
@@ -345,7 +331,7 @@ class OptimizedTWSClient:
             workstations=workstations, jobs=jobs, critical_jobs=critical_jobs
         )
 
-    async def get_job_status_batch(self, job_ids: List[str]) -> dict[str, JobStatus]:
+    async def get_job_status_batch(self, job_ids: list[str]) -> dict[str, JobStatus]:
         """
         Batch multiple job status queries using parallel execution.
 

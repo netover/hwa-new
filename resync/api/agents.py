@@ -1,4 +1,5 @@
 import logging
+
 from fastapi import APIRouter, Depends, Request
 
 from resync.core.exceptions_enhanced import NotFoundError

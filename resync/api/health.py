@@ -2,22 +2,16 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from resync.core.health_models import (
-    ComponentType,
-    HealthStatus,
-    get_status_color,
-    get_status_description,
-)
-from resync.core.health_service import (
-    get_health_check_service,
-    shutdown_health_check_service,
-)
+from resync.core.health_models import (ComponentType, HealthStatus,
+                                       get_status_color,
+                                       get_status_description)
+from resync.core.health_service import (get_health_check_service,
+                                        shutdown_health_check_service)
 from resync.core.metrics import runtime_metrics
 
 logger = logging.getLogger(__name__)
@@ -43,9 +37,9 @@ class HealthSummaryResponse(BaseModel):
     status_description: str
     timestamp: str
     correlation_id: str
-    summary: Dict[str, Any]
-    alerts: List[str]
-    performance_metrics: Dict[str, Any]
+    summary: dict[str, Any]
+    alerts: list[str]
+    performance_metrics: dict[str, Any]
 
 
 class ComponentHealthResponse(BaseModel):
@@ -56,10 +50,10 @@ class ComponentHealthResponse(BaseModel):
     status: str
     status_color: str
     message: str
-    response_time_ms: Optional[float]
+    response_time_ms: float | None
     last_check: str
     error_count: int
-    metadata: Optional[Dict[str, Any]]
+    metadata: dict[str, Any] | None
 
 
 class DetailedHealthResponse(BaseModel):
@@ -69,11 +63,11 @@ class DetailedHealthResponse(BaseModel):
     overall_status_color: str
     timestamp: str
     correlation_id: str
-    components: Dict[str, ComponentHealthResponse]
-    summary: Dict[str, Any]
-    alerts: List[str]
-    performance_metrics: Dict[str, Any]
-    history: List[Dict[str, Any]]
+    components: dict[str, ComponentHealthResponse]
+    summary: dict[str, Any]
+    alerts: list[str]
+    performance_metrics: dict[str, Any]
+    history: list[dict[str, Any]]
 
 
 class CoreHealthResponse(BaseModel):
@@ -82,8 +76,8 @@ class CoreHealthResponse(BaseModel):
     status: str
     status_color: str
     timestamp: str
-    core_components: Dict[str, ComponentHealthResponse]
-    summary: Dict[str, Any]
+    core_components: dict[str, ComponentHealthResponse]
+    summary: dict[str, Any]
 
 
 # Core components that are critical for system operation
@@ -297,7 +291,7 @@ async def get_detailed_health(
 
 
 @router.get("/ready")
-async def readiness_probe() -> Dict[str, Any]:
+async def readiness_probe() -> dict[str, Any]:
     """
     Kubernetes readiness probe endpoint.
 
@@ -305,7 +299,7 @@ async def readiness_probe() -> Dict[str, Any]:
     200 OK if system is ready to serve requests.
 
     Returns:
-        Dict[str, Any]: Readiness status with core component details
+        dict[str, Any]: Readiness status with core component details
     """
     try:
         health_service = await get_health_check_service()
@@ -360,7 +354,7 @@ async def readiness_probe() -> Dict[str, Any]:
 
 
 @router.get("/live")
-async def liveness_probe() -> Dict[str, Any]:
+async def liveness_probe() -> dict[str, Any]:
     """
     Kubernetes liveness probe endpoint.
 
@@ -368,7 +362,7 @@ async def liveness_probe() -> Dict[str, Any]:
     200 OK if the system is alive and responding.
 
     Returns:
-        Dict[str, Any]: Liveness status
+        dict[str, Any]: Liveness status
     """
     try:
         health_service = await get_health_check_service()
@@ -419,7 +413,7 @@ async def liveness_probe() -> Dict[str, Any]:
 
 
 @router.post("/component/{component_name}/recover")
-async def recover_component(component_name: str) -> Dict[str, Any]:
+async def recover_component(component_name: str) -> dict[str, Any]:
     """
     Attempt to recover a specific component.
 
@@ -427,7 +421,7 @@ async def recover_component(component_name: str) -> Dict[str, Any]:
         component_name: Name of the component to recover
 
     Returns:
-        Dict[str, Any]: Recovery attempt result
+        dict[str, Any]: Recovery attempt result
     """
     try:
         health_service = await get_health_check_service()
@@ -479,7 +473,7 @@ async def recover_component(component_name: str) -> Dict[str, Any]:
 
 
 @router.get("/redis")
-async def get_redis_health() -> Dict[str, Any]:
+async def get_redis_health() -> dict[str, Any]:
     """
     Get detailed Redis health check with connection validation.
 
@@ -487,7 +481,7 @@ async def get_redis_health() -> Dict[str, Any]:
     critical status information for idempotency guarantee validation.
 
     Returns:
-        Dict[str, Any]: Redis health status with connection details
+        dict[str, Any]: Redis health status with connection details
     """
     try:
         health_service = await get_health_check_service()
@@ -551,12 +545,12 @@ async def get_redis_health() -> Dict[str, Any]:
 
 
 @router.get("/components")
-async def list_components() -> Dict[str, List[Dict[str, str]]]:
+async def list_components() -> dict[str, list[dict[str, str]]]:
     """
     List all available health check components.
 
     Returns:
-        Dict[str, List[Dict[str, str]]]: List of available components
+        dict[str, list[dict[str, str]]]: List of available components
     """
     components = [
         {

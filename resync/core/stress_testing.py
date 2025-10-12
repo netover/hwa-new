@@ -24,11 +24,8 @@ import psutil
 from resync.core import get_environment_tags, get_global_correlation_id
 from resync.core.agent_manager import AgentManager
 from resync.core.async_cache import AsyncTTLCache
-from resync.core.audit_db import (
-    add_audit_records_batch,
-    auto_sweep_pending_audits,
-    get_audit_metrics,
-)
+from resync.core.audit_db import (add_audit_records_batch,
+                                  auto_sweep_pending_audits, get_audit_metrics)
 from resync.core.metrics import log_with_correlation, runtime_metrics
 
 logger = logging.getLogger(__name__)

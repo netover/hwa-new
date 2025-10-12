@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, BackgroundTasks
+from fastapi import (APIRouter, BackgroundTasks, Depends, File, HTTPException,
+                     UploadFile)
 
 from resync.core.exceptions import FileProcessingError
 from resync.core.fastapi_di import get_file_ingestor

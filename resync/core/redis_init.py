@@ -7,13 +7,8 @@ import sys
 from typing import Optional
 
 import redis.asyncio as redis
-from redis.exceptions import (
-    ConnectionError,
-    TimeoutError,
-    AuthenticationError,
-    BusyLoadingError,
-    RedisError,
-)
+from redis.exceptions import (AuthenticationError, BusyLoadingError,
+                              ConnectionError, RedisError, TimeoutError)
 
 from resync.settings import settings
 
@@ -202,3 +197,12 @@ class RedisInitializer:
         if self._client:
             await self._client.close()
             await self._client.connection_pool.disconnect()
+
+
+# Global Redis initializer instance
+_redis_initializer = RedisInitializer()
+
+
+async def get_redis_initializer() -> RedisInitializer:
+    """Get the global Redis initializer instance."""
+    return _redis_initializer

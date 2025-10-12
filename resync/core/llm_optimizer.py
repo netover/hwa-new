@@ -10,11 +10,12 @@ import time
 from typing import Any
 
 import pybreaker
+
 from resync.core.async_cache import AsyncTTLCache
+from resync.core.litellm_init import get_litellm_router
 from resync.core.llm_monitor import llm_cost_monitor
 from resync.core.utils.llm import call_llm
 from resync.settings import settings
-from resync.core.litellm_init import get_litellm_router
 
 # Define the circuit breaker for LLM API calls
 llm_api_breaker = pybreaker.CircuitBreaker(

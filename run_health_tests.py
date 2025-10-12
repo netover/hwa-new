@@ -44,7 +44,7 @@ def run_tests():
     except ImportError as e:
         print(f"❌ Error importing pytest: {e}")
         return 1
-    except Exception as e:
+    except (ModuleNotFoundError, FileNotFoundError, RuntimeError) as e:
         print(f"❌ Error running tests: {e}")
         return 1
 

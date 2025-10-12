@@ -11,18 +11,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
-from typing import (
-    Any,
-    AsyncGenerator,
-    Dict,
-    List,
-    Optional,
-    Pattern,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import (Any, AsyncGenerator, Dict, List, Optional, Pattern, Tuple,
+                    Type, TypeVar, Union)
 
 import structlog
 from jose import JWTError, jwt
@@ -39,10 +29,7 @@ except ImportError:
 
 from pydantic import BaseModel, Field
 
-from resync.api.validation.common import (
-    SanitizationLevel,
-    sanitize_input,
-)
+from resync.api.validation.common import SanitizationLevel, sanitize_input
 from resync.settings import settings
 
 # Type aliases for better readability

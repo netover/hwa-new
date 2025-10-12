@@ -2,16 +2,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from ..exceptions import (
-    ToolConnectionError,
-    ToolExecutionError,
-    ToolProcessingError,
-    TWSConnectionError,
-)
-from ...tool_definitions.tws_tools import (
-    tws_status_tool,
-    tws_troubleshooting_tool,
-)
+from ...tool_definitions.tws_tools import (tws_status_tool,
+                                           tws_troubleshooting_tool)
+from ..exceptions import (ToolConnectionError, ToolExecutionError,
+                          ToolProcessingError, TWSConnectionError)
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio

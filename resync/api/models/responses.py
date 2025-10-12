@@ -7,13 +7,13 @@ problemas aos clientes da API.
 Referência: https://tools.ietf.org/html/rfc7807
 """
 
-from typing import Any, Dict, List, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
-from resync.core.exceptions import BaseAppException, ErrorCode, ErrorSeverity
 from resync.core.context import get_correlation_id
-
+from resync.core.exceptions import BaseAppException, ErrorCode, ErrorSeverity
 
 # ============================================================================
 # PROBLEM DETAILS MODEL (RFC 7807)

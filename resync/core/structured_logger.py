@@ -11,25 +11,28 @@ Características:
 - Integração com sistemas de agregação (ELK, Loki, etc.)
 """
 
+from __future__ import annotations
+
 import logging
 import sys
-from typing import Any, Dict, Optional
-from datetime import datetime
 from contextvars import ContextVar
+from datetime import datetime
+from typing import Any
 
 import structlog
-from structlog.types import EventDict, WrappedLogger
 from fastapi import Request
+from structlog.types import EventDict, WrappedLogger
 
 from resync.settings import settings
 
+from .encoding_utils import can_encode
 
 # ============================================================================
 # CONTEXT VARIABLES
 # ============================================================================
 
 # Store current request context for logging
-_current_request_ctx: ContextVar[Optional[Dict[str, Any]]] = ContextVar(
+_current_request_ctx: ContextVar[dict[str, Any] | None] = ContextVar(
     "current_request_ctx", default=None
 )
 
@@ -205,7 +208,7 @@ def censor_sensitive_data(
 
     import re
 
-    def censor_dict(d: Dict[str, Any]) -> Dict[str, Any]:
+    def censor_dict(d: dict[str, Any]) -> dict[str, Any]:
         """Censura recursivamente um dicionário."""
         result = {}
         for key, value in d.items():
@@ -313,7 +316,7 @@ def configure_structured_logging(
     )
 
 
-def get_logger(name: Optional[str] = None) -> structlog.BoundLogger:
+def get_logger(name: str | None = None) -> structlog.BoundLogger:
     """Obtém um logger estruturado.
 
     Args:
@@ -396,7 +399,7 @@ class LoggerAdapter:
         return LoggerAdapter(self.logger.bind(**kwargs))
 
 
-def get_logger_adapter(name: Optional[str] = None) -> LoggerAdapter:
+def get_logger_adapter(name: str | None = None) -> LoggerAdapter:
     """Obtém um logger adapter.
 
     Args:
@@ -430,10 +433,10 @@ class PerformanceLogger:
         path: str,
         status_code: int,
         duration_ms: float,
-        request_size: Optional[int] = None,
-        response_size: Optional[int] = None,
-        user_agent: Optional[str] = None,
-        client_ip: Optional[str] = None,
+        request_size: int | None = None,
+        response_size: int | None = None,
+        user_agent: str | None = None,
+        client_ip: str | None = None,
         **kwargs,
     ) -> None:
         """Loga informações de uma requisição HTTP.
@@ -483,8 +486,8 @@ class PerformanceLogger:
         self,
         query_type: str,
         duration_ms: float,
-        rows_affected: Optional[int] = None,
-        query: Optional[str] = None,
+        rows_affected: int | None = None,
+        query: str | None = None,
         **kwargs,
     ) -> None:
         """Loga informações de uma query de banco de dados.
@@ -531,8 +534,8 @@ class PerformanceLogger:
         operation: str,
         duration_ms: float,
         success: bool,
-        request_size: Optional[int] = None,
-        response_size: Optional[int] = None,
+        request_size: int | None = None,
+        response_size: int | None = None,
         **kwargs,
     ) -> None:
         """Loga chamada a serviço externo.
@@ -575,7 +578,7 @@ class PerformanceLogger:
         operation: str,
         key: str,
         hit: bool,
-        duration_ms: Optional[float] = None,
+        duration_ms: float | None = None,
         **kwargs,
     ) -> None:
         """Loga operações de cache.
@@ -605,9 +608,9 @@ class PerformanceLogger:
         self,
         event_type: str,
         severity: str,
-        source_ip: Optional[str] = None,
-        user_id: Optional[str] = None,
-        details: Optional[str] = None,
+        source_ip: str | None = None,
+        user_id: str | None = None,
+        details: str | None = None,
         **kwargs,
     ) -> None:
         """Loga eventos de segurança.
@@ -648,7 +651,7 @@ class PerformanceLogger:
             self.logger.info("security_event_detected", **log_data)
 
 
-def get_performance_logger(name: Optional[str] = None) -> PerformanceLogger:
+def get_performance_logger(name: str | None = None) -> PerformanceLogger:
     """Obtém um performance logger.
 
     Args:
@@ -694,6 +697,48 @@ def set_request_context(request: Request) -> None:
     _current_request_ctx.set(context)
 
 
+class SafeEncodingFormatter(logging.Formatter):
+    """
+    Logging formatter that prevents UnicodeEncodeError in non-UTF-8 streams.
+
+    Applies fallback for unsupported characters, prioritizing readability.
+    Replaces detectable emoji patterns with ASCII equivalents when needed.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Get base formatted message
+        message = super().format(record)
+
+        # Try to detect encoding from current context
+        # This is a best-effort approach since logging doesn't always expose stream info
+        encoding = None
+        try:
+            # Check if we can find a stream in the logging hierarchy
+            import sys
+
+            if hasattr(sys.stdout, "encoding") and sys.stdout.encoding:
+                encoding = sys.stdout.encoding
+        except Exception:
+            pass
+
+        if not can_encode(message, encoding=encoding):
+            # Apply fallback: replace common emoji patterns
+            message = (
+                message.replace("✅", "[OK]")
+                .replace("❌", "[ERR]")
+                .replace("🚀", "[START]")
+                .replace("🛑", "[STOP]")
+            )
+            # If still not encodable, use errors='replace' as last resort
+            if not can_encode(message, encoding=encoding):
+                try:
+                    enc = encoding or "utf-8"
+                    message = message.encode(enc, errors="replace").decode(enc)
+                except Exception:
+                    message = "[ENCODING ERROR]"
+        return message
+
+
 class StructuredErrorLogger:
     """Structured error logger for consistent error logging."""
 
@@ -728,6 +773,7 @@ __all__ = [
     "LoggerAdapter",
     "PerformanceLogger",
     "StructuredErrorLogger",
+    "SafeEncodingFormatter",
     # Processadores
     "add_correlation_id",
     "add_user_context",

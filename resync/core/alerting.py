@@ -2,15 +2,23 @@
 Alerting system for Resync with multiple notification channels
 """
 
-import json
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Callable
-from dataclasses import dataclass
-from enum import Enum
+from __future__ import annotations
 
-from resync.core.teams_integration import get_teams_integration, TeamsNotification
-from resync.core.metrics import runtime_metrics
+import json
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any, Callable
+
+import structlog
+
+# Configure alerting logger
+alerting_logger = structlog.get_logger("resync.alerting")
+
 from resync.config.slo import KPI_DEFINITIONS, validate_slo_compliance
+from resync.core.metrics import runtime_metrics
+from resync.core.teams_integration import (TeamsNotification,
+                                           get_teams_integration)
 
 
 # Initialize default SLO alert rules at module level
@@ -130,8 +138,8 @@ class Alert:
     threshold: float
     metric_name: str
     acknowledged: bool = False
-    acknowledged_by: Optional[str] = None
-    acknowledged_at: Optional[datetime] = None
+    acknowledged_by: str | None = None
+    acknowledged_at: datetime | None = None
 
 
 class AlertingSystem:
@@ -141,10 +149,10 @@ class AlertingSystem:
 
     def __init__(self):
         self.rules: List[AlertRule] = []
-        self.active_alerts: List[Alert] = []
-        self.escalation_policies: Dict[str, List[Callable]] = {}
-        self.alert_history: List[Alert] = []
-        self.metrics_snapshot: Dict[str, Any] = {}
+        self.active_alerts: list[Alert] = []
+        self.escalation_policies: dict[str, list[Callable]] = {}
+        self.alert_history: list[Alert] = []
+        self.metrics_snapshot: dict[str, Any] = {}
 
         # Initialize with default alert rules
         self._initialize_default_rules()
@@ -221,7 +229,7 @@ class AlertingSystem:
             )
         )
 
-    async def evaluate_rules(self, metrics: Dict[str, Any]) -> List[Alert]:
+    async def evaluate_rules(self, metrics: dict[str, Any]) -> list[Alert]:
         """
         Evaluate all alert rules against current metrics and generate alerts
         """
@@ -308,7 +316,7 @@ class AlertingSystem:
         else:
             return False
 
-    def _find_active_alert(self, rule_name: str, metric_name: str) -> Optional[Alert]:
+    def _find_active_alert(self, rule_name: str, metric_name: str) -> Alert | None:
         """Find an active alert for a specific rule and metric"""
         for alert in self.active_alerts:
             if (
@@ -320,7 +328,7 @@ class AlertingSystem:
         return None
 
     def _create_alert(
-        self, rule: AlertRule, value: float, timestamp: Optional[datetime] = None
+        self, rule: AlertRule, value: float, timestamp: datetime | None = None
     ) -> Alert:
         """Create a new alert from a rule and metric value"""
         import uuid
@@ -344,7 +352,7 @@ class AlertingSystem:
             metric_name=rule.metric_name,
         )
 
-    async def process_alerts(self, new_alerts: List[Alert]):
+    async def process_alerts(self, new_alerts: list[Alert]):
         """
         Process new alerts - send notifications and apply escalation policies
         """
@@ -392,7 +400,12 @@ class AlertingSystem:
             )
             await teams_integration.send_notification(notification)
         except Exception as e:
-            print(f"Failed to send Teams notification for alert {alert.id}: {e}")
+            alerting_logger.error(
+                "teams_notification_failed",
+                alert_id=alert.id,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
     async def _apply_escalation_policy(self, alert: Alert):
         """Apply escalation policy for an alert"""
@@ -402,7 +415,13 @@ class AlertingSystem:
                 try:
                     await handler(alert)
                 except Exception as e:
-                    print(f"Escalation handler failed for alert {alert.id}: {e}")
+                    alerting_logger.error(
+                        "escalation_handler_failed",
+                        alert_id=alert.id,
+                        escalation_policy=policy_name,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                    )
 
     def acknowledge_alert(self, alert_id: str, acknowledged_by: str):
         """Acknowledge an alert"""
@@ -426,11 +445,11 @@ class AlertingSystem:
         """Remove an alert rule by name"""
         self.rules = [rule for rule in self.rules if rule.name != rule_name]
 
-    def get_active_alerts(self) -> List[Alert]:
+    def get_active_alerts(self) -> list[Alert]:
         """Get all active (non-acknowledged) alerts"""
         return [alert for alert in self.active_alerts if not alert.acknowledged]
 
-    def get_alert_history(self, limit: int = 100) -> List[Alert]:
+    def get_alert_history(self, limit: int = 100) -> list[Alert]:
         """Get alert history, limited to the specified number"""
         return self.alert_history[-limit:]
 

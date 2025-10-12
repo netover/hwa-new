@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """
 Final test of implemented improvements.
+
+This script validates that all the code quality improvements have been successfully
+implemented and are functioning correctly. It tests:
+
+1. Cache improvements - Input validation, bounds checking, and health monitoring
+2. Audit validation - Proper validation of audit records
+3. Exception handling - Appropriate error types and logging
+4. Type checking - Proper type annotations and validation
+5. Import cleanup - Removal of unused imports and proper organization
+
+The script serves as both a validation tool and a demonstration of the improvements
+made to the codebase.
 """
 from __future__ import annotations
 
@@ -8,6 +20,8 @@ import asyncio
 
 from resync.core.async_cache import AsyncTTLCache
 from resync.core.audit_db import _validate_audit_record
+from resync.core.exceptions import (CacheError, ConfigurationError,
+                                    DatabaseError, ValidationError)
 
 
 async def main() -> None:
@@ -37,7 +51,7 @@ async def main() -> None:
         prod_ready = health.get("production_ready", False)
         print(f"   Health check: {status} (production ready: {prod_ready})")
 
-    except Exception as e:
+    except (CacheError, ValidationError, ConfigurationError) as e:
         print(f"   Cache test failed: {e}")
     finally:
         await cache.stop()
@@ -64,7 +78,7 @@ async def main() -> None:
             except (ValueError, TypeError):
                 print(f"   {desc}: PASS - correctly rejected")
 
-    except Exception as e:
+    except (ValidationError, DatabaseError, ConfigurationError) as e:
         print(f"   Audit test failed: {e}")
 
     print("\n" + "=" * 40)

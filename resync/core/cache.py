@@ -17,7 +17,8 @@ from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, TypeVar
 
-from resync.core.write_ahead_log import WriteAheadLog, WalOperationType, WalEntry
+from resync.core.write_ahead_log import (WalEntry, WalOperationType,
+                                         WriteAheadLog)
 
 logger = logging.getLogger(__name__)
 

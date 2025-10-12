@@ -7,9 +7,9 @@ como Correlation ID sem precisar passar explicitamente através de parâmetros.
 Uso de contextvars garante isolamento entre requisições concorrentes.
 """
 
+import uuid
 from contextvars import ContextVar, Token
 from typing import Optional
-import uuid
 
 # Context variables para armazenar informações da requisição
 _correlation_id_ctx: ContextVar[Optional[str]] = ContextVar(

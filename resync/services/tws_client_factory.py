@@ -5,10 +5,11 @@ Este módulo implementa o padrão Factory para criação de clientes TWS,
 seguindo os princípios SOLID e facilitando testes e manutenção.
 """
 
-from abc import ABC, abstractmethod
-from typing import Protocol, runtime_checkable
 import asyncio
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
+
 import structlog
 
 from resync.services.tws_service import OptimizedTWSClient

@@ -9,12 +9,8 @@ from typing import Any, Dict, List, Optional
 from pydantic import Field, model_validator, validator
 from pydantic.types import constr
 
-from .common import (
-    BaseValidatedModel,
-    NumericConstraints,
-    StringConstraints,
-    ValidationPatterns,
-)
+from .common import (BaseValidatedModel, NumericConstraints, StringConstraints,
+                     ValidationPatterns)
 
 
 class FileType(str, Enum):

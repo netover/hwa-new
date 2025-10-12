@@ -2,9 +2,10 @@
 
 import json
 import re
-from typing import Any, Dict, Union, Optional, TYPE_CHECKING
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+
 from typing_extensions import Literal
 
 if TYPE_CHECKING:

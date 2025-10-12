@@ -6,12 +6,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from resync.models.tws import (
-    CriticalJob,
-    JobStatus,
-    SystemStatus,
-    WorkstationStatus,
-)
+from resync.models.tws import (CriticalJob, JobStatus, SystemStatus,
+                               WorkstationStatus)
 
 logger = logging.getLogger(__name__)
 

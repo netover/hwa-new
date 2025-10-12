@@ -14,8 +14,8 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from resync.core.exceptions import FileProcessingError, KnowledgeGraphError
 from resync.core.interfaces import IFileIngestor, IKnowledgeGraph
-from resync.settings import settings
 from resync.core.structured_logger import get_logger
+from resync.settings import settings
 
 logger = get_logger(__name__)
 

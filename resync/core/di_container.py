@@ -2,12 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from enum import Enum
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    TypeVar,
-)
+from typing import Any, Callable, Dict, TypeVar
 
 # --- Logging Setup ---
 from resync.core.structured_logger import get_logger

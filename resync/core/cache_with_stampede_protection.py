@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Dict, Optional, Callable, TypeVar, Generic
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 
 from resync.core.structured_logger import get_logger
 

@@ -5,29 +5,22 @@ convertendo-as em respostas HTTP padronizadas seguindo RFC 7807.
 """
 
 from typing import Union
-from fastapi import Request, status
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-from starlette.exceptions import HTTPException as StarletteHTTPException
-from pydantic import ValidationError as PydanticValidationError
 
-from resync.core.exceptions import (
-    BaseAppException,
-    ValidationError,
-    AuthenticationError,
-    AuthorizationError,
-    ResourceNotFoundError,
-    ResourceConflictError,
-    RateLimitError,
-    InternalError,
-)
-from resync.api.models.responses import (
-    create_problem_detail,
-    create_validation_problem_detail,
-    ValidationErrorDetail,
-)
-from resync.core.structured_logger import get_logger
+from fastapi import Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError as PydanticValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from resync.api.models.responses import (ValidationErrorDetail,
+                                         create_problem_detail,
+                                         create_validation_problem_detail)
 from resync.core.context import get_correlation_id
+from resync.core.exceptions import (AuthenticationError, AuthorizationError,
+                                    BaseAppException, InternalError,
+                                    RateLimitError, ResourceConflictError,
+                                    ResourceNotFoundError, ValidationError)
+from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
 

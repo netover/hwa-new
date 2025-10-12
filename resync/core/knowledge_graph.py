@@ -1,13 +1,13 @@
 # resync/core/knowledge_graph.py
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from neo4j import AsyncGraphDatabase
 from neo4j import exceptions as neo4j_exceptions
 
 from resync.core.exceptions import KnowledgeGraphError
-from resync.settings import settings
 from resync.core.structured_logger import get_logger
+from resync.settings import settings
 
 logger = get_logger(__name__)
 
@@ -42,7 +42,7 @@ class AsyncKnowledgeGraph:
             await self.driver.close()
             logger.info("neo4j_driver_closed")
 
-    async def add_content(self, content: str, metadata: Dict[str, Any]) -> str:
+    async def add_content(self, content: str, metadata: dict[str, Any]) -> str:
         """Adds a piece of content (e.g., a document chunk) to the knowledge graph."""
         query = """
         CREATE (n:Content {
@@ -109,7 +109,7 @@ class AsyncKnowledgeGraph:
         user_query: str,
         agent_response: str,
         agent_id: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         """Stores a conversation between a user and an agent."""
         query = """
@@ -145,7 +145,7 @@ class AsyncKnowledgeGraph:
 
     async def search_similar_issues(
         self, query: str, limit: int = 5
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Searches the knowledge graph for similar past issues and solutions."""
         # Simple implementation - could be enhanced with vector search
         cypher_query = """
@@ -173,7 +173,7 @@ class AsyncKnowledgeGraph:
         limit: int = 100,
         _sort_by: str = "created_at",
         _sort_order: str = "desc",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Optimized search method for conversations."""
         cypher_query = """
         MATCH (c:Conversation)
@@ -213,7 +213,7 @@ class AsyncKnowledgeGraph:
 
     async def get_all_recent_conversations(
         self, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Retrieves all recent conversation-type memories for auditing."""
         return await self.search_conversations(limit=limit)
 
@@ -259,7 +259,7 @@ class AsyncKnowledgeGraph:
             logger.error("error_deleting_memory", error=str(e), exc_info=True)
             raise KnowledgeGraphError("Failed to delete memory.") from e
 
-    async def add_observations(self, memory_id: str, observations: List[str]) -> None:
+    async def add_observations(self, memory_id: str, observations: list[str]) -> None:
         """Adds observations to a memory in the knowledge graph."""
         query = """
         MATCH (c:Conversation) WHERE id(c) = $memory_id
@@ -350,7 +350,7 @@ class AsyncKnowledgeGraph:
     # Synchronous counterparts for use in non-async contexts
     # --------------------------------------------------------------------------
 
-    def add_content_sync(self, content: str, metadata: Dict[str, Any]) -> str:
+    def add_content_sync(self, content: str, metadata: dict[str, Any]) -> str:
         return asyncio.run(self.add_content(content, metadata))
 
     def add_conversation_sync(
@@ -358,7 +358,7 @@ class AsyncKnowledgeGraph:
         user_query: str,
         agent_response: str,
         agent_id: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         return asyncio.run(
             self.add_conversation(user_query, agent_response, agent_id, context)
@@ -366,8 +366,10 @@ class AsyncKnowledgeGraph:
 
     def search_similar_issues_sync(
         self, query: str, limit: int = 5
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         return asyncio.run(self.search_similar_issues(query, limit))
+
+
 import asyncio
 from typing import Any, Dict, List, Optional
 
@@ -375,8 +377,8 @@ from neo4j import AsyncGraphDatabase
 from neo4j import exceptions as neo4j_exceptions
 
 from resync.core.exceptions import KnowledgeGraphError
-from resync.settings import settings
 from resync.core.structured_logger import get_logger
+from resync.settings import settings
 
 logger = get_logger(__name__)
 
@@ -411,7 +413,7 @@ class AsyncKnowledgeGraph:
             await self.driver.close()
             logger.info("neo4j_driver_closed")
 
-    async def add_content(self, content: str, metadata: Dict[str, Any]) -> str:
+    async def add_content(self, content: str, metadata: dict[str, Any]) -> str:
         """Adds a piece of content (e.g., a document chunk) to the knowledge graph."""
         query = """
         CREATE (n:Content {
@@ -478,7 +480,7 @@ class AsyncKnowledgeGraph:
         user_query: str,
         agent_response: str,
         agent_id: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         """Stores a conversation between a user and an agent."""
         query = """
@@ -514,7 +516,7 @@ class AsyncKnowledgeGraph:
 
     async def search_similar_issues(
         self, query: str, limit: int = 5
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Searches the knowledge graph for similar past issues and solutions."""
         # Simple implementation - could be enhanced with vector search
         cypher_query = """
@@ -542,7 +544,7 @@ class AsyncKnowledgeGraph:
         limit: int = 100,
         _sort_by: str = "created_at",
         _sort_order: str = "desc",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Optimized search method for conversations."""
         cypher_query = """
         MATCH (c:Conversation)
@@ -582,7 +584,7 @@ class AsyncKnowledgeGraph:
 
     async def get_all_recent_conversations(
         self, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Retrieves all recent conversation-type memories for auditing."""
         return await self.search_conversations(limit=limit)
 
@@ -628,7 +630,7 @@ class AsyncKnowledgeGraph:
             logger.error("error_deleting_memory", error=str(e), exc_info=True)
             raise KnowledgeGraphError("Failed to delete memory.") from e
 
-    async def add_observations(self, memory_id: str, observations: List[str]) -> None:
+    async def add_observations(self, memory_id: str, observations: list[str]) -> None:
         """Adds observations to a memory in the knowledge graph."""
         query = """
         MATCH (c:Conversation) WHERE id(c) = $memory_id
@@ -719,7 +721,7 @@ class AsyncKnowledgeGraph:
     # Synchronous counterparts for use in non-async contexts
     # --------------------------------------------------------------------------
 
-    def add_content_sync(self, content: str, metadata: Dict[str, Any]) -> str:
+    def add_content_sync(self, content: str, metadata: dict[str, Any]) -> str:
         return asyncio.run(self.add_content(content, metadata))
 
     def add_conversation_sync(
@@ -727,7 +729,7 @@ class AsyncKnowledgeGraph:
         user_query: str,
         agent_response: str,
         agent_id: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         return asyncio.run(
             self.add_conversation(user_query, agent_response, agent_id, context)
@@ -735,7 +737,7 @@ class AsyncKnowledgeGraph:
 
     def search_similar_issues_sync(
         self, query: str, limit: int = 5
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         return asyncio.run(self.search_similar_issues(query, limit))
 
     def search_conversations_sync(
@@ -744,7 +746,7 @@ class AsyncKnowledgeGraph:
         limit: int = 100,
         sort_by: str = "created_at",
         _sort_order: str = "desc",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         return asyncio.run(
             self.search_conversations(query, limit, sort_by, _sort_order)
         )
@@ -756,7 +758,7 @@ class AsyncKnowledgeGraph:
 
     def get_all_recent_conversations_sync(
         self, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         return asyncio.run(self.get_all_recent_conversations(limit))
 
     def get_relevant_context_sync(self, user_query: str) -> str:
@@ -771,7 +773,7 @@ class AsyncKnowledgeGraph:
     def delete_memory_sync(self, memory_id: str) -> None:
         return asyncio.run(self.delete_memory(memory_id))
 
-    def add_observations_sync(self, memory_id: str, observations: List[str]) -> None:
+    def add_observations_sync(self, memory_id: str, observations: list[str]) -> None:
         return asyncio.run(self.add_observations(memory_id, observations))
 
     def is_memory_already_processed_sync(self, memory_id: str) -> bool:

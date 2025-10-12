@@ -8,12 +8,8 @@ from typing import Any, Dict, List, Optional
 from pydantic import Field, validator
 from pydantic.types import constr
 
-from .common import (
-    BaseValidatedModel,
-    NumericConstraints,
-    StringConstraints,
-    ValidationPatterns,
-)
+from .common import (BaseValidatedModel, NumericConstraints, StringConstraints,
+                     ValidationPatterns)
 
 
 class SortOrder(str, Enum):

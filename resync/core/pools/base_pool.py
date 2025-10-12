@@ -6,14 +6,14 @@ Separated to follow Single Responsibility Principle.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 from abc import ABC, abstractmethod
+from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import AsyncIterator, Generic, Optional, TypeVar
-from collections import deque
-
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-@dataclass
+@dataclass(frozen=True)
 class ConnectionPoolStats:
     """Statistics for connection pool monitoring."""
 
@@ -124,15 +124,22 @@ class ConnectionPool(ABC, Generic[T]):
             self._wait_times.append(wait_time)
             # Calculate average
             if self._wait_times:
-                self.stats.average_wait_time = sum(self._wait_times) / len(
-                    self._wait_times
-                )
+                average = sum(self._wait_times) / len(self._wait_times)
+                # Update stats with new average (immutable, so create new instance)
+                self.stats = dataclasses.replace(self.stats, average_wait_time=average)
 
     async def increment_stat(self, stat_name: str, amount: int = 1) -> None:
         """Increment a statistic in a thread-safe manner."""
         async with self._stats_lock:
             current_value = getattr(self.stats, stat_name, 0)
-            setattr(self.stats, stat_name, current_value + amount)
+            new_value = current_value + amount
+            # Create a new immutable stats object with the updated value
+            updated_stats = dataclasses.replace(self.stats, **{stat_name: new_value})
+            self.stats = updated_stats
+
+    def get_stats_copy(self) -> dict:
+        """Return a mutable copy of the current stats for safe access in tests or external use."""
+        return dataclasses.asdict(self.stats)
 
     async def health_check(self) -> bool:
         """Perform a health check on the pool."""

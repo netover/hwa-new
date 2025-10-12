@@ -1,9 +1,23 @@
+"""AI Agent management and orchestration.
+
+This module provides comprehensive agent management functionality including:
+- Agent registration and discovery
+- Agent lifecycle management (load, unload, reload)
+- Agent execution orchestration
+- Agent configuration validation
+- Performance monitoring and metrics
+"""
+
 from __future__ import annotations
 
 import asyncio
 import threading
+from typing import Any, Callable
+
 import structlog
-from typing import Any, Callable, Optional
+
+# Configure agent manager logger
+agent_logger = structlog.get_logger("resync.agent_manager")
 
 
 try:
@@ -40,34 +54,61 @@ except ImportError:
 
         async def arun(self, message: str) -> str:
             """Process a message and return a response."""
-            print(f"[MockAgent] Processing message: {message}")
+            agent_logger.debug(
+                "mock_agent_processing_message", message=message, agent_name=self.name
+            )
             try:
                 msg = message.lower()
-                print(f"[MockAgent] Lower case message: {msg}")
+                agent_logger.debug(
+                    "mock_agent_message_normalized",
+                    original_message=message,
+                    normalized_message=msg,
+                )
 
                 if "job" in msg and ("abend" in msg or "erro" in msg):
                     result = "Jobs em estado ABEND encontrados:\\n- Data Processing (ID: JOB002) na workstation TWS_AGENT2\\n\\nRecomendo investigar o log do job e verificar dependências."
-                    print(f"[MockAgent] Returning ABEND result: {result[:50]}...")
+                    agent_logger.info(
+                        "mock_agent_abend_response",
+                        agent_name=self.name,
+                        result_preview=result[:50],
+                    )
                     return result
 
                 elif "status" in msg or "workstation" in msg:
                     result = "Status atual do ambiente TWS:\\n\\nWorkstations:\\n- TWS_MASTER: ONLINE\\n- TWS_AGENT1: ONLINE\\n- TWS_AGENT2: OFFLINE\\n\\nJobs:\\n- Daily Backup: SUCC (TWS_AGENT1)\\n- Data Processing: ABEND (TWS_AGENT2)\\n- Report Generation: SUCC (TWS_AGENT1)"
-                    print(f"[MockAgent] Returning status result: {result[:50]}...")
+                    agent_logger.info(
+                        "mock_agent_status_response",
+                        agent_name=self.name,
+                        result_preview=result[:50],
+                    )
                     return result
 
                 elif "tws" in msg:
                     result = f"Como {self.name}, posso ajudar com questões relacionadas ao TWS. Que informações você precisa?"
-                    print(f"[MockAgent] Returning TWS result: {result[:50]}...")
+                    agent_logger.info(
+                        "mock_agent_tws_response",
+                        agent_name=self.name,
+                        result_preview=result[:50],
+                    )
                     return result
 
                 else:
                     result = f"Entendi sua mensagem: '{message}'. Como {self.name}, estou aqui para ajudar com questões do TWS."
-                    print(f"[MockAgent] Returning default result: {result[:50]}...")
+                    agent_logger.info(
+                        "mock_agent_default_response",
+                        agent_name=self.name,
+                        result_preview=result[:50],
+                    )
                     return result
 
             except Exception as e:
                 result = f"Erro simples: {str(e)}"
-                print(f"[MockAgent] Error: {e}")
+                agent_logger.error(
+                    "mock_agent_processing_error",
+                    agent_name=self.name,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
                 return result
 
         def run(self, message: str) -> str:
@@ -106,19 +147,17 @@ except ImportError:
 
 from pydantic import BaseModel
 
-from .global_utils import get_environment_tags, get_global_correlation_id
-from resync.core.exceptions import (
-    AgentError,  # Renamed from AgentExecutionError for broader scope
-    ConfigurationError,
-    InvalidConfigError,
-    MissingConfigError,
-    NetworkError,
-    ParsingError,
-)
+from resync.core.exceptions import \
+    AgentError  # Renamed from AgentExecutionError for broader scope
+from resync.core.exceptions import (ConfigurationError, InvalidConfigError,
+                                    MissingConfigError, NetworkError,
+                                    ParsingError)
 from resync.core.metrics import runtime_metrics
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
+
+from .global_utils import get_environment_tags, get_global_correlation_id
 
 # --- Logging Setup ---
 logger = structlog.get_logger(__name__)
@@ -167,7 +206,7 @@ class AgentManager:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    async def load_agents_from_config(self, config_path: Optional[str] = None) -> None:
+    async def load_agents_from_config(self, config_path: str | None = None) -> None:
         """Loads agent configurations from settings or specified path."""
         # Implementation for loading agents from config
 
@@ -243,7 +282,7 @@ class AgentManager:
         """Returns the configuration of all loaded agents."""
         return self.agent_configs
 
-    async def get_agent_config(self, agent_id: str) -> Optional[AgentConfig]:
+    async def get_agent_config(self, agent_id: str) -> AgentConfig | None:
         """Retrieves the configuration of a specific agent by its ID."""
         for config in self.agent_configs:
             if config.id == agent_id:
@@ -273,9 +312,7 @@ class AgentManager:
         """Discover available tools for agents."""
         try:
             from resync.tool_definitions.tws_tools import (
-                tws_status_tool,
-                tws_troubleshooting_tool,
-            )
+                tws_status_tool, tws_troubleshooting_tool)
 
             return {
                 "get_tws_status": tws_status_tool.get_tws_status,
@@ -296,9 +333,7 @@ class AgentManager:
         with self._lock:
             if not self._initialized:
                 self._initialized = True
-                self._tws_client_factory = (
-                    tws_client_factory or self._create_tws_client
-                )
+                self._tws_client_factory = tws_client_factory or self._create_tws_client
 
                 global_correlation = get_global_correlation_id()
                 correlation_id = runtime_metrics.create_correlation_id(

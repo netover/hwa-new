@@ -2,29 +2,25 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import psutil
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import aiofiles
-from resync.core.health_models import (
-    HealthStatus,
-    ComponentType,
-    ComponentHealth,
-    HealthCheckResult,
-    HealthCheckConfig,
-    HealthStatusHistory,
-)
-from resync.core.connection_pool_manager import get_connection_pool_manager
+import psutil
+
+from resync.core.app_context import AppContext
 from resync.core.cache_hierarchy import get_cache_hierarchy
+from resync.core.connection_pool_manager import get_connection_pool_manager
+from resync.core.health_models import (ComponentHealth, ComponentType,
+                                       HealthCheckConfig, HealthCheckResult,
+                                       HealthStatus, HealthStatusHistory)
 from resync.core.tws_monitor import tws_monitor
 from resync.core.websocket_pool_manager import websocket_pool_manager
-from resync.core.app_context import AppContext
 from resync.settings import settings
 
-from .health_utils import initialize_health_result, get_health_checks_dict
+from .health_utils import get_health_checks_dict, initialize_health_result
 
 logger = logging.getLogger(__name__)
 

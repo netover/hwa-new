@@ -9,13 +9,13 @@ e possibilidade de rollback.
 import asyncio
 import logging
 from typing import Any, Optional
+
 from prometheus_client import Counter, Histogram
 
 from resync.core.async_cache import AsyncTTLCache
 from resync.core.improved_cache import ImprovedAsyncCache
-from resync.services.tws_service import OptimizedTWSClient
 from resync.services.tws_client_factory import TWSClientFactory
-
+from resync.services.tws_service import OptimizedTWSClient
 # Rate limiter imports - commented out as classes may not exist yet
 # from resync.core.rate_limiter import RateLimiter
 # from resync.core.rate_limiter_improved import TokenBucketRateLimiter

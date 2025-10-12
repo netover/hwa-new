@@ -413,7 +413,7 @@ class SystemErrorResponse(BaseErrorResponse):
             method=method,
             user_friendly_message=f"The {service} service is currently unavailable. Please try again later.",
             troubleshooting_hints=[
-                f"Try again in a few minutes",
+                "Try again in a few minutes",
                 "Check service status",
             ],
             error_details={"service": service},
@@ -453,7 +453,7 @@ class ExternalServiceErrorResponse(BaseErrorResponse):
             severity=ErrorSeverity.MEDIUM,
             user_friendly_message=f"An error occurred while communicating with {service_name}. Please try again later.",
             troubleshooting_hints=[
-                f"Try again in a few minutes",
+                "Try again in a few minutes",
                 "Check if {service_name} is operational",
             ],
             service_name=service_name,

@@ -5,17 +5,15 @@ incluindo gerenciamento de idempotência, autenticação, e obtenção de IDs de
 """
 
 from typing import Optional
+
 from fastapi import Depends, Header, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from resync.core.container import app_container
+from resync.core.exceptions import (AuthenticationError,
+                                    ServiceUnavailableError, ValidationError)
 from resync.core.idempotency import IdempotencyManager
-from resync.core.exceptions import ValidationError
 from resync.core.structured_logger import get_logger
-from resync.core.exceptions import (
-    AuthenticationError,
-    ServiceUnavailableError,
-)
 
 logger = get_logger(__name__)
 
@@ -156,7 +154,8 @@ async def get_correlation_id(
         return x_correlation_id
 
     # Tentar obter do contexto
-    from resync.core.context import get_correlation_id as get_ctx_correlation_id
+    from resync.core.context import \
+        get_correlation_id as get_ctx_correlation_id
 
     ctx_id = get_ctx_correlation_id()
     if ctx_id:

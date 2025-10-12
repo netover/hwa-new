@@ -7,15 +7,17 @@ performance metrics collection, and alert generation for anomalies.
 from __future__ import annotations
 
 import asyncio
-import structlog
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+import structlog
+
 from resync.core.exceptions import PerformanceError
 from resync.core.interfaces import ITWSClient
 from resync.core.teams_integration import get_teams_integration
+
 from .shared_utils import TeamsNotification, create_job_status_notification
 
 logger = structlog.get_logger(__name__)

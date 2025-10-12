@@ -5,19 +5,17 @@ This module is responsible for initializing and closing resources such as
 database connections, background tasks, and service clients.
 """
 
-import logging
 import asyncio
+import logging
 from contextlib import asynccontextmanager
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 from fastapi import FastAPI
 
+from resync.core.connection_pool_manager import (
+    get_connection_pool_manager, shutdown_connection_pool_manager)
 from resync.core.container import app_container
 from resync.core.interfaces import IAgentManager, IKnowledgeGraph, ITWSClient
-from resync.core.connection_pool_manager import (
-    get_connection_pool_manager,
-    shutdown_connection_pool_manager,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -190,9 +188,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize knowledge graph and register with resource manager
     knowledge_graph = await app_container.get(IKnowledgeGraph)
-    resource_manager.register_resource(
-        "knowledge_graph", knowledge_graph
-    )
+    resource_manager.register_resource("knowledge_graph", knowledge_graph)
 
     logger.info("Application startup complete.")
 
