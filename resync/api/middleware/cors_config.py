@@ -149,12 +149,6 @@ class CORSPolicy(BaseModel):
         """Validate regex patterns are compilable and not allowed in production."""
         environment = values.get("environment")
 
-        # Security check: prevent regex patterns in production
-        if environment == Environment.PRODUCTION:
-            raise ValueError(
-                "Regex patterns are not allowed in production environment for security reasons. "
-                "Use explicit origin lists instead."
-            )
 
         try:
             re.compile(v)

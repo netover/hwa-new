@@ -720,6 +720,12 @@ class AsyncAuditQueue(IAuditQueue):
         return asyncio.run(self.get_connection_info())
 
     # Synchronous wrappers for FastAPI compatibility
+    def add_audit_record_sync(self, memory: Dict[str, Any]) -> bool:
+        """Synchronous wrapper for add_audit_record"""
+        import asyncio
+
+        return asyncio.run(self.add_audit_record(memory))
+
     def get_all_audits_sync(self) -> List[Dict[str, Any]]:
         """Synchronous wrapper for get_all_audits"""
         import asyncio

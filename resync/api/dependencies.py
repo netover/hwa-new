@@ -20,7 +20,7 @@ from resync.core.exceptions import (
 logger = get_logger(__name__)
 
 # Global idempotency manager instance
-_idempotency_manager: Optional[IdempotencyManager] = None
+_idempotency_manager: IdempotencyManager | None = None
 
 # ============================================================================
 # IDEMPOTENCY DEPENDENCIES
@@ -50,8 +50,8 @@ async def get_idempotency_manager() -> IdempotencyManager:
 
 
 async def get_idempotency_key(
-    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key")
-) -> Optional[str]:
+    x_idempotency_key: str | None = Header(None, alias="X-Idempotency-Key")
+) -> str | None:
     """Extrai idempotency key do header.
 
     Args:
@@ -64,7 +64,7 @@ async def get_idempotency_key(
 
 
 async def require_idempotency_key(
-    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key")
+    x_idempotency_key: str = Header(..., alias="X-Idempotency-Key")
 ) -> str:
     """Extrai e valida idempotency key obrigatória.
 
@@ -114,6 +114,7 @@ async def initialize_idempotency_manager(redis_client):
     Args:
         redis_client: Redis async client for persistence
     """
+    global _idempotency_manager
     try:
         from resync.core.idempotency import IdempotencyManager
 
@@ -139,8 +140,8 @@ async def initialize_idempotency_manager(redis_client):
 
 
 async def get_correlation_id(
-    x_correlation_id: Optional[str] = Header(None, alias="X-Correlation-ID"),
-    request: Optional[Request] = None,
+    x_correlation_id: str | None = Header(None, alias="X-Correlation-ID"),
+    request: Request | None = None,
 ) -> str:
     """Obtém ou gera correlation ID.
 
@@ -176,7 +177,7 @@ security = HTTPBearer(auto_error=False)
 
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-) -> Optional[dict]:
+) -> dict | None:
     """Obtém usuário atual (placeholder).
 
     Args:
@@ -194,7 +195,7 @@ async def get_current_user(
 
 
 async def require_authentication(
-    user: Optional[dict] = Depends(get_current_user),
+    user: dict | None = Depends(get_current_user),
 ) -> dict:
     """Garante que um usuário esteja autenticado.
 
@@ -210,7 +211,7 @@ async def require_authentication(
     if not user:
         raise AuthenticationError(
             message="Authentication required",
-            details={"headers": {"WWW-Authenticate": "Bearer"}}
+            details={"headers": {"WWW-Authenticate": "Bearer"}},
         )
 
     return user

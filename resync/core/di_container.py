@@ -58,6 +58,7 @@ class DIContainer:
         self._singletons: Dict[type, Any] = {}
         self._locks: Dict[type, asyncio.Lock] = {}
         self._global_lock = asyncio.Lock()
+        self.current_scope: ServiceScope | None = None
 
     def register(
         self,
@@ -115,10 +116,12 @@ class DIContainer:
 
         else:  # SCOPED
             # Get from current scope (request context)
-            scope = await self._get_current_scope()
-            if interface not in scope:
-                scope[interface] = await self._create_instance(factory)
-            return scope[interface]
+            scope = self._get_current_scope()
+            service = scope.get_service(interface)
+            if not service:
+                service = await self._create_instance(factory)
+                scope.set_service(interface, service)
+            return service
 
     async def _create_instance(self, factory: Callable) -> Any:
         """Create instance handling async factories."""
@@ -126,12 +129,14 @@ class DIContainer:
             return await factory()
         return factory()
 
-    async def _get_current_scope(self) -> Dict[type, Any]:
+    def _get_current_scope(self) -> ServiceScope:
         """Get or create scope for current request/context."""
         # Use context vars for scope isolation
         # Implementation depends on your framework
         # For now, return a new dict for each call
-        return {}
+        if self.current_scope is None:
+            self.current_scope = ServiceScope()
+        return self.current_scope
 
 
 # --- Global Container Instance ---

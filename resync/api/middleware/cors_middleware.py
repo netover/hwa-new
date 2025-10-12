@@ -9,6 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from resync.api.middleware.cors_config import CORSPolicy, Environment, cors_config
+from resync.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -208,61 +209,6 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
         }
 
 
-def create_cors_middleware(
-    app: FastAPI,
-    environment: Union[str, Environment] = None,
-    custom_policy: CORSPolicy = None,
-) -> LoggingCORSMiddleware:
-    """
-    Create and configure CORS middleware for the application.
-
-    Args:
-        app: FastAPI application
-        environment: Environment name (development, production, test) or Environment enum
-        custom_policy: Custom CORS policy (overrides environment-based policy)
-
-    Returns:
-        Configured CORS middleware instance
-    """
-    # Determine environment if not provided
-    if environment is None:
-        # Try to get from settings or default to development
-        try:
-            from resync.settings import settings
-
-            environment = getattr(settings, "ENVIRONMENT", "development")
-        except ImportError:
-            environment = "development"
-
-    # Ensure environment is properly converted to Environment enum
-    if isinstance(environment, str):
-        environment = Environment(environment.lower())
-
-    # Get CORS policy
-    if custom_policy:
-        policy = custom_policy
-    else:
-        policy = cors_config.get_policy(environment)
-
-    logger.info(
-        f"Initializing CORS middleware for environment: {policy.environment} "
-        f"(allow_all_origins={policy.allow_all_origins}, "
-        f"allowed_origins={len(policy.allowed_origins)}, "
-        f"allow_credentials={policy.allow_credentials})"
-    )
-
-    # Create and return the middleware
-    return LoggingCORSMiddleware(
-        app=app,
-        policy=policy,
-        allow_origins=policy.allowed_origins if not policy.allow_all_origins else ["*"],
-        allow_methods=policy.allowed_methods,
-        allow_headers=policy.allowed_headers,
-        allow_credentials=policy.allow_credentials,
-        max_age=policy.max_age,
-    )
-
-
 def add_cors_middleware(
     app: FastAPI,
     environment: Union[str, Environment] = None,
@@ -282,12 +228,7 @@ def add_cors_middleware(
     # Determine environment if not provided
     if environment is None:
         # Try to get from settings or default to development
-        try:
-            from resync.settings import settings
-
-            environment = getattr(settings, "ENVIRONMENT", "development")
-        except ImportError:
-            environment = "development"
+        environment = getattr(settings, "ENVIRONMENT", "development")
 
     # Ensure environment is properly converted to Environment enum
     if isinstance(environment, str):
@@ -308,8 +249,7 @@ def add_cors_middleware(
 
     # Add the middleware to the app with proper parameters
     app.add_middleware(
-        LoggingCORSMiddleware,
-        policy=policy,
+        CORSMiddleware,
         allow_origins=policy.allowed_origins if not policy.allow_all_origins else ["*"],
         allow_methods=policy.allowed_methods,
         allow_headers=policy.allowed_headers,

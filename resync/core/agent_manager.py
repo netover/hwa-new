@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import structlog
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 
 try:
@@ -135,6 +135,7 @@ class AgentConfig(BaseModel):
     backstory: str
     tools: list[str]
     model_name: str = "llama3:latest"
+    temperature: float = 0.7
     memory: bool = True
     verbose: bool = False
 
@@ -204,7 +205,7 @@ class AgentManager:
                         from resync.core.interfaces import ITWSClient
 
                         try:
-                            self.tws_client = await get_service(ITWSClient)()
+                            self.tws_client = await get_service(ITWSClient)
                         except Exception as e:
                             logger.warning(f"Failed to get TWS client: {e}")
                             self.tws_client = None
@@ -249,19 +250,23 @@ class AgentManager:
                 return config
         return None
 
-    async def _get_tws_client(self) -> Any:
+    def _create_tws_client(self) -> Any:
+        """Creates a TWS client instance."""
+        from resync.core.fastapi_di import get_service
+        from resync.core.interfaces import ITWSClient
+
+        try:
+            return get_service(ITWSClient)()
+        except Exception as e:
+            logger.warning(f"Failed to get TWS client: {e}")
+            return None
+
+    async def get_tws_client(self) -> Any:
         """Get or create TWS client with thread-safe initialization."""
         if not self.tws_client:
             async with self._tws_init_lock:
                 if not self.tws_client:
-                    from resync.core.fastapi_di import get_service
-                    from resync.core.interfaces import ITWSClient
-
-                    try:
-                        self.tws_client = await get_service(ITWSClient)()
-                    except Exception as e:
-                        logger.warning(f"Failed to get TWS client: {e}")
-                        self.tws_client = None
+                    self.tws_client = self._tws_client_factory()
         return self.tws_client
 
     def _discover_tools(self) -> dict[str, Any]:
@@ -280,13 +285,20 @@ class AgentManager:
             logger.warning(f"Could not import TWS tools: {e}")
             return {}
 
-    def __init__(self, settings_module: Any = settings) -> None:
+    def __init__(
+        self,
+        settings_module: Any = settings,
+        tws_client_factory: Optional[Callable[[], Any]] = None,
+    ) -> None:
         """
         Initializes the AgentManager with thread-safe initialization.
         """
         with self._lock:
             if not self._initialized:
                 self._initialized = True
+                self._tws_client_factory = (
+                    tws_client_factory or self._create_tws_client
+                )
 
                 global_correlation = get_global_correlation_id()
                 correlation_id = runtime_metrics.create_correlation_id(

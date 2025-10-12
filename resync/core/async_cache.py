@@ -518,6 +518,7 @@ class AsyncTTLCache:
                                     "total_requests": total_requests,
                                 },
                             )
+                        entry.timestamp = current_time  # Update timestamp for LRU
                         log_with_correlation(
                             logging.DEBUG,
                             f"Cache HIT for key: {repr(key)}",
@@ -1075,10 +1076,10 @@ class AsyncTTLCache:
     def _check_item_count_bounds(self, current_size: int) -> bool:
         """Check if item count is within safe bounds."""
         max_safe_size = self.max_entries  # Use configurable max entries
-        # We check if current_size >= max_safe_size because we're about to add one more entry
-        if current_size >= max_safe_size:
+        # We check if current_size > max_safe_size because the check is done after adding the new entry
+        if current_size > max_safe_size:
             logger.warning(
-                f"Cache size {current_size} exceeds or equals safe bounds {max_safe_size}",
+                f"Cache size {current_size} exceeds safe bounds {max_safe_size}",
                 extra={
                     "correlation_id": runtime_metrics.create_correlation_id(
                         {

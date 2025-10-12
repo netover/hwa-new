@@ -6,6 +6,7 @@ Tests core classes without full application dependencies.
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Optional
 from unittest.mock import Mock
@@ -91,6 +92,7 @@ class DatabaseConnectionPool(ConnectionPool):
         self._engine = Mock()
         return True
 
+    @asynccontextmanager
     async def get_connection(self) -> Any:
         """Get database connection from pool."""
         self.stats.pool_hits += 1
@@ -117,6 +119,7 @@ class RedisConnectionPool(ConnectionPool):
         self._connection_pool = Mock()
         return True
 
+    @asynccontextmanager
     async def get_connection(self) -> Any:
         """Get Redis connection from pool."""
         self.stats.pool_hits += 1
@@ -142,6 +145,7 @@ class HTTPConnectionPool(ConnectionPool):
         self._client = Mock()
         return True
 
+    @asynccontextmanager
     async def get_connection(self) -> Any:
         """Get HTTP connection from pool."""
         self.stats.pool_hits += 1

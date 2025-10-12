@@ -121,7 +121,7 @@ async def test_redis_initializer_health_check():
         mock_create_task.assert_called_once()
 
         # Verify initialization status
-        assert initializer._initialized, "Redis should remain initialized"
+        assert initializer.initialized, "Redis should remain initialized"
 
         # Verify mock calls
         mock_client.ping.assert_called_once()

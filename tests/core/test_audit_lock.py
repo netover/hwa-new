@@ -83,9 +83,9 @@ class TestDistributedAuditLock:
             mock_redis_client.set.assert_called_with(ANY, ANY, nx=True, px=5000)
 
             mock_redis_client.set.return_value = False
-            failed_context = await audit_lock_instance.acquire(memory_id, timeout=1)
             with pytest.raises(AuditError, match="Could not acquire audit lock"):
-                await failed_context.__aenter__()
+                async with await audit_lock_instance.acquire(memory_id, timeout=1):
+                    pass  # This block should not be reached
 
     @pytest.mark.asyncio
     async def test_lock_is_locked(self, audit_lock_instance, mock_redis_client):

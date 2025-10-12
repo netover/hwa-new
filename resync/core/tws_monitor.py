@@ -294,7 +294,7 @@ class TWSMonitor:
         """
         try:
             # Get Teams integration
-            teams_integration = await get_teams_integration()
+            teams_integration = get_teams_integration()
 
             # Create Teams notification
             notification = TeamsNotification(

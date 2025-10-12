@@ -173,10 +173,7 @@ async def test_background_cleanup(cache):
 async def test_lru_eviction(cache):
     """Test LRU eviction when cache bounds are exceeded."""
     # Set cache with smaller bounds for testing
-    small_cache = AsyncTTLCache(ttl_seconds=10, num_shards=1)
-
-    # Create a cache with max size 2 for testing
-    small_cache._max_safe_size = 2  # Mock the max size for testing
+    small_cache = AsyncTTLCache(ttl_seconds=10, num_shards=1, max_entries=2)
 
     # Add more items than the cache can hold
     await small_cache.set("key1", "value1")
@@ -188,7 +185,8 @@ async def test_lru_eviction(cache):
 
     # key1 should still be there (recently used)
     assert await small_cache.get("key1") == "value1"
-    # key2 might be evicted
+    # key2 should be evicted
+    assert await small_cache.get("key2") is None
     # key3 should be there
     assert await small_cache.get("key3") == "value3"
 
@@ -342,30 +340,28 @@ async def test_stop_cleanup_task(cache):
 
 
 @pytest.mark.asyncio
-async def test_cache_bounds_enforcement(cache):
+async def test_cache_bounds_enforcement():
     """Test cache bounds enforcement with too many items."""
-    # Temporarily modify the cache to have smaller bounds for testing
-    original_method = cache._check_item_count_bounds
+    # Use a cache with a small size limit for this test
+    cache = AsyncTTLCache(ttl_seconds=10, num_shards=2, max_entries=5)
+    try:
+        # Add items up to the limit
+        for i in range(5):
+            await cache.set(f"bound_key_{i}", f"bound_value_{i}")
 
-    def mock_check_bounds(current_size):
-        # Simulate bounds check with smaller limit for testing
-        return current_size <= 5  # Limit to 5 items for testing
+        assert cache.size() == 5
 
-    cache._check_item_count_bounds = mock_check_bounds
+        # Adding another item should work and trigger eviction
+        await cache.set("bound_key_5", "bound_value_5")
 
-    # Add items up to the limit
-    for i in range(5):
-        await cache.set(f"bound_key_{i}", f"bound_value_{i}")
+        # The size should not exceed the max_entries limit
+        assert cache.size() == 5
 
-    # Adding another item should work but might trigger eviction
-    await cache.set("bound_key_5", "bound_value_5")
-
-    # Size should still be reasonable
-    size = cache.size()
-    assert size <= 10  # Allow for some flexibility in eviction
-
-    # Restore original method
-    cache._check_item_count_bounds = original_method
+        # Check that the new key is present.
+        assert await cache.get("bound_key_5") == "bound_value_5"
+    finally:
+        # Stop the cache's background task
+        await cache.stop()
 
 
 @pytest.mark.asyncio

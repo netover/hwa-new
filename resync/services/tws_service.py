@@ -525,6 +525,15 @@ class OptimizedTWSClient:
         # Clear all cached workstation data
         await self.cache.delete_pattern("tws:workstations:*")
 
+    @property
+    def is_connected(self) -> bool:
+        """Checks if the TWS client is currently connected."""
+        if self.use_connection_pool:
+            pool_manager = asyncio.run(get_connection_pool_manager())
+            return pool_manager.is_pool_healthy("tws_http")
+        else:
+            return hasattr(self, "client") and not self.client.is_closed
+
     async def close(self) -> None:
         """Closes the underlying HTTPX client and its connections."""
         if self.use_connection_pool:

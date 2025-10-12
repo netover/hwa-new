@@ -90,7 +90,12 @@ class TestWebSocketAsync:
                     break  # The server might just close the connection at the end
 
         assert full_response == "Hello World"
-        mock_kg.add_conversation.assert_called_once()
+        mock_kg.add_conversation.assert_called_once_with(
+            user_query="test message",
+            agent_response="Hello World",
+            agent_id="test-agent",
+            context={"agent_name": "Unknown Agent", "agent_description": "No description", "model_used": "Unknown Model"},
+        )
 
     def test_websocket_disconnect(self, client_with_mocks):
         """Test WebSocket disconnection handling."""

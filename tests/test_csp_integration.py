@@ -3,7 +3,11 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from resync.main import app
+from resync.api.endpoints import api_router as csp_router
+from fastapi import FastAPI
+
+app = FastAPI()
+app.include_router(csp_router)
 
 
 @pytest.fixture

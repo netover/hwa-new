@@ -85,7 +85,17 @@ class TestTWSClientFactory:
 
     def test_create_from_settings(self):
         """Testa criação a partir de settings."""
-        settings = MagicMock()
+        settings = MagicMock(
+            spec=[
+                "TWS_HOST",
+                "TWS_PORT",
+                "TWS_USER",
+                "TWS_PASSWORD",
+                "TWS_MOCK_MODE",
+                "TWS_ENGINE_NAME",
+                "TWS_ENGINE_OWNER",
+            ]
+        )
         settings.TWS_HOST = "testhost"
         settings.TWS_PORT = 1620
         settings.TWS_USER = "testuser"

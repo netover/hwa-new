@@ -283,7 +283,8 @@ class RobustCacheManager:
                     ]
 
                     for key in expired_keys:
-                        await self._remove_entry(key)
+                        if key in self._cache:
+                            await self._remove_entry(key)
 
                     # Clean weak references
                     dead_refs = [

@@ -128,43 +128,66 @@ async def _get_optimized_response(
 
 async def _stream_agent_response(websocket: WebSocket, agent: Agent, query: str) -> str:
     """Streams the agent's response to the WebSocket and returns the full message."""
-    response_message = ""
+    full_response = ""
     try:
-        # Try to use stream method if available
         stream_method = getattr(agent, "stream", None)
-        if stream_method is not None and callable(stream_method):
-            try:
-                stream_result = stream_method(query)
-                # Check if it's an async iterable
+        if callable(stream_method):
+            stream_result = stream_method(query)
+            # Check if the result is an async generator
+            if hasattr(stream_result, "__aiter__"):
                 try:
-                    if hasattr(stream_result, '__aiter__'):
-                        async for chunk in stream_result:
-                            chunk_str = str(chunk) if not isinstance(chunk, str) else chunk
-                            response_message += chunk_str
-                            await websocket.send_json(
-                                {"type": "stream", "sender": "agent", "message": chunk_str}
-                            )
-                    else:
-                        # Treat as single response
-                        response_message = str(stream_result)
-                except (TypeError, AttributeError):
-                    # If not actually async iterable, treat as single response
-                    response_message = str(stream_result)
-            except Exception as e:
-                logger.warning(f"Streaming failed, falling back to regular response: {e}")
-                response = await agent.arun(query)
-                response_message = str(response)
+                    async for chunk in stream_result:
+                        chunk_str = str(chunk)
+                        full_response += chunk_str
+                        await websocket.send_json(
+                            {
+                                "type": "stream",
+                                "sender": "agent",
+                                "message": chunk_str,
+                            }
+                        )
+                    await websocket.send_json({"type": "stream_end"})
+                except TypeError:
+                    # If not an async iterator, handle as a single response
+                    full_response = str(stream_result)
+                    await websocket.send_json(
+                        {
+                            "type": "stream",
+                            "sender": "agent",
+                            "message": full_response,
+                        }
+                    )
+            else:
+                # Handle non-async-generator stream results
+                full_response = str(stream_result)
+                await websocket.send_json(
+                    {
+                        "type": "stream",
+                        "sender": "agent",
+                        "message": full_response,
+                    }
+                )
         else:
-            # Fallback to regular run method
+            # Fallback to non-streaming response
             response = await agent.arun(query)
-            response_message = str(response)
+            full_response = str(response)
             await websocket.send_json(
-                {"type": "stream", "sender": "agent", "message": response_message}
+                {
+                    "type": "stream",
+                    "sender": "agent",
+                    "message": full_response,
+                }
             )
     except Exception as e:
-        logger.error(f"Error streaming agent response: {e}")
-        raise
-    return response_message
+        logger.error(f"Error streaming agent response: {e}", exc_info=True)
+        # Fallback to a safe error message
+        error_message = "Ocorreu um erro ao processar sua solicitação."
+        await websocket.send_json(
+            {"type": "error", "sender": "system", "message": error_message}
+        )
+        return error_message  # Return the error message as the full response
+
+    return full_response
 
 
 async def _finalize_and_store_interaction(
@@ -325,7 +348,7 @@ async def _setup_websocket_session(
     logger.info(
         f"Agent '{getattr(agent, 'name', 'Unknown Agent')}' ready for WebSocket communication"
     )
-    return agent  # type: ignore[no-any-return]
+    return agent
 
 
 async def _message_processing_loop(

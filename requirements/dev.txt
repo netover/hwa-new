@@ -11,13 +11,13 @@ mutmut==2.4.3
 
 # Security scanning
 bandit==1.7.6
-safety==2.3.9
+# safety==3.0.0
 
 # Type checking
 mypy==1.7.1
 
 # Linting
-pylint==3.0.5
+pylint==3.2.5
 ruff==0.1.8
 
 # Code formatting

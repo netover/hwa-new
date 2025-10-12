@@ -108,8 +108,8 @@ def configure_container(app_container: DIContainer = container) -> DIContainer:
 
         # Register FileIngestor - depends on KnowledgeGraph
         # Using a factory function to ensure dependencies are properly resolved
-        def file_ingestor_factory():
-            knowledge_graph = app_container.get(IKnowledgeGraph)
+        async def file_ingestor_factory():
+            knowledge_graph = await app_container.get(IKnowledgeGraph)
             return create_file_ingestor(knowledge_graph)
 
         app_container.register_factory(
@@ -150,9 +150,9 @@ def get_service(service_type: Type[T]) -> Callable[[], T]:
         A callable that resolves the service from the container.
     """
 
-    def _get_service() -> T:
+    async def _get_service() -> T:
         try:
-            return container.get(service_type)
+            return await container.get(service_type)
         except KeyError:
             logger.error(
                 "service_not_registered_in_container",
@@ -272,7 +272,7 @@ def with_injection(func: Callable) -> Callable:
     parameters = list(signature.parameters.values())
     type_hints = get_type_hints(func)
 
-    def inject_dependencies(kwargs: Dict[str, Any]) -> None:
+    async def inject_dependencies(kwargs: Dict[str, Any]) -> None:
         """Helper to inject dependencies into kwargs."""
         for param in parameters:
             if param.name in kwargs:
@@ -281,7 +281,7 @@ def with_injection(func: Callable) -> Callable:
                 continue
             param_type = type_hints.get(param.name, Any)
             try:
-                kwargs[param.name] = container.get(param_type)
+                kwargs[param.name] = await container.get(param_type)
             except KeyError:
                 if param.default is not param.empty:
                     kwargs[param.name] = param.default
@@ -290,7 +290,7 @@ def with_injection(func: Callable) -> Callable:
 
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            inject_dependencies(kwargs)
+            await inject_dependencies(kwargs)
             return await func(*args, **kwargs)
 
         return async_wrapper
@@ -298,7 +298,12 @@ def with_injection(func: Callable) -> Callable:
 
         @wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-            inject_dependencies(kwargs)
+            # This is a synchronous function, so we need to run the async inject_dependencies
+            # function in an event loop.
+            async def run_injection():
+                await inject_dependencies(kwargs)
+
+            asyncio.run(run_injection())
             return func(*args, **kwargs)
 
         return sync_wrapper

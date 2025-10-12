@@ -29,26 +29,72 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            reviewList.innerHTML = items.map((item, index) => `
-                <div class="review-item" id="item-${item.memory_id}">
-                    <p><span class="label">ID da Memória:</span> ${item.memory_id}</p>
-                    <p><span class="label">Status:</span> ${item.status}</p>
-                    <p><span class="label">Pergunta do Usuário:</span></p>
-                    <pre>${escapeHtml(item.user_query)}</pre>
-                    <p><span class="label">Resposta do Agente:</span></p>
-                    <pre>${escapeHtml(item.agent_response)}</pre>
-                    <p><span class="label">Motivo da Sinalização (IA):</span> ${escapeHtml(item.ia_audit_reason || 'N/A')} (Confiança: ${item.ia_audit_confidence || 'N/A'})</p>
-                    <p><span class="label">Criado em:</span> ${new Date(item.created_at).toLocaleString()}</p>
-                    ${item.reviewed_at ? `<p><span class="label">Revisado em:</span> ${new Date(item.reviewed_at).toLocaleString()}</p>` : ''}
-                    <div class="actions">
-                        ${item.status === 'pending' ? `
-                            <button class="approve-btn" data-id="${item.memory_id}">Aprovar</button>
-                            <button class="reject-btn" data-id="${item.memory_id}">Rejeitar</button>
-                        ` : ''}
-                    </div>
-                    <div class="status"></div>
-                </div>
-            `).join('');
+            items.forEach((item, index) => {
+                const reviewItem = document.createElement('div');
+                reviewItem.className = 'review-item';
+                reviewItem.id = `item-${item.memory_id}`;
+
+                const memoryId = document.createElement('p');
+                memoryId.innerHTML = `<span class="label">ID da Memória:</span> ${item.memory_id}`;
+                reviewItem.appendChild(memoryId);
+
+                const status = document.createElement('p');
+                status.innerHTML = `<span class="label">Status:</span> ${item.status}`;
+                reviewItem.appendChild(status);
+
+                const userQueryLabel = document.createElement('p');
+                userQueryLabel.innerHTML = `<span class="label">Pergunta do Usuário:</span>`;
+                reviewItem.appendChild(userQueryLabel);
+
+                const userQuery = document.createElement('pre');
+                userQuery.textContent = item.user_query;
+                reviewItem.appendChild(userQuery);
+
+                const agentResponseLabel = document.createElement('p');
+                agentResponseLabel.innerHTML = `<span class="label">Resposta do Agente:</span>`;
+                reviewItem.appendChild(agentResponseLabel);
+
+                const agentResponse = document.createElement('pre');
+                agentResponse.textContent = item.agent_response;
+                reviewItem.appendChild(agentResponse);
+
+                const reason = document.createElement('p');
+                reason.innerHTML = `<span class="label">Motivo da Sinalização (IA):</span> ${escapeHtml(item.ia_audit_reason || 'N/A')} (Confiança: ${item.ia_audit_confidence || 'N/A'})`;
+                reviewItem.appendChild(reason);
+
+                const createdAt = document.createElement('p');
+                createdAt.innerHTML = `<span class="label">Criado em:</span> ${new Date(item.created_at).toLocaleString()}`;
+                reviewItem.appendChild(createdAt);
+
+                if (item.reviewed_at) {
+                    const reviewedAt = document.createElement('p');
+                    reviewedAt.innerHTML = `<span class="label">Revisado em:</span> ${new Date(item.reviewed_at).toLocaleString()}`;
+                    reviewItem.appendChild(reviewedAt);
+                }
+
+                const actions = document.createElement('div');
+                actions.className = 'actions';
+                if (item.status === 'pending') {
+                    const approveBtn = document.createElement('button');
+                    approveBtn.className = 'approve-btn';
+                    approveBtn.dataset.id = item.memory_id;
+                    approveBtn.textContent = 'Aprovar';
+                    actions.appendChild(approveBtn);
+
+                    const rejectBtn = document.createElement('button');
+                    rejectBtn.className = 'reject-btn';
+                    rejectBtn.dataset.id = item.memory_id;
+                    rejectBtn.textContent = 'Rejeitar';
+                    actions.appendChild(rejectBtn);
+                }
+                reviewItem.appendChild(actions);
+
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'status';
+                reviewItem.appendChild(statusDiv);
+
+                reviewList.appendChild(reviewItem);
+            });
             statusMessage.textContent = '';
 
         } catch (error) {
