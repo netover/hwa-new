@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
     // --- DOM Element Selectors ---
     const workstationsTotalEl = document.getElementById('workstations-total');
     const jobsAbendEl = document.getElementById('jobs-abend');
@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let websocket = null;
 
     // --- UI Update Functions ---
-    const updateTWSConnectionStatus = (isOnline) => {
+    const updateTWSConnectionStatus = function(isOnline) {
         if (isOnline) {
             twsConnectionStatusEl.classList.remove('offline');
             twsConnectionStatusEl.classList.add('online');
@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const updateWebSocketStatus = (isConnected) => {
+    const updateWebSocketStatus = function(isConnected) {
         if (isConnected) {
             websocketStatusEl.classList.remove('offline');
             websocketStatusEl.classList.add('online');
@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const addChatMessage = (sender, message, type = 'message') => {
+    const addChatMessage = function(sender, message, type = 'message') {
         const messageEl = document.createElement('div');
         messageEl.classList.add('message', sender, type);
         messageEl.textContent = message;
@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Data Fetching ---
-    const fetchSystemStatus = async () => {
+    const fetchSystemStatus = async function() {
         try {
             const response = await fetch('/api/status');
             if (!response.ok) {
@@ -68,8 +68,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Update dashboard metrics
             workstationsTotalEl.textContent = data.workstations.length;
-            jobsAbendEl.textContent = data.jobs.filter(j => j.status === 'ABEND').length;
-            jobsSuccEl.textContent = data.jobs.filter(j => j.status === 'SUCC').length;
+            jobsAbendEl.textContent = data.jobs.filter(function(j) { return j.status === 'ABEND'; }).length;
+            jobsSuccEl.textContent = data.jobs.filter(function(j) { return j.status === 'SUCC'; }).length;
             updateTWSConnectionStatus(true);
         } catch (error) {
             console.error('Failed to fetch system status:', error);
@@ -81,14 +81,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const fetchAgents = async () => {
+    const fetchAgents = async function() {
         try {
             const response = await fetch('/api/v1/');
             if (!response.ok) throw new Error('Failed to fetch agents');
             const agents = await response.json();
 
             agentSelectEl.innerHTML = '<option value="">Selecione um agente</option>';
-            agents.forEach(agent => {
+            agents.forEach(function(agent) {
                 const option = document.createElement('option');
                 option.value = agent.id;
                 option.textContent = agent.name;
@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- RAG File Upload ---
-    const uploadFile = async () => {
+    const uploadFile = async function() {
         const file = fileInputEl.files[0];
         if (!file) {
             uploadStatusEl.textContent = 'Por favor, selecione um arquivo.';
@@ -138,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- WebSocket Management ---
-    const connectWebSocket = () => {
+    const connectWebSocket = function() {
         if (websocket) {
             websocket.close();
         }
@@ -153,12 +153,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/ws/${agentId}`;
         websocket = new WebSocket(wsUrl);
 
-        websocket.onopen = () => {
+        websocket.onopen = function() {
             console.log('WebSocket connection established.');
             updateWebSocketStatus(true);
         };
 
-        websocket.onmessage = (event) => {
+        websocket.onmessage = function(event) {
             const data = JSON.parse(event.data);
             console.log('WebSocket message received:', data);
 
@@ -182,20 +182,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        websocket.onclose = () => {
+        websocket.onclose = function() {
             console.log('WebSocket connection closed.');
             updateWebSocketStatus(false);
             websocket = null;
         };
 
-        websocket.onerror = (error) => {
+        websocket.onerror = function(error) {
             console.error('WebSocket error:', error);
             addChatMessage('system', 'Erro na conexão com o WebSocket.', 'error');
             updateWebSocketStatus(false);
         };
     };
 
-    const sendMessage = () => {
+    const sendMessage = function() {
         if (websocket && websocket.readyState === WebSocket.OPEN && chatInputEl.value.trim() !== '') {
             const message = chatInputEl.value;
             websocket.send(message);
@@ -207,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Event Listeners ---
     agentSelectEl.addEventListener('change', connectWebSocket);
     sendButtonEl.addEventListener('click', sendMessage);
-    chatInputEl.addEventListener('keypress', (event) => {
+    chatInputEl.addEventListener('keypress', function(event) {
         if (event.key === 'Enter') {
             sendMessage();
         }
@@ -215,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
     uploadButtonEl.addEventListener('click', uploadFile);
 
     // --- Initial Load ---
-    const initializeDashboard = () => {
+    const initializeDashboard = function() {
         fetchSystemStatus();
         fetchAgents();
         setInterval(fetchSystemStatus, 30000); // Refresh status every 30 seconds
