@@ -134,22 +134,7 @@ allow_origins = ["https://trusted-domain.com"]
 allow_credentials = True
 ```
 
-**Enhanced Security:**
-```python
-# Environment-specific CORS policies
-cors_policies = {
-    "development": CORSPolicy(
-        allow_origins=["http://localhost:*", "http://127.0.0.1:*"],
-        allow_credentials=True,
-        max_age=3600
-    ),
-    "production": CORSPolicy(
-        allow_origins=["https://app.resync.com"],
-        allow_credentials=False,  # More secure
-        max_age=86400
-    )
-}
-```
+
 
 ### 3. Authentication & Authorization ✅
 
