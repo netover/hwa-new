@@ -6,9 +6,12 @@ from resync.core.cache_hierarchy import get_cache_hierarchy
 from resync.core.interfaces import ITWSClient
 from resync.cqrs.base import IQueryHandler, QueryResult
 from resync.cqrs.queries import (CheckTWSConnectionQuery,
-                                 GetCriticalPathStatusQuery,
+                                 GetCriticalPathStatusQuery, GetEventLogQuery,
+                                 GetJobDependenciesQuery, GetJobDetailsQuery,
+                                 GetJobHistoryQuery, GetJobLogQuery,
                                  GetJobsStatusQuery, GetJobStatusBatchQuery,
                                  GetJobStatusQuery, GetPerformanceMetricsQuery,
+                                 GetPlanDetailsQuery, GetResourceUsageQuery,
                                  GetSystemHealthQuery, GetSystemStatusQuery,
                                  GetWorkstationsStatusQuery, SearchJobsQuery)
 
@@ -269,5 +272,220 @@ class CheckTWSConnectionQueryHandler(
         try:
             is_connected = await self.tws_client.check_connection()
             return QueryResult(success=True, data={"connected": is_connected})
+        except Exception as e:
+            return QueryResult(success=False, error=str(e))
+
+
+class GetJobDetailsQueryHandler(IQueryHandler[GetJobDetailsQuery, QueryResult]):
+    """Handler for getting detailed job information."""
+
+    def __init__(self, tws_client: ITWSClient):
+        self.tws_client = tws_client
+        self.cache = get_cache_hierarchy()
+
+    async def execute(self, query: GetJobDetailsQuery) -> QueryResult:
+        try:
+            # Try to get from cache first
+            cache_key = f"query_job_details_{query.job_id}"
+            cached_result = await self.cache.get(cache_key)
+            if cached_result:
+                return QueryResult(success=True, data=cached_result)
+
+            # If not in cache, fetch from TWS
+            job_details = await self.tws_client.get_job_details(query.job_id)
+            result = job_details.dict()
+
+            # Store in cache
+            await self.cache.set(cache_key, result, ttl=300)  # 5 minutes TTL
+
+            return QueryResult(success=True, data=result)
+        except Exception as e:
+            return QueryResult(success=False, error=str(e))
+
+
+class GetJobHistoryQueryHandler(IQueryHandler[GetJobHistoryQuery, QueryResult]):
+    """Handler for getting job execution history."""
+
+    def __init__(self, tws_client: ITWSClient):
+        self.tws_client = tws_client
+        self.cache = get_cache_hierarchy()
+
+    async def execute(self, query: GetJobHistoryQuery) -> QueryResult:
+        try:
+            # Try to get from cache first
+            cache_key = f"query_job_history_{query.job_name}"
+            cached_result = await self.cache.get(cache_key)
+            if cached_result:
+                return QueryResult(success=True, data=cached_result)
+
+            # If not in cache, fetch from TWS
+            job_history = await self.tws_client.get_job_history(query.job_name)
+            result = [execution.dict() for execution in job_history]
+
+            # Store in cache
+            await self.cache.set(cache_key, result, ttl=300)  # 5 minutes TTL
+
+            return QueryResult(success=True, data=result)
+        except Exception as e:
+            return QueryResult(success=False, error=str(e))
+
+
+class GetJobLogQueryHandler(IQueryHandler[GetJobLogQuery, QueryResult]):
+    """Handler for getting job log content."""
+
+    def __init__(self, tws_client: ITWSClient):
+        self.tws_client = tws_client
+        self.cache = get_cache_hierarchy()
+
+    async def execute(self, query: GetJobLogQuery) -> QueryResult:
+        try:
+            # Try to get from cache first
+            cache_key = f"query_job_log_{query.job_id}"
+            cached_result = await self.cache.get(cache_key)
+            if cached_result:
+                return QueryResult(success=True, data=cached_result)
+
+            # If not in cache, fetch from TWS
+            job_log = await self.tws_client.get_job_log(query.job_id)
+
+            # Store in cache
+            await self.cache.set(cache_key, job_log, ttl=600)  # 10 minutes TTL
+
+            return QueryResult(success=True, data=job_log)
+        except Exception as e:
+            return QueryResult(success=False, error=str(e))
+
+
+class GetPlanDetailsQueryHandler(IQueryHandler[GetPlanDetailsQuery, QueryResult]):
+    """Handler for getting plan details."""
+
+    def __init__(self, tws_client: ITWSClient):
+        self.tws_client = tws_client
+        self.cache = get_cache_hierarchy()
+
+    async def execute(self, query: GetPlanDetailsQuery) -> QueryResult:
+        try:
+            # Try to get from cache first
+            cache_key = "query_plan_details"
+            cached_result = await self.cache.get(cache_key)
+            if cached_result:
+                return QueryResult(success=True, data=cached_result)
+
+            # If not in cache, fetch from TWS
+            plan_details = await self.tws_client.get_plan_details()
+            result = plan_details.dict()
+
+            # Store in cache
+            await self.cache.set(cache_key, result, ttl=60)  # 1 minute TTL
+
+            return QueryResult(success=True, data=result)
+        except Exception as e:
+            return QueryResult(success=False, error=str(e))
+
+
+class GetJobDependenciesQueryHandler(IQueryHandler[GetJobDependenciesQuery, QueryResult]):
+    """Handler for getting job dependencies."""
+
+    def __init__(self, tws_client: ITWSClient):
+        self.tws_client = tws_client
+        self.cache = get_cache_hierarchy()
+
+    async def execute(self, query: GetJobDependenciesQuery) -> QueryResult:
+        try:
+            # Try to get from cache first
+            cache_key = f"query_job_dependencies_{query.job_id}"
+            cached_result = await self.cache.get(cache_key)
+            if cached_result:
+                return QueryResult(success=True, data=cached_result)
+
+            # If not in cache, fetch from TWS
+            dependencies = await self.tws_client.get_job_dependencies(query.job_id)
+            result = dependencies.dict()
+
+            # Store in cache
+            await self.cache.set(cache_key, result, ttl=600)  # 10 minutes TTL
+
+            return QueryResult(success=True, data=result)
+        except Exception as e:
+            return QueryResult(success=False, error=str(e))
+
+
+class GetResourceUsageQueryHandler(IQueryHandler[GetResourceUsageQuery, QueryResult]):
+    """Handler for getting resource usage information."""
+
+    def __init__(self, tws_client: ITWSClient):
+        self.tws_client = tws_client
+        self.cache = get_cache_hierarchy()
+
+    async def execute(self, query: GetResourceUsageQuery) -> QueryResult:
+        try:
+            # Try to get from cache first
+            cache_key = "query_resource_usage"
+            cached_result = await self.cache.get(cache_key)
+            if cached_result:
+                return QueryResult(success=True, data=cached_result)
+
+            # If not in cache, fetch from TWS
+            resources = await self.tws_client.get_resource_usage()
+            result = [resource.dict() for resource in resources]
+
+            # Store in cache
+            await self.cache.set(cache_key, result, ttl=300)  # 5 minutes TTL
+
+            return QueryResult(success=True, data=result)
+        except Exception as e:
+            return QueryResult(success=False, error=str(e))
+
+
+class GetEventLogQueryHandler(IQueryHandler[GetEventLogQuery, QueryResult]):
+    """Handler for getting event log entries."""
+
+    def __init__(self, tws_client: ITWSClient):
+        self.tws_client = tws_client
+        self.cache = get_cache_hierarchy()
+
+    async def execute(self, query: GetEventLogQuery) -> QueryResult:
+        try:
+            # Try to get from cache first
+            cache_key = f"query_event_log_{query.last_hours}h"
+            cached_result = await self.cache.get(cache_key)
+            if cached_result:
+                return QueryResult(success=True, data=cached_result)
+
+            # If not in cache, fetch from TWS
+            events = await self.tws_client.get_event_log(query.last_hours)
+            result = [event.dict() for event in events]
+
+            # Store in cache
+            await self.cache.set(cache_key, result, ttl=300)  # 5 minutes TTL
+
+            return QueryResult(success=True, data=result)
+        except Exception as e:
+            return QueryResult(success=False, error=str(e))
+
+
+class GetPerformanceMetricsQueryHandler(IQueryHandler[GetPerformanceMetricsQuery, QueryResult]):
+    """Handler for getting performance metrics."""
+
+    def __init__(self, tws_client: ITWSClient):
+        self.tws_client = tws_client
+        self.cache = get_cache_hierarchy()
+
+    async def execute(self, query: GetPerformanceMetricsQuery) -> QueryResult:
+        try:
+            # Try to get from cache first
+            cache_key = "query_performance_metrics"
+            cached_result = await self.cache.get(cache_key)
+            if cached_result:
+                return QueryResult(success=True, data=cached_result)
+
+            # If not in cache, fetch from TWS
+            metrics = await self.tws_client.get_performance_metrics()
+            result = metrics.dict()
+
+            # Store in cache
+            await self.cache.set(cache_key, result, ttl=60)  # 1 minute TTL
+
+            return QueryResult(success=True, data=result)
         except Exception as e:
             return QueryResult(success=False, error=str(e))

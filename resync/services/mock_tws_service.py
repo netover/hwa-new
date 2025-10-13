@@ -3,10 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from resync.models.tws import (CriticalJob, JobStatus, SystemStatus,
+from resync.models.tws import (CriticalJob, DependencyTree, Event, JobDetails,
+                               JobExecution, JobStatus, PerformanceData,
+                               PlanDetails, ResourceStatus, SystemStatus,
                                WorkstationStatus)
 
 logger = logging.getLogger(__name__)
@@ -257,6 +260,195 @@ class MockTWSClient:
             "status": "CANCELED",
             "timestamp": "2024-01-01T12:00:00Z",
         }
+
+    async def get_job_details(self, job_id: str) -> JobDetails:
+        """
+        Mocks getting detailed information about a specific job.
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+
+        # Find job data or create mock data
+        jobs_data = self.mock_data.get("jobs_status", [])
+        job_data = None
+        for job in jobs_data:
+            if job.get("name") == job_id or job.get("id") == job_id:
+                job_data = job
+                break
+
+        if not job_data:
+            # Create mock job data
+            job_data = {
+                "name": job_id,
+                "workstation": "CPU_WS",
+                "status": "SUCC",
+                "job_stream": "STREAM_A",
+                "full_definition": {
+                    "name": job_id,
+                    "workstation": "CPU_WS",
+                    "status": "SUCC",
+                    "job_stream": "STREAM_A",
+                    "script": f"#!/bin/bash\necho 'Running job {job_id}'",
+                    "dependencies": ["PREV_JOB"],
+                    "resource_requirements": {"cpu": "1", "memory": "512MB"}
+                },
+                "dependencies": ["PREV_JOB"],
+                "resource_requirements": {"cpu": "1", "memory": "512MB"}
+            }
+
+        # Get execution history
+        history = await self.get_job_history(job_id)
+
+        # Get dependencies
+        dependencies = await self.get_job_dependencies(job_id)
+
+        return JobDetails(
+            job_id=job_id,
+            name=job_data.get("name", job_id),
+            workstation=job_data.get("workstation", "CPU_WS"),
+            status=job_data.get("status", "SUCC"),
+            job_stream=job_data.get("job_stream", "STREAM_A"),
+            full_definition=job_data.get("full_definition", {}),
+            dependencies=dependencies.dependencies,
+            resource_requirements=job_data.get("resource_requirements", {}),
+            execution_history=history[:10]  # Limit to last 10 executions
+        )
+
+    async def get_job_history(self, job_name: str) -> List[JobExecution]:
+        """
+        Mocks getting the execution history for a specific job.
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+
+        # Return mock history data
+        return [
+            JobExecution(
+                job_id=job_name,
+                status="SUCC",
+                start_time=datetime.now(),
+                end_time=datetime.now(),
+                duration="5m",
+                error_message=None
+            ),
+            JobExecution(
+                job_id=job_name,
+                status="RUNNING",
+                start_time=datetime.now(),
+                end_time=None,
+                duration=None,
+                error_message=None
+            ),
+        ]
+
+    async def get_job_log(self, job_id: str) -> str:
+        """
+        Mocks getting the log content for a specific job execution.
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+
+        return f"Mock log content for job {job_id}\nJob started successfully\nProcessing data...\nJob completed"
+
+    async def get_plan_details(self) -> PlanDetails:
+        """
+        Mocks getting details about the current TWS plan.
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+
+        return PlanDetails(
+            plan_id="CURRENT_PLAN",
+            creation_date=datetime.now(),
+            jobs_count=len(self.mock_data.get("jobs_status", [])),
+            estimated_completion=datetime.now(),
+            status="ACTIVE"
+        )
+
+    async def get_job_dependencies(self, job_id: str) -> DependencyTree:
+        """
+        Mocks getting the dependency tree for a specific job.
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+
+        return DependencyTree(
+            job_id=job_id,
+            dependencies=["PREV_JOB"],
+            dependents=["NEXT_JOB"],
+            dependency_graph={
+                "PREV_JOB": [],
+                job_id: ["PREV_JOB"],
+                "NEXT_JOB": [job_id]
+            }
+        )
+
+    async def get_resource_usage(self) -> List[ResourceStatus]:
+        """
+        Mocks getting resource usage information.
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+
+        return [
+            ResourceStatus(
+                resource_name="CPU_WS",
+                resource_type="WORKSTATION",
+                total_capacity=100.0,
+                used_capacity=75.0,
+                available_capacity=25.0,
+                utilization_percentage=75.0
+            ),
+            ResourceStatus(
+                resource_name="MEMORY_POOL",
+                resource_type="MEMORY",
+                total_capacity=8192.0,
+                used_capacity=6144.0,
+                available_capacity=2048.0,
+                utilization_percentage=75.0
+            )
+        ]
+
+    async def get_event_log(self, last_hours: int = 24) -> List[Event]:
+        """
+        Mocks getting TWS event log entries.
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+
+        events_data = [
+            {
+                "event_id": "EVENT_001",
+                "timestamp": datetime.now(),
+                "event_type": "JOB_STARTED",
+                "severity": "INFO",
+                "source": "TWS_ENGINE",
+                "message": "Job JOB_A started successfully",
+                "job_id": "JOB_A",
+                "workstation": "CPU_WS"
+            },
+            {
+                "event_id": "EVENT_002",
+                "timestamp": datetime.now(),
+                "event_type": "JOB_COMPLETED",
+                "severity": "INFO",
+                "source": "TWS_ENGINE",
+                "message": "Job JOB_A completed successfully",
+                "job_id": "JOB_A",
+                "workstation": "CPU_WS"
+            }
+        ]
+
+        return [Event(**event_data) for event_data in events_data]
+
+    async def get_performance_metrics(self) -> PerformanceData:
+        """
+        Mocks getting TWS performance metrics.
+        """
+        await asyncio.sleep(0.1)  # Simulate network delay
+
+        return PerformanceData(
+            timestamp=datetime.now(),
+            api_response_times={"get_system_status": 0.5, "get_jobs_status": 0.3},
+            cache_hit_rate=85.5,
+            memory_usage_mb=256.0,
+            cpu_usage_percentage=45.0,
+            active_connections=5,
+            jobs_per_minute=12.5
+        )
 
     async def get_job_status(self, job_id: str) -> JobStatus:
         """

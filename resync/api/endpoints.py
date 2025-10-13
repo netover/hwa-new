@@ -38,7 +38,11 @@ from resync.core.runbooks import runbook_registry
 from resync.core.tws_monitor import tws_monitor  # type: ignore[attr-defined]
 # Import CQRS components
 from resync.cqrs.dispatcher import dispatcher
-from resync.cqrs.queries import (CheckTWSConnectionQuery, GetJobsStatusQuery,
+from resync.cqrs.queries import (CheckTWSConnectionQuery, GetEventLogQuery,
+                                 GetJobDependenciesQuery, GetJobDetailsQuery,
+                                 GetJobHistoryQuery, GetJobLogQuery,
+                                 GetJobsStatusQuery, GetPerformanceMetricsQuery,
+                                 GetPlanDetailsQuery, GetResourceUsageQuery,
                                  GetWorkstationsStatusQuery)
 from resync.settings import settings
 
@@ -236,6 +240,211 @@ async def get_jobs_status_cqrs(
     except Exception as e:
         logger.error("Failed to get TWS job statuses: %s", e, exc_info=True)
         raise handle_api_error(e, "TWS job statuses retrieval")
+
+
+@api_router.get("/status/jobs/{job_id}")
+@public_rate_limit
+async def get_job_details(
+    request: Request,
+    job_id: str,
+    tws_client: ITWSClient = tws_client_dependency,
+) -> dict[str, Any]:
+    """
+    Get detailed information about a specific TWS job.
+    """
+    try:
+        query = GetJobDetailsQuery(job_id=job_id)
+        result = await dispatcher.execute_query(query)
+
+        if not result.success:
+            raise HTTPException(
+                status_code=500,
+                detail=result.error or "Failed to retrieve job details",
+            )
+
+        return result.data
+    except Exception as e:
+        logger.error("Failed to get TWS job details: %s", e, exc_info=True)
+        raise handle_api_error(e, "TWS job details retrieval")
+
+
+@api_router.get("/status/jobs/{job_name}/history")
+@public_rate_limit
+async def get_job_history(
+    request: Request,
+    job_name: str,
+    tws_client: ITWSClient = tws_client_dependency,
+) -> list[dict[str, Any]]:
+    """
+    Get execution history for a specific TWS job.
+    """
+    try:
+        query = GetJobHistoryQuery(job_name=job_name)
+        result = await dispatcher.execute_query(query)
+
+        if not result.success:
+            raise HTTPException(
+                status_code=500,
+                detail=result.error or "Failed to retrieve job history",
+            )
+
+        return result.data
+    except Exception as e:
+        logger.error("Failed to get TWS job history: %s", e, exc_info=True)
+        raise handle_api_error(e, "TWS job history retrieval")
+
+
+@api_router.get("/status/jobs/{job_id}/log")
+@public_rate_limit
+async def get_job_log(
+    request: Request,
+    job_id: str,
+    tws_client: ITWSClient = tws_client_dependency,
+) -> dict[str, str]:
+    """
+    Get log content for a specific TWS job execution.
+    """
+    try:
+        query = GetJobLogQuery(job_id=job_id)
+        result = await dispatcher.execute_query(query)
+
+        if not result.success:
+            raise HTTPException(
+                status_code=500,
+                detail=result.error or "Failed to retrieve job log",
+            )
+
+        return {"log_content": result.data}
+    except Exception as e:
+        logger.error("Failed to get TWS job log: %s", e, exc_info=True)
+        raise handle_api_error(e, "TWS job log retrieval")
+
+
+@api_router.get("/status/plan")
+@public_rate_limit
+async def get_plan_details(
+    request: Request,
+    tws_client: ITWSClient = tws_client_dependency,
+) -> dict[str, Any]:
+    """
+    Get details about the current TWS plan.
+    """
+    try:
+        query = GetPlanDetailsQuery()
+        result = await dispatcher.execute_query(query)
+
+        if not result.success:
+            raise HTTPException(
+                status_code=500,
+                detail=result.error or "Failed to retrieve plan details",
+            )
+
+        return result.data
+    except Exception as e:
+        logger.error("Failed to get TWS plan details: %s", e, exc_info=True)
+        raise handle_api_error(e, "TWS plan details retrieval")
+
+
+@api_router.get("/status/jobs/{job_id}/dependencies")
+@public_rate_limit
+async def get_job_dependencies(
+    request: Request,
+    job_id: str,
+    tws_client: ITWSClient = tws_client_dependency,
+) -> dict[str, Any]:
+    """
+    Get dependency tree for a specific TWS job.
+    """
+    try:
+        query = GetJobDependenciesQuery(job_id=job_id)
+        result = await dispatcher.execute_query(query)
+
+        if not result.success:
+            raise HTTPException(
+                status_code=500,
+                detail=result.error or "Failed to retrieve job dependencies",
+            )
+
+        return result.data
+    except Exception as e:
+        logger.error("Failed to get TWS job dependencies: %s", e, exc_info=True)
+        raise handle_api_error(e, "TWS job dependencies retrieval")
+
+
+@api_router.get("/status/resources")
+@public_rate_limit
+async def get_resource_usage(
+    request: Request,
+    tws_client: ITWSClient = tws_client_dependency,
+) -> list[dict[str, Any]]:
+    """
+    Get resource usage information.
+    """
+    try:
+        query = GetResourceUsageQuery()
+        result = await dispatcher.execute_query(query)
+
+        if not result.success:
+            raise HTTPException(
+                status_code=500,
+                detail=result.error or "Failed to retrieve resource usage",
+            )
+
+        return result.data
+    except Exception as e:
+        logger.error("Failed to get TWS resource usage: %s", e, exc_info=True)
+        raise handle_api_error(e, "TWS resource usage retrieval")
+
+
+@api_router.get("/status/events")
+@public_rate_limit
+async def get_event_log(
+    request: Request,
+    last_hours: int = Query(default=24, ge=1, le=168, description="Hours to look back for events"),
+    tws_client: ITWSClient = tws_client_dependency,
+) -> list[dict[str, Any]]:
+    """
+    Get TWS event log entries.
+    """
+    try:
+        query = GetEventLogQuery(last_hours=last_hours)
+        result = await dispatcher.execute_query(query)
+
+        if not result.success:
+            raise HTTPException(
+                status_code=500,
+                detail=result.error or "Failed to retrieve event log",
+            )
+
+        return result.data
+    except Exception as e:
+        logger.error("Failed to get TWS event log: %s", e, exc_info=True)
+        raise handle_api_error(e, "TWS event log retrieval")
+
+
+@api_router.get("/status/performance")
+@public_rate_limit
+async def get_performance_metrics(
+    request: Request,
+    tws_client: ITWSClient = tws_client_dependency,
+) -> dict[str, Any]:
+    """
+    Get TWS performance metrics.
+    """
+    try:
+        query = GetPerformanceMetricsQuery()
+        result = await dispatcher.execute_query(query)
+
+        if not result.success:
+            raise HTTPException(
+                status_code=500,
+                detail=result.error or "Failed to retrieve performance metrics",
+            )
+
+        return result.data
+    except Exception as e:
+        logger.error("Failed to get TWS performance metrics: %s", e, exc_info=True)
+        raise handle_api_error(e, "TWS performance metrics retrieval")
 
 
 # --- Health Check Endpoints ---

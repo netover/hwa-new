@@ -83,3 +83,69 @@ class CheckTWSConnectionQuery(IQuery):
     """
     Query to check the TWS connection status.
     """
+
+
+@dataclass
+class GetJobDetailsQuery(IQuery):
+    """
+    Query to retrieve detailed information about a specific TWS job.
+    """
+
+    job_id: str
+
+
+@dataclass
+class GetJobHistoryQuery(IQuery):
+    """
+    Query to retrieve the execution history for a specific TWS job.
+    """
+
+    job_name: str
+
+
+@dataclass
+class GetJobLogQuery(IQuery):
+    """
+    Query to retrieve the log content for a specific TWS job execution.
+    """
+
+    job_id: str
+
+
+@dataclass
+class GetPlanDetailsQuery(IQuery):
+    """
+    Query to retrieve details about the current TWS plan.
+    """
+
+
+@dataclass
+class GetJobDependenciesQuery(IQuery):
+    """
+    Query to retrieve the dependency tree for a specific TWS job.
+    """
+
+    job_id: str
+
+
+@dataclass
+class GetResourceUsageQuery(IQuery):
+    """
+    Query to retrieve resource usage information.
+    """
+
+
+@dataclass
+class GetEventLogQuery(IQuery):
+    """
+    Query to retrieve TWS event log entries.
+    """
+
+    last_hours: int = 24
+
+
+@dataclass
+class GetPerformanceMetricsQuery(IQuery):
+    """
+    Query to retrieve TWS performance metrics.
+    """

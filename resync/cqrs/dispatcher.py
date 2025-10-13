@@ -23,17 +23,27 @@ from resync.cqrs.commands import (ExecuteJobCommand,
                                   GetWorkstationsStatusCommand,
                                   UpdateJobStatusCommand)
 from resync.cqrs.queries import (CheckTWSConnectionQuery,
-                                 GetCriticalPathStatusQuery,
+                                 GetCriticalPathStatusQuery, GetEventLogQuery,
+                                 GetJobDependenciesQuery, GetJobDetailsQuery,
+                                 GetJobHistoryQuery, GetJobLogQuery,
                                  GetJobsStatusQuery, GetJobStatusBatchQuery,
                                  GetJobStatusQuery, GetPerformanceMetricsQuery,
+                                 GetPlanDetailsQuery, GetResourceUsageQuery,
                                  GetSystemHealthQuery, GetSystemStatusQuery,
                                  GetWorkstationsStatusQuery, SearchJobsQuery)
 from resync.cqrs.query_handlers import (CheckTWSConnectionQueryHandler,
                                         GetCriticalPathStatusQueryHandler,
+                                        GetEventLogQueryHandler,
+                                        GetJobDependenciesQueryHandler,
+                                        GetJobDetailsQueryHandler,
+                                        GetJobHistoryQueryHandler,
+                                        GetJobLogQueryHandler,
                                         GetJobsStatusQueryHandler,
                                         GetJobStatusBatchQueryHandler,
                                         GetJobStatusQueryHandler,
                                         GetPerformanceMetricsQueryHandler,
+                                        GetPlanDetailsQueryHandler,
+                                        GetResourceUsageQueryHandler,
                                         GetSystemHealthQueryHandler,
                                         GetSystemStatusQueryHandler,
                                         GetWorkstationsStatusQueryHandler,
@@ -147,4 +157,27 @@ def initialize_dispatcher(tws_client, tws_monitor):
     )
     dispatcher.register_query_handler(
         CheckTWSConnectionQuery, CheckTWSConnectionQueryHandler(tws_client)
+    )
+
+    # Register new query handlers
+    dispatcher.register_query_handler(
+        GetJobDetailsQuery, GetJobDetailsQueryHandler(tws_client)
+    )
+    dispatcher.register_query_handler(
+        GetJobHistoryQuery, GetJobHistoryQueryHandler(tws_client)
+    )
+    dispatcher.register_query_handler(
+        GetJobLogQuery, GetJobLogQueryHandler(tws_client)
+    )
+    dispatcher.register_query_handler(
+        GetPlanDetailsQuery, GetPlanDetailsQueryHandler(tws_client)
+    )
+    dispatcher.register_query_handler(
+        GetJobDependenciesQuery, GetJobDependenciesQueryHandler(tws_client)
+    )
+    dispatcher.register_query_handler(
+        GetResourceUsageQuery, GetResourceUsageQueryHandler(tws_client)
+    )
+    dispatcher.register_query_handler(
+        GetEventLogQuery, GetEventLogQueryHandler(tws_client)
     )
