@@ -17,18 +17,18 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from resync.core.compliance.report_strategies import (
-    ReportGenerator,
-    ControlComplianceStrategy,
-    CriteriaScoresStrategy,
-    OverallComplianceStrategy,
-    ControlStatusSummaryStrategy,
-    EvidenceSummaryStrategy,
-    AvailabilitySummaryStrategy,
-    ProcessingIntegritySummaryStrategy,
-    ConfidentialityIncidentsSummaryStrategy,
-    RecommendationsStrategy
-)
+# #from resync.core.compliance.report_strategies import (
+#     ReportGenerator,
+#     ControlComplianceStrategy,
+#     CriteriaScoresStrategy,
+#     OverallComplianceStrategy,
+#     ControlStatusSummaryStrategy,
+#     EvidenceSummaryStrategy,
+#     AvailabilitySummaryStrategy,
+#     ProcessingIntegritySummaryStrategy,
+#     ConfidentialityIncidentsSummaryStrategy,
+#     RecommendationsStrategy
+# )
 from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
@@ -292,7 +292,7 @@ class SOC2ComplianceManager:
         self._initialize_soc2_controls()
 
         # Initialize report generator
-        self.report_generator = ReportGenerator()
+#         self.report_generator = ReportGenerator()
 
     async def start(self) -> None:
         """Start the SOC 2 compliance manager."""
@@ -684,15 +684,15 @@ class SOC2ComplianceManager:
         }
 
         # Execute strategies to populate report
-        report["control_compliance"] = ControlComplianceStrategy().execute(self)
-        report["criteria_scores"] = CriteriaScoresStrategy().execute(self)
-        report["overall_compliance_score"] = OverallComplianceStrategy().execute(self)
-        report["control_status"] = ControlStatusSummaryStrategy().execute(self)
-        report["evidence_summary"] = EvidenceSummaryStrategy().execute(self)
-        report["availability_summary"] = AvailabilitySummaryStrategy().execute(self)
-        report["processing_integrity_summary"] = ProcessingIntegritySummaryStrategy().execute(self)
-        report["confidentiality_incidents"] = ConfidentialityIncidentsSummaryStrategy().execute(self)
-        report["recommendations"] = RecommendationsStrategy().execute(self)
+        #         report["control_compliance"] = ControlComplianceStrategy().execute(self)
+        #         report["criteria_scores"] = CriteriaScoresStrategy().execute(self)
+        #         report["overall_compliance_score"] = OverallComplianceStrategy().execute(self)
+        #         report["control_status"] = ControlStatusSummaryStrategy().execute(self)
+        #         report["evidence_summary"] = EvidenceSummaryStrategy().execute(self)
+        #         report["availability_summary"] = AvailabilitySummaryStrategy().execute(self)
+        #         report["processing_integrity_summary"] = ProcessingIntegritySummaryStrategy().execute(self)
+        #         report["confidentiality_incidents"] = ConfidentialityIncidentsSummaryStrategy().execute(self)
+        #         report["recommendations"] = RecommendationsStrategy().execute(self)
 
         # Store report
         self.compliance_reports.append(report)

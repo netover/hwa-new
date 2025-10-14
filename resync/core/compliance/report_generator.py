@@ -12,7 +12,10 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 from resync.core.security_dashboard import ComplianceReport
-from resync.core.soc2_compliance import SOC2ComplianceManager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from resync.core.soc2_compliance_refactored import SOC2ComplianceManager
 from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)

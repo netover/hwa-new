@@ -10,7 +10,7 @@ from typing import Dict, Any
 from collections import defaultdict
 from enum import Enum
 
-from resync.core.soc2_compliance import SOC2ComplianceManager, SOC2TrustServiceCriteria
+from resync.core.soc2_compliance_refactored import SOC2ComplianceManager, SOC2TrustServiceCriteria
 
 
 class ReportStrategy:
