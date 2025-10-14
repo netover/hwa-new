@@ -94,7 +94,6 @@ def test_documentation() -> bool:
     docs_to_test = [
         "docs/PERFORMANCE_OPTIMIZATION.md",
         "docs/PERFORMANCE_QUICK_REFERENCE.md",
-        "docs/PHASE2_IMPLEMENTATION_SUMMARY.md",
         "docs/README.md",
     ]
 
@@ -194,7 +193,6 @@ def test_file_structure() -> bool:
         "resync/api/performance.py",
         "docs/PERFORMANCE_OPTIMIZATION.md",
         "docs/PERFORMANCE_QUICK_REFERENCE.md",
-        "docs/PHASE2_IMPLEMENTATION_SUMMARY.md",
     ]
 
     all_exist = True

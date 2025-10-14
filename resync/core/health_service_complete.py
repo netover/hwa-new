@@ -13,9 +13,14 @@ import psutil
 from resync.core.app_context import AppContext
 from resync.core.cache_hierarchy import get_cache_hierarchy
 from resync.core.connection_pool_manager import get_connection_pool_manager
-from resync.core.health_models import (ComponentHealth, ComponentType,
-                                       HealthCheckConfig, HealthCheckResult,
-                                       HealthStatus, HealthStatusHistory)
+from resync.core.health_models import (
+    ComponentHealth,
+    ComponentType,
+    HealthCheckConfig,
+    HealthCheckResult,
+    HealthStatus,
+    HealthStatusHistory,
+)
 from resync.core.tws_monitor import tws_monitor
 from resync.core.websocket_pool_manager import websocket_pool_manager
 from resync.settings import settings

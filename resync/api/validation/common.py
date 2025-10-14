@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Pattern
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, validator
 from pydantic.types import constr
 
 
@@ -58,13 +58,12 @@ class ValidationErrorResponse(BaseModel):
 class BaseValidatedModel(BaseModel):
     """Base model with common validation methods and sanitization."""
 
-    class Config:
-        """Pydantic configuration."""
-
-        validate_assignment = True  # Validate on assignment
-        use_enum_values = True  # Use enum values in serialization
-        extra = "forbid"  # Forbid extra fields
-        validate_by_name = True  # Allow population by field name (Pydantic v2)
+    model_config = ConfigDict(
+        validate_assignment=True,  # Validate on assignment
+        use_enum_values=True,  # Use enum values in serialization
+        extra="forbid",  # Forbid extra fields
+        validate_by_name=True,  # Allow population by field name (Pydantic v2)
+    )
 
     def sanitize_string_fields(self) -> None:
         """Sanitize all string fields in the model."""

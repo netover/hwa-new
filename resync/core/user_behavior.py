@@ -121,7 +121,8 @@ class UserProfile:
             self.avg_response_time = activity.response_time
         else:
             self.avg_response_time = (
-                (self.avg_response_time * (self.total_activities - 1)) + activity.response_time
+                (self.avg_response_time * (self.total_activities - 1))
+                + activity.response_time
             ) / self.total_activities
 
         # Update error rate
@@ -139,7 +140,9 @@ class UserProfile:
         # Factor 1: Unusual timing (weight: 0.3)
         current_hour = datetime.now().hour
         expected_activities = self.hourly_pattern.get(current_hour, 0)
-        avg_activities = sum(self.hourly_pattern.values()) / max(1, len(self.hourly_pattern))
+        avg_activities = sum(self.hourly_pattern.values()) / max(
+            1, len(self.hourly_pattern)
+        )
 
         if avg_activities > 0:
             timing_anomaly = abs(expected_activities - avg_activities) / avg_activities
@@ -175,7 +178,8 @@ class UserProfile:
         # Factor 5: Activity burst (weight: 0.1)
         # Check for sudden activity spikes
         recent_activities = sum(
-            count for hour, count in self.hourly_pattern.items()
+            count
+            for hour, count in self.hourly_pattern.items()
             if abs(hour - current_hour) <= 1
         )
         total_activities = sum(self.hourly_pattern.values())
@@ -188,7 +192,9 @@ class UserProfile:
 
         # Update suspicious patterns
         if score > 0.6:
-            self.suspicious_patterns.append(f"high_risk_score_{score:.2f}_at_{time.time()}")
+            self.suspicious_patterns.append(
+                f"high_risk_score_{score:.2f}_at_{time.time()}"
+            )
             # Keep only last 10 patterns
             self.suspicious_patterns = self.suspicious_patterns[-10:]
 
@@ -197,7 +203,7 @@ class UserProfile:
 
         logger.debug(
             f"Risk score calculated for user {self.user_id}: {score:.3f}",
-            factors=factors
+            factors=factors,
         )
 
         return self.risk_score
@@ -215,14 +221,10 @@ class UserProfile:
             "error_rate": self.error_rate,
             "risk_score": self.risk_score,
             "top_activities": sorted(
-                self.activity_frequency.items(),
-                key=lambda x: x[1],
-                reverse=True
+                self.activity_frequency.items(), key=lambda x: x[1], reverse=True
             )[:5],
             "peak_hours": sorted(
-                self.hourly_pattern.items(),
-                key=lambda x: x[1],
-                reverse=True
+                self.hourly_pattern.items(), key=lambda x: x[1], reverse=True
             )[:3],
             "suspicious_patterns": self.suspicious_patterns[-3:],  # Last 3
         }
@@ -258,7 +260,9 @@ class SessionAnalysis:
             return 0.0
 
         timestamps = sorted([a.timestamp for a in self.activities])
-        intervals = [timestamps[i+1] - timestamps[i] for i in range(len(timestamps)-1)]
+        intervals = [
+            timestamps[i + 1] - timestamps[i] for i in range(len(timestamps) - 1)
+        ]
         return sum(intervals) / len(intervals)
 
     def analyze_bot_probability(self) -> float:
@@ -274,14 +278,18 @@ class SessionAnalysis:
         if len(self.activities) > 10:
             intervals = []
             for i in range(1, len(self.activities)):
-                interval = self.activities[i].timestamp - self.activities[i-1].timestamp
+                interval = (
+                    self.activities[i].timestamp - self.activities[i - 1].timestamp
+                )
                 intervals.append(interval)
 
             if intervals:
                 # Calculate coefficient of variation (lower = more regular = more bot-like)
                 mean_interval = sum(intervals) / len(intervals)
-                variance = sum((x - mean_interval) ** 2 for x in intervals) / len(intervals)
-                std_dev = variance ** 0.5
+                variance = sum((x - mean_interval) ** 2 for x in intervals) / len(
+                    intervals
+                )
+                std_dev = variance**0.5
                 cv = std_dev / max(0.001, mean_interval)  # Coefficient of variation
 
                 # Low CV indicates very regular intervals (bot-like)
@@ -405,9 +413,7 @@ class BehavioralAnalysisEngine:
         logger.info("Behavioral analysis engine stopped")
 
     async def analyze_activity(
-        self,
-        activity: UserActivity,
-        generate_alerts: bool = True
+        self, activity: UserActivity, generate_alerts: bool = True
     ) -> Dict[str, Any]:
         """
         Analyze user activity for behavioral anomalies.
@@ -470,7 +476,7 @@ class BehavioralAnalysisEngine:
             self.active_sessions[session_id] = SessionAnalysis(
                 session_id=session_id,
                 user_id=activity.user_id,
-                start_time=activity.timestamp
+                start_time=activity.timestamp,
             )
 
         session = self.active_sessions[session_id]
@@ -478,12 +484,16 @@ class BehavioralAnalysisEngine:
         session.last_activity = activity.timestamp
 
         # Check for session timeout
-        if time.time() - session.last_activity > (self.config.session_timeout_minutes * 60):
+        if time.time() - session.last_activity > (
+            self.config.session_timeout_minutes * 60
+        ):
             # Move to history
             self.session_history.append(session)
             del self.active_sessions[session_id]
 
-    async def _perform_comprehensive_analysis(self, activity: UserActivity) -> Dict[str, Any]:
+    async def _perform_comprehensive_analysis(
+        self, activity: UserActivity
+    ) -> Dict[str, Any]:
         """Perform comprehensive behavioral analysis."""
         user_id = activity.user_id
         profile = self.user_profiles.get(user_id)
@@ -515,10 +525,10 @@ class BehavioralAnalysisEngine:
         # Combined analysis
         overall_risk = max(risk_score, session_risk)
         is_suspicious = (
-            overall_risk >= self.config.medium_risk_threshold or
-            bot_probability > self.config.bot_probability_threshold or
-            len(temporal_anomalies) > 0 or
-            len(network_anomalies) > 0
+            overall_risk >= self.config.medium_risk_threshold
+            or bot_probability > self.config.bot_probability_threshold
+            or len(temporal_anomalies) > 0
+            or len(network_anomalies) > 0
         )
 
         return {
@@ -536,13 +546,11 @@ class BehavioralAnalysisEngine:
                 "active_sessions": len(self.active_sessions),
                 "session_duration": session.duration if session else 0,
                 "activities_in_session": session.activity_count if session else 0,
-            }
+            },
         }
 
     def _analyze_temporal_patterns(
-        self,
-        activity: UserActivity,
-        profile: UserProfile
+        self, activity: UserActivity, profile: UserProfile
     ) -> List[str]:
         """Analyze temporal patterns for anomalies."""
         anomalies = []
@@ -550,7 +558,9 @@ class BehavioralAnalysisEngine:
         # Check unusual hour
         current_hour = activity.hour_of_day
         expected_activities = profile.hourly_pattern.get(current_hour, 0)
-        avg_activities = sum(profile.hourly_pattern.values()) / max(1, len(profile.hourly_pattern))
+        avg_activities = sum(profile.hourly_pattern.values()) / max(
+            1, len(profile.hourly_pattern)
+        )
 
         if avg_activities > 0 and expected_activities < avg_activities * 0.1:
             anomalies.append(f"unusual_hour_{current_hour}")
@@ -558,16 +568,22 @@ class BehavioralAnalysisEngine:
         # Check unusual day
         current_day = activity.day_of_week
         if profile.daily_pattern:
-            max_day = max(profile.daily_pattern.keys(), key=lambda k: profile.daily_pattern[k])
-            if (current_day != max_day and
-                profile.daily_pattern.get(current_day, 0) < profile.daily_pattern[max_day] * 0.2):
+            max_day = max(
+                profile.daily_pattern.keys(), key=lambda k: profile.daily_pattern[k]
+            )
+            if (
+                current_day != max_day
+                and profile.daily_pattern.get(current_day, 0)
+                < profile.daily_pattern[max_day] * 0.2
+            ):
                 anomalies.append(f"unusual_day_{current_day}")
 
         # Check business hours violation
         if not activity.is_business_hours and profile.total_activities > 10:
             # Calculate percentage of activities outside business hours
             out_of_hours = sum(
-                count for hour, count in profile.hourly_pattern.items()
+                count
+                for hour, count in profile.hourly_pattern.items()
                 if not (9 <= hour <= 17)
             )
             total_activities = sum(profile.hourly_pattern.values())
@@ -578,9 +594,7 @@ class BehavioralAnalysisEngine:
         return anomalies
 
     def _analyze_network_patterns(
-        self,
-        activity: UserActivity,
-        profile: UserProfile
+        self, activity: UserActivity, profile: UserProfile
     ) -> List[str]:
         """Analyze network patterns for anomalies."""
         anomalies = []
@@ -591,7 +605,10 @@ class BehavioralAnalysisEngine:
                 anomalies.append("new_ip_address")
 
         # Check new User-Agent
-        if activity.user_agent and activity.user_agent not in profile.unique_user_agents:
+        if (
+            activity.user_agent
+            and activity.user_agent not in profile.unique_user_agents
+        ):
             if len(profile.unique_user_agents) >= 2:  # Already has multiple UAs
                 anomalies.append("new_user_agent")
 
@@ -613,9 +630,7 @@ class BehavioralAnalysisEngine:
             return "minimal"
 
     async def _generate_alerts(
-        self,
-        activity: UserActivity,
-        analysis_result: Dict[str, Any]
+        self, activity: UserActivity, analysis_result: Dict[str, Any]
     ) -> None:
         """Generate alerts for suspicious activities."""
         user_id = activity.user_id
@@ -629,42 +644,50 @@ class BehavioralAnalysisEngine:
 
         # High risk user alert
         if analysis_result["risk_level"] == "high":
-            alerts.append({
-                "type": "high_risk_user",
-                "severity": "high",
-                "message": f"User {user_id} showing high risk behavior (score: {analysis_result['risk_score']:.2f})",
-                "details": {
-                    "risk_score": analysis_result["risk_score"],
-                    "temporal_anomalies": analysis_result["temporal_anomalies"],
-                    "network_anomalies": analysis_result["network_anomalies"],
+            alerts.append(
+                {
+                    "type": "high_risk_user",
+                    "severity": "high",
+                    "message": f"User {user_id} showing high risk behavior (score: {analysis_result['risk_score']:.2f})",
+                    "details": {
+                        "risk_score": analysis_result["risk_score"],
+                        "temporal_anomalies": analysis_result["temporal_anomalies"],
+                        "network_anomalies": analysis_result["network_anomalies"],
+                    },
                 }
-            })
+            )
 
         # Bot detection alert
         if analysis_result["is_bot"]:
-            alerts.append({
-                "type": "bot_detected",
-                "severity": "high",
-                "message": f"Bot-like behavior detected for user {user_id} (probability: {analysis_result['bot_probability']:.2f})",
-                "details": analysis_result["session_info"]
-            })
+            alerts.append(
+                {
+                    "type": "bot_detected",
+                    "severity": "high",
+                    "message": f"Bot-like behavior detected for user {user_id} (probability: {analysis_result['bot_probability']:.2f})",
+                    "details": analysis_result["session_info"],
+                }
+            )
 
         # Suspicious pattern alerts
         if analysis_result["temporal_anomalies"]:
-            alerts.append({
-                "type": "temporal_anomaly",
-                "severity": "medium",
-                "message": f"Temporal anomalies detected for user {user_id}",
-                "details": {"anomalies": analysis_result["temporal_anomalies"]}
-            })
+            alerts.append(
+                {
+                    "type": "temporal_anomaly",
+                    "severity": "medium",
+                    "message": f"Temporal anomalies detected for user {user_id}",
+                    "details": {"anomalies": analysis_result["temporal_anomalies"]},
+                }
+            )
 
         if analysis_result["network_anomalies"]:
-            alerts.append({
-                "type": "network_anomaly",
-                "severity": "medium",
-                "message": f"Network anomalies detected for user {user_id}",
-                "details": {"anomalies": analysis_result["network_anomalies"]}
-            })
+            alerts.append(
+                {
+                    "type": "network_anomaly",
+                    "severity": "medium",
+                    "message": f"Network anomalies detected for user {user_id}",
+                    "details": {"anomalies": analysis_result["network_anomalies"]},
+                }
+            )
 
         # Send alerts
         for alert in alerts:
@@ -683,7 +706,7 @@ class BehavioralAnalysisEngine:
             severity=alert["severity"],
             user_id=activity.user_id,
             message=alert["message"],
-            details=alert["details"]
+            details=alert["details"],
         )
 
         # Here you could integrate with external systems:
@@ -773,7 +796,9 @@ class BehavioralAnalysisEngine:
                     # If risk has decreased, remove from high-risk list
                     if current_risk < self.config.medium_risk_threshold:
                         self.high_risk_users.discard(user_id)
-                        logger.info(f"User {user_id} risk level decreased, removed from high-risk monitoring")
+                        logger.info(
+                            f"User {user_id} risk level decreased, removed from high-risk monitoring"
+                        )
 
     async def _update_risk_scores(self) -> None:
         """Update risk scores for active users."""
@@ -781,7 +806,8 @@ class BehavioralAnalysisEngine:
             # Update risk scores for recently active users
             current_time = time.time()
             recently_active = [
-                user_id for user_id, last_access in self.profile_access_times.items()
+                user_id
+                for user_id, last_access in self.profile_access_times.items()
                 if current_time - last_access < 3600  # Active in last hour
             ]
 
@@ -810,7 +836,7 @@ class BehavioralAnalysisEngine:
                 "max_profiles": self.config.max_profiles,
                 "profile_ttl_days": self.config.profile_ttl_days,
                 "bot_probability_threshold": self.config.bot_probability_threshold,
-            }
+            },
         }
 
     def _calculate_risk_distribution(self) -> Dict[str, int]:
@@ -872,7 +898,8 @@ class BehavioralAnalysisEngine:
     def _get_user_session_analysis(self, user_id: str) -> Dict[str, Any]:
         """Get session analysis for a specific user."""
         user_sessions = [
-            session for session in self.active_sessions.values()
+            session
+            for session in self.active_sessions.values()
             if session.user_id == user_id
         ]
 
@@ -881,8 +908,12 @@ class BehavioralAnalysisEngine:
 
         # Analyze user's sessions
         total_activities = sum(len(session.activities) for session in user_sessions)
-        avg_duration = sum(session.duration for session in user_sessions) / len(user_sessions)
-        bot_probabilities = [session.analyze_bot_probability() for session in user_sessions]
+        avg_duration = sum(session.duration for session in user_sessions) / len(
+            user_sessions
+        )
+        bot_probabilities = [
+            session.analyze_bot_probability() for session in user_sessions
+        ]
         avg_bot_probability = sum(bot_probabilities) / len(bot_probabilities)
 
         return {

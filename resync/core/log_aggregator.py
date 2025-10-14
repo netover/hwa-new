@@ -76,7 +76,11 @@ class LogEntry:
     fields: Dict[str, Any] = field(default_factory=dict)
 
     # Metadata
-    hostname: str = field(default_factory=lambda: os.uname().nodename if hasattr(os, 'uname') else 'unknown')
+    hostname: str = field(
+        default_factory=lambda: (
+            os.uname().nodename if hasattr(os, "uname") else "unknown"
+        )
+    )
     pid: int = field(default_factory=lambda: os.getpid())
     thread_id: Optional[int] = None
 
@@ -101,7 +105,7 @@ class LogEntry:
             "thread_id": self.thread_id,
             "parsed": self.parsed,
             "indexed": self.indexed,
-            **self.fields
+            **self.fields,
         }
 
     def to_elasticsearch(self) -> Dict[str, Any]:
@@ -187,7 +191,9 @@ class KibanaDashboard:
     description: str
     visualizations: List[Dict[str, Any]] = field(default_factory=list)
     filters: List[Dict[str, Any]] = field(default_factory=list)
-    time_range: Dict[str, str] = field(default_factory=lambda: {"from": "now-24h", "to": "now"})
+    time_range: Dict[str, str] = field(
+        default_factory=lambda: {"from": "now-24h", "to": "now"}
+    )
 
     def to_kibana_format(self) -> Dict[str, Any]:
         """Convert to Kibana saved object format."""
@@ -197,15 +203,14 @@ class KibanaDashboard:
                 "title": self.title,
                 "description": self.description,
                 "panelsJSON": json.dumps(self.visualizations),
-                "optionsJSON": json.dumps({
-                    "useMargins": True,
-                    "hidePanelTitles": False
-                }),
+                "optionsJSON": json.dumps(
+                    {"useMargins": True, "hidePanelTitles": False}
+                ),
                 "version": 1,
                 "timeRestore": True,
                 "timeTo": self.time_range["to"],
-                "timeFrom": self.time_range["from"]
-            }
+                "timeFrom": self.time_range["from"],
+            },
         }
 
 
@@ -279,7 +284,9 @@ class LogAggregator:
         self.network_listeners: Dict[str, asyncio.AbstractServer] = {}
 
         # Processing queues
-        self.processing_queue: asyncio.Queue = asyncio.Queue(maxsize=self.config.max_buffer_size)
+        self.processing_queue: asyncio.Queue = asyncio.Queue(
+            maxsize=self.config.max_buffer_size
+        )
 
         # Background tasks
         self._collection_task: Optional[asyncio.Task] = None
@@ -294,7 +301,7 @@ class LogAggregator:
             "logs_indexed": 0,
             "logs_dropped": 0,
             "indexing_errors": 0,
-            "parsing_errors": 0
+            "parsing_errors": 0,
         }
 
         # Initialize components
@@ -312,8 +319,8 @@ class LogAggregator:
                     "timestamp": "request_time",
                     "method": "http_method",
                     "status": "http_status",
-                    "bytes": "response_bytes"
-                }
+                    "bytes": "response_bytes",
+                },
             ),
             LogParser(
                 name="nginx_access",
@@ -326,22 +333,15 @@ class LogAggregator:
                     "status": "http_status",
                     "body_bytes_sent": "response_bytes",
                     "http_referer": "referer",
-                    "http_user_agent": "user_agent"
-                }
+                    "http_user_agent": "user_agent",
+                },
             ),
-            LogParser(
-                name="json_log",
-                pattern=r'\{.*\}',
-                field_mappings={}
-            ),
+            LogParser(name="json_log", pattern=r"\{.*\}", field_mappings={}),
             LogParser(
                 name="syslog",
-                pattern=r'(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\S+)\s+(?P<program>\S+)(?:\[(?P<pid>\d+)\])?:\s+(?P<message>.*)',
-                field_mappings={
-                    "program": "facility",
-                    "pid": "process_id"
-                }
-            )
+                pattern=r"(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\S+)\s+(?P<program>\S+)(?:\[(?P<pid>\d+)\])?:\s+(?P<message>.*)",
+                field_mappings={"program": "facility", "pid": "process_id"},
+            ),
         ]
 
         for parser in standard_parsers:
@@ -353,6 +353,7 @@ class LogAggregator:
 
         if self.config.elasticsearch_username and self.config.elasticsearch_password:
             import base64
+
             auth = base64.b64encode(
                 f"{self.config.elasticsearch_username}:{self.config.elasticsearch_password}".encode()
             ).decode()
@@ -360,7 +361,9 @@ class LogAggregator:
 
         self.es_session = aiohttp.ClientSession(
             headers=headers,
-            connector=aiohttp.TCPConnector(verify_ssl=self.config.enable_ssl_verification)
+            connector=aiohttp.TCPConnector(
+                verify_ssl=self.config.enable_ssl_verification
+            ),
         )
 
     async def start(self) -> None:
@@ -445,11 +448,15 @@ class LogAggregator:
         trace_id: Optional[str] = None,
         span_id: Optional[str] = None,
         correlation_id: Optional[str] = None,
-        **fields
+        **fields,
     ) -> None:
         """Add a structured log entry."""
         # Get current trace context if available
-        from resync.core.distributed_tracing import get_current_trace_id, get_current_span_id
+        from resync.core.distributed_tracing import (
+            get_current_trace_id,
+            get_current_span_id,
+        )
+
         if not trace_id:
             trace_id = get_current_trace_id()
         if not span_id:
@@ -464,7 +471,7 @@ class LogAggregator:
             trace_id=trace_id,
             span_id=span_id,
             correlation_id=correlation_id,
-            fields=fields
+            fields=fields,
         )
 
         # Add to processing queue
@@ -481,7 +488,7 @@ class LogAggregator:
         start_time: Optional[float] = None,
         end_time: Optional[float] = None,
         size: int = 100,
-        sort: str = "@timestamp:desc"
+        sort: str = "@timestamp:desc",
     ) -> Dict[str, Any]:
         """Search logs in Elasticsearch."""
         if not self.es_session:
@@ -489,24 +496,22 @@ class LogAggregator:
 
         # Build Elasticsearch query
         es_query = {
-            "query": {
-                "bool": {
-                    "must": [
-                        {"query_string": {"query": query}}
-                    ]
-                }
-            },
+            "query": {"bool": {"must": [{"query_string": {"query": query}}]}},
             "size": size,
-            "sort": [sort]
+            "sort": [sort],
         }
 
         # Add time range filter
         if start_time or end_time:
             range_filter = {"range": {"@timestamp": {}}}
             if start_time:
-                range_filter["range"]["@timestamp"]["gte"] = datetime.fromtimestamp(start_time).isoformat()
+                range_filter["range"]["@timestamp"]["gte"] = datetime.fromtimestamp(
+                    start_time
+                ).isoformat()
             if end_time:
-                range_filter["range"]["@timestamp"]["lte"] = datetime.fromtimestamp(end_time).isoformat()
+                range_filter["range"]["@timestamp"]["lte"] = datetime.fromtimestamp(
+                    end_time
+                ).isoformat()
 
             es_query["query"]["bool"]["filter"] = [range_filter]
 
@@ -519,7 +524,7 @@ class LogAggregator:
                     result = await response.json()
                     return {
                         "total": result["hits"]["total"]["value"],
-                        "logs": [hit["_source"] for hit in result["hits"]["hits"]]
+                        "logs": [hit["_source"] for hit in result["hits"]["hits"]],
                     }
                 else:
                     return {"error": f"Elasticsearch query failed: {response.status}"}
@@ -536,14 +541,16 @@ class LogAggregator:
         headers = {
             "Authorization": f"ApiKey {self.config.kibana_api_key}",
             "Content-Type": "application/json",
-            "kbn-xsrf": "true"
+            "kbn-xsrf": "true",
         }
 
         self.kibana_session = aiohttp.ClientSession(headers=headers)
 
         # Test connection
         try:
-            async with self.kibana_session.get(f"{self.config.kibana_url}/api/status") as response:
+            async with self.kibana_session.get(
+                f"{self.config.kibana_url}/api/status"
+            ) as response:
                 if response.status == 200:
                     logger.info("Kibana integration initialized")
                     if self.config.auto_create_dashboards:
@@ -562,36 +569,35 @@ class LogAggregator:
             self._create_overview_dashboard(),
             self._create_error_dashboard(),
             self._create_performance_dashboard(),
-            self._create_security_dashboard()
+            self._create_security_dashboard(),
         ]
 
         for dashboard in dashboards:
             try:
                 async with self.kibana_session.post(
                     f"{self.config.kibana_url}/api/saved_objects/dashboard",
-                    json=dashboard.to_kibana_format()
+                    json=dashboard.to_kibana_format(),
                 ) as response:
                     if response.status in [200, 201]:
                         logger.info(f"Created Kibana dashboard: {dashboard.title}")
                     else:
-                        logger.warning(f"Failed to create dashboard {dashboard.title}: {response.status}")
+                        logger.warning(
+                            f"Failed to create dashboard {dashboard.title}: {response.status}"
+                        )
             except Exception as e:
                 logger.error(f"Dashboard creation failed: {e}")
 
     def _create_overview_dashboard(self) -> KibanaDashboard:
         """Create overview dashboard."""
         dashboard = KibanaDashboard(
-            title="HWA-New Log Overview",
-            description="Overview of all log data"
+            title="HWA-New Log Overview", description="Overview of all log data"
         )
 
         # Log level distribution visualization
         level_viz = {
             "title": "Log Levels",
             "type": "pie",
-            "aggs": [
-                {"type": "terms", "field": "level", "name": "levels"}
-            ]
+            "aggs": [{"type": "terms", "field": "level", "name": "levels"}],
         }
 
         # Timeline visualization
@@ -600,7 +606,7 @@ class LogAggregator:
             "type": "line",
             "aggs": [
                 {"type": "date_histogram", "field": "@timestamp", "interval": "1h"}
-            ]
+            ],
         }
 
         dashboard.visualizations = [level_viz, timeline_viz]
@@ -609,8 +615,7 @@ class LogAggregator:
     def _create_error_dashboard(self) -> KibanaDashboard:
         """Create error-focused dashboard."""
         dashboard = KibanaDashboard(
-            title="HWA-New Error Logs",
-            description="Error and warning log analysis"
+            title="HWA-New Error Logs", description="Error and warning log analysis"
         )
 
         # Error rate over time
@@ -620,7 +625,7 @@ class LogAggregator:
             "filter": {"term": {"level": "ERROR"}},
             "aggs": [
                 {"type": "date_histogram", "field": "@timestamp", "interval": "5m"}
-            ]
+            ],
         }
 
         # Top error messages
@@ -628,9 +633,7 @@ class LogAggregator:
             "title": "Top Error Messages",
             "type": "table",
             "filter": {"terms": {"level": ["ERROR", "CRITICAL"]}},
-            "aggs": [
-                {"type": "terms", "field": "message", "size": 10}
-            ]
+            "aggs": [{"type": "terms", "field": "message", "size": 10}],
         }
 
         dashboard.visualizations = [error_rate_viz, top_errors_viz]
@@ -640,7 +643,7 @@ class LogAggregator:
         """Create performance-focused dashboard."""
         dashboard = KibanaDashboard(
             title="HWA-New Performance Logs",
-            description="Performance and latency analysis"
+            description="Performance and latency analysis",
         )
 
         # Response time distribution
@@ -648,7 +651,7 @@ class LogAggregator:
             "title": "Response Time Distribution",
             "type": "histogram",
             "field": "response_time",
-            "buckets": 20
+            "buckets": 20,
         }
 
         # Slow queries
@@ -656,9 +659,7 @@ class LogAggregator:
             "title": "Slow Queries",
             "type": "table",
             "filter": {"range": {"query_time": {"gt": 1000}}},
-            "aggs": [
-                {"type": "terms", "field": "query", "size": 10}
-            ]
+            "aggs": [{"type": "terms", "field": "query", "size": 10}],
         }
 
         dashboard.visualizations = [response_time_viz, slow_queries_viz]
@@ -667,8 +668,7 @@ class LogAggregator:
     def _create_security_dashboard(self) -> KibanaDashboard:
         """Create security-focused dashboard."""
         dashboard = KibanaDashboard(
-            title="HWA-New Security Logs",
-            description="Security events and incidents"
+            title="HWA-New Security Logs", description="Security events and incidents"
         )
 
         # Authentication failures
@@ -678,14 +678,14 @@ class LogAggregator:
             "filter": {"term": {"event_type": "auth_failure"}},
             "aggs": [
                 {"type": "date_histogram", "field": "@timestamp", "interval": "1h"}
-            ]
+            ],
         }
 
         # Security events by type
         security_events_viz = {
             "title": "Security Events by Type",
             "type": "pie",
-            "field": "security_event_type"
+            "field": "security_event_type",
         }
 
         dashboard.visualizations = [auth_failures_viz, security_events_viz]
@@ -718,7 +718,9 @@ class LogAggregator:
         try:
             # Open file if not already open
             if source_config.name not in self.file_handles:
-                handle = open(source_config.file_path, 'r', encoding=source_config.file_encoding)
+                handle = open(
+                    source_config.file_path, "r", encoding=source_config.file_encoding
+                )
                 self.file_handles[source_config.name] = handle
                 # Seek to end if following
                 if source_config.follow_file:
@@ -758,15 +760,21 @@ class LogAggregator:
         # Simplified implementation
         pass
 
-    async def _process_log_line(self, line: str, source_config: LogSourceConfig) -> None:
+    async def _process_log_line(
+        self, line: str, source_config: LogSourceConfig
+    ) -> None:
         """Process a single log line."""
         # Apply filters
         if source_config.include_patterns:
-            if not any(re.search(pattern, line) for pattern in source_config.include_patterns):
+            if not any(
+                re.search(pattern, line) for pattern in source_config.include_patterns
+            ):
                 return
 
         if source_config.exclude_patterns:
-            if any(re.search(pattern, line) for pattern in source_config.exclude_patterns):
+            if any(
+                re.search(pattern, line) for pattern in source_config.exclude_patterns
+            ):
                 return
 
         # Create log entry
@@ -775,7 +783,7 @@ class LogAggregator:
             level=LogLevel.INFO,  # Default, will be parsed
             message=line,
             source=source_config.source_type,
-            source_name=source_config.name
+            source_name=source_config.name,
         )
 
         # Parse log if parser configured
@@ -787,9 +795,9 @@ class LogAggregator:
                 log_entry.parsed = True
 
                 # Extract level if available
-                if 'level' in parsed_fields:
+                if "level" in parsed_fields:
                     try:
-                        log_entry.level = LogLevel(parsed_fields['level'].upper())
+                        log_entry.level = LogLevel(parsed_fields["level"].upper())
                     except ValueError:
                         pass
 
@@ -840,7 +848,11 @@ class LogAggregator:
 
             for log_entry in batch:
                 # Index metadata
-                bulk_data.append(json.dumps({"index": {"_index": index_name, "_id": str(uuid.uuid4())}}))
+                bulk_data.append(
+                    json.dumps(
+                        {"index": {"_index": index_name, "_id": str(uuid.uuid4())}}
+                    )
+                )
                 # Document
                 bulk_data.append(json.dumps(log_entry.to_elasticsearch()))
 
@@ -851,8 +863,11 @@ class LogAggregator:
             async with self.es_session.post(url, data=bulk_body) as response:
                 if response.status == 200:
                     result = await response.json()
-                    successful = sum(1 for item in result.get("items", [])
-                                   if item.get("index", {}).get("status") == 201)
+                    successful = sum(
+                        1
+                        for item in result.get("items", [])
+                        if item.get("index", {}).get("status") == 201
+                    )
                     self.metrics["logs_indexed"] += successful
 
                     # Mark entries as indexed
@@ -897,7 +912,9 @@ class LogAggregator:
             return
 
         try:
-            cutoff_date = (datetime.now() - timedelta(days=self.config.retention_days)).strftime('%Y-%m-%d')
+            cutoff_date = (
+                datetime.now() - timedelta(days=self.config.retention_days)
+            ).strftime("%Y-%m-%d")
 
             # Get all indices matching pattern
             url = f"{self.config.elasticsearch_url}/_cat/indices/{self.config.elasticsearch_index_prefix}-*?format=json"
@@ -908,15 +925,21 @@ class LogAggregator:
                     for index in indices:
                         index_name = index["index"]
                         # Extract date from index name
-                        date_part = index_name.replace(f"{self.config.elasticsearch_index_prefix}-", "")
+                        date_part = index_name.replace(
+                            f"{self.config.elasticsearch_index_prefix}-", ""
+                        )
                         if date_part < cutoff_date:
                             # Delete old index
                             delete_url = f"{self.config.elasticsearch_url}/{index_name}"
-                            async with self.es_session.delete(delete_url) as delete_response:
+                            async with self.es_session.delete(
+                                delete_url
+                            ) as delete_response:
                                 if delete_response.status == 200:
                                     logger.info(f"Deleted old index: {index_name}")
                                 else:
-                                    logger.warning(f"Failed to delete index {index_name}")
+                                    logger.warning(
+                                        f"Failed to delete index {index_name}"
+                                    )
 
         except Exception as e:
             logger.error(f"Index cleanup failed: {e}")
@@ -931,32 +954,41 @@ class LogAggregator:
                 "logs_dropped": self.metrics["logs_dropped"],
                 "indexing_errors": self.metrics["indexing_errors"],
                 "parsing_errors": self.metrics["parsing_errors"],
-                "parse_rate": self.metrics["logs_parsed"] / max(1, self.metrics["logs_collected"])
+                "parse_rate": self.metrics["logs_parsed"]
+                / max(1, self.metrics["logs_collected"]),
             },
             "sources": {
                 "configured_sources": len(self.sources),
                 "active_sources": sum(1 for s in self.sources.values() if s.enabled),
-                "file_sources": sum(1 for s in self.sources.values() if s.source_type == LogSource.FILE),
-                "network_sources": sum(1 for s in self.sources.values() if s.source_type == LogSource.NETWORK)
+                "file_sources": sum(
+                    1 for s in self.sources.values() if s.source_type == LogSource.FILE
+                ),
+                "network_sources": sum(
+                    1
+                    for s in self.sources.values()
+                    if s.source_type == LogSource.NETWORK
+                ),
             },
             "parsers": {
                 "available_parsers": len(self.parsers),
-                "parsing_enabled": sum(1 for s in self.sources.values() if s.parser_name)
+                "parsing_enabled": sum(
+                    1 for s in self.sources.values() if s.parser_name
+                ),
             },
             "storage": {
                 "buffer_size": len(self.log_buffer),
                 "queue_size": self.processing_queue.qsize(),
-                "retention_days": self.config.retention_days
+                "retention_days": self.config.retention_days,
             },
             "integrations": {
                 "elasticsearch_enabled": self.es_session is not None,
                 "kibana_enabled": self.kibana_session is not None,
-                "auto_dashboards": self.config.auto_create_dashboards
+                "auto_dashboards": self.config.auto_create_dashboards,
             },
             "health": {
                 "running": self._running,
-                "processing_workers": len(self._processing_tasks)
-            }
+                "processing_workers": len(self._processing_tasks),
+            },
         }
 
 

@@ -9,11 +9,14 @@ from typing import Optional
 
 import httpx
 
-from resync.core.constants import (DEFAULT_CONNECT_TIMEOUT,
-                                   DEFAULT_MAX_CONNECTIONS,
-                                   DEFAULT_MAX_KEEPALIVE_CONNECTIONS,
-                                   DEFAULT_POOL_TIMEOUT, DEFAULT_READ_TIMEOUT,
-                                   DEFAULT_WRITE_TIMEOUT)
+from resync.core.constants import (
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_MAX_CONNECTIONS,
+    DEFAULT_MAX_KEEPALIVE_CONNECTIONS,
+    DEFAULT_POOL_TIMEOUT,
+    DEFAULT_READ_TIMEOUT,
+    DEFAULT_WRITE_TIMEOUT,
+)
 from resync.settings import settings
 
 

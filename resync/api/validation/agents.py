@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, model_validator, validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, validator
 from pydantic.types import constr
 
 from .common import NumericConstraints, StringConstraints, ValidationPatterns
@@ -128,12 +128,11 @@ class AgentConfig(BaseModel):
         None, ge=0.0, le=2.0, description="Model temperature setting"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        use_enum_values = True
-        validate_assignment = True
-        extra = "forbid"
+    model_config = ConfigDict(
+        use_enum_values=True,
+        validate_assignment=True,
+        extra="forbid",
+    )
 
     @validator("name")
     def validate_agent_name(cls, v: str) -> str:
@@ -156,16 +155,13 @@ class AgentConfig(BaseModel):
         """Validate tools list."""
         if not v:
             return v
-
         # Check for duplicate tools
         if len(v) != len(set(v)):
             raise ValueError("Duplicate tools found in list")
-
         # Validate each tool name
         for tool in v:
             if not tool.replace("_", "").replace("-", "").isalnum():
                 raise ValueError(f"Invalid tool name: {tool}")
-
         return v
 
     @validator("tags")
@@ -173,16 +169,13 @@ class AgentConfig(BaseModel):
         """Validate tags list."""
         if not v:
             return v
-
         # Check for duplicate tags
         if len(v) != len(set(v)):
             raise ValueError("Duplicate tags found in list")
-
         # Validate each tag
         for tag in v:
             if not tag.replace("-", "").replace("_", "").isalnum():
                 raise ValueError(f"Invalid tag format: {tag}")
-
         return v
 
     @model_validator(mode="before")
@@ -191,7 +184,6 @@ class AgentConfig(BaseModel):
         if isinstance(values, dict):
             model_name = values.get("model_name")
             max_tokens = values.get("max_tokens")
-
             if model_name and max_tokens:
                 # Add model-specific token limits here
                 model_limits = {
@@ -199,23 +191,20 @@ class AgentConfig(BaseModel):
                     "gpt-3.5-turbo": 4096,
                     "gpt-4": 8192,
                 }
-
                 if model_name in model_limits and max_tokens > model_limits[model_name]:
                     raise ValueError(
                         f"Max tokens {max_tokens} exceeds limit for {model_name} "
                         f"(max: {model_limits[model_name]})"
                     )
-
         return values
 
 
 class AgentCreateRequest(AgentConfig):
     """Request model for creating a new agent."""
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @model_validator(mode="before")
     def validate_create_request(cls, values):
@@ -226,7 +215,6 @@ class AgentCreateRequest(AgentConfig):
             for field in required_fields:
                 if not values.get(field):
                     raise ValueError(f"Required field '{field}' is missing or empty")
-
         return values
 
 
@@ -293,11 +281,10 @@ class AgentUpdateRequest(BaseModel):
         None, ge=0.0, le=2.0, description="Updated temperature"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
-        validate_assignment = True
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+    )
 
     @validator("name", "role", "goal", "backstory", "description")
     def validate_text_content(cls, v):
@@ -311,19 +298,15 @@ class AgentUpdateRequest(BaseModel):
         """Validate tools list if provided."""
         if v is None:
             return v
-
         if not v:
             return v
-
         # Check for duplicate tools
         if len(v) != len(set(v)):
             raise ValueError("Duplicate tools found in list")
-
         # Validate each tool name
         for tool in v:
             if not tool.replace("_", "").replace("-", "").isalnum():
                 raise ValueError(f"Invalid tool name: {tool}")
-
         return v
 
     @validator("tags")
@@ -331,19 +314,15 @@ class AgentUpdateRequest(BaseModel):
         """Validate tags list if provided."""
         if v is None:
             return v
-
         if not v:
             return v
-
         # Check for duplicate tags
         if len(v) != len(set(v)):
             raise ValueError("Duplicate tags found in list")
-
         # Validate each tag
         for tag in v:
             if not tag.replace("-", "").replace("_", "").isalnum():
                 raise ValueError(f"Invalid tag format: {tag}")
-
         return v
 
 
@@ -382,21 +361,18 @@ class AgentQueryParams(BaseModel):
         description="Sort order (ascending or descending)",
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("tags")
     def validate_tags(cls, v):
         """Validate tags list."""
         if not v:
             return v
-
         # Check for duplicate tags
         if len(v) != len(set(v)):
             raise ValueError("Duplicate tags found in list")
-
         return v
 
 
@@ -420,19 +396,16 @@ class AgentBulkActionRequest(BaseModel):
         None, description="Confirmation token for destructive actions"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("agent_ids")
     def validate_agent_ids(cls, v):
         """Validate agent IDs list."""
         if not v:
             raise ValueError("Agent IDs list cannot be empty")
-
         # Check for duplicate IDs
         if len(v) != len(set(v)):
             raise ValueError("Duplicate agent IDs found in list")
-
         return v

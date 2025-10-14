@@ -14,10 +14,9 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
-from resync.api.dependencies import (get_idempotency_manager,
-                                     require_idempotency_key)
+from resync.api.dependencies import get_idempotency_manager, require_idempotency_key
 from resync.core.fastapi_di import get_audit_queue, get_knowledge_graph
-from resync.core.idempotency import IdempotencyManager
+from resync.core.idempotency.manager import IdempotencyManager
 from resync.core.interfaces import IAuditQueue, IKnowledgeGraph
 from resync.core.logger import log_audit_event, log_with_correlation
 

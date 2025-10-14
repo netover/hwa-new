@@ -58,7 +58,7 @@ class AnomalyMetrics:
             float(self.request_size),
             float(self.response_size),
             hash(self.endpoint) % 1000,  # Hash endpoint to numeric
-            hash(self.method) % 100,     # Hash method to numeric
+            hash(self.method) % 100,  # Hash method to numeric
             hash(self.user_agent) % 1000 if self.user_agent else 0,
             hash(self.ip_address) % 1000 if self.ip_address else 0,
         ]
@@ -120,7 +120,9 @@ class MLModelConfig:
     retrain_interval_hours: int = 6
 
     # Model selection
-    primary_model: str = "isolation_forest"  # "isolation_forest", "one_class_svm", "ensemble"
+    primary_model: str = (
+        "isolation_forest"  # "isolation_forest", "one_class_svm", "ensemble"
+    )
     enable_ensemble: bool = True
 
     # Performance tuning
@@ -152,7 +154,7 @@ class IsolationForestDetector:
                 risk_level="low",
                 detection_method="isolation_forest",
                 feature_importance={},
-                metrics=metrics
+                metrics=metrics,
             )
 
         try:
@@ -166,7 +168,9 @@ class IsolationForestDetector:
             anomaly_score = (score + 1) / 2  # Convert from [-1,1] to [0,1]
 
             # Determine if it's an anomaly
-            is_anomaly = anomaly_score > (1 - self.config.isolation_forest_contamination)
+            is_anomaly = anomaly_score > (
+                1 - self.config.isolation_forest_contamination
+            )
 
             # Calculate risk level
             risk_level = self._calculate_risk_level(anomaly_score)
@@ -177,7 +181,7 @@ class IsolationForestDetector:
                 risk_level=risk_level,
                 detection_method="isolation_forest",
                 feature_importance=self._get_feature_importance(),
-                metrics=metrics
+                metrics=metrics,
             )
 
         except Exception as e:
@@ -188,7 +192,7 @@ class IsolationForestDetector:
                 risk_level="low",
                 detection_method="isolation_forest",
                 feature_importance={},
-                metrics=metrics
+                metrics=metrics,
             )
 
     async def _train_model(self) -> None:
@@ -198,7 +202,9 @@ class IsolationForestDetector:
 
         try:
             # Convert training data to feature matrix
-            feature_matrix = np.vstack([m.to_feature_vector()[0] for m in self.training_data])
+            feature_matrix = np.vstack(
+                [m.to_feature_vector()[0] for m in self.training_data]
+            )
 
             # Fit scaler
             self.scaler.fit(feature_matrix)
@@ -211,14 +217,16 @@ class IsolationForestDetector:
                 n_estimators=self.config.isolation_forest_n_estimators,
                 contamination=self.config.isolation_forest_contamination,
                 random_state=self.config.isolation_forest_random_state,
-                n_jobs=-1
+                n_jobs=-1,
             )
 
             self.model.fit(scaled_features)
             self.is_trained = True
             self.last_trained = time.time()
 
-            logger.info(f"Isolation Forest model trained with {len(self.training_data)} samples")
+            logger.info(
+                f"Isolation Forest model trained with {len(self.training_data)} samples"
+            )
 
         except Exception as e:
             logger.error(f"Isolation Forest training error: {e}")
@@ -286,7 +294,7 @@ class OneClassSVMDetector:
                 risk_level="low",
                 detection_method="one_class_svm",
                 feature_importance={},
-                metrics=metrics
+                metrics=metrics,
             )
 
         try:
@@ -310,7 +318,7 @@ class OneClassSVMDetector:
                 risk_level=risk_level,
                 detection_method="one_class_svm",
                 feature_importance=self._get_feature_importance(),
-                metrics=metrics
+                metrics=metrics,
             )
 
         except Exception as e:
@@ -321,7 +329,7 @@ class OneClassSVMDetector:
                 risk_level="low",
                 detection_method="one_class_svm",
                 feature_importance={},
-                metrics=metrics
+                metrics=metrics,
             )
 
     async def _train_model(self) -> None:
@@ -330,7 +338,9 @@ class OneClassSVMDetector:
             return
 
         try:
-            feature_matrix = np.vstack([m.to_feature_vector()[0] for m in self.training_data])
+            feature_matrix = np.vstack(
+                [m.to_feature_vector()[0] for m in self.training_data]
+            )
 
             self.scaler.fit(feature_matrix)
             scaled_features = self.scaler.transform(feature_matrix)
@@ -338,14 +348,16 @@ class OneClassSVMDetector:
             self.model = OneClassSVM(
                 nu=self.config.svm_nu,
                 kernel=self.config.svm_kernel,
-                gamma=self.config.svm_gamma
+                gamma=self.config.svm_gamma,
             )
 
             self.model.fit(scaled_features)
             self.is_trained = True
             self.last_trained = time.time()
 
-            logger.info(f"One-Class SVM model trained with {len(self.training_data)} samples")
+            logger.info(
+                f"One-Class SVM model trained with {len(self.training_data)} samples"
+            )
 
         except Exception as e:
             logger.error(f"One-Class SVM training error: {e}")
@@ -395,12 +407,9 @@ class EnsembleAnomalyDetector:
         self.config = config
         self.detectors = {
             "isolation_forest": IsolationForestDetector(config),
-            "one_class_svm": OneClassSVMDetector(config)
+            "one_class_svm": OneClassSVMDetector(config),
         }
-        self.ensemble_weights = {
-            "isolation_forest": 0.6,
-            "one_class_svm": 0.4
-        }
+        self.ensemble_weights = {"isolation_forest": 0.6, "one_class_svm": 0.4}
 
     async def detect(self, metrics: AnomalyMetrics) -> AnomalyScore:
         """Detect anomalies using ensemble approach."""
@@ -454,7 +463,7 @@ class EnsembleAnomalyDetector:
             risk_level=risk_level,
             detection_method="ensemble",
             feature_importance=dict(feature_importance),
-            metrics=metrics
+            metrics=metrics,
         )
 
     def add_training_sample(self, metrics: AnomalyMetrics) -> None:
@@ -491,7 +500,7 @@ class AnomalyDetectionEngine:
             "critical": 0.9,
             "high": 0.7,
             "medium": 0.5,
-            "low": 0.3
+            "low": 0.3,
         }
 
         # Metrics collection
@@ -541,9 +550,7 @@ class AnomalyDetectionEngine:
         logger.info("Anomaly detection engine stopped")
 
     async def analyze_request(
-        self,
-        metrics: AnomalyMetrics,
-        generate_alert: bool = True
+        self, metrics: AnomalyMetrics, generate_alert: bool = True
     ) -> AnomalyScore:
         """
         Analyze a request for anomalies.
@@ -572,7 +579,9 @@ class AnomalyDetectionEngine:
                 self.anomalies_detected += 1
 
                 # Generate alert if requested
-                if generate_alert and result.confidence > self.alert_thresholds.get(result.risk_level, 0.5):
+                if generate_alert and result.confidence > self.alert_thresholds.get(
+                    result.risk_level, 0.5
+                ):
                     await self._generate_alert(result)
 
             return result
@@ -580,7 +589,9 @@ class AnomalyDetectionEngine:
     async def _generate_alert(self, result: AnomalyScore) -> None:
         """Generate alert for detected anomaly."""
         alert_data = {
-            "anomaly_id": hashlib.md5(f"{result.timestamp}_{result.metrics.user_id}".encode()).hexdigest(),
+            "anomaly_id": hashlib.md5(
+                f"{result.timestamp}_{result.metrics.user_id}".encode()
+            ).hexdigest(),
             "risk_level": result.risk_level,
             "confidence": result.confidence,
             "detection_method": result.detection_method,
@@ -588,7 +599,7 @@ class AnomalyDetectionEngine:
             "endpoint": result.metrics.endpoint if result.metrics else "",
             "ip_address": result.metrics.ip_address if result.metrics else "",
             "timestamp": result.timestamp,
-            "feature_importance": result.feature_importance
+            "feature_importance": result.feature_importance,
         }
 
         # Log alert
@@ -599,7 +610,7 @@ class AnomalyDetectionEngine:
             confidence=result.confidence,
             user_id=result.metrics.user_id if result.metrics else None,
             endpoint=result.metrics.endpoint if result.metrics else "",
-            detection_method=result.detection_method
+            detection_method=result.detection_method,
         )
 
         # Here you could integrate with external alerting systems
@@ -658,7 +669,7 @@ class AnomalyDetectionEngine:
         """Update ML models with new training data."""
         try:
             # Force retraining if needed
-            if hasattr(self.primary_detector, '_should_retrain'):
+            if hasattr(self.primary_detector, "_should_retrain"):
                 if self.primary_detector._should_retrain():
                     # Retraining is handled automatically in detect() method
                     pass
@@ -703,14 +714,16 @@ class AnomalyDetectionEngine:
             "models": {
                 "primary_model": self.config.primary_model,
                 "last_update": self.last_model_update,
-                "training_samples": len(getattr(self.primary_detector, 'training_data', [])),
-                "is_trained": getattr(self.primary_detector, 'is_trained', False),
+                "training_samples": len(
+                    getattr(self.primary_detector, "training_data", [])
+                ),
+                "is_trained": getattr(self.primary_detector, "is_trained", False),
             },
             "configuration": {
                 "batch_size": self.config.batch_size,
                 "min_samples_for_training": self.config.min_samples_for_training,
                 "retrain_interval_hours": self.config.retrain_interval_hours,
-            }
+            },
         }
 
     def update_alert_thresholds(self, thresholds: Dict[str, float]) -> None:
@@ -726,8 +739,13 @@ class AnomalyDetectionEngine:
             True if found and marked, False otherwise
         """
         for result in self.anomaly_history:
-            if (result.metrics and
-                hashlib.md5(f"{result.timestamp}_{result.metrics.user_id}".encode()).hexdigest() == anomaly_id):
+            if (
+                result.metrics
+                and hashlib.md5(
+                    f"{result.timestamp}_{result.metrics.user_id}".encode()
+                ).hexdigest()
+                == anomaly_id
+            ):
                 self.false_positives += 1
                 logger.info(f"False positive marked for anomaly {anomaly_id}")
                 return True

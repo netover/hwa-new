@@ -14,8 +14,8 @@ Settings are organized into logical groups:
 
 from __future__ import annotations
 
-import os
 from enum import Enum
+from functools import cached_property
 from pathlib import Path
 from typing import Any, Literal
 
@@ -186,7 +186,9 @@ class Settings(BaseSettings):
     )
 
     llm_api_key: str = Field(
-        default="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",
+        default=(
+            "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"
+        ),
         min_length=1,
         description="Chave de API do LLM (OpenRouter)",
     )
@@ -203,23 +205,23 @@ class Settings(BaseSettings):
 
     # Cache Hierarchy Configuration
     cache_hierarchy_l1_max_size: int = Field(
-        default=int(os.environ.get("CACHE_HIERARCHY_L1_MAX_SIZE", 5000)),
+        default=5000,
         description="Maximum number of entries in L1 cache",
     )
     cache_hierarchy_l2_ttl: int = Field(
-        default=int(os.environ.get("CACHE_HIERARCHY_L2_TTL", 600)),
+        default=600,
         description="Time-To-Live for L2 cache entries in seconds",
     )
     cache_hierarchy_l2_cleanup_interval: int = Field(
-        default=int(os.environ.get("CACHE_HIERARCHY_L2_CLEANUP_INTERVAL", 60)),
+        default=60,
         description="Cleanup interval for L2 cache in seconds",
     )
     cache_hierarchy_num_shards: int = Field(
-        default=int(os.environ.get("CACHE_HIERARCHY_NUM_SHARDS", 8)),
+        default=8,
         description="Number of shards for cache",
     )
     cache_hierarchy_max_workers: int = Field(
-        default=int(os.environ.get("CACHE_HIERARCHY_MAX_WORKERS", 4)),
+        default=4,
         description="Max workers for cache operations",
     )
 
@@ -484,7 +486,7 @@ class Settings(BaseSettings):
     def AGENT_MODEL_NAME(self) -> str:
         return self.agent_model_name
 
-    @property
+    @cached_property
     def CACHE_HIERARCHY(self) -> Any:
         """Cache hierarchy configuration object."""
         return CacheHierarchyConfig(
@@ -709,7 +711,7 @@ class Settings(BaseSettings):
                     raise ValueError("TWS_PASSWORD cannot be a common/default password")
         return v
 
-    def model_post_init(self, _context: Any) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """Validações pós-inicialização."""
         # Validar TWS quando não está em mock mode
         if not self.tws_mock_mode:

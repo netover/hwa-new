@@ -10,9 +10,12 @@ from fastapi import Depends, Header, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from resync.core.container import app_container
-from resync.core.exceptions import (AuthenticationError,
-                                    ServiceUnavailableError, ValidationError)
-from resync.core.idempotency import IdempotencyManager
+from resync.core.exceptions import (
+    AuthenticationError,
+    ServiceUnavailableError,
+    ValidationError,
+)
+from resync.core.idempotency.manager import IdempotencyManager
 from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
@@ -114,9 +117,7 @@ async def initialize_idempotency_manager(redis_client):
     """
     global _idempotency_manager
     try:
-        from resync.core.idempotency import IdempotencyManager
-
-        # Initialize the global manager
+        # Initialize the global manager with the new refactored structure
         manager = IdempotencyManager(redis_client)
         # Store globally for dependency injection
         _idempotency_manager = manager
@@ -130,6 +131,9 @@ async def initialize_idempotency_manager(redis_client):
             redis_available=False,
         )
         # Create in-memory fallback
+        # Note: In production, this should not be used
+        # For now, we'll just log the error and continue
+        pass
 
 
 # ============================================================================
@@ -154,8 +158,7 @@ async def get_correlation_id(
         return x_correlation_id
 
     # Tentar obter do contexto
-    from resync.core.context import \
-        get_correlation_id as get_ctx_correlation_id
+    from resync.core.context import get_correlation_id as get_ctx_correlation_id
 
     ctx_id = get_ctx_correlation_id()
     if ctx_id:

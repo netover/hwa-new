@@ -9,12 +9,14 @@ from typing import Annotated, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from resync.api.dependencies import (get_correlation_id,
-                                     get_idempotency_manager,
-                                     require_idempotency_key)
-from resync.core.idempotency import IdempotencyManager
+from resync.api.dependencies import (
+    get_correlation_id,
+    get_idempotency_manager,
+    require_idempotency_key,
+)
+from resync.core.idempotency.manager import IdempotencyManager
 from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
@@ -38,14 +40,15 @@ class CreateResourceRequest(BaseModel):
         default_factory=dict, description="Metadados adicionais"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "My Resource",
                 "description": "A sample resource",
                 "metadata": {"category": "test", "priority": "high"},
             }
         }
+    )
 
 
 class ResourceResponse(BaseModel):
@@ -58,8 +61,8 @@ class ResourceResponse(BaseModel):
     created_at: str = Field(..., description="Timestamp de criação")
     idempotency_key: str = Field(..., description="Chave de idempotência usada")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "550e8400-e29b-41d4-a716-446655440000",
                 "name": "My Resource",
@@ -69,6 +72,7 @@ class ResourceResponse(BaseModel):
                 "idempotency_key": "660e8400-e29b-41d4-a716-446655440001",
             }
         }
+    )
 
 
 Currency = Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")]
@@ -81,14 +85,15 @@ class TransactionRequest(BaseModel):
     currency: Currency = Field(default="USD", description="Moeda")
     description: str = Field(..., description="Descrição da transação", min_length=1)
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "amount": 100.50,
                 "currency": "USD",
                 "description": "Payment for services",
             }
         }
+    )
 
 
 class TransactionResponse(BaseModel):
@@ -102,8 +107,8 @@ class TransactionResponse(BaseModel):
     created_at: str = Field(..., description="Timestamp de criação")
     idempotency_key: str = Field(..., description="Chave de idempotência")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "txn_550e8400e29b41d4",
                 "amount": 100.50,
@@ -114,6 +119,7 @@ class TransactionResponse(BaseModel):
                 "idempotency_key": "660e8400-e29b-41d4-a716-446655440001",
             }
         }
+    )
 
 
 # ============================================================================

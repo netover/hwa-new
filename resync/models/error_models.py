@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ErrorCategory(str, Enum):
@@ -56,11 +56,10 @@ class BaseErrorResponse(BaseModel):
         None, description="Stack trace for debugging (production disabled)"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        use_enum_values = True
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(
+        use_enum_values=True,
+        json_encoders={datetime: lambda v: v.isoformat()},
+    )
 
 
 class ValidationErrorDetail(BaseModel):

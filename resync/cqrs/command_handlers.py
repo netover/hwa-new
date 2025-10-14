@@ -4,14 +4,16 @@ Command handlers for TWS operations in the CQRS pattern.
 
 from resync.core.interfaces import ITWSClient
 from resync.cqrs.base import CommandResult, ICommandHandler
-from resync.cqrs.commands import (ExecuteJobCommand,
-                                  GetCriticalPathStatusCommand,
-                                  GetJobsStatusCommand,
-                                  GetJobStatusBatchCommand,
-                                  GetSystemHealthCommand,
-                                  GetSystemStatusCommand,
-                                  GetWorkstationsStatusCommand,
-                                  UpdateJobStatusCommand)
+from resync.cqrs.commands import (
+    ExecuteJobCommand,
+    GetCriticalPathStatusCommand,
+    GetJobsStatusCommand,
+    GetJobStatusBatchCommand,
+    GetSystemHealthCommand,
+    GetSystemStatusCommand,
+    GetWorkstationsStatusCommand,
+    UpdateJobStatusCommand,
+)
 
 
 class GetSystemStatusCommandHandler(

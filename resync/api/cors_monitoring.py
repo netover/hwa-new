@@ -11,10 +11,13 @@ from typing import List
 from fastapi import APIRouter, Depends, Query
 from starlette.requests import Request
 
-from resync.models.validation import (CorsConfigResponse, CorsTestParams,
-                                      CorsTestResponse,
-                                      OriginValidationRequest,
-                                      OriginValidationResponse)
+from resync.models.validation import (
+    CorsConfigResponse,
+    CorsTestParams,
+    CorsTestResponse,
+    OriginValidationRequest,
+    OriginValidationResponse,
+)
 from resync.settings import settings
 
 # Initialize logger

@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, Generator, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, DateTime, Integer, String, Text, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
@@ -62,8 +62,7 @@ class AuditLogResponse(BaseModel):
     source_component: Optional[str]
     severity: Optional[str]
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AuditLogManager:

@@ -311,7 +311,6 @@ async def initialize_redis_with_retry(
 ### Phase 2: Advanced Performance Optimization ✅ COMPLETE
 
 **Status:** Fully implemented and tested
-**Documentation:** See [docs/PHASE2_COMPLETE.md](docs/PHASE2_COMPLETE.md)
 
 Phase 2 introduces comprehensive performance monitoring, optimization, and resource management capabilities:
 
@@ -370,7 +369,6 @@ curl http://localhost:8000/api/performance/report
 - **Quick Reference:** [docs/PERFORMANCE_QUICK_REFERENCE.md](docs/PERFORMANCE_QUICK_REFERENCE.md)
 - **Full Guide:** [docs/PERFORMANCE_OPTIMIZATION.md](docs/PERFORMANCE_OPTIMIZATION.md)
 - **Testing & Deployment:** [docs/TESTING_DEPLOYMENT_GUIDE.md](docs/TESTING_DEPLOYMENT_GUIDE.md)
-- **Implementation Details:** [docs/PHASE2_IMPLEMENTATION_SUMMARY.md](docs/PHASE2_IMPLEMENTATION_SUMMARY.md)
 
 ### AsyncTTLCache Improvements
 - Enhanced memory management with better size estimation
@@ -762,6 +760,10 @@ We welcome contributions to improve Resync! Please follow these guidelines:
 
 ### Development Setup
 
+**Requirements:**
+- Python 3.13 or later
+- All dependencies listed in requirements.txt
+
 ```bash
 # Clone the repository
 git clone https://github.com/your-org/resync.git
@@ -776,6 +778,16 @@ cp settings.development.toml.example settings.development.toml
 
 # Run tests
 pytest
+
+# Format code with Black
+black .
+
+# Check types with MyPy
+mypy .
+
+# Run linters
+pylint resync/
+flake8 resync/
 
 # Start development server
 uvicorn resync.main:app --reload

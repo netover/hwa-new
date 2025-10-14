@@ -16,8 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict
 from unittest.mock import patch
 
-from resync.core import (get_environment_tags,  # type: ignore
-                         get_global_correlation_id)
+from resync.core import get_environment_tags, get_global_correlation_id  # type: ignore
 from resync.core.agent_manager import AgentManager
 from resync.core.async_cache import AsyncTTLCache
 from resync.core.audit_db import add_audit_records_batch  # type: ignore

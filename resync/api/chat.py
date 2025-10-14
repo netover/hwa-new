@@ -16,9 +16,14 @@ from agno.agent import Agent
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from resync.api.utils.stream_handler import AgentResponseStreamer
-from resync.core.exceptions import (AgentExecutionError, AuditError,
-                                    DatabaseError, KnowledgeGraphError,
-                                    LLMError, ToolExecutionError)
+from resync.core.exceptions import (
+    AgentExecutionError,
+    AuditError,
+    DatabaseError,
+    KnowledgeGraphError,
+    LLMError,
+    ToolExecutionError,
+)
 from resync.core.fastapi_di import get_agent_manager, get_knowledge_graph
 from resync.core.ia_auditor import analyze_and_flag_memories
 from resync.core.interfaces import IAgentManager, IKnowledgeGraph

@@ -12,11 +12,17 @@ from abc import abstractmethod  # type: ignore
 from contextlib import asynccontextmanager  # type: ignore
 from typing import Any, Protocol  # type: ignore
 
-from resync.api_gateway.services import (IAgentService,  # type: ignore
-                                         IKnowledgeService, ITWSService,
-                                         ServiceFactory)
+from resync.api_gateway.services import (
+    IAgentService,  # type: ignore
+    IKnowledgeService,
+    ITWSService,
+    ServiceFactory,
+)
 from resync.core.interfaces import (  # type: ignore[attr-defined]
-    IAgentManager, IKnowledgeGraph, ITWSClient)
+    IAgentManager,
+    IKnowledgeGraph,
+    ITWSClient,
+)
 
 
 class IContainer(Protocol):  # type: ignore

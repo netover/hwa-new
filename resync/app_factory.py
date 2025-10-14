@@ -92,15 +92,19 @@ class ApplicationFactory:
             # Import here to avoid circular dependencies
             from resync.api_gateway.container import setup_dependencies
             from resync.core.container import app_container
-            from resync.core.exceptions import (ConfigurationError,
-                                                RedisAuthError,
-                                                RedisConnectionError,
-                                                RedisInitializationError,
-                                                RedisTimeoutError)
-            from resync.core.interfaces import (IAgentManager, IKnowledgeGraph,
-                                                ITWSClient)
-            from resync.core.tws_monitor import (get_tws_monitor,
-                                                 shutdown_tws_monitor)
+            from resync.core.exceptions import (
+                ConfigurationError,
+                RedisAuthError,
+                RedisConnectionError,
+                RedisInitializationError,
+                RedisTimeoutError,
+            )
+            from resync.core.interfaces import (
+                IAgentManager,
+                IKnowledgeGraph,
+                ITWSClient,
+            )
+            from resync.core.tws_monitor import get_tws_monitor, shutdown_tws_monitor
             from resync.cqrs.dispatcher import initialize_dispatcher
             from resync.lifespan import initialize_redis_with_retry
 
@@ -313,12 +317,10 @@ class ApplicationFactory:
 
     def _configure_middleware(self) -> None:
         """Configure all middleware in the correct order."""
-        from resync.api.middleware.correlation_id import \
-            CorrelationIdMiddleware
+        from resync.api.middleware.correlation_id import CorrelationIdMiddleware
         from resync.api.middleware.cors_config import CORSConfig
         from resync.api.middleware.csp_middleware import CSPMiddleware
-        from resync.api.middleware.error_handler import \
-            GlobalExceptionHandlerMiddleware
+        from resync.api.middleware.error_handler import GlobalExceptionHandlerMiddleware
 
         # 1. Correlation ID (must be first)
         self.app.add_middleware(CorrelationIdMiddleware)

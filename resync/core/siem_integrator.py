@@ -146,37 +146,34 @@ class SIEMEvent:
 
     def to_json(self) -> str:
         """Convert event to JSON format."""
-        return json.dumps({
-            "event_id": self.event_id,
-            "timestamp": self.timestamp,
-            "@timestamp": datetime.fromtimestamp(self.timestamp).isoformat(),
-            "source": self.source,
-            "event_type": self.event_type,
-            "severity": self.severity,
-            "category": self.category,
-            "message": self.message,
-            "user_id": self.user_id,
-            "session_id": self.session_id,
-            "ip_address": self.ip_address,
-            "user_agent": self.user_agent,
-            "resource_id": self.resource_id,
-            "resource_type": self.resource_type,
-            "action": self.action,
-            "correlation_id": self.correlation_id,
-            "tags": list(self.tags),
-            **self.details,
-            **self.custom_fields
-        }, separators=(',', ':'))
+        return json.dumps(
+            {
+                "event_id": self.event_id,
+                "timestamp": self.timestamp,
+                "@timestamp": datetime.fromtimestamp(self.timestamp).isoformat(),
+                "source": self.source,
+                "event_type": self.event_type,
+                "severity": self.severity,
+                "category": self.category,
+                "message": self.message,
+                "user_id": self.user_id,
+                "session_id": self.session_id,
+                "ip_address": self.ip_address,
+                "user_agent": self.user_agent,
+                "resource_id": self.resource_id,
+                "resource_type": self.resource_type,
+                "action": self.action,
+                "correlation_id": self.correlation_id,
+                "tags": list(self.tags),
+                **self.details,
+                **self.custom_fields,
+            },
+            separators=(",", ":"),
+        )
 
     def _severity_to_int(self, severity: str) -> int:
         """Convert severity string to numeric value."""
-        mapping = {
-            "informational": 0,
-            "low": 1,
-            "medium": 5,
-            "high": 8,
-            "critical": 10
-        }
+        mapping = {"informational": 0, "low": 1, "medium": 5, "high": 8, "critical": 10}
         return mapping.get(severity.lower(), 5)
 
 
@@ -260,7 +257,9 @@ class SIEMConnector(ABC):
             "events_sent": self.events_sent,
             "last_event_sent": self.last_event_sent,
             "connection_failures": self.connection_failures,
-            "uptime": time.time() - self.last_connection_attempt if self.is_connected() else 0
+            "uptime": (
+                time.time() - self.last_connection_attempt if self.is_connected() else 0
+            ),
         }
 
 
@@ -279,7 +278,7 @@ class SplunkConnector(SIEMConnector):
             # Create HTTP session
             self.session = aiohttp.ClientSession(
                 headers=self.config.get_auth_headers(),
-                timeout=aiohttp.ClientTimeout(total=self.config.timeout_seconds)
+                timeout=aiohttp.ClientTimeout(total=self.config.timeout_seconds),
             )
 
             # Test connection
@@ -325,7 +324,7 @@ class SplunkConnector(SIEMConnector):
                     "host": "hwa-new-system",
                     "source": event.source,
                     "sourcetype": f"hwa:{event.category}",
-                    "index": "security"
+                    "index": "security",
                 }
                 splunk_events.append(json.dumps(splunk_event))
 
@@ -339,7 +338,9 @@ class SplunkConnector(SIEMConnector):
                     self.last_event_sent = time.time()
                     return len(events)
                 else:
-                    logger.error(f"Splunk batch send failed: {response.status} - {await response.text()}")
+                    logger.error(
+                        f"Splunk batch send failed: {response.status} - {await response.text()}"
+                    )
                     return 0
 
         except Exception as e:
@@ -382,7 +383,7 @@ class ELKConnector(SIEMConnector):
 
             self.session = aiohttp.ClientSession(
                 headers=self.config.get_auth_headers(),
-                timeout=aiohttp.ClientTimeout(total=self.config.timeout_seconds)
+                timeout=aiohttp.ClientTimeout(total=self.config.timeout_seconds),
             )
 
             # Test connection
@@ -424,10 +425,7 @@ class ELKConnector(SIEMConnector):
             for event in events:
                 # Index metadata
                 index_meta = {
-                    "index": {
-                        "_index": "security-events",
-                        "_id": event.event_id
-                    }
+                    "index": {"_index": "security-events", "_id": event.event_id}
                 }
                 bulk_data.append(json.dumps(index_meta))
                 bulk_data.append(event.to_json())
@@ -437,13 +435,18 @@ class ELKConnector(SIEMConnector):
             async with self.session.post(self.bulk_endpoint, data=payload) as response:
                 if response.status == 200:
                     result = await response.json()
-                    successful = sum(1 for item in result.get("items", [])
-                                   if item.get("index", {}).get("status") == 201)
+                    successful = sum(
+                        1
+                        for item in result.get("items", [])
+                        if item.get("index", {}).get("status") == 201
+                    )
                     self.events_sent += successful
                     self.last_event_sent = time.time()
                     return successful
                 else:
-                    logger.error(f"ELK bulk send failed: {response.status} - {await response.text()}")
+                    logger.error(
+                        f"ELK bulk send failed: {response.status} - {await response.text()}"
+                    )
                     return 0
 
         except Exception as e:
@@ -466,7 +469,7 @@ class ELKConnector(SIEMConnector):
                     return {
                         "status": "ok",
                         "cluster_status": health_data.get("status"),
-                        "response_time": time.time()
+                        "response_time": time.time(),
                     }
                 else:
                     return {"status": "error", "http_status": response.status}
@@ -577,7 +580,7 @@ class SIEMIntegrator:
         severity: str,
         message: str,
         source: str = "hwa-system",
-        **kwargs
+        **kwargs,
     ) -> str:
         """Send a security event to all configured SIEMs."""
         event_id = f"sec_{int(time.time() * 1000000)}_{secrets.token_hex(4)}"
@@ -590,7 +593,7 @@ class SIEMIntegrator:
             severity=severity,
             category=self._categorize_event(event_type),
             message=message,
-            **kwargs
+            **kwargs,
         )
 
         # Enrich event
@@ -627,8 +630,7 @@ class SIEMIntegrator:
     def get_connector_status(self) -> Dict[str, Dict[str, Any]]:
         """Get status of all connectors."""
         return {
-            name: connector.get_metrics()
-            for name, connector in self.connectors.items()
+            name: connector.get_metrics() for name, connector in self.connectors.items()
         }
 
     def get_system_metrics(self) -> Dict[str, Any]:
@@ -641,21 +643,26 @@ class SIEMIntegrator:
                 "dropped": self.events_dropped,
                 "correlated": self.correlation_events,
                 "queue_size": self.event_queue.qsize(),
-                "buffer_size": len(self.event_buffer)
+                "buffer_size": len(self.event_buffer),
             },
             "connectors": {
                 "total": len(self.connectors),
-                "connected": sum(1 for c in connector_status.values() if c["status"] == "connected"),
-                "failed": sum(1 for c in connector_status.values() if c["status"] == "error")
+                "connected": sum(
+                    1 for c in connector_status.values() if c["status"] == "connected"
+                ),
+                "failed": sum(
+                    1 for c in connector_status.values() if c["status"] == "error"
+                ),
             },
             "performance": {
                 "avg_processing_time": 0.0,  # Would need to track this
-                "throughput_per_second": self.events_processed / max(1, time.time() - (time.time() - 3600))
+                "throughput_per_second": self.events_processed
+                / max(1, time.time() - (time.time() - 3600)),
             },
             "correlation": {
                 "rules_active": len(self.correlation_engine.rules),
-                "alerts_generated": self.correlation_engine.alerts_generated
-            }
+                "alerts_generated": self.correlation_engine.alerts_generated,
+            },
         }
 
     def _categorize_event(self, event_type: str) -> str:
@@ -669,7 +676,7 @@ class SIEMIntegrator:
             "breach": "incident",
             "access_denied": "authorization",
             "data_access": "data_security",
-            "admin_action": "administration"
+            "admin_action": "administration",
         }
         return categories.get(event_type, "general")
 
@@ -699,8 +706,10 @@ class SIEMIntegrator:
                 await asyncio.sleep(self.flush_interval)
 
                 # Check if it's time to flush
-                if (len(self.event_buffer) > 0 and
-                    time.time() - self.last_flush >= self.flush_interval):
+                if (
+                    len(self.event_buffer) > 0
+                    and time.time() - self.last_flush >= self.flush_interval
+                ):
                     await self._flush_events()
 
             except asyncio.CancelledError:
@@ -739,7 +748,9 @@ class SIEMIntegrator:
 
         if successful_sends < len(events_to_send):
             failed_count = len(events_to_send) - successful_sends
-            logger.warning(f"Failed to send {failed_count} out of {len(events_to_send)} events")
+            logger.warning(
+                f"Failed to send {failed_count} out of {len(events_to_send)} events"
+            )
 
     async def _health_monitor(self) -> None:
         """Monitor health of SIEM connections."""
@@ -762,7 +773,9 @@ class SIEMIntegrator:
                         # Try to close circuit breaker if enough time has passed
                         if self.circuit_breaker.can_attempt(name):
                             self.circuit_breaker.attempt_reset(name)
-                            logger.info(f"Attempting to reset circuit breaker for {name}")
+                            logger.info(
+                                f"Attempting to reset circuit breaker for {name}"
+                            )
 
             except asyncio.CancelledError:
                 break
@@ -786,29 +799,36 @@ class EventCorrelationEngine:
             {
                 "name": "multiple_failed_logins",
                 "condition": lambda events: (
-                    len([e for e in events if e.event_type == "failed_login"]) >= 5 and
-                    len(set(e.ip_address for e in events if e.ip_address)) <= 2
+                    len([e for e in events if e.event_type == "failed_login"]) >= 5
+                    and len(set(e.ip_address for e in events if e.ip_address)) <= 2
                 ),
                 "time_window": 300,  # 5 minutes
-                "severity": "high"
+                "severity": "high",
             },
             {
                 "name": "brute_force_attack",
                 "condition": lambda events: (
-                    len([e for e in events if e.event_type == "failed_login" and e.user_id]) >= 10
+                    len(
+                        [
+                            e
+                            for e in events
+                            if e.event_type == "failed_login" and e.user_id
+                        ]
+                    )
+                    >= 10
                 ),
                 "time_window": 600,  # 10 minutes
-                "severity": "critical"
+                "severity": "critical",
             },
             {
                 "name": "privilege_escalation",
                 "condition": lambda events: (
-                    any(e.event_type == "admin_action" for e in events) and
-                    any(e.event_type == "failed_login" for e in events)
+                    any(e.event_type == "admin_action" for e in events)
+                    and any(e.event_type == "failed_login" for e in events)
                 ),
                 "time_window": 1800,  # 30 minutes
-                "severity": "high"
-            }
+                "severity": "high",
+            },
         ]
 
     async def correlate_event(self, event: SIEMEvent) -> Optional[Dict[str, Any]]:

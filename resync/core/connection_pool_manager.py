@@ -16,12 +16,17 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-from resync.core.pools.base_pool import (ConnectionPool, ConnectionPoolConfig,
-                                         ConnectionPoolStats)
+from resync.core.pools.base_pool import (
+    ConnectionPool,
+    ConnectionPoolConfig,
+    ConnectionPoolStats,
+)
 from resync.core.pools.db_pool import DatabaseConnectionPool
 from resync.core.pools.http_pool import HTTPConnectionPool
-from resync.core.pools.pool_manager import (ConnectionPoolManager,
-                                            get_connection_pool_manager)
+from resync.core.pools.pool_manager import (
+    ConnectionPoolManager,
+    get_connection_pool_manager,
+)
 from resync.core.pools.redis_pool import RedisConnectionPool
 from resync.core.smart_pooling import SmartConnectionPool, SmartPoolConfig
 from resync.core.structured_logger import get_logger
@@ -64,7 +69,9 @@ class LoadMetrics:
         """Update request rate with sliding window average."""
         self.request_history.append(requests_per_second)
         self.request_rate = requests_per_second
-        self.avg_request_rate = statistics.mean(self.request_history) if self.request_history else 0.0
+        self.avg_request_rate = (
+            statistics.mean(self.request_history) if self.request_history else 0.0
+        )
 
     def update_latency(self, latency_ms: float) -> None:
         """Update latency metrics."""
@@ -75,7 +82,9 @@ class LoadMetrics:
             n = len(sorted_latencies)
             self.avg_latency = statistics.mean(sorted_latencies)
             self.p95_latency = sorted_latencies[int(0.95 * n)]
-            self.p99_latency = sorted_latencies[int(0.99 * n)] if n > 2 else sorted_latencies[-1]
+            self.p99_latency = (
+                sorted_latencies[int(0.99 * n)] if n > 2 else sorted_latencies[-1]
+            )
 
     def update_errors(self, is_error: bool) -> None:
         """Update error rate."""
@@ -87,10 +96,10 @@ class LoadMetrics:
         """Calculate comprehensive load score (0.0 to 1.0)."""
         # Weighted combination of metrics
         weights = {
-            'latency': 0.3,
-            'utilization': 0.3,
-            'error_rate': 0.2,
-            'queue_depth': 0.2
+            "latency": 0.3,
+            "utilization": 0.3,
+            "error_rate": 0.2,
+            "queue_depth": 0.2,
         }
 
         # Normalize latency score (higher latency = higher score)
@@ -106,10 +115,10 @@ class LoadMetrics:
         queue_score = min(1.0, self.queue_depth / 50.0)  # 50 waiting requests = 1.0
 
         return (
-            weights['latency'] * latency_score +
-            weights['utilization'] * utilization_score +
-            weights['error_rate'] * error_score +
-            weights['queue_depth'] * queue_score
+            weights["latency"] * latency_score
+            + weights["utilization"] * utilization_score
+            + weights["error_rate"] * error_score
+            + weights["queue_depth"] * queue_score
         )
 
 
@@ -118,28 +127,28 @@ class AutoScalingConfig:
     """Configuration for automatic pool scaling."""
 
     # Base scaling thresholds
-    scale_up_threshold: float = 0.7    # Scale up when load > 70%
+    scale_up_threshold: float = 0.7  # Scale up when load > 70%
     scale_down_threshold: float = 0.3  # Scale down when load < 30%
 
     # Scaling factors
-    scale_up_factor: float = 1.5       # Multiply connections by 1.5 when scaling up
-    scale_down_factor: float = 0.7     # Multiply connections by 0.7 when scaling down
+    scale_up_factor: float = 1.5  # Multiply connections by 1.5 when scaling up
+    scale_down_factor: float = 0.7  # Multiply connections by 0.7 when scaling down
 
     # Connection limits
     min_connections: int = 5
     max_connections: int = 100
 
     # Cooldown periods (seconds)
-    scale_up_cooldown: float = 300.0   # 5 minutes
-    scale_down_cooldown: float = 600.0 # 10 minutes
+    scale_up_cooldown: float = 300.0  # 5 minutes
+    scale_down_cooldown: float = 600.0  # 10 minutes
 
     # Predictive scaling
     enable_predictive_scaling: bool = True
-    prediction_window: int = 5         # Look ahead 5 minutes
+    prediction_window: int = 5  # Look ahead 5 minutes
 
     # Gradual scaling
     gradual_scaling: bool = True
-    scaling_step_size: int = 5         # Add/remove 5 connections at a time
+    scaling_step_size: int = 5  # Add/remove 5 connections at a time
 
 
 class AutoScalingManager:
@@ -170,7 +179,9 @@ class AutoScalingManager:
             return
 
         self._stop_monitoring.clear()
-        self._monitor_thread = threading.Thread(target=self._monitoring_loop, daemon=True)
+        self._monitor_thread = threading.Thread(
+            target=self._monitoring_loop, daemon=True
+        )
         self._monitor_thread.start()
         self._monitoring_active = True
         logger.info("auto_scaling_monitoring_started")
@@ -230,15 +241,20 @@ class AutoScalingManager:
         load_score = self.load_metrics.get_load_score()
 
         # Check scale up conditions
-        if (load_score > self.config.scale_up_threshold and
-            current_time - self.last_scale_up_time > self.config.scale_up_cooldown):
+        if (
+            load_score > self.config.scale_up_threshold
+            and current_time - self.last_scale_up_time > self.config.scale_up_cooldown
+        ):
 
             asyncio.run(self._scale_up())
             self.last_scale_up_time = current_time
 
         # Check scale down conditions
-        elif (load_score < self.config.scale_down_threshold and
-              current_time - self.last_scale_down_time > self.config.scale_down_cooldown):
+        elif (
+            load_score < self.config.scale_down_threshold
+            and current_time - self.last_scale_down_time
+            > self.config.scale_down_cooldown
+        ):
 
             asyncio.run(self._scale_down())
             self.last_scale_down_time = current_time
@@ -254,12 +270,12 @@ class AutoScalingManager:
             if self.config.gradual_scaling:
                 new_connections = min(
                     self.config.max_connections,
-                    self.current_connections + self.config.scaling_step_size
+                    self.current_connections + self.config.scaling_step_size,
                 )
             else:
                 new_connections = min(
                     self.config.max_connections,
-                    int(self.current_connections * self.config.scale_up_factor)
+                    int(self.current_connections * self.config.scale_up_factor),
                 )
 
             if new_connections > self.current_connections:
@@ -279,12 +295,12 @@ class AutoScalingManager:
             if self.config.gradual_scaling:
                 new_connections = max(
                     self.config.min_connections,
-                    self.current_connections - self.config.scaling_step_size
+                    self.current_connections - self.config.scaling_step_size,
                 )
             else:
                 new_connections = max(
                     self.config.min_connections,
-                    int(self.current_connections * self.config.scale_down_factor)
+                    int(self.current_connections * self.config.scale_down_factor),
                 )
 
             if new_connections < self.current_connections:
@@ -305,7 +321,7 @@ class AutoScalingManager:
             direction=direction,
             old_connections=old_count,
             new_connections=new_connection_count,
-            load_score=self.load_metrics.get_load_score()
+            load_score=self.load_metrics.get_load_score(),
         )
 
     def _update_predictions(self) -> None:
@@ -336,7 +352,7 @@ class AutoScalingManager:
                 "max_connections": self.config.max_connections,
                 "scale_up_threshold": self.config.scale_up_threshold,
                 "scale_down_threshold": self.config.scale_down_threshold,
-            }
+            },
         }
 
 
@@ -407,7 +423,9 @@ class AdvancedConnectionPoolManager:
         self._initialized = False
         logger.info("advanced_connection_pool_manager_shutdown")
 
-    async def get_connection(self, pool_type: str, connection_id: str = "default") -> Any:
+    async def get_connection(
+        self, pool_type: str, connection_id: str = "default"
+    ) -> Any:
         """
         Get a connection with intelligent pool selection.
 
@@ -423,7 +441,9 @@ class AdvancedConnectionPoolManager:
 
         if self.smart_pool and pool_type in ["db", "redis", "http"]:
             # Use smart pooling for critical connections
-            async with self.smart_pool.get_connection(f"{pool_type}_{connection_id}") as conn:
+            async with self.smart_pool.get_connection(
+                f"{pool_type}_{connection_id}"
+            ) as conn:
                 yield conn
         else:
             # Fall back to traditional pooling

@@ -57,11 +57,7 @@ class PreparedStatementInfo:
 
     def should_evict(self, max_age: float, max_idle: float) -> bool:
         """Check if statement should be evicted."""
-        return (
-            self.age > max_age or
-            self.idle_time > max_idle or
-            not self.is_valid
-        )
+        return self.age > max_age or self.idle_time > max_idle or not self.is_valid
 
     def record_execution(self, execution_time: float) -> None:
         """Record statement execution."""
@@ -160,7 +156,9 @@ class PreparedStatementCache:
         self.statement_ids: Dict[str, str] = {}
 
         # Connection-specific caches
-        self.connection_caches: Dict[str, Set[str]] = {}  # connection_id -> set of fingerprints
+        self.connection_caches: Dict[str, Set[str]] = (
+            {}
+        )  # connection_id -> set of fingerprints
 
         # Schema tracking
         self.current_schema_version = 0
@@ -222,7 +220,7 @@ class PreparedStatementCache:
         self,
         sql: str,
         connection_id: str = "default",
-        execution_time_estimate: Optional[float] = None
+        execution_time_estimate: Optional[float] = None,
     ) -> Tuple[Optional[str], bool]:
         """
         Get prepared statement ID for SQL, creating if necessary.
@@ -247,9 +245,11 @@ class PreparedStatementCache:
                 statement_info = self.cache[fingerprint]
 
                 # Check if still valid
-                if (statement_info.is_valid and
-                    statement_info.schema_version == self.current_schema_version and
-                    statement_info.connection_id == connection_id):
+                if (
+                    statement_info.is_valid
+                    and statement_info.schema_version == self.current_schema_version
+                    and statement_info.connection_id == connection_id
+                ):
 
                     # Move to end (most recently used)
                     self.cache.move_to_end(fingerprint)
@@ -259,7 +259,9 @@ class PreparedStatementCache:
                     return statement_info.statement_id, True
 
             # Cache miss - prepare new statement
-            statement_id = await self._prepare_statement(sql, connection_id, fingerprint)
+            statement_id = await self._prepare_statement(
+                sql, connection_id, fingerprint
+            )
 
             if statement_id:
                 # Add to cache
@@ -268,7 +270,7 @@ class PreparedStatementCache:
                     sql=sql,
                     fingerprint=fingerprint,
                     connection_id=connection_id,
-                    schema_version=self.current_schema_version
+                    schema_version=self.current_schema_version,
                 )
 
                 # Check cache size limits
@@ -284,8 +286,11 @@ class PreparedStatementCache:
                 self.connection_caches[connection_id].add(fingerprint)
 
                 # Check per-connection limits
-                if (self.config.connection_aware_caching and
-                    len(self.connection_caches[connection_id]) > self.config.max_statements_per_connection):
+                if (
+                    self.config.connection_aware_caching
+                    and len(self.connection_caches[connection_id])
+                    > self.config.max_statements_per_connection
+                ):
                     await self._evict_connection_lru(connection_id)
 
                 self.metrics.total_statements_cached += 1
@@ -297,9 +302,7 @@ class PreparedStatementCache:
         return None, False
 
     async def execute_prepared(
-        self,
-        statement_id: str,
-        params: Tuple[Any, ...] = ()
+        self, statement_id: str, params: Tuple[Any, ...] = ()
     ) -> Any:
         """
         Execute a prepared statement.
@@ -318,8 +321,10 @@ class PreparedStatementCache:
         statement_info = self.cache[fingerprint]
 
         # Check if still valid
-        if (not statement_info.is_valid or
-            statement_info.schema_version != self.current_schema_version):
+        if (
+            not statement_info.is_valid
+            or statement_info.schema_version != self.current_schema_version
+        ):
             # Invalidate and re-prepare
             await self.invalidate_statement(statement_id)
             raise ValueError(f"Prepared statement invalidated: {statement_id}")
@@ -331,8 +336,7 @@ class PreparedStatementCache:
             pool = await get_multiplex_connection_pool()
 
             async with pool.execute_operation(
-                sql=f"EXECUTE {statement_id}",
-                params=params
+                sql=f"EXECUTE {statement_id}", params=params
             ) as result:
                 execution_time = time.time() - start_time
                 statement_info.record_execution(execution_time)
@@ -427,7 +431,9 @@ class PreparedStatementCache:
                     invalidated += 1
 
             if invalidated > 0:
-                logger.info(f"Invalidated {invalidated} statements due to table change: {table_name}")
+                logger.info(
+                    f"Invalidated {invalidated} statements due to table change: {table_name}"
+                )
 
             return invalidated
 
@@ -449,6 +455,7 @@ class PreparedStatementCache:
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get comprehensive cache statistics."""
+
         async def _get_stats():
             async with self._lock:
                 return {
@@ -475,20 +482,18 @@ class PreparedStatementCache:
                         "max_idle_time": self.config.max_idle_time,
                         "schema_tracking": self.config.enable_schema_tracking,
                         "connection_aware": self.config.connection_aware_caching,
-                    }
+                    },
                 }
 
         # Since this is called from sync context, create a task
         import concurrent.futures
+
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future = executor.submit(asyncio.run, _get_stats())
             return future.result()
 
     async def _prepare_statement(
-        self,
-        sql: str,
-        connection_id: str,
-        fingerprint: str
+        self, sql: str, connection_id: str, fingerprint: str
     ) -> Optional[str]:
         """Prepare a statement on the database."""
         try:
@@ -504,7 +509,8 @@ class PreparedStatementCache:
             self.metrics.total_preparation_time += preparation_time
             if self.metrics.total_statements_cached > 0:
                 self.metrics.avg_preparation_time = (
-                    self.metrics.total_preparation_time / self.metrics.total_statements_cached
+                    self.metrics.total_preparation_time
+                    / self.metrics.total_statements_cached
                 )
 
             # Generate statement ID
@@ -529,11 +535,11 @@ class PreparedStatementCache:
     def _normalize_sql(self, sql: str) -> str:
         """Normalize SQL for consistent fingerprinting."""
         # Remove extra whitespace
-        normalized = re.sub(r'\s+', ' ', sql.strip())
+        normalized = re.sub(r"\s+", " ", sql.strip())
 
         # Remove comments
-        normalized = re.sub(r'--.*', '', normalized)
-        normalized = re.sub(r'/\*.*?\*/', '', normalized, flags=re.DOTALL)
+        normalized = re.sub(r"--.*", "", normalized)
+        normalized = re.sub(r"/\*.*?\*/", "", normalized, flags=re.DOTALL)
 
         # Normalize case for keywords
         # This is a simplified normalization - real implementation would be more comprehensive
@@ -542,9 +548,7 @@ class PreparedStatementCache:
         return normalized
 
     def _should_prepare_statement(
-        self,
-        sql: str,
-        execution_time_estimate: Optional[float]
+        self, sql: str, execution_time_estimate: Optional[float]
     ) -> bool:
         """Determine if a statement should be prepared."""
         # Skip very simple queries
@@ -552,13 +556,15 @@ class PreparedStatementCache:
             return False
 
         # Skip DDL statements
-        ddl_keywords = ['create', 'alter', 'drop', 'truncate']
+        ddl_keywords = ["create", "alter", "drop", "truncate"]
         if any(keyword in sql.lower() for keyword in ddl_keywords):
             return False
 
         # Check execution time estimate
-        if (execution_time_estimate is not None and
-            execution_time_estimate < self.config.execution_time_threshold):
+        if (
+            execution_time_estimate is not None
+            and execution_time_estimate < self.config.execution_time_threshold
+        ):
             return False
 
         return True
@@ -595,7 +601,7 @@ class PreparedStatementCache:
             return
 
         lru_fingerprint = None
-        lru_time = float('inf')
+        lru_time = float("inf")
 
         for fingerprint in connection_fingerprints:
             if fingerprint in self.cache:
@@ -611,7 +617,7 @@ class PreparedStatementCache:
     def _statement_uses_table(self, sql: str, table_name: str) -> bool:
         """Check if SQL statement uses a specific table."""
         # Simple regex check - real implementation would parse SQL properly
-        pattern = r'\b' + re.escape(table_name) + r'\b'
+        pattern = r"\b" + re.escape(table_name) + r"\b"
         return bool(re.search(pattern, sql, re.IGNORECASE))
 
     async def _cleanup_loop(self) -> None:
@@ -624,8 +630,7 @@ class PreparedStatementCache:
                     to_evict = []
                     for fingerprint, statement_info in self.cache.items():
                         if statement_info.should_evict(
-                            self.config.max_cache_age,
-                            self.config.max_idle_time
+                            self.config.max_cache_age, self.config.max_idle_time
                         ):
                             to_evict.append(fingerprint)
 
@@ -638,7 +643,9 @@ class PreparedStatementCache:
                             # Remove from connection cache
                             connection_id = statement_info.connection_id
                             if connection_id in self.connection_caches:
-                                self.connection_caches[connection_id].discard(fingerprint)
+                                self.connection_caches[connection_id].discard(
+                                    fingerprint
+                                )
 
                             self.metrics.evicted_statements += 1
 
@@ -675,19 +682,23 @@ class PreparedStatementCache:
                     # Update usage patterns
                     self.metrics.statements_by_frequency = {}
                     for statement_info in self.cache.values():
-                        freq_range = self._categorize_frequency(statement_info.use_count)
-                        self.metrics.statements_by_frequency[freq_range] = \
+                        freq_range = self._categorize_frequency(
+                            statement_info.use_count
+                        )
+                        self.metrics.statements_by_frequency[freq_range] = (
                             self.metrics.statements_by_frequency.get(freq_range, 0) + 1
+                        )
 
                     # Find most used statements
                     sorted_statements = sorted(
-                        self.cache.values(),
-                        key=lambda x: x.use_count,
-                        reverse=True
+                        self.cache.values(), key=lambda x: x.use_count, reverse=True
                     )[:10]
 
                     self.metrics.most_used_statements = [
-                        (stmt.sql[:50] + "..." if len(stmt.sql) > 50 else stmt.sql, stmt.use_count)
+                        (
+                            stmt.sql[:50] + "..." if len(stmt.sql) > 50 else stmt.sql,
+                            stmt.use_count,
+                        )
                         for stmt in sorted_statements
                     ]
 

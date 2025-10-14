@@ -160,17 +160,16 @@ class SecurityHardeningConfig:
         return secrets.token_urlsafe(length)
 
     @classmethod
-    def hash_password(cls, password: str, salt: Optional[bytes] = None) -> tuple[bytes, bytes]:
+    def hash_password(
+        cls, password: str, salt: Optional[bytes] = None
+    ) -> tuple[bytes, bytes]:
         """Hash a password using PBKDF2."""
         if salt is None:
             salt = secrets.token_bytes(16)
 
         # Use PBKDF2 with SHA-256
         key = hashlib.pbkdf2_hmac(
-            'sha256',
-            password.encode('utf-8'),
-            salt,
-            cls.KEY_DERIVATION_ITERATIONS
+            "sha256", password.encode("utf-8"), salt, cls.KEY_DERIVATION_ITERATIONS
         )
 
         return key, salt
@@ -188,7 +187,9 @@ class SecurityHardeningConfig:
             return ""
 
         # Remove null bytes and other dangerous characters
-        sanitized = input_str.replace('\x00', '').replace('\r\n', '\n').replace('\r', '\n')
+        sanitized = (
+            input_str.replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+        )
 
         # Limit length if specified
         if max_length and len(sanitized) > max_length:

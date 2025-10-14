@@ -10,8 +10,11 @@ import logging
 from typing import TYPE_CHECKING, Dict, Optional
 
 from resync.core.exceptions import TWSConnectionError
-from resync.core.pools.base_pool import (ConnectionPool, ConnectionPoolConfig,
-                                         ConnectionPoolStats)
+from resync.core.pools.base_pool import (
+    ConnectionPool,
+    ConnectionPoolConfig,
+    ConnectionPoolStats,
+)
 from resync.core.pools.db_pool import DatabaseConnectionPool
 from resync.core.pools.http_pool import HTTPConnectionPool
 from resync.core.pools.redis_pool import RedisConnectionPool

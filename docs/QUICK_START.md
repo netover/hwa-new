@@ -2,7 +2,7 @@
 
 ## 📋 Pré-requisitos
 
-- Python 3.9+
+- Python 3.13+
 - Redis (opcional, usa in-memory se não disponível)
 - Git
 

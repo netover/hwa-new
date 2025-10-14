@@ -142,7 +142,9 @@ class CacheDependencyGraph:
 
     def __init__(self):
         self.dependencies: Dict[str, Set[str]] = defaultdict(set)  # key -> dependents
-        self.reverse_dependencies: Dict[str, Set[str]] = defaultdict(set)  # key -> dependencies
+        self.reverse_dependencies: Dict[str, Set[str]] = defaultdict(
+            set
+        )  # key -> dependencies
         self.tags: Dict[str, Set[str]] = defaultdict(set)  # tag -> keys
 
     def add_dependency(self, key: str, depends_on: str) -> None:
@@ -228,11 +230,11 @@ class AdvancedCacheManager:
 
         # Configuration
         self.ttl_policies = {
-            'user_data': 300,      # 5 minutes
-            'config': 3600,        # 1 hour
-            'analytics': 1800,     # 30 minutes
-            'api_responses': 600,  # 10 minutes
-            'static_data': 86400,  # 24 hours
+            "user_data": 300,  # 5 minutes
+            "config": 3600,  # 1 hour
+            "analytics": 1800,  # 30 minutes
+            "api_responses": 600,  # 10 minutes
+            "static_data": 86400,  # 24 hours
         }
 
         # Invalidation rules
@@ -300,7 +302,7 @@ class AdvancedCacheManager:
         fetch_func: Optional[callable] = None,
         ttl: Optional[int] = None,
         dependencies: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None
+        tags: Optional[List[str]] = None,
     ) -> Any:
         """
         Get value from cache with intelligent fallback.
@@ -354,7 +356,7 @@ class AdvancedCacheManager:
         value: Any,
         ttl: Optional[int] = None,
         dependencies: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None
+        tags: Optional[List[str]] = None,
     ) -> None:
         """Set value in cache with metadata."""
         # Determine TTL
@@ -367,7 +369,7 @@ class AdvancedCacheManager:
             value=value,
             ttl=ttl,
             dependencies=set(dependencies or []),
-            tags=set(tags or [])
+            tags=set(tags or []),
         )
 
         # Calculate size
@@ -447,11 +449,11 @@ class AdvancedCacheManager:
     async def invalidate_by_pattern(self, pattern: str) -> int:
         """Invalidate entries matching a pattern."""
         import re
+
         regex = re.compile(pattern)
 
         keys_to_invalidate = [
-            key for key in self.memory_cache.keys()
-            if regex.match(key)
+            key for key in self.memory_cache.keys() if regex.match(key)
         ]
 
         invalidated = 0
@@ -475,8 +477,8 @@ class AdvancedCacheManager:
 
         for key_config in warming_keys:
             try:
-                key = key_config['key']
-                fetch_func = key_config['fetch_func']
+                key = key_config["key"]
+                fetch_func = key_config["fetch_func"]
 
                 # Check if already cached
                 existing = await self._get_from_memory(key)
@@ -488,16 +490,18 @@ class AdvancedCacheManager:
                 await self.set(
                     key=key,
                     value=value,
-                    ttl=key_config.get('ttl'),
-                    dependencies=key_config.get('dependencies'),
-                    tags=key_config.get('tags')
+                    ttl=key_config.get("ttl"),
+                    dependencies=key_config.get("dependencies"),
+                    tags=key_config.get("tags"),
                 )
 
                 warmed += 1
                 logger.debug(f"Warmed cache key: {key}")
 
             except Exception as e:
-                logger.warning(f"Failed to warm cache key {key_config.get('key', 'unknown')}: {e}")
+                logger.warning(
+                    f"Failed to warm cache key {key_config.get('key', 'unknown')}: {e}"
+                )
 
         logger.info(f"Cache warming completed: {warmed} keys warmed")
         return warmed
@@ -531,7 +535,7 @@ class AdvancedCacheManager:
                 "memory_enabled": True,
                 "redis_enabled": self.redis_enabled,
                 "database_enabled": True,
-            }
+            },
         }
 
     async def _get_from_memory(self, key: str) -> Any:
@@ -547,7 +551,9 @@ class AdvancedCacheManager:
                 # Update access statistics
                 entry.last_accessed = time.time()
                 entry.access_count += 1
-                entry.hit_rate = entry.access_count / max(1, entry.age / 60)  # hits per minute
+                entry.hit_rate = entry.access_count / max(
+                    1, entry.age / 60
+                )  # hits per minute
 
                 return entry.value
 
@@ -560,7 +566,10 @@ class AdvancedCacheManager:
             if len(self.memory_cache) >= self.stats.max_entries:
                 await self._evict_entries()
 
-            if self.stats.memory_usage_bytes + entry.size_bytes > self.stats.max_memory_bytes:
+            if (
+                self.stats.memory_usage_bytes + entry.size_bytes
+                > self.stats.max_memory_bytes
+            ):
                 await self._evict_entries()
 
             self.memory_cache[entry.key] = entry
@@ -603,11 +612,11 @@ class AdvancedCacheManager:
         elif isinstance(value, (int, float, str)) and len(str(value)) < 100:
             return 3600  # Small data - 1 hour
         else:
-            return 900   # Default - 15 minutes
+            return 900  # Default - 15 minutes
 
     def _calculate_size(self, value: Any) -> int:
         """Calculate approximate memory usage of a value."""
-        return len(json.dumps(value, default=str).encode('utf-8'))
+        return len(json.dumps(value, default=str).encode("utf-8"))
 
     async def _evict_entries(self) -> None:
         """Evict entries based on LRU and other policies."""
@@ -618,7 +627,9 @@ class AdvancedCacheManager:
             def eviction_score(entry_tuple):
                 key, entry = entry_tuple
                 # Lower score = more likely to evict
-                score = entry.idle_time * (2 - entry.hit_rate) * (entry.size_bytes / 1000)
+                score = (
+                    entry.idle_time * (2 - entry.hit_rate) * (entry.size_bytes / 1000)
+                )
                 return score
 
             entries.sort(key=eviction_score, reverse=True)  # Highest scores first
@@ -676,7 +687,8 @@ class AdvancedCacheManager:
 
                 async with self._lock:
                     expired_keys = [
-                        key for key, entry in self.memory_cache.items()
+                        key
+                        for key, entry in self.memory_cache.items()
                         if entry.should_evict()
                     ]
 
@@ -687,7 +699,9 @@ class AdvancedCacheManager:
                             self.dependency_graph.remove_key(key)
 
                     if expired_keys:
-                        logger.debug(f"Cleaned up {len(expired_keys)} expired cache entries")
+                        logger.debug(
+                            f"Cleaned up {len(expired_keys)} expired cache entries"
+                        )
 
             except asyncio.CancelledError:
                 break
@@ -703,7 +717,8 @@ class AdvancedCacheManager:
                 # Identify frequently accessed keys that could benefit from longer TTL
                 async with self._lock:
                     candidates = [
-                        (key, entry) for key, entry in self.memory_cache.items()
+                        (key, entry)
+                        for key, entry in self.memory_cache.items()
                         if entry.hit_rate > 0.5 and entry.access_count > 10
                     ]
 
@@ -712,7 +727,9 @@ class AdvancedCacheManager:
                         new_ttl = entry.calculate_dynamic_ttl({})
                         if new_ttl > entry.ttl:
                             entry.ttl = new_ttl
-                            logger.debug(f"Extended TTL for hot key {key} to {new_ttl}s")
+                            logger.debug(
+                                f"Extended TTL for hot key {key} to {new_ttl}s"
+                            )
 
             except asyncio.CancelledError:
                 break

@@ -46,8 +46,8 @@ class QueryFingerprint:
 
         # Simple regex to find table names in FROM clauses
         # This is a basic implementation - could be enhanced with proper SQL parsing
-        from_pattern = re.compile(r'\bfrom\s+(\w+)', re.IGNORECASE)
-        join_pattern = re.compile(r'\bjoin\s+(\w+)', re.IGNORECASE)
+        from_pattern = re.compile(r"\bfrom\s+(\w+)", re.IGNORECASE)
+        join_pattern = re.compile(r"\bjoin\s+(\w+)", re.IGNORECASE)
 
         tables = set()
 
@@ -118,7 +118,9 @@ class QueryResult:
     def __post_init__(self):
         """Calculate result hash and row count after initialization."""
         # Calculate hash of result for change detection
-        result_str = str(sorted(self.data.items()) if isinstance(self.data, dict) else str(self.data))
+        result_str = str(
+            sorted(self.data.items()) if isinstance(self.data, dict) else str(self.data)
+        )
         self.result_hash = hashlib.md5(result_str.encode()).hexdigest()
 
         # Count rows if it's a list of results
@@ -133,7 +135,9 @@ class TableChangeTracker:
     table_name: str
     last_change_timestamp: float = 0.0
     change_count: int = 0
-    tracked_queries: Set[str] = field(default_factory=set)  # Query fingerprints affected
+    tracked_queries: Set[str] = field(
+        default_factory=set
+    )  # Query fingerprints affected
 
     def record_change(self) -> None:
         """Record a table change."""
@@ -193,7 +197,7 @@ class QueryCacheManager:
         parameters: Tuple[Any, ...] = (),
         connection_id: str = "default",
         force_refresh: bool = False,
-        ttl_override: Optional[int] = None
+        ttl_override: Optional[int] = None,
     ) -> QueryResult:
         """
         Execute query with intelligent caching.
@@ -234,7 +238,7 @@ class QueryCacheManager:
             result = QueryResult(
                 data=result_data,
                 execution_time=execution_time,
-                execution_stats=self.query_stats.get(cache_key)
+                execution_stats=self.query_stats.get(cache_key),
             )
 
             # Update query statistics
@@ -251,13 +255,13 @@ class QueryCacheManager:
 
         except Exception as e:
             logger.error(f"Query execution failed: {e}")
-            self._update_cache_stats(hit=False, execution_time=time.time() - start_time, error=True)
+            self._update_cache_stats(
+                hit=False, execution_time=time.time() - start_time, error=True
+            )
             raise
 
     async def execute_batch(
-        self,
-        queries: List[Tuple[str, Tuple[Any, ...]]],
-        connection_id: str = "default"
+        self, queries: List[Tuple[str, Tuple[Any, ...]]], connection_id: str = "default"
     ) -> List[QueryResult]:
         """
         Execute multiple queries with batch optimization.
@@ -271,10 +275,12 @@ class QueryCacheManager:
         """
         if len(queries) <= self.max_batch_size:
             # Execute individually with caching
-            return await asyncio.gather(*[
-                self.execute_query(sql, params, connection_id)
-                for sql, params in queries
-            ])
+            return await asyncio.gather(
+                *[
+                    self.execute_query(sql, params, connection_id)
+                    for sql, params in queries
+                ]
+            )
 
         # For larger batches, optimize execution
         return await self._execute_optimized_batch(queries, connection_id)
@@ -300,14 +306,20 @@ class QueryCacheManager:
                     if query_key in self.query_stats:
                         # Invalidate cache entry
                         if self.cache_manager:
-                            invalidated += await self.cache_manager.invalidate(query_key, cascade=False)
+                            invalidated += await self.cache_manager.invalidate(
+                                query_key, cascade=False
+                            )
 
-                logger.info(f"Invalidated {invalidated} queries dependent on table {table_name}")
+                logger.info(
+                    f"Invalidated {invalidated} queries dependent on table {table_name}"
+                )
                 return invalidated
 
         return 0
 
-    async def record_table_change(self, table_name: str, change_type: str = "update") -> None:
+    async def record_table_change(
+        self, table_name: str, change_type: str = "update"
+    ) -> None:
         """
         Record that a table has changed for cache invalidation.
 
@@ -340,12 +352,14 @@ class QueryCacheManager:
                 "tracked_queries": len(self.query_stats),
                 "avg_execution_time": sum(
                     stats.avg_execution_time for stats in self.query_stats.values()
-                ) / max(1, len(self.query_stats)),
+                )
+                / max(1, len(self.query_stats)),
             },
             "tables": {
                 "tracked_tables": len(self.table_trackers),
                 "tables_with_changes": sum(
-                    1 for tracker in self.table_trackers.values()
+                    1
+                    for tracker in self.table_trackers.values()
                     if tracker.change_count > 0
                 ),
             },
@@ -376,7 +390,7 @@ class QueryCacheManager:
         cache_key: str,
         result: QueryResult,
         fingerprint: QueryFingerprint,
-        ttl_override: Optional[int]
+        ttl_override: Optional[int],
     ) -> None:
         """Cache query result with appropriate TTL."""
         if not self.cache_manager:
@@ -399,16 +413,13 @@ class QueryCacheManager:
             value=result,
             ttl=ttl,
             dependencies=dependencies,
-            tags=["query_cache", "database"]
+            tags=["query_cache", "database"],
         )
 
         self.total_queries_cached += 1
 
     async def _update_query_stats(
-        self,
-        fingerprint: QueryFingerprint,
-        result: QueryResult,
-        execution_time: float
+        self, fingerprint: QueryFingerprint, result: QueryResult, execution_time: float
     ) -> None:
         """Update statistics for a query."""
         cache_key = fingerprint.cache_key
@@ -417,7 +428,7 @@ class QueryCacheManager:
             if cache_key not in self.query_stats:
                 self.query_stats[cache_key] = QueryExecutionStats(
                     query_fingerprint=cache_key,
-                    table_dependencies=fingerprint.table_names
+                    table_dependencies=fingerprint.table_names,
                 )
 
             stats = self.query_stats[cache_key]
@@ -452,7 +463,9 @@ class QueryCacheManager:
                 if table_name not in self.table_trackers:
                     self.table_trackers[table_name] = TableChangeTracker(table_name)
 
-                self.table_trackers[table_name].tracked_queries.add(fingerprint.cache_key)
+                self.table_trackers[table_name].tracked_queries.add(
+                    fingerprint.cache_key
+                )
 
     async def _setup_change_tracking(self) -> None:
         """Set up database change tracking."""
@@ -461,7 +474,9 @@ class QueryCacheManager:
         # For now, this is a placeholder
         logger.info("Database change tracking setup completed")
 
-    async def _simulate_query_execution(self, sql: str, parameters: Tuple[Any, ...]) -> Any:
+    async def _simulate_query_execution(
+        self, sql: str, parameters: Tuple[Any, ...]
+    ) -> Any:
         """Simulate query execution (replace with actual database calls)."""
         # Simulate execution time based on query complexity
         complexity_factor = len(sql.split()) / 10
@@ -478,9 +493,7 @@ class QueryCacheManager:
             return {"affected_rows": 1}
 
     async def _execute_optimized_batch(
-        self,
-        queries: List[Tuple[str, Tuple[Any, ...]]],
-        connection_id: str
+        self, queries: List[Tuple[str, Tuple[Any, ...]]], connection_id: str
     ) -> List[QueryResult]:
         """Execute large batch of queries with optimization."""
         # Group similar queries for optimization
@@ -499,26 +512,29 @@ class QueryCacheManager:
                 tasks.append(self._execute_batch_select(group_queries, connection_id))
             else:
                 # Execute other queries individually
-                tasks.extend([
-                    self.execute_query(sql, params, connection_id)
-                    for sql, params in group_queries
-                ])
+                tasks.extend(
+                    [
+                        self.execute_query(sql, params, connection_id)
+                        for sql, params in group_queries
+                    ]
+                )
 
         results = await asyncio.gather(*tasks)
-        return [item for sublist in results for item in (sublist if isinstance(sublist, list) else [sublist])]
+        return [
+            item
+            for sublist in results
+            for item in (sublist if isinstance(sublist, list) else [sublist])
+        ]
 
     async def _execute_batch_select(
-        self,
-        queries: List[Tuple[str, Tuple[Any, ...]]],
-        connection_id: str
+        self, queries: List[Tuple[str, Tuple[Any, ...]]], connection_id: str
     ) -> List[QueryResult]:
         """Execute batch SELECT queries efficiently."""
         # For now, execute individually
         # In a real implementation, this could combine queries or use batch APIs
-        return await asyncio.gather(*[
-            self.execute_query(sql, params, connection_id)
-            for sql, params in queries
-        ])
+        return await asyncio.gather(
+            *[self.execute_query(sql, params, connection_id) for sql, params in queries]
+        )
 
     def _calculate_ttl_distribution(self) -> Dict[str, int]:
         """Calculate distribution of TTL values."""
@@ -550,10 +566,7 @@ class QueryCacheManager:
         return ttl_ranges
 
     def _update_cache_stats(
-        self,
-        hit: bool,
-        execution_time: float,
-        error: bool = False
+        self, hit: bool, execution_time: float, error: bool = False
     ) -> None:
         """Update cache performance statistics."""
         if hit:

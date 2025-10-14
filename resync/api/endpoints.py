@@ -18,8 +18,7 @@ import logging
 from typing import Any
 from urllib.parse import unquote
 
-from fastapi import (APIRouter, Depends, Form, HTTPException, Query, Request,
-                     status)
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 from starlette.responses import HTMLResponse
@@ -32,18 +31,29 @@ from resync.core.interfaces import IAgentManager, ITWSClient
 from resync.core.llm_wrapper import optimized_llm  # type: ignore[attr-defined]
 from resync.core.metrics import runtime_metrics  # type: ignore[attr-defined]
 from resync.core.rate_limiter import (  # type: ignore[attr-defined]
-    authenticated_rate_limit, public_rate_limit)
+    authenticated_rate_limit,
+    public_rate_limit,
+)
+
 # Import new monitoring and observability components
 from resync.core.runbooks import runbook_registry
 from resync.core.tws_monitor import tws_monitor  # type: ignore[attr-defined]
+
 # Import CQRS components
 from resync.cqrs.dispatcher import dispatcher
-from resync.cqrs.queries import (CheckTWSConnectionQuery, GetEventLogQuery,
-                                 GetJobDependenciesQuery, GetJobDetailsQuery,
-                                 GetJobHistoryQuery, GetJobLogQuery,
-                                 GetJobsStatusQuery, GetPerformanceMetricsQuery,
-                                 GetPlanDetailsQuery, GetResourceUsageQuery,
-                                 GetWorkstationsStatusQuery)
+from resync.cqrs.queries import (
+    CheckTWSConnectionQuery,
+    GetEventLogQuery,
+    GetJobDependenciesQuery,
+    GetJobDetailsQuery,
+    GetJobHistoryQuery,
+    GetJobLogQuery,
+    GetJobsStatusQuery,
+    GetPerformanceMetricsQuery,
+    GetPlanDetailsQuery,
+    GetResourceUsageQuery,
+    GetWorkstationsStatusQuery,
+)
 from resync.settings import settings
 
 # Import monitoring endpoints
@@ -400,7 +410,9 @@ async def get_resource_usage(
 @public_rate_limit
 async def get_event_log(
     request: Request,
-    last_hours: int = Query(default=24, ge=1, le=168, description="Hours to look back for events"),
+    last_hours: int = Query(
+        default=24, ge=1, le=168, description="Hours to look back for events"
+    ),
     tws_client: ITWSClient = tws_client_dependency,
 ) -> list[dict[str, Any]]:
     """
@@ -847,8 +859,11 @@ async def login_for_access_token(
     """
     OAuth2 compatible token login, get an access token for future requests.
     """
-    from resync.api.auth import (ACCESS_TOKEN_EXPIRE_MINUTES,
-                                 authenticate_admin, create_access_token)
+    from resync.api.auth import (
+        ACCESS_TOKEN_EXPIRE_MINUTES,
+        authenticate_admin,
+        create_access_token,
+    )
 
     user = await authenticate_admin(username, password)
     if not user:

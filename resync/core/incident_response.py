@@ -112,7 +112,10 @@ class Incident:
     @property
     def is_active(self) -> bool:
         """Check if incident is still active."""
-        return self.status not in [IncidentStatus.CLOSED, IncidentStatus.LESSONS_LEARNED]
+        return self.status not in [
+            IncidentStatus.CLOSED,
+            IncidentStatus.LESSONS_LEARNED,
+        ]
 
     @property
     def response_effectiveness(self) -> float:
@@ -124,7 +127,9 @@ class Incident:
         base_score = 50.0
 
         # Bonus for quick response
-        if self.contained_at and (self.contained_at - self.detected_at) < 3600:  # < 1 hour
+        if (
+            self.contained_at and (self.contained_at - self.detected_at) < 3600
+        ):  # < 1 hour
             base_score += 20
 
         # Bonus for comprehensive response
@@ -169,7 +174,7 @@ class Incident:
             "detection_source": self.detection_source,
             "correlation_id": self.correlation_id,
             "tags": list(self.tags),
-            "custom_fields": self.custom_fields
+            "custom_fields": self.custom_fields,
         }
 
 
@@ -222,8 +227,11 @@ class ResponsePlaybook:
 
     def applies_to(self, incident: Incident) -> bool:
         """Check if playbook applies to incident."""
-        severity_ok = (self.severity_range[0].value <= incident.severity.value <=
-                      self.severity_range[1].value)
+        severity_ok = (
+            self.severity_range[0].value
+            <= incident.severity.value
+            <= self.severity_range[1].value
+        )
         category_ok = self.category == incident.category
         return severity_ok and category_ok
 
@@ -261,7 +269,9 @@ class IncidentResponseConfig:
     # Notification settings
     notify_on_detection: bool = True
     notify_on_containment: bool = True
-    escalation_intervals_minutes: List[int] = field(default_factory=lambda: [60, 240, 1440])
+    escalation_intervals_minutes: List[int] = field(
+        default_factory=lambda: [60, 240, 1440]
+    )
 
     # Stakeholder management
     critical_stakeholders: List[str] = field(default_factory=list)
@@ -290,40 +300,60 @@ class IncidentDetector:
                 "category": IncidentCategory.UNAUTHORIZED_ACCESS,
                 "severity": IncidentSeverity.MEDIUM,
                 "condition": lambda events: (
-                    len([e for e in events if e.get("event_type") == "failed_login"]) >= 10 and
-                    len(set(e.get("ip_address") for e in events if e.get("ip_address"))) <= 3
+                    len([e for e in events if e.get("event_type") == "failed_login"])
+                    >= 10
+                    and len(
+                        set(e.get("ip_address") for e in events if e.get("ip_address"))
+                    )
+                    <= 3
                 ),
-                "time_window": 300  # 5 minutes
+                "time_window": 300,  # 5 minutes
             },
             {
                 "name": "anomaly_detected",
                 "category": IncidentCategory.UNAUTHORIZED_ACCESS,
                 "severity": IncidentSeverity.HIGH,
                 "condition": lambda events: (
-                    any(e.get("event_type") == "anomaly" and e.get("severity") == "high" for e in events)
+                    any(
+                        e.get("event_type") == "anomaly" and e.get("severity") == "high"
+                        for e in events
+                    )
                 ),
-                "time_window": 60  # 1 minute
+                "time_window": 60,  # 1 minute
             },
             {
                 "name": "data_breach_suspected",
                 "category": IncidentCategory.DATA_BREACH,
                 "severity": IncidentSeverity.CRITICAL,
                 "condition": lambda events: (
-                    any(e.get("event_type") == "unauthorized_data_access" for e in events) and
-                    any(e.get("severity") == "critical" for e in events)
+                    any(
+                        e.get("event_type") == "unauthorized_data_access"
+                        for e in events
+                    )
+                    and any(e.get("severity") == "critical" for e in events)
                 ),
-                "time_window": 120  # 2 minutes
+                "time_window": 120,  # 2 minutes
             },
             {
                 "name": "dos_attack",
                 "category": IncidentCategory.DENIAL_OF_SERVICE,
                 "severity": IncidentSeverity.HIGH,
                 "condition": lambda events: (
-                    len([e for e in events if e.get("event_type") == "rate_limit_exceeded"]) >= 50 and
-                    len(set(e.get("ip_address") for e in events if e.get("ip_address"))) <= 5
+                    len(
+                        [
+                            e
+                            for e in events
+                            if e.get("event_type") == "rate_limit_exceeded"
+                        ]
+                    )
+                    >= 50
+                    and len(
+                        set(e.get("ip_address") for e in events if e.get("ip_address"))
+                    )
+                    <= 5
                 ),
-                "time_window": 300  # 5 minutes
-            }
+                "time_window": 300,  # 5 minutes
+            },
         ]
 
     async def detect_incident(self, events: List[Dict[str, Any]]) -> Optional[Incident]:
@@ -341,14 +371,14 @@ class IncidentDetector:
                     category=rule["category"],
                     detection_source="automated_detection",
                     evidence=[{"events": events, "rule": rule["name"]}],
-                    tags={"automated", "detected"}
+                    tags={"automated", "detected"},
                 )
 
                 logger.warning(
                     "incident_detected",
                     incident_id=incident_id,
                     severity=incident.severity.value,
-                    category=incident.category.value
+                    category=incident.category.value,
                 )
 
                 return incident
@@ -379,7 +409,7 @@ class IncidentResponder:
                 target_systems=["firewall", "load_balancer"],
                 parameters={"block_duration_hours": 24},
                 success_criteria="IP successfully blocked",
-                rollback_procedure="Remove IP from block list"
+                rollback_procedure="Remove IP from block list",
             ),
             ResponseAction(
                 action_id="disable_user",
@@ -392,7 +422,7 @@ class IncidentResponder:
                 target_systems=["identity_provider", "database"],
                 parameters={"disable_duration_hours": 24},
                 success_criteria="User account disabled",
-                rollback_procedure="Re-enable user account"
+                rollback_procedure="Re-enable user account",
             ),
             ResponseAction(
                 action_id="notify_security_team",
@@ -402,8 +432,11 @@ class IncidentResponder:
                 severity_threshold=IncidentSeverity.MEDIUM,
                 automated=True,
                 target_systems=["email", "slack", "sms"],
-                parameters={"urgency": "high", "channels": ["security_team", "management"]},
-                success_criteria="Notifications sent successfully"
+                parameters={
+                    "urgency": "high",
+                    "channels": ["security_team", "management"],
+                },
+                success_criteria="Notifications sent successfully",
             ),
             ResponseAction(
                 action_id="enable_enhanced_monitoring",
@@ -415,7 +448,7 @@ class IncidentResponder:
                 target_systems=["monitoring_system"],
                 parameters={"monitoring_level": "enhanced", "duration_hours": 24},
                 success_criteria="Monitoring level increased",
-                rollback_procedure="Return to normal monitoring level"
+                rollback_procedure="Return to normal monitoring level",
             ),
             ResponseAction(
                 action_id="backup_critical_data",
@@ -426,8 +459,8 @@ class IncidentResponder:
                 automated=True,
                 target_systems=["backup_system"],
                 parameters={"backup_type": "emergency", "include_audit_logs": True},
-                success_criteria="Backup completed successfully"
-            )
+                success_criteria="Backup completed successfully",
+            ),
         ]
 
         for action in actions:
@@ -442,56 +475,67 @@ class IncidentResponder:
 
         # Find applicable actions
         applicable_actions = [
-            action for action in self.response_actions.values()
+            action
+            for action in self.response_actions.values()
             if action.can_execute(incident) and action.automated
         ]
 
         # Limit number of automated actions
-        applicable_actions = applicable_actions[:self.config.max_automated_actions]
+        applicable_actions = applicable_actions[: self.config.max_automated_actions]
 
         for action in applicable_actions:
             # Check if approval is required
             if action.requires_approval and self.config.require_manual_approval:
                 # Skip automated execution, mark for manual review
-                executed_actions.append({
-                    "action_id": action.action_id,
-                    "status": "pending_approval",
-                    "timestamp": time.time(),
-                    "reason": "Requires manual approval"
-                })
+                executed_actions.append(
+                    {
+                        "action_id": action.action_id,
+                        "status": "pending_approval",
+                        "timestamp": time.time(),
+                        "reason": "Requires manual approval",
+                    }
+                )
                 continue
 
             # Execute action
             try:
                 result = await self._execute_action(action, incident)
 
-                executed_actions.append({
-                    "action_id": action.action_id,
-                    "status": "executed",
-                    "timestamp": time.time(),
-                    "result": result
-                })
+                executed_actions.append(
+                    {
+                        "action_id": action.action_id,
+                        "status": "executed",
+                        "timestamp": time.time(),
+                        "result": result,
+                    }
+                )
 
                 # Update incident
-                incident.response_actions.append({
-                    "action_id": action.action_id,
-                    "timestamp": time.time(),
-                    "result": result,
-                    "automated": True
-                })
+                incident.response_actions.append(
+                    {
+                        "action_id": action.action_id,
+                        "timestamp": time.time(),
+                        "result": result,
+                        "automated": True,
+                    }
+                )
 
             except Exception as e:
                 logger.error(f"Failed to execute action {action.action_id}: {e}")
-                executed_actions.append({
-                    "action_id": action.action_id,
-                    "status": "failed",
-                    "timestamp": time.time(),
-                    "error": str(e)
-                })
+                executed_actions.append(
+                    {
+                        "action_id": action.action_id,
+                        "status": "failed",
+                        "timestamp": time.time(),
+                        "error": str(e),
+                    }
+                )
 
         return executed_actions
 
-    async def _execute_action(self, action: ResponseAction, incident: Incident) -> Dict[str, Any]:
+    async def _execute_action(
+        self, action: ResponseAction, incident: Incident
+    ) -> Dict[str, Any]:
         """Execute a specific response action."""
         # This is where you'd integrate with actual systems
         # For now, simulate execution
@@ -500,21 +544,21 @@ class IncidentResponder:
             # Simulate notification
             result = {
                 "notifications_sent": len(action.parameters.get("channels", [])),
-                "channels": action.parameters.get("channels", [])
+                "channels": action.parameters.get("channels", []),
             }
 
         elif action.action_id == "isolate_ip":
             # Simulate IP blocking
             result = {
                 "ips_blocked": 1,  # Would get from incident evidence
-                "block_duration_hours": action.parameters.get("block_duration_hours")
+                "block_duration_hours": action.parameters.get("block_duration_hours"),
             }
 
         elif action.action_id == "enable_enhanced_monitoring":
             # Simulate monitoring increase
             result = {
                 "monitoring_level": action.parameters.get("monitoring_level"),
-                "duration_hours": action.parameters.get("duration_hours")
+                "duration_hours": action.parameters.get("duration_hours"),
             }
 
         else:
@@ -525,7 +569,7 @@ class IncidentResponder:
             "response_action_executed",
             action_id=action.action_id,
             incident_id=incident.incident_id,
-            result=result
+            result=result,
         )
 
         return result
@@ -544,11 +588,7 @@ class NotificationManager:
 
         message = self._format_incident_notification(incident, "DETECTED")
 
-        await self._send_notifications(
-            message,
-            ["security_team"],
-            "incident_detected"
-        )
+        await self._send_notifications(message, ["security_team"], "incident_detected")
 
     async def notify_incident_contained(self, incident: Incident) -> None:
         """Send notifications for incident containment."""
@@ -558,16 +598,15 @@ class NotificationManager:
         message = self._format_incident_notification(incident, "CONTAINED")
 
         await self._send_notifications(
-            message,
-            ["security_team", "management"],
-            "incident_contained"
+            message, ["security_team", "management"], "incident_contained"
         )
 
-    async def send_escalation_notification(self, incident: Incident, level: int) -> None:
+    async def send_escalation_notification(
+        self, incident: Incident, level: int
+    ) -> None:
         """Send escalation notification."""
         message = self._format_incident_notification(
-            incident,
-            f"ESCALATION LEVEL {level}"
+            incident, f"ESCALATION LEVEL {level}"
         )
 
         # Escalate to more stakeholders
@@ -578,9 +617,7 @@ class NotificationManager:
             stakeholders.extend(["legal", "compliance"])
 
         await self._send_notifications(
-            message,
-            stakeholders,
-            f"incident_escalation_level_{level}"
+            message, stakeholders, f"incident_escalation_level_{level}"
         )
 
     def _format_incident_notification(self, incident: Incident, event_type: str) -> str:
@@ -609,10 +646,7 @@ Please review and take appropriate action.
         """.strip()
 
     async def _send_notifications(
-        self,
-        message: str,
-        stakeholders: List[str],
-        notification_type: str
+        self, message: str, stakeholders: List[str], notification_type: str
     ) -> None:
         """Send notifications via configured channels."""
         # This would integrate with actual notification systems
@@ -625,7 +659,7 @@ Please review and take appropriate action.
                     stakeholder=stakeholder,
                     channel=channel,
                     type=notification_type,
-                    message_preview=message[:100] + "..."
+                    message_preview=message[:100] + "...",
                 )
 
 
@@ -686,28 +720,36 @@ class IncidentResponseEngine:
                 triage_steps=[
                     "Verify incident details and impact",
                     "Determine affected systems and data",
-                    "Assess attacker capabilities and intent"
+                    "Assess attacker capabilities and intent",
                 ],
                 containment_steps=[
                     "Isolate affected systems from network",
                     "Revoke compromised credentials",
-                    "Implement emergency access controls"
+                    "Implement emergency access controls",
                 ],
                 eradication_steps=[
                     "Remove malicious code or backdoors",
                     "Patch exploited vulnerabilities",
-                    "Clean compromised systems"
+                    "Clean compromised systems",
                 ],
                 recovery_steps=[
                     "Restore systems from clean backups",
                     "Validate system integrity",
-                    "Monitor for re-compromise"
+                    "Monitor for re-compromise",
                 ],
                 automated_actions=[
-                    ResponseAction("isolate_ip", "Isolate IP", "", "isolate", IncidentSeverity.HIGH),
-                    ResponseAction("notify_security_team", "Notify Team", "", "notify", IncidentSeverity.MEDIUM)
+                    ResponseAction(
+                        "isolate_ip", "Isolate IP", "", "isolate", IncidentSeverity.HIGH
+                    ),
+                    ResponseAction(
+                        "notify_security_team",
+                        "Notify Team",
+                        "",
+                        "notify",
+                        IncidentSeverity.MEDIUM,
+                    ),
                 ],
-                notify_stakeholders=["security_team", "it_ops"]
+                notify_stakeholders=["security_team", "it_ops"],
             ),
             ResponsePlaybook(
                 playbook_id="pb_data_breach",
@@ -718,29 +760,41 @@ class IncidentResponseEngine:
                 triage_steps=[
                     "Assess breach scope and data exposure",
                     "Notify legal and compliance teams",
-                    "Determine notification requirements"
+                    "Determine notification requirements",
                 ],
                 containment_steps=[
                     "Stop data exfiltration",
                     "Isolate affected databases",
-                    "Secure backup systems"
+                    "Secure backup systems",
                 ],
                 eradication_steps=[
                     "Remove unauthorized access",
                     "Audit and patch systems",
-                    "Enhance monitoring"
+                    "Enhance monitoring",
                 ],
                 recovery_steps=[
                     "Restore from clean backups",
                     "Validate data integrity",
-                    "Implement additional controls"
+                    "Implement additional controls",
                 ],
                 automated_actions=[
-                    ResponseAction("backup_critical_data", "Backup Data", "", "protect", IncidentSeverity.HIGH),
-                    ResponseAction("notify_security_team", "Notify Team", "", "notify", IncidentSeverity.HIGH)
+                    ResponseAction(
+                        "backup_critical_data",
+                        "Backup Data",
+                        "",
+                        "protect",
+                        IncidentSeverity.HIGH,
+                    ),
+                    ResponseAction(
+                        "notify_security_team",
+                        "Notify Team",
+                        "",
+                        "notify",
+                        IncidentSeverity.HIGH,
+                    ),
                 ],
-                notify_stakeholders=["security_team", "legal", "executives"]
-            )
+                notify_stakeholders=["security_team", "legal", "executives"],
+            ),
         ]
 
         for playbook in playbooks:
@@ -795,7 +849,7 @@ class IncidentResponseEngine:
         severity: IncidentSeverity,
         category: IncidentCategory,
         detection_source: str = "manual_creation",
-        **kwargs
+        **kwargs,
     ) -> str:
         """Create an incident manually."""
         incident_id = f"inc_manual_{int(time.time())}_{hash(title) % 10000}"
@@ -809,7 +863,7 @@ class IncidentResponseEngine:
             status=IncidentStatus.TRIAGED,  # Skip detection phase
             triaged_at=time.time(),
             detection_source=detection_source,
-            **kwargs
+            **kwargs,
         )
 
         self.active_incidents[incident_id] = incident
@@ -822,10 +876,7 @@ class IncidentResponseEngine:
         return incident_id
 
     async def update_incident_status(
-        self,
-        incident_id: str,
-        new_status: IncidentStatus,
-        **kwargs
+        self, incident_id: str, new_status: IncidentStatus, **kwargs
     ) -> bool:
         """Update incident status and execute appropriate actions."""
         if incident_id not in self.active_incidents:
@@ -860,7 +911,7 @@ class IncidentResponseEngine:
             "incident_status_updated",
             incident_id=incident_id,
             old_status=old_status.value,
-            new_status=new_status.value
+            new_status=new_status.value,
         )
 
         return True
@@ -874,9 +925,7 @@ class IncidentResponseEngine:
         return list(self.active_incidents.values())
 
     def get_incident_history(
-        self,
-        limit: int = 50,
-        severity_filter: Optional[IncidentSeverity] = None
+        self, limit: int = 50, severity_filter: Optional[IncidentSeverity] = None
     ) -> List[Incident]:
         """Get incident history with optional filtering."""
         incidents = self.incident_history[-limit:]
@@ -895,17 +944,23 @@ class IncidentResponseEngine:
         # Calculate metrics
         contained_incidents = [i for i in self.incident_history if i.contained_at]
         avg_containment_time = (
-            sum(i.contained_at - i.detected_at for i in contained_incidents) / len(contained_incidents)
-            if contained_incidents else 0
+            sum(i.contained_at - i.detected_at for i in contained_incidents)
+            / len(contained_incidents)
+            if contained_incidents
+            else 0
         )
 
         severity_distribution = {}
         for incident in self.incident_history + list(self.active_incidents.values()):
-            severity_distribution[incident.severity.value] = severity_distribution.get(incident.severity.value, 0) + 1
+            severity_distribution[incident.severity.value] = (
+                severity_distribution.get(incident.severity.value, 0) + 1
+            )
 
         category_distribution = {}
         for incident in self.incident_history + list(self.active_incidents.values()):
-            category_distribution[incident.category.value] = category_distribution.get(incident.category.value, 0) + 1
+            category_distribution[incident.category.value] = (
+                category_distribution.get(incident.category.value, 0) + 1
+            )
 
         return {
             "total_incidents": total_incidents,
@@ -916,7 +971,10 @@ class IncidentResponseEngine:
             "category_distribution": category_distribution,
             "automated_responses": self.automated_responses,
             "manual_interventions": self.manual_interventions,
-            "response_effectiveness": sum(i.response_effectiveness for i in self.incident_history) / max(1, len(self.incident_history))
+            "response_effectiveness": sum(
+                i.response_effectiveness for i in self.incident_history
+            )
+            / max(1, len(self.incident_history)),
         }
 
     async def _check_for_incident(self) -> None:
@@ -926,7 +984,9 @@ class IncidentResponseEngine:
 
         # Get recent events within detection window
         cutoff_time = time.time() - self.detection_window
-        recent_events = [e for e in self.event_buffer if e.get("timestamp", 0) > cutoff_time]
+        recent_events = [
+            e for e in self.event_buffer if e.get("timestamp", 0) > cutoff_time
+        ]
 
         if len(recent_events) < 3:  # Need minimum events for pattern detection
             return
@@ -951,12 +1011,16 @@ class IncidentResponseEngine:
 
         if applicable_playbook:
             incident.tags.add(f"playbook_{applicable_playbook.playbook_id}")
-            logger.info(f"Applied playbook {applicable_playbook.playbook_id} to incident {incident.incident_id}")
+            logger.info(
+                f"Applied playbook {applicable_playbook.playbook_id} to incident {incident.incident_id}"
+            )
 
         # Execute automated response
         if self.config.enable_automated_response:
             executed_actions = await self.responder.execute_response(incident)
-            self.automated_responses += len([a for a in executed_actions if a["status"] == "executed"])
+            self.automated_responses += len(
+                [a for a in executed_actions if a["status"] == "executed"]
+            )
 
         # Send notifications
         await self.notifier.notify_incident_detected(incident)
@@ -979,14 +1043,12 @@ class IncidentResponseEngine:
             "lessons_learned": [
                 "Review automated response effectiveness",
                 "Update detection rules if needed",
-                "Improve stakeholder communication"
-            ]
+                "Improve stakeholder communication",
+            ],
         }
 
         logger.info(
-            "incident_post_mortem",
-            incident_id=incident.incident_id,
-            analysis=analysis
+            "incident_post_mortem", incident_id=incident.incident_id, analysis=analysis
         )
 
     async def _incident_detection_worker(self) -> None:
@@ -1014,13 +1076,17 @@ class IncidentResponseEngine:
                     # Check escalation intervals
                     age_minutes = (current_time - incident.detected_at) / 60
 
-                    for i, interval in enumerate(self.config.escalation_intervals_minutes):
+                    for i, interval in enumerate(
+                        self.config.escalation_intervals_minutes
+                    ):
                         if age_minutes >= interval:
                             # Check if we already escalated at this level
                             escalation_tag = f"escalated_level_{i+1}"
                             if escalation_tag not in incident.tags:
                                 incident.tags.add(escalation_tag)
-                                await self.notifier.send_escalation_notification(incident, i+1)
+                                await self.notifier.send_escalation_notification(
+                                    incident, i + 1
+                                )
                                 break
 
             except asyncio.CancelledError:
@@ -1036,7 +1102,9 @@ class IncidentResponseEngine:
 
                 # Close old incidents
                 current_time = time.time()
-                cutoff_time = current_time - (self.config.review_incidents_after_days * 24 * 3600)
+                cutoff_time = current_time - (
+                    self.config.review_incidents_after_days * 24 * 3600
+                )
 
                 to_close = []
                 for incident_id, incident in self.active_incidents.items():
@@ -1044,7 +1112,9 @@ class IncidentResponseEngine:
                         to_close.append(incident_id)
 
                 for incident_id in to_close:
-                    await self.update_incident_status(incident_id, IncidentStatus.CLOSED)
+                    await self.update_incident_status(
+                        incident_id, IncidentStatus.CLOSED
+                    )
 
             except asyncio.CancelledError:
                 break

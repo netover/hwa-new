@@ -17,8 +17,7 @@ alerting_logger = structlog.get_logger("resync.alerting")
 
 from resync.config.slo import KPI_DEFINITIONS, validate_slo_compliance
 from resync.core.metrics import runtime_metrics
-from resync.core.teams_integration import (TeamsNotification,
-                                           get_teams_integration)
+from resync.core.teams_integration import TeamsNotification, get_teams_integration
 
 
 # Initialize default SLO alert rules at module level

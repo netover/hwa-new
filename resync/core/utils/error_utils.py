@@ -12,16 +12,21 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from resync.models.error_models import (AuthenticationErrorResponse,
-                                        AuthorizationErrorResponse,
-                                        BaseErrorResponse,
-                                        BusinessLogicErrorResponse,
-                                        ErrorCategory, ErrorSeverity,
-                                        ExternalServiceErrorResponse,
-                                        RateLimitErrorResponse,
-                                        SystemErrorResponse,
-                                        ValidationErrorResponse)
+from resync.models.error_models import (
+    AuthenticationErrorResponse,
+    AuthorizationErrorResponse,
+    BaseErrorResponse,
+    BusinessLogicErrorResponse,
+    ErrorCategory,
+    ErrorSeverity,
+    ExternalServiceErrorResponse,
+    RateLimitErrorResponse,
+    SystemErrorResponse,
+    ValidationErrorResponse,
+)
 from resync.settings import settings
+
+from .error_factories import ErrorFactory
 
 logger = logging.getLogger(__name__)
 
@@ -287,20 +292,6 @@ def should_include_stack_trace() -> bool:
     return False
 
 
-def get_error_status_code(error_category: ErrorCategory) -> int:
-    """Get HTTP status code based on error category."""
-    status_code_map = {
-        ErrorCategory.VALIDATION: status.HTTP_400_BAD_REQUEST,
-        ErrorCategory.AUTHENTICATION: status.HTTP_401_UNAUTHORIZED,
-        ErrorCategory.AUTHORIZATION: status.HTTP_403_FORBIDDEN,
-        ErrorCategory.BUSINESS_LOGIC: status.HTTP_404_NOT_FOUND,  # Changed from 400 to 404 for resource not found
-        ErrorCategory.SYSTEM: status.HTTP_500_INTERNAL_SERVER_ERROR,
-        ErrorCategory.EXTERNAL_SERVICE: status.HTTP_503_SERVICE_UNAVAILABLE,
-        ErrorCategory.RATE_LIMIT: status.HTTP_429_TOO_MANY_REQUESTS,
-    }
-    return status_code_map.get(error_category, status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 def log_error_response(
     error_response: BaseErrorResponse, original_exception: Optional[Exception] = None
 ) -> None:
@@ -335,161 +326,18 @@ def log_error_response(
         logger.info(f"Low severity error occurred: {log_data}")
 
 
-def create_error_response_from_exception(
-    exception: Exception,
-    request: Optional[Request] = None,
-    correlation_id: Optional[str] = None,
-) -> BaseErrorResponse:
-    """Create standardized error response from any exception with security considerations."""
-    from resync.core.exceptions import DatabaseError, LLMError, NotFoundError
-    from resync.core.exceptions import ResyncException as BaseResyncException
-    from resync.core.exceptions import TWSConnectionError
-    from resync.core.exceptions_enhanced import \
-        DatabaseError as EnhancedDatabaseError
-    from resync.core.exceptions_enhanced import LLMError as EnhancedLLMError
-    from resync.core.exceptions_enhanced import \
-        NotFoundError as EnhancedNotFoundError
-    from resync.core.exceptions_enhanced import \
-        ResyncException as EnhancedResyncException
-    from resync.core.exceptions_enhanced import \
-        TWSConnectionError as EnhancedTWSConnectionError
-
-    builder = ErrorResponseBuilder()
-
-    if correlation_id:
-        builder.with_correlation_id(correlation_id)
-    else:
-        builder.with_correlation_id(generate_correlation_id())
-
-    if request:
-        builder.with_request_context(request)
-
-    # Enhanced security: only include stack traces in non-production environments
-    is_production = getattr(settings, "APP_ENV", "development") == "production"
-    include_stack_trace = should_include_stack_trace() and not is_production
-
-    # In production, sanitize error messages to prevent information disclosure
-    if is_production:
-        # Don't include raw exception details in production
-        builder.with_stack_trace(include_stack_trace and is_production is False)
-    else:
-        builder.with_stack_trace(include_stack_trace)
-
-    # Handle enhanced Resync exceptions with richer information
-    if isinstance(exception, EnhancedResyncException):
-        return _handle_enhanced_resync_exception(builder, exception, is_production)
-
-    # Handle base Resync exceptions for backward compatibility
-    elif isinstance(exception, (TWSConnectionError, EnhancedTWSConnectionError)):
-        return builder.build_external_service_error("TWS", "service_error")
-    elif isinstance(exception, (LLMError, EnhancedLLMError)):
-        return builder.build_external_service_error("LLM", "service_error")
-    elif isinstance(exception, (DatabaseError, EnhancedDatabaseError)):
-        return builder.build_system_error("database_error")
-    elif isinstance(exception, (NotFoundError, EnhancedNotFoundError)):
-        return builder.build_business_logic_error(
-            "resource_not_found", resource="Resource"
-        )
-    elif isinstance(exception, BaseResyncException):
-        # Generic base ResyncException - create system error
-        return builder.build_system_error(
-            "internal_server_error", exception=exception if not is_production else None
-        )
-    else:
-        # Unknown exception - create system error
-        return builder.build_system_error(
-            "internal_server_error", exception=exception if not is_production else None
-        )
-
-
-def _handle_enhanced_resync_exception(
-    builder: ErrorResponseBuilder, exception: Exception, is_production: bool
-) -> BaseErrorResponse:
-    """Handle enhanced Resync exceptions with rich information."""
-    # Use the enhanced exception's information to create a more detailed response
-    message = exception.message
-    user_friendly_message = exception.user_friendly_message
-    details = exception.details.copy()  # Copy to avoid modifying original
-
-    # Sanitize details in production to prevent sensitive data leakage
-    if is_production:
-        # Remove potentially sensitive information
-        details.pop("original_exception", None)
-        if "details" in details:
-            # Further sanitize nested details
-            if isinstance(details["details"], dict):
-                details["details"] = {
-                    k: v
-                    for k, v in details["details"].items()
-                    if k not in ["password", "token", "credentials", "key"]
-                }
-
-    # Map the enhanced exception to the appropriate response type based on category
-    if exception.error_category == "VALIDATION":
-        return builder.build_validation_error(
-            [
-                {
-                    "loc": ["validation"],
-                    "msg": sanitize_error_message(message),
-                    "type": "value_error",
-                }
-            ],
-            sanitize_error_message(user_friendly_message),
-        )
-    elif exception.error_category == "BUSINESS_LOGIC":
-        return _handle_business_logic_exception(
-            builder, exception, message, user_friendly_message, details, is_production
-        )
-    elif exception.error_category == "EXTERNAL_SERVICE":
-        service_name = (
-            details.get("service", "External Service")
-            if details
-            else "External Service"
-        )
-        return builder.build_external_service_error(
-            service_name,
-            user_friendly_message=sanitize_error_message(user_friendly_message),
-            details=details,
-        )
-    elif exception.error_category == "SYSTEM":
-        return builder.build_system_error(
-            "internal_server_error",
-            user_friendly_message=sanitize_error_message(user_friendly_message),
-            details=details,
-            exception=exception if not is_production else None,
-        )
-    else:
-        # For other enhanced exceptions
-        return builder.build_system_error(
-            "internal_server_error",
-            exception=exception if not is_production else None,
-            user_friendly_message=sanitize_error_message(user_friendly_message),
-            details=details,
-        )
-
-
-def _handle_business_logic_exception(
-    builder: ErrorResponseBuilder,
-    exception: Exception,
-    message: str,
-    user_friendly_message: str,
-    details: dict,
-    is_production: bool,
-) -> BaseErrorResponse:
-    """Handle business logic exceptions."""
-    from resync.core.exceptions_enhanced import \
-        NotFoundError as EnhancedNotFoundError
-
-    if isinstance(exception, EnhancedNotFoundError):
-        return builder.build_business_logic_error(
-            "resource_not_found", resource="Resource"
-        )
-    else:
-        return builder.build_business_logic_error(
-            "invalid_operation",
-            user_friendly_message=sanitize_error_message(user_friendly_message),
-            details=details,
-        )
+def get_error_status_code(error_category: ErrorCategory) -> int:
+    """Get HTTP status code based on error category."""
+    status_code_map = {
+        ErrorCategory.VALIDATION: status.HTTP_400_BAD_REQUEST,
+        ErrorCategory.AUTHENTICATION: status.HTTP_401_UNAUTHORIZED,
+        ErrorCategory.AUTHORIZATION: status.HTTP_403_FORBIDDEN,
+        ErrorCategory.BUSINESS_LOGIC: status.HTTP_404_NOT_FOUND,  # Changed from 400 to 404 for resource not found
+        ErrorCategory.SYSTEM: status.HTTP_500_INTERNAL_SERVER_ERROR,
+        ErrorCategory.EXTERNAL_SERVICE: status.HTTP_503_SERVICE_UNAVAILABLE,
+        ErrorCategory.RATE_LIMIT: status.HTTP_429_TOO_MANY_REQUESTS,
+    }
+    return status_code_map.get(error_category, status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ErrorSanitizer:
@@ -581,8 +429,9 @@ def register_exception_handlers(app):  # type: ignore
     from starlette.exceptions import HTTPException as StarletteHTTPException
 
     from resync.core.exceptions import ResyncException as BaseResyncException
-    from resync.core.exceptions_enhanced import \
-        ResyncException as EnhancedResyncException
+    from resync.core.exceptions_enhanced import (
+        ResyncException as EnhancedResyncException,
+    )
 
     # Register handler for validation errors
     @app.exception_handler(RequestValidationError)  # type: ignore
@@ -655,3 +504,12 @@ def register_exception_handlers(app):  # type: ignore
         return create_json_response_from_error(error_response)
 
     return app
+
+
+def create_error_response_from_exception(
+    exception: Exception,
+    request: Optional[Request] = None,
+    correlation_id: Optional[str] = None,
+) -> BaseErrorResponse:
+    """Create standardized error response from any exception with security considerations."""
+    return ErrorFactory.create_error_response(exception, request, correlation_id)

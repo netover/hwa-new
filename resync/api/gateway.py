@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import time
 import re
 from collections import defaultdict, deque
@@ -34,7 +33,10 @@ import jwt
 from cryptography.fernet import Fernet
 
 from resync.core.structured_logger import get_logger
-from resync.core.circuit_breaker import adaptive_llm_api_breaker, adaptive_tws_api_breaker
+from resync.core.circuit_breaker import (
+    adaptive_llm_api_breaker,
+    adaptive_tws_api_breaker,
+)
 
 logger = get_logger(__name__)
 
@@ -104,7 +106,9 @@ class RouteConfiguration:
 
     path_pattern: str
     service_name: str
-    methods: Set[HTTPMethod] = field(default_factory=lambda: {HTTPMethod.GET, HTTPMethod.POST})
+    methods: Set[HTTPMethod] = field(
+        default_factory=lambda: {HTTPMethod.GET, HTTPMethod.POST}
+    )
     strip_prefix: bool = True
     add_prefix: str = ""
     timeout_seconds: float = 30.0
@@ -173,7 +177,9 @@ class APIGateway:
 
         # Runtime state
         self.service_index: Dict[str, int] = defaultdict(int)  # For round-robin
-        self.active_connections: Dict[str, int] = defaultdict(int)  # For least connections
+        self.active_connections: Dict[str, int] = defaultdict(
+            int
+        )  # For least connections
         self.request_counts: Dict[str, deque] = defaultdict(lambda: deque(maxlen=10000))
 
         # Caching
@@ -193,7 +199,7 @@ class APIGateway:
             "response_time_avg": 0.0,
             "rate_limited_requests": 0,
             "cached_responses": 0,
-            "circuit_breaker_trips": 0
+            "circuit_breaker_trips": 0,
         }
 
         # Background tasks
@@ -212,7 +218,7 @@ class APIGateway:
             limit_type=RateLimitType.REQUESTS_PER_MINUTE,
             limit_value=100,
             window_seconds=60,
-            burst_limit=150
+            burst_limit=150,
         )
 
         # Add default WAF rules
@@ -221,20 +227,20 @@ class APIGateway:
                 "name": "sql_injection",
                 "pattern": r"(?i)(union|select|insert|delete|update|drop|create|alter)\s",
                 "severity": "high",
-                "action": "block"
+                "action": "block",
             },
             {
                 "name": "xss_attempt",
                 "pattern": r"<script[^>]*>.*?</script>",
                 "severity": "high",
-                "action": "block"
+                "action": "block",
             },
             {
                 "name": "path_traversal",
                 "pattern": r"\.\./|\.\.\\",
                 "severity": "critical",
-                "action": "block"
-            }
+                "action": "block",
+            },
         ]
 
         # Compile regex patterns
@@ -327,7 +333,9 @@ class APIGateway:
                 return self._create_error_response(429, "Rate limit exceeded")
 
             # 3. Authentication
-            if request.get("route_config", RouteConfiguration("", "")).authentication_required:
+            if request.get(
+                "route_config", RouteConfiguration("", "")
+            ).authentication_required:
                 auth_result = await self._authenticate_request(request)
                 if not auth_result["authenticated"]:
                     return self._create_error_response(401, "Authentication required")
@@ -341,7 +349,9 @@ class APIGateway:
             request["route_config"] = route_config
 
             # 5. Service discovery and load balancing
-            service_endpoint = await self._select_service_endpoint(route_config.service_name, request)
+            service_endpoint = await self._select_service_endpoint(
+                route_config.service_name, request
+            )
             if not service_endpoint:
                 return self._create_error_response(503, "Service unavailable")
 
@@ -352,7 +362,9 @@ class APIGateway:
             if service_endpoint.circuit_breaker_enabled:
                 circuit_breaker = self._get_circuit_breaker(route_config.service_name)
                 if not await circuit_breaker.can_execute():
-                    return self._create_error_response(503, "Service temporarily unavailable")
+                    return self._create_error_response(
+                        503, "Service temporarily unavailable"
+                    )
 
             # 8. Cache check
             if route_config.caching_enabled and request.method == "GET":
@@ -363,13 +375,19 @@ class APIGateway:
                     return cached_response
 
             # 9. Forward request
-            response = await self._forward_request(transformed_request, service_endpoint, route_config)
+            response = await self._forward_request(
+                transformed_request, service_endpoint, route_config
+            )
 
             # 10. Response processing
             processed_response = await self._process_response(response, route_config)
 
             # 11. Caching
-            if route_config.caching_enabled and request.method == "GET" and response.status == 200:
+            if (
+                route_config.caching_enabled
+                and request.method == "GET"
+                and response.status == 200
+            ):
                 cache_key = self._generate_cache_key(request)
                 self._cache_response(cache_key, processed_response)
 
@@ -377,8 +395,11 @@ class APIGateway:
             self.metrics["requests_success"] += 1
             processing_time = time.time() - start_time
             self.metrics["response_time_avg"] = (
-                (self.metrics["response_time_avg"] * (self.metrics["requests_success"] - 1)) +
-                processing_time
+                (
+                    self.metrics["response_time_avg"]
+                    * (self.metrics["requests_success"] - 1)
+                )
+                + processing_time
             ) / self.metrics["requests_success"]
 
             return processed_response
@@ -410,7 +431,11 @@ class APIGateway:
     async def _check_rate_limits(self, request: web.Request) -> Dict[str, Any]:
         """Check rate limits for request."""
         route_config = getattr(request, "route_config", None)
-        rule_name = route_config.rate_limit.get("rule", "default") if route_config and route_config.rate_limit else "default"
+        rule_name = (
+            route_config.rate_limit.get("rule", "default")
+            if route_config and route_config.rate_limit
+            else "default"
+        )
 
         rule = self.rate_limits.get(rule_name, self.rate_limits["default"])
         if not rule:
@@ -428,7 +453,10 @@ class APIGateway:
             self.request_counts[key] = deque(maxlen=1000)
 
         # Clean old requests
-        while self.request_counts[key] and current_time - self.request_counts[key][0] > rule.window_seconds:
+        while (
+            self.request_counts[key]
+            and current_time - self.request_counts[key][0] > rule.window_seconds
+        ):
             self.request_counts[key].popleft()
 
         # Check rate limit
@@ -480,7 +508,9 @@ class APIGateway:
     def _find_route(self, request: web.Request) -> Optional[RouteConfiguration]:
         """Find matching route configuration."""
         for route in self.routes:
-            if route.matches_path(request.path) and request.method in [m.value for m in route.methods]:
+            if route.matches_path(request.path) and request.method in [
+                m.value for m in route.methods
+            ]:
                 return route
         return None
 
@@ -488,10 +518,12 @@ class APIGateway:
         self,
         service_name: str,
         request: web.Request,
-        strategy: LoadBalancingStrategy = LoadBalancingStrategy.ROUND_ROBIN
+        strategy: LoadBalancingStrategy = LoadBalancingStrategy.ROUND_ROBIN,
     ) -> Optional[ServiceEndpoint]:
         """Select service endpoint using load balancing strategy."""
-        available_endpoints = [ep for ep in self.services.get(service_name, []) if ep.is_healthy]
+        available_endpoints = [
+            ep for ep in self.services.get(service_name, []) if ep.is_healthy
+        ]
 
         if not available_endpoints:
             return None
@@ -503,7 +535,10 @@ class APIGateway:
 
         elif strategy == LoadBalancingStrategy.LEAST_CONNECTIONS:
             # Select endpoint with least active connections
-            return min(available_endpoints, key=lambda ep: self.active_connections.get(ep.url, 0))
+            return min(
+                available_endpoints,
+                key=lambda ep: self.active_connections.get(ep.url, 0),
+            )
 
         elif strategy == LoadBalancingStrategy.WEIGHTED_ROUND_ROBIN:
             # Simple weighted selection
@@ -513,9 +548,10 @@ class APIGateway:
 
             # This is a simplified implementation
             weights = [ep.weight for ep in available_endpoints]
-            cumulative_weights = [sum(weights[:i+1]) for i in range(len(weights))]
+            cumulative_weights = [sum(weights[: i + 1]) for i in range(len(weights))]
 
             import random
+
             rand = random.randint(1, total_weight)
             for i, weight in enumerate(cumulative_weights):
                 if rand <= weight:
@@ -523,7 +559,9 @@ class APIGateway:
 
         return available_endpoints[0]  # Default fallback
 
-    async def _transform_request(self, request: web.Request, route_config: RouteConfiguration) -> web.Request:
+    async def _transform_request(
+        self, request: web.Request, route_config: RouteConfiguration
+    ) -> web.Request:
         """Transform request before forwarding."""
         if not route_config.transformation_enabled:
             return request
@@ -535,9 +573,13 @@ class APIGateway:
         if route_config.strip_prefix:
             new_path = request.path
             if route_config.path_pattern.startswith("/"):
-                prefix = route_config.path_pattern.split("/")[1] if "/" in route_config.path_pattern[1:] else ""
+                prefix = (
+                    route_config.path_pattern.split("/")[1]
+                    if "/" in route_config.path_pattern[1:]
+                    else ""
+                )
                 if prefix and new_path.startswith(f"/{prefix}"):
-                    new_path = new_path[len(f"/{prefix}"):]
+                    new_path = new_path[len(f"/{prefix}") :]
 
             # Add new prefix if configured
             if route_config.add_prefix:
@@ -564,7 +606,7 @@ class APIGateway:
         self,
         request: web.Request,
         endpoint: ServiceEndpoint,
-        route_config: RouteConfiguration
+        route_config: RouteConfiguration,
     ) -> web.Response:
         """Forward request to service endpoint."""
         # Increment active connections
@@ -577,15 +619,21 @@ class APIGateway:
             # Prepare headers (remove hop-by-hop headers)
             headers = dict(request.headers)
             hop_by_hop_headers = {
-                'connection', 'keep-alive', 'proxy-authenticate',
-                'proxy-authorization', 'te', 'trailers', 'transfer-encoding', 'upgrade'
+                "connection",
+                "keep-alive",
+                "proxy-authenticate",
+                "proxy-authorization",
+                "te",
+                "trailers",
+                "transfer-encoding",
+                "upgrade",
             }
             for header in hop_by_hop_headers:
                 headers.pop(header, None)
 
             # Add gateway headers
-            headers['X-Forwarded-For'] = self._get_client_ip(request)
-            headers['X-Gateway-Request-Id'] = request.get('request_id', 'unknown')
+            headers["X-Forwarded-For"] = self._get_client_ip(request)
+            headers["X-Gateway-Request-Id"] = request.get("request_id", "unknown")
 
             # Create HTTP client session
             timeout = aiohttp.ClientTimeout(total=route_config.timeout_seconds)
@@ -597,14 +645,14 @@ class APIGateway:
                     url=target_url,
                     headers=headers,
                     data=await request.read() if request.body_exists else None,
-                    allow_redirects=False
+                    allow_redirects=False,
                 ) as response:
                     # Create response
                     response_data = await response.read()
                     gateway_response = web.Response(
                         status=response.status,
                         headers=dict(response.headers),
-                        body=response_data
+                        body=response_data,
                     )
 
                     return gateway_response
@@ -618,11 +666,13 @@ class APIGateway:
             # Decrement active connections
             self.active_connections[endpoint.url] -= 1
 
-    async def _process_response(self, response: web.Response, route_config: RouteConfiguration) -> web.Response:
+    async def _process_response(
+        self, response: web.Response, route_config: RouteConfiguration
+    ) -> web.Response:
         """Process response before returning to client."""
         # Add gateway headers
-        response.headers['X-Gateway-Processed'] = 'true'
-        response.headers['X-Gateway-Timestamp'] = str(int(time.time()))
+        response.headers["X-Gateway-Processed"] = "true"
+        response.headers["X-Gateway-Timestamp"] = str(int(time.time()))
 
         # Apply response transformations if configured
         if route_config.transformation_enabled:
@@ -636,7 +686,7 @@ class APIGateway:
         key_parts = [
             request.method,
             request.path_qs,
-            str(sorted(request.headers.items()))
+            str(sorted(request.headers.items())),
         ]
         key_string = "|".join(key_parts)
         return hashlib.md5(key_string.encode()).hexdigest()
@@ -649,7 +699,7 @@ class APIGateway:
                 return web.Response(
                     status=cached_data["status"],
                     headers=cached_data["headers"],
-                    body=cached_data["body"]
+                    body=cached_data["body"],
                 )
             else:
                 # Cache expired
@@ -658,29 +708,35 @@ class APIGateway:
 
         return None
 
-    def _cache_response(self, cache_key: str, response: web.Response, ttl_seconds: int = 300) -> None:
+    def _cache_response(
+        self, cache_key: str, response: web.Response, ttl_seconds: int = 300
+    ) -> None:
         """Cache response."""
         self.cache[cache_key] = {
             "status": response.status,
             "headers": dict(response.headers),
-            "body": response.body if hasattr(response, 'body') else b''
+            "body": response.body if hasattr(response, "body") else b"",
         }
         self.cache_ttl[cache_key] = time.time() + ttl_seconds
 
     def _get_client_ip(self, request: web.Request) -> str:
         """Get client IP address."""
         # Check forwarded headers
-        forwarded_for = request.headers.get('X-Forwarded-For')
+        forwarded_for = request.headers.get("X-Forwarded-For")
         if forwarded_for:
-            return forwarded_for.split(',')[0].strip()
+            return forwarded_for.split(",")[0].strip()
 
         # Check real IP header
-        real_ip = request.headers.get('X-Real-IP')
+        real_ip = request.headers.get("X-Real-IP")
         if real_ip:
             return real_ip
 
         # Fall back to peer name
-        return request.transport.get_extra_info('peername')[0] if request.transport else 'unknown'
+        return (
+            request.transport.get_extra_info("peername")[0]
+            if request.transport
+            else "unknown"
+        )
 
     def _create_error_response(self, status: int, message: str) -> web.Response:
         """Create standardized error response."""
@@ -689,10 +745,10 @@ class APIGateway:
                 "error": {
                     "code": status,
                     "message": message,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.utcnow().isoformat(),
                 }
             },
-            status=status
+            status=status,
         )
 
     async def _cleanup_worker(self) -> None:
@@ -704,8 +760,7 @@ class APIGateway:
                 # Clean expired cache entries
                 current_time = time.time()
                 expired_keys = [
-                    key for key, ttl in self.cache_ttl.items()
-                    if current_time > ttl
+                    key for key, ttl in self.cache_ttl.items() if current_time > ttl
                 ]
 
                 for key in expired_keys:
@@ -719,7 +774,9 @@ class APIGateway:
                         requests.popleft()
 
                 if expired_keys:
-                    logger.debug(f"Cleaned up {len(expired_keys)} expired cache entries")
+                    logger.debug(
+                        f"Cleaned up {len(expired_keys)} expired cache entries"
+                    )
 
             except asyncio.CancelledError:
                 break
@@ -759,7 +816,7 @@ class APIGateway:
                     requests_failed=self.metrics["requests_failed"],
                     response_time_avg=round(self.metrics["response_time_avg"], 3),
                     rate_limited_requests=self.metrics["rate_limited_requests"],
-                    cached_responses=self.metrics["cached_responses"]
+                    cached_responses=self.metrics["cached_responses"],
                 )
 
             except asyncio.CancelledError:
@@ -774,32 +831,38 @@ class APIGateway:
                 "requests_total": self.metrics["requests_total"],
                 "requests_success": self.metrics["requests_success"],
                 "requests_failed": self.metrics["requests_failed"],
-                "success_rate": self.metrics["requests_success"] / max(1, self.metrics["requests_total"]),
+                "success_rate": self.metrics["requests_success"]
+                / max(1, self.metrics["requests_total"]),
                 "response_time_avg": self.metrics["response_time_avg"],
                 "rate_limited_requests": self.metrics["rate_limited_requests"],
-                "cached_responses": self.metrics["cached_responses"]
+                "cached_responses": self.metrics["cached_responses"],
             },
             "services": {
                 service_name: {
                     "endpoints_count": len(endpoints),
                     "healthy_endpoints": sum(1 for ep in endpoints if ep.is_healthy),
-                    "active_connections": sum(self.active_connections.get(ep.url, 0) for ep in endpoints)
+                    "active_connections": sum(
+                        self.active_connections.get(ep.url, 0) for ep in endpoints
+                    ),
                 }
                 for service_name, endpoints in self.services.items()
             },
             "routes": {
                 "total_routes": len(self.routes),
-                "authenticated_routes": sum(1 for r in self.routes if r.authentication_required)
+                "authenticated_routes": sum(
+                    1 for r in self.routes if r.authentication_required
+                ),
             },
             "cache": {
                 "cached_entries": len(self.cache),
-                "cache_hit_ratio": self.metrics["cached_responses"] / max(1, self.metrics["requests_total"])
+                "cache_hit_ratio": self.metrics["cached_responses"]
+                / max(1, self.metrics["requests_total"]),
             },
             "security": {
                 "blacklisted_ips": len(self.blacklisted_ips),
                 "waf_rules": len(self.waf_rules),
-                "rate_limit_rules": len(self.rate_limits)
-            }
+                "rate_limit_rules": len(self.rate_limits),
+            },
         }
 
 

@@ -57,10 +57,10 @@ class ConnectionInfo:
     def should_retire(self, max_age: float, max_idle: float, max_errors: int) -> bool:
         """Check if connection should be retired."""
         return (
-            self.age > max_age or
-            self.idle_time > max_idle or
-            self.errors_count > max_errors or
-            not self.is_healthy
+            self.age > max_age
+            or self.idle_time > max_idle
+            or self.errors_count > max_errors
+            or not self.is_healthy
         )
 
 
@@ -109,9 +109,9 @@ class MultiplexConnection:
     async def can_accept_operation(self, operation: MultiplexOperation) -> bool:
         """Check if connection can accept a new operation."""
         return (
-            self.available_slots > 0 and
-            self.info.is_healthy and
-            not operation.is_expired
+            self.available_slots > 0
+            and self.info.is_healthy
+            and not operation.is_expired
         )
 
     async def add_operation(self, operation: MultiplexOperation) -> bool:
@@ -141,7 +141,8 @@ class MultiplexConnection:
                 self.info.avg_response_time = duration
             else:
                 self.info.avg_response_time = (
-                    (self.info.avg_response_time * (self.info.total_operations - 1)) + duration
+                    (self.info.avg_response_time * (self.info.total_operations - 1))
+                    + duration
                 ) / self.info.total_operations
 
             del self.active_operations[operation_id]
@@ -271,12 +272,14 @@ class MultiplexConnectionPool:
         # Start background tasks
         self._health_check_task = asyncio.create_task(self._health_check_loop())
         self._metrics_task = asyncio.create_task(self._metrics_loop())
-        self._operation_processor_task = asyncio.create_task(self._operation_processor())
+        self._operation_processor_task = asyncio.create_task(
+            self._operation_processor()
+        )
 
         logger.info(
             "Multiplex connection pool started",
             min_connections=self.config.min_connections,
-            max_connections=self.config.max_connections
+            max_connections=self.config.max_connections,
         )
 
     async def stop(self) -> None:
@@ -287,7 +290,11 @@ class MultiplexConnectionPool:
         self._running = False
 
         # Stop background tasks
-        for task in [self._health_check_task, self._metrics_task, self._operation_processor_task]:
+        for task in [
+            self._health_check_task,
+            self._metrics_task,
+            self._operation_processor_task,
+        ]:
             if task:
                 task.cancel()
                 try:
@@ -306,7 +313,7 @@ class MultiplexConnectionPool:
         sql: str,
         params: Tuple[Any, ...] = (),
         priority: int = 1,
-        timeout: Optional[float] = None
+        timeout: Optional[float] = None,
     ):
         """
         Execute a database operation using the multiplex pool.
@@ -322,7 +329,7 @@ class MultiplexConnectionPool:
             sql=sql,
             params=params,
             priority=priority,
-            timeout=timeout or self.config.operation_timeout
+            timeout=timeout or self.config.operation_timeout,
         )
 
         start_time = time.time()
@@ -334,8 +341,11 @@ class MultiplexConnectionPool:
             # Operation completed immediately
             async with self._metrics_lock:
                 self.metrics.avg_operation_time = (
-                    (self.metrics.avg_operation_time * (self.metrics.total_operations - 1)) +
-                    (time.time() - start_time)
+                    (
+                        self.metrics.avg_operation_time
+                        * (self.metrics.total_operations - 1)
+                    )
+                    + (time.time() - start_time)
                 ) / self.metrics.total_operations
 
             yield result
@@ -347,15 +357,15 @@ class MultiplexConnectionPool:
 
         try:
             # Wait for operation to complete
-            result = await asyncio.wait_for(
-                future,
-                timeout=operation.timeout
-            )
+            result = await asyncio.wait_for(future, timeout=operation.timeout)
 
             async with self._metrics_lock:
                 self.metrics.avg_operation_time = (
-                    (self.metrics.avg_operation_time * (self.metrics.total_operations - 1)) +
-                    (time.time() - start_time)
+                    (
+                        self.metrics.avg_operation_time
+                        * (self.metrics.total_operations - 1)
+                    )
+                    + (time.time() - start_time)
                 ) / self.metrics.total_operations
 
             yield result
@@ -396,7 +406,10 @@ class MultiplexConnectionPool:
             prepared_stmt = f"prepared_{statement_key}"  # Mock prepared statement
 
             # Cache it
-            if len(self.prepared_statements) < self.config.prepared_statement_cache_size:
+            if (
+                len(self.prepared_statements)
+                < self.config.prepared_statement_cache_size
+            ):
                 self.prepared_statements[statement_key] = prepared_stmt
                 self.statement_usage[statement_key] = 1
 
@@ -450,7 +463,7 @@ class MultiplexConnectionPool:
                 "max_connections": self.config.max_connections,
                 "load_balancing": self.config.load_balancing_strategy,
                 "multiplexing_enabled": True,
-            }
+            },
         }
 
     async def _initialize_connections(self) -> None:
@@ -474,7 +487,7 @@ class MultiplexConnectionPool:
             multiplex_conn = MultiplexConnection(
                 connection=mock_connection,
                 info=ConnectionInfo(connection_id=connection_id),
-                max_concurrent_operations=self.config.max_concurrent_operations_per_connection
+                max_concurrent_operations=self.config.max_concurrent_operations_per_connection,
             )
 
             self.connections[connection_id] = multiplex_conn
@@ -494,11 +507,13 @@ class MultiplexConnectionPool:
         """Get a connection suitable for statement preparation."""
         # Find least loaded connection
         best_connection = None
-        best_utilization = float('inf')
+        best_utilization = float("inf")
 
         for multiplex_conn in self.connections.values():
-            if (multiplex_conn.info.is_healthy and
-                multiplex_conn.utilization < best_utilization):
+            if (
+                multiplex_conn.info.is_healthy
+                and multiplex_conn.utilization < best_utilization
+            ):
                 best_connection = multiplex_conn
                 best_utilization = multiplex_conn.utilization
 
@@ -532,7 +547,9 @@ class MultiplexConnectionPool:
 
         return None
 
-    async def _select_connection(self, operation: MultiplexOperation) -> Optional[MultiplexConnection]:
+    async def _select_connection(
+        self, operation: MultiplexOperation
+    ) -> Optional[MultiplexConnection]:
         """Select best connection for operation using load balancing."""
         async with self._load_balancer_lock:
             strategy = self.config.load_balancing_strategy
@@ -549,25 +566,25 @@ class MultiplexConnectionPool:
     def _round_robin_selection(self) -> Optional[MultiplexConnection]:
         """Round-robin connection selection."""
         healthy_connections = [
-            conn for conn in self.connections.values()
-            if conn.info.is_healthy
+            conn for conn in self.connections.values() if conn.info.is_healthy
         ]
 
         if not healthy_connections:
             return None
 
-        selected = healthy_connections[self.load_balancer_index % len(healthy_connections)]
+        selected = healthy_connections[
+            self.load_balancer_index % len(healthy_connections)
+        ]
         self.load_balancer_index += 1
         return selected
 
     def _least_loaded_selection(self) -> Optional[MultiplexConnection]:
         """Select least loaded connection."""
         best_connection = None
-        best_utilization = float('inf')
+        best_utilization = float("inf")
 
         for connection in self.connections.values():
-            if (connection.info.is_healthy and
-                connection.utilization < best_utilization):
+            if connection.info.is_healthy and connection.utilization < best_utilization:
                 best_connection = connection
                 best_utilization = connection.utilization
 
@@ -578,16 +595,13 @@ class MultiplexConnectionPool:
         import random
 
         healthy_connections = [
-            conn for conn in self.connections.values()
-            if conn.info.is_healthy
+            conn for conn in self.connections.values() if conn.info.is_healthy
         ]
 
         return random.choice(healthy_connections) if healthy_connections else None
 
     async def _execute_on_connection(
-        self,
-        connection: MultiplexConnection,
-        operation: MultiplexOperation
+        self, connection: MultiplexConnection, operation: MultiplexOperation
     ) -> Any:
         """Execute operation on a specific connection."""
         # Add operation to connection
@@ -621,8 +635,7 @@ class MultiplexConnectionPool:
                 async with self._metrics_lock:
                     self.metrics.queued_operations += 1
                     self.metrics.max_queue_depth = max(
-                        self.metrics.max_queue_depth,
-                        self.operation_queue.qsize()
+                        self.metrics.max_queue_depth, self.operation_queue.qsize()
                     )
 
                 # Try to execute
@@ -679,7 +692,9 @@ class MultiplexConnectionPool:
             except Exception as e:
                 logger.error(f"Health check loop error: {e}")
 
-    async def _health_check_connection(self, multiplex_conn: MultiplexConnection) -> bool:
+    async def _health_check_connection(
+        self, multiplex_conn: MultiplexConnection
+    ) -> bool:
         """Perform health check on a multiplex connection."""
         try:
             # Simulate health check
@@ -696,7 +711,7 @@ class MultiplexConnectionPool:
             if multiplex_conn.info.should_retire(
                 self.config.max_connection_age,
                 self.config.max_connection_idle,
-                self.config.max_connection_errors
+                self.config.max_connection_errors,
             ):
                 to_retire.append(connection_id)
 
@@ -731,10 +746,13 @@ class MultiplexConnectionPool:
                     # Calculate connection utilization
                     if self.metrics.total_connections > 0:
                         active_count = sum(
-                            1 for conn in self.connections.values()
+                            1
+                            for conn in self.connections.values()
                             if len(conn.active_operations) > 0
                         )
-                        self.metrics.connection_utilization = active_count / self.metrics.total_connections
+                        self.metrics.connection_utilization = (
+                            active_count / self.metrics.total_connections
+                        )
 
             except asyncio.CancelledError:
                 break

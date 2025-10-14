@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from typing import Any, Callable
+from typing import Any, Callable, Optional, List
 
 import structlog
 
@@ -147,11 +147,16 @@ except ImportError:
 
 from pydantic import BaseModel
 
-from resync.core.exceptions import \
-    AgentError  # Renamed from AgentExecutionError for broader scope
-from resync.core.exceptions import (ConfigurationError, InvalidConfigError,
-                                    MissingConfigError, NetworkError,
-                                    ParsingError)
+from resync.core.exceptions import (
+    AgentError,
+)  # Renamed from AgentExecutionError for broader scope
+from resync.core.exceptions import (
+    ConfigurationError,
+    InvalidConfigError,
+    MissingConfigError,
+    NetworkError,
+    ParsingError,
+)
 from resync.core.metrics import runtime_metrics
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
@@ -164,27 +169,15 @@ logger = structlog.get_logger(__name__)
 
 
 # --- Pydantic Models for Agent Configuration ---
-class AgentConfig(BaseModel):
-    """Represents the configuration for a single AI agent."""
-
-    id: str
-    name: str
-    role: str
-    goal: str
-    backstory: str
-    tools: list[str]
-    model_name: str = "llama3:latest"
-    temperature: float = 0.7
-    memory: bool = True
-    verbose: bool = False
+from resync.api.models.agents import AgentConfig, AgentType
+from pydantic import BaseModel
+from typing import List
 
 
 class AgentsConfig(BaseModel):
-    """
-    Represents the top-level structure of the agent configuration file.
-    """
+    """Configuration model for multiple agents."""
 
-    agents: list[AgentConfig]
+    agents: List[AgentConfig] = []
 
 
 # --- Agent Manager Class ---
@@ -312,7 +305,9 @@ class AgentManager:
         """Discover available tools for agents."""
         try:
             from resync.tool_definitions.tws_tools import (
-                tws_status_tool, tws_troubleshooting_tool)
+                tws_status_tool,
+                tws_troubleshooting_tool,
+            )
 
             return {
                 "get_tws_status": tws_status_tool.get_tws_status,
@@ -388,6 +383,7 @@ class AgentManager:
                         AgentConfig(
                             id="tws-troubleshooting",
                             name="TWS Troubleshooting Agent",
+                            agent_type=AgentType.TASK,
                             role="TWS Troubleshooting Specialist",
                             goal="Help users identify and resolve TWS system issues",
                             backstory="I am an expert AI assistant specialized in IBM Workload Automation (TWS) troubleshooting and system monitoring.",
@@ -400,6 +396,7 @@ class AgentManager:
                         AgentConfig(
                             id="tws-general",
                             name="TWS General Assistant",
+                            agent_type=AgentType.CHAT,
                             role="TWS General Assistant",
                             goal="Provide general assistance for TWS operations and monitoring",
                             backstory="I am a helpful AI assistant for IBM Workload Automation (TWS) operations, providing information about system status and job execution.",

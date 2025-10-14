@@ -30,12 +30,12 @@ logger = get_logger(__name__)
 class MetricType(Enum):
     """Types of security metrics."""
 
-    COUNT = "count"          # Raw counts (events, incidents, etc.)
-    RATE = "rate"           # Rates per time period
+    COUNT = "count"  # Raw counts (events, incidents, etc.)
+    RATE = "rate"  # Rates per time period
     PERCENTAGE = "percentage"  # Percentage values
-    DURATION = "duration"    # Time durations
-    SCORE = "score"         # Calculated scores
-    TREND = "trend"         # Trend indicators
+    DURATION = "duration"  # Time durations
+    SCORE = "score"  # Calculated scores
+    TREND = "trend"  # Trend indicators
 
 
 class MetricCategory(Enum):
@@ -77,7 +77,9 @@ class SecurityMetric:
     alert_enabled: bool = True
 
     # Historical data
-    historical_values: deque = field(default_factory=lambda: deque(maxlen=10080))  # 1 week at 1-minute intervals
+    historical_values: deque = field(
+        default_factory=lambda: deque(maxlen=10080)
+    )  # 1 week at 1-minute intervals
 
     @property
     def trend(self) -> str:
@@ -85,7 +87,9 @@ class SecurityMetric:
         if len(self.data_points) < 2:
             return "stable"
 
-        recent = list(self.data_points)[-10:]  # Last 10 points (timestamp, value tuples)
+        recent = list(self.data_points)[
+            -10:
+        ]  # Last 10 points (timestamp, value tuples)
         if len(recent) < 2:
             return "stable"
 
@@ -93,8 +97,8 @@ class SecurityMetric:
         values = [point[1] for point in recent]
 
         # Simple linear trend
-        first_half = sum(values[:len(values)//2]) / (len(values)//2)
-        second_half = sum(values[len(values)//2:]) / (len(values) - len(values)//2)
+        first_half = sum(values[: len(values) // 2]) / (len(values) // 2)
+        second_half = sum(values[len(values) // 2 :]) / (len(values) - len(values) // 2)
 
         if second_half > first_half * 1.1:
             return "increasing"
@@ -117,7 +121,7 @@ class SecurityMetric:
     def percentage_change(self) -> float:
         """Calculate percentage change from previous value."""
         if self.previous_value == 0:
-            return 0.0 if self.current_value == 0 else float('inf')
+            return 0.0 if self.current_value == 0 else float("inf")
 
         return ((self.current_value - self.previous_value) / self.previous_value) * 100
 
@@ -148,7 +152,7 @@ class SecurityMetric:
             "last_updated": self.last_updated,
             "data_points_count": len(self.data_points),
             "warning_threshold": self.warning_threshold,
-            "critical_threshold": self.critical_threshold
+            "critical_threshold": self.critical_threshold,
         }
 
 
@@ -163,7 +167,9 @@ class DashboardWidget:
     position: Dict[str, int] = field(default_factory=dict)  # x, y, width, height
     config: Dict[str, Any] = field(default_factory=dict)  # Widget-specific config
     refresh_interval: int = 30  # seconds
-    roles: Set[str] = field(default_factory=lambda: {"admin", "security"})  # Access control
+    roles: Set[str] = field(
+        default_factory=lambda: {"admin", "security"}
+    )  # Access control
 
     def can_access(self, user_roles: Set[str]) -> bool:
         """Check if user can access this widget."""
@@ -286,11 +292,13 @@ class SecurityDashboardConfig:
 
     # Reporting
     auto_generate_reports: bool = True
-    report_schedule: Dict[str, str] = field(default_factory=lambda: {
-        "daily": "08:00",
-        "weekly": "Monday 09:00",
-        "monthly": "1st 10:00"
-    })
+    report_schedule: Dict[str, str] = field(
+        default_factory=lambda: {
+            "daily": "08:00",
+            "weekly": "Monday 09:00",
+            "monthly": "1st 10:00",
+        }
+    )
 
     # Access control
     enable_role_based_access: bool = True
@@ -324,7 +332,7 @@ class MetricCollector:
                 metric_type=MetricType.COUNT,
                 unit="threats",
                 warning_threshold=10,
-                critical_threshold=50
+                critical_threshold=50,
             ),
             SecurityMetric(
                 metric_id="anomalies_per_hour",
@@ -334,9 +342,8 @@ class MetricCollector:
                 metric_type=MetricType.RATE,
                 unit="anomalies/hour",
                 warning_threshold=5.0,
-                critical_threshold=15.0
+                critical_threshold=15.0,
             ),
-
             # Incident Response
             SecurityMetric(
                 metric_id="active_incidents",
@@ -346,7 +353,7 @@ class MetricCollector:
                 metric_type=MetricType.COUNT,
                 unit="incidents",
                 warning_threshold=2,
-                critical_threshold=5
+                critical_threshold=5,
             ),
             SecurityMetric(
                 metric_id="avg_response_time",
@@ -356,9 +363,8 @@ class MetricCollector:
                 metric_type=MetricType.DURATION,
                 unit="minutes",
                 warning_threshold=30.0,
-                critical_threshold=120.0
+                critical_threshold=120.0,
             ),
-
             # Compliance
             SecurityMetric(
                 metric_id="compliance_score",
@@ -368,7 +374,7 @@ class MetricCollector:
                 metric_type=MetricType.SCORE,
                 unit="%",
                 warning_threshold=85.0,
-                critical_threshold=70.0
+                critical_threshold=70.0,
             ),
             SecurityMetric(
                 metric_id="audit_findings",
@@ -378,9 +384,8 @@ class MetricCollector:
                 metric_type=MetricType.COUNT,
                 unit="findings",
                 warning_threshold=5,
-                critical_threshold=15
+                critical_threshold=15,
             ),
-
             # Access Control
             SecurityMetric(
                 metric_id="failed_logins",
@@ -390,7 +395,7 @@ class MetricCollector:
                 metric_type=MetricType.COUNT,
                 unit="attempts",
                 warning_threshold=50,
-                critical_threshold=200
+                critical_threshold=200,
             ),
             SecurityMetric(
                 metric_id="privileged_access",
@@ -400,9 +405,8 @@ class MetricCollector:
                 metric_type=MetricType.COUNT,
                 unit="events",
                 warning_threshold=10,
-                critical_threshold=25
+                critical_threshold=25,
             ),
-
             # System Health
             SecurityMetric(
                 metric_id="system_uptime",
@@ -412,7 +416,7 @@ class MetricCollector:
                 metric_type=MetricType.PERCENTAGE,
                 unit="%",
                 warning_threshold=99.0,
-                critical_threshold=95.0
+                critical_threshold=95.0,
             ),
             SecurityMetric(
                 metric_id="error_rate",
@@ -422,9 +426,8 @@ class MetricCollector:
                 metric_type=MetricType.PERCENTAGE,
                 unit="%",
                 warning_threshold=1.0,
-                critical_threshold=5.0
+                critical_threshold=5.0,
             ),
-
             # User Behavior
             SecurityMetric(
                 metric_id="suspicious_users",
@@ -434,9 +437,8 @@ class MetricCollector:
                 metric_type=MetricType.COUNT,
                 unit="users",
                 warning_threshold=3,
-                critical_threshold=10
+                critical_threshold=10,
             ),
-
             # Network Security
             SecurityMetric(
                 metric_id="blocked_connections",
@@ -446,9 +448,8 @@ class MetricCollector:
                 metric_type=MetricType.COUNT,
                 unit="connections",
                 warning_threshold=100,
-                critical_threshold=500
+                critical_threshold=500,
             ),
-
             # Data Protection
             SecurityMetric(
                 metric_id="encryption_coverage",
@@ -458,14 +459,16 @@ class MetricCollector:
                 metric_type=MetricType.PERCENTAGE,
                 unit="%",
                 warning_threshold=95.0,
-                critical_threshold=85.0
-            )
+                critical_threshold=85.0,
+            ),
         ]
 
         for metric in standard_metrics:
             self.metrics[metric.metric_id] = metric
 
-    def update_metric(self, metric_id: str, value: float, timestamp: Optional[float] = None) -> None:
+    def update_metric(
+        self, metric_id: str, value: float, timestamp: Optional[float] = None
+    ) -> None:
         """Update a metric value."""
         if metric_id in self.metrics:
             self.metrics[metric_id].update_value(value, timestamp)
@@ -489,7 +492,7 @@ class MetricCollector:
             "by_category": defaultdict(int),
             "by_status": defaultdict(int),
             "alerts_active": 0,
-            "last_updated": 0
+            "last_updated": 0,
         }
 
         for metric in self.metrics.values():
@@ -526,7 +529,7 @@ class AlertManager:
                 condition=">",
                 threshold=25.0,
                 severity="high",
-                cooldown_minutes=30
+                cooldown_minutes=30,
             ),
             AlertRule(
                 rule_id="low_compliance_score",
@@ -536,7 +539,7 @@ class AlertManager:
                 condition="<",
                 threshold=80.0,
                 severity="high",
-                cooldown_minutes=60
+                cooldown_minutes=60,
             ),
             AlertRule(
                 rule_id="multiple_failed_logins",
@@ -546,7 +549,7 @@ class AlertManager:
                 condition=">",
                 threshold=100.0,
                 severity="medium",
-                cooldown_minutes=15
+                cooldown_minutes=15,
             ),
             AlertRule(
                 rule_id="system_downtime",
@@ -556,14 +559,16 @@ class AlertManager:
                 condition="<",
                 threshold=98.0,
                 severity="critical",
-                cooldown_minutes=5
-            )
+                cooldown_minutes=5,
+            ),
         ]
 
         for rule in rules:
             self.alert_rules[rule.rule_id] = rule
 
-    async def check_alerts(self, metrics: Dict[str, SecurityMetric]) -> List[Dict[str, Any]]:
+    async def check_alerts(
+        self, metrics: Dict[str, SecurityMetric]
+    ) -> List[Dict[str, Any]]:
         """Check all alert rules and return triggered alerts."""
         triggered_alerts = []
 
@@ -586,7 +591,7 @@ class AlertManager:
                     "threshold": rule.threshold,
                     "condition": rule.condition,
                     "timestamp": time.time(),
-                    "description": f"{rule.description} - Current value: {metric.current_value}"
+                    "description": f"{rule.description} - Current value: {metric.current_value}",
                 }
 
                 # Mark rule as triggered
@@ -603,7 +608,7 @@ class AlertManager:
                     alert_id=alert["alert_id"],
                     rule_name=rule.name,
                     severity=rule.severity,
-                    metric_value=metric.current_value
+                    metric_value=metric.current_value,
                 )
 
         return triggered_alerts
@@ -633,9 +638,7 @@ class AlertManager:
         return list(self.active_alerts.values())
 
     def get_alert_history(
-        self,
-        limit: int = 100,
-        severity_filter: Optional[str] = None
+        self, limit: int = 100, severity_filter: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Get alert history with optional filtering."""
         alerts = list(self.alert_history)[-limit:]
@@ -679,7 +682,7 @@ class ReportGenerator:
             report_id=f"report_{report_type}_{int(now)}",
             report_type=report_type,
             period_start=period_start,
-            period_end=now
+            period_end=now,
         )
 
         # Generate report content
@@ -704,22 +707,22 @@ class ReportGenerator:
                 "category": "threat_detection",
                 "title": "Increased Anomalous Activity",
                 "description": "Detected 15% increase in anomalous user behavior patterns",
-                "recommendation": "Review user behavior monitoring rules"
+                "recommendation": "Review user behavior monitoring rules",
             },
             {
                 "severity": "low",
                 "category": "compliance",
                 "title": "Minor Audit Findings",
                 "description": "3 minor audit findings related to documentation",
-                "recommendation": "Update security documentation"
-            }
+                "recommendation": "Update security documentation",
+            },
         ]
 
         report.recommendations = [
             "Enhance user behavior analytics",
             "Implement additional automated testing",
             "Review and update incident response procedures",
-            "Strengthen network segmentation controls"
+            "Strengthen network segmentation controls",
         ]
 
         report.metrics_summary = {
@@ -727,7 +730,7 @@ class ReportGenerator:
             "incidents_resolved": 12,
             "compliance_score": 87.5,
             "system_uptime": 99.8,
-            "false_positives": 8
+            "false_positives": 8,
         }
 
         report.compliance_score = 87.5
@@ -776,7 +779,7 @@ class SecurityDashboard:
                 widget_type="chart",
                 metrics=["threats_detected", "anomalies_per_hour"],
                 position={"x": 0, "y": 0, "width": 6, "height": 4},
-                config={"chart_type": "line", "time_range": "24h"}
+                config={"chart_type": "line", "time_range": "24h"},
             ),
             DashboardWidget(
                 widget_id="incident_status",
@@ -784,7 +787,7 @@ class SecurityDashboard:
                 widget_type="gauge",
                 metrics=["active_incidents"],
                 position={"x": 6, "y": 0, "width": 3, "height": 4},
-                config={"max_value": 10, "thresholds": {"warning": 2, "critical": 5}}
+                config={"max_value": 10, "thresholds": {"warning": 2, "critical": 5}},
             ),
             DashboardWidget(
                 widget_id="compliance_score",
@@ -792,7 +795,10 @@ class SecurityDashboard:
                 widget_type="gauge",
                 metrics=["compliance_score"],
                 position={"x": 9, "y": 0, "width": 3, "height": 4},
-                config={"max_value": 100, "thresholds": {"warning": 85, "critical": 70}}
+                config={
+                    "max_value": 100,
+                    "thresholds": {"warning": 85, "critical": 70},
+                },
             ),
             DashboardWidget(
                 widget_id="access_control",
@@ -800,7 +806,7 @@ class SecurityDashboard:
                 widget_type="table",
                 metrics=["failed_logins", "privileged_access"],
                 position={"x": 0, "y": 4, "width": 6, "height": 4},
-                config={"show_trend": True}
+                config={"show_trend": True},
             ),
             DashboardWidget(
                 widget_id="system_health",
@@ -808,7 +814,7 @@ class SecurityDashboard:
                 widget_type="chart",
                 metrics=["system_uptime", "error_rate"],
                 position={"x": 6, "y": 4, "width": 6, "height": 4},
-                config={"chart_type": "area", "dual_axis": True}
+                config={"chart_type": "area", "dual_axis": True},
             ),
             DashboardWidget(
                 widget_id="active_alerts",
@@ -816,8 +822,8 @@ class SecurityDashboard:
                 widget_type="alert",
                 metrics=[],  # Special widget for alerts
                 position={"x": 0, "y": 8, "width": 12, "height": 2},
-                config={"max_alerts": 5, "auto_acknowledge": False}
-            )
+                config={"max_alerts": 5, "auto_acknowledge": False},
+            ),
         ]
 
         dashboard = Dashboard(
@@ -825,7 +831,7 @@ class SecurityDashboard:
             name="Security Overview",
             description="Default security monitoring dashboard",
             widgets=widgets,
-            is_default=True
+            is_default=True,
         )
 
         self.dashboards[dashboard.dashboard_id] = dashboard
@@ -864,7 +870,9 @@ class SecurityDashboard:
         """Update a metric value."""
         self.metric_collector.update_metric(metric_id, value)
 
-    def get_dashboard(self, dashboard_id: str, user_roles: Set[str]) -> Optional[Dashboard]:
+    def get_dashboard(
+        self, dashboard_id: str, user_roles: Set[str]
+    ) -> Optional[Dashboard]:
         """Get a dashboard if user has access."""
         dashboard = self.dashboards.get(dashboard_id)
         if dashboard and dashboard.can_access(user_roles):
@@ -878,10 +886,7 @@ class SecurityDashboard:
         return None
 
     def get_dashboard_data(
-        self,
-        dashboard: Dashboard,
-        user_roles: Set[str],
-        time_range: str = "24h"
+        self, dashboard: Dashboard, user_roles: Set[str], time_range: str = "24h"
     ) -> Dict[str, Any]:
         """Get data for a dashboard."""
         visible_widgets = dashboard.get_visible_widgets(user_roles)
@@ -889,7 +894,7 @@ class SecurityDashboard:
         dashboard_data = {
             "dashboard_id": dashboard.dashboard_id,
             "name": dashboard.name,
-            "widgets": []
+            "widgets": [],
         }
 
         for widget in visible_widgets:
@@ -898,7 +903,7 @@ class SecurityDashboard:
                 "title": widget.title,
                 "type": widget.widget_type,
                 "position": widget.position,
-                "data": {}
+                "data": {},
             }
 
             # Get metric data for widget
@@ -909,7 +914,11 @@ class SecurityDashboard:
 
             # Special handling for alert widgets
             if widget.widget_type == "alert":
-                widget_data["data"]["active_alerts"] = self.alert_manager.get_active_alerts()[:widget.config.get("max_alerts", 5)]
+                widget_data["data"][
+                    "active_alerts"
+                ] = self.alert_manager.get_active_alerts()[
+                    : widget.config.get("max_alerts", 5)
+                ]
 
             dashboard_data["widgets"].append(widget_data)
 
@@ -919,7 +928,7 @@ class SecurityDashboard:
         self,
         metric_ids: Optional[List[str]] = None,
         category: Optional[MetricCategory] = None,
-        time_range: str = "24h"
+        time_range: str = "24h",
     ) -> Dict[str, Any]:
         """Get metrics data for API consumption."""
         if metric_ids:
@@ -933,10 +942,12 @@ class SecurityDashboard:
         return {
             "metrics": [m.get_summary() for m in metrics],
             "summary": self.metric_collector.get_metrics_summary(),
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
 
-    def get_alerts_data(self, include_history: bool = False, limit: int = 50) -> Dict[str, Any]:
+    def get_alerts_data(
+        self, include_history: bool = False, limit: int = 50
+    ) -> Dict[str, Any]:
         """Get alerts data."""
         data = {
             "active_alerts": self.alert_manager.get_active_alerts(),
@@ -949,10 +960,10 @@ class SecurityDashboard:
                     "threshold": rule.threshold,
                     "severity": rule.severity,
                     "enabled": rule.enabled,
-                    "last_triggered": rule.last_triggered
+                    "last_triggered": rule.last_triggered,
                 }
                 for rule in self.alert_manager.alert_rules.values()
-            ]
+            ],
         }
 
         if include_history:
@@ -984,7 +995,7 @@ class SecurityDashboard:
         name: str,
         description: str,
         widgets: List[DashboardWidget],
-        roles: Set[str]
+        roles: Set[str],
     ) -> str:
         """Create a custom dashboard."""
         dashboard_id = f"dashboard_{int(time.time())}_{hash(name) % 10000}"
@@ -994,7 +1005,7 @@ class SecurityDashboard:
             name=name,
             description=description,
             widgets=widgets,
-            roles=roles
+            roles=roles,
         )
 
         self.dashboards[dashboard_id] = dashboard
@@ -1023,10 +1034,14 @@ class SecurityDashboard:
         import random
 
         # Simulate some realistic metric values
-        self.metric_collector.update_metric("system_uptime", 99.7 + random.uniform(-0.5, 0.5))
+        self.metric_collector.update_metric(
+            "system_uptime", 99.7 + random.uniform(-0.5, 0.5)
+        )
         self.metric_collector.update_metric("threats_detected", random.randint(0, 10))
         self.metric_collector.update_metric("active_incidents", random.randint(0, 3))
-        self.metric_collector.update_metric("compliance_score", 85.0 + random.uniform(-5, 5))
+        self.metric_collector.update_metric(
+            "compliance_score", 85.0 + random.uniform(-5, 5)
+        )
 
     async def _alert_checking_worker(self) -> None:
         """Background worker for alert checking."""
@@ -1035,7 +1050,9 @@ class SecurityDashboard:
                 await asyncio.sleep(self.config.alert_check_interval_seconds)
 
                 # Check for triggered alerts
-                metrics = {m.metric_id: m for m in self.metric_collector.get_all_metrics()}
+                metrics = {
+                    m.metric_id: m for m in self.metric_collector.get_all_metrics()
+                }
                 triggered_alerts = await self.alert_manager.check_alerts(metrics)
 
                 # Handle triggered alerts (send notifications, etc.)
@@ -1054,7 +1071,7 @@ class SecurityDashboard:
             "alert_notification",
             alert_id=alert["alert_id"],
             severity=alert["severity"],
-            message=alert["description"]
+            message=alert["description"],
         )
 
     async def _report_generation_worker(self) -> None:
@@ -1076,18 +1093,29 @@ class SecurityDashboard:
                     logger.info(f"Generated daily security report: {report.report_id}")
 
                 # Generate weekly report on configured day/time
-                weekly_schedule = self.config.report_schedule.get("weekly", "Monday 09:00")
-                if weekly_schedule and current_time.strftime("%A %H:%M") == weekly_schedule:
+                weekly_schedule = self.config.report_schedule.get(
+                    "weekly", "Monday 09:00"
+                )
+                if (
+                    weekly_schedule
+                    and current_time.strftime("%A %H:%M") == weekly_schedule
+                ):
                     report = await self.report_generator.generate_weekly_report()
                     logger.info(f"Generated weekly security report: {report.report_id}")
 
                 # Generate monthly report on configured day/time
-                monthly_schedule = self.config.report_schedule.get("monthly", "1st 10:00")
-                if (monthly_schedule and
-                    current_time.day == 1 and
-                    current_time.strftime("%H:%M") == monthly_schedule.split()[1]):
+                monthly_schedule = self.config.report_schedule.get(
+                    "monthly", "1st 10:00"
+                )
+                if (
+                    monthly_schedule
+                    and current_time.day == 1
+                    and current_time.strftime("%H:%M") == monthly_schedule.split()[1]
+                ):
                     report = await self.report_generator.generate_monthly_report()
-                    logger.info(f"Generated monthly security report: {report.report_id}")
+                    logger.info(
+                        f"Generated monthly security report: {report.report_id}"
+                    )
 
             except asyncio.CancelledError:
                 break

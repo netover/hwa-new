@@ -13,7 +13,9 @@ from typing import Any, Dict, List
 from fastapi import FastAPI
 
 from resync.core.connection_pool_manager import (
-    get_connection_pool_manager, shutdown_connection_pool_manager)
+    get_connection_pool_manager,
+    shutdown_connection_pool_manager,
+)
 from resync.core.container import app_container
 from resync.core.interfaces import IAgentManager, IKnowledgeGraph, ITWSClient
 

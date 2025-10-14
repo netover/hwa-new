@@ -10,9 +10,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from resync.core.exceptions import ResyncException
 from resync.core.utils.error_utils import (
-    ErrorResponseBuilder, create_error_response_from_exception,
-    create_json_response_from_error, extract_validation_errors,
-    generate_correlation_id, log_error_response)
+    ErrorResponseBuilder,
+    create_error_response_from_exception,
+    create_json_response_from_error,
+    extract_validation_errors,
+    generate_correlation_id,
+    log_error_response,
+)
 
 logger = logging.getLogger(__name__)
 

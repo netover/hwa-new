@@ -7,10 +7,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from resync.models.tws import (CriticalJob, DependencyTree, Event, JobDetails,
-                               JobExecution, JobStatus, PerformanceData,
-                               PlanDetails, ResourceStatus, SystemStatus,
-                               WorkstationStatus)
+from resync.models.tws import (
+    CriticalJob,
+    DependencyTree,
+    Event,
+    JobDetails,
+    JobExecution,
+    JobStatus,
+    PerformanceData,
+    PlanDetails,
+    ResourceStatus,
+    SystemStatus,
+    WorkstationStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -289,10 +298,10 @@ class MockTWSClient:
                     "job_stream": "STREAM_A",
                     "script": f"#!/bin/bash\necho 'Running job {job_id}'",
                     "dependencies": ["PREV_JOB"],
-                    "resource_requirements": {"cpu": "1", "memory": "512MB"}
+                    "resource_requirements": {"cpu": "1", "memory": "512MB"},
                 },
                 "dependencies": ["PREV_JOB"],
-                "resource_requirements": {"cpu": "1", "memory": "512MB"}
+                "resource_requirements": {"cpu": "1", "memory": "512MB"},
             }
 
         # Get execution history
@@ -310,7 +319,7 @@ class MockTWSClient:
             full_definition=job_data.get("full_definition", {}),
             dependencies=dependencies.dependencies,
             resource_requirements=job_data.get("resource_requirements", {}),
-            execution_history=history[:10]  # Limit to last 10 executions
+            execution_history=history[:10],  # Limit to last 10 executions
         )
 
     async def get_job_history(self, job_name: str) -> List[JobExecution]:
@@ -327,7 +336,7 @@ class MockTWSClient:
                 start_time=datetime.now(),
                 end_time=datetime.now(),
                 duration="5m",
-                error_message=None
+                error_message=None,
             ),
             JobExecution(
                 job_id=job_name,
@@ -335,7 +344,7 @@ class MockTWSClient:
                 start_time=datetime.now(),
                 end_time=None,
                 duration=None,
-                error_message=None
+                error_message=None,
             ),
         ]
 
@@ -358,7 +367,7 @@ class MockTWSClient:
             creation_date=datetime.now(),
             jobs_count=len(self.mock_data.get("jobs_status", [])),
             estimated_completion=datetime.now(),
-            status="ACTIVE"
+            status="ACTIVE",
         )
 
     async def get_job_dependencies(self, job_id: str) -> DependencyTree:
@@ -374,8 +383,8 @@ class MockTWSClient:
             dependency_graph={
                 "PREV_JOB": [],
                 job_id: ["PREV_JOB"],
-                "NEXT_JOB": [job_id]
-            }
+                "NEXT_JOB": [job_id],
+            },
         )
 
     async def get_resource_usage(self) -> List[ResourceStatus]:
@@ -391,7 +400,7 @@ class MockTWSClient:
                 total_capacity=100.0,
                 used_capacity=75.0,
                 available_capacity=25.0,
-                utilization_percentage=75.0
+                utilization_percentage=75.0,
             ),
             ResourceStatus(
                 resource_name="MEMORY_POOL",
@@ -399,8 +408,8 @@ class MockTWSClient:
                 total_capacity=8192.0,
                 used_capacity=6144.0,
                 available_capacity=2048.0,
-                utilization_percentage=75.0
-            )
+                utilization_percentage=75.0,
+            ),
         ]
 
     async def get_event_log(self, last_hours: int = 24) -> List[Event]:
@@ -418,7 +427,7 @@ class MockTWSClient:
                 "source": "TWS_ENGINE",
                 "message": "Job JOB_A started successfully",
                 "job_id": "JOB_A",
-                "workstation": "CPU_WS"
+                "workstation": "CPU_WS",
             },
             {
                 "event_id": "EVENT_002",
@@ -428,8 +437,8 @@ class MockTWSClient:
                 "source": "TWS_ENGINE",
                 "message": "Job JOB_A completed successfully",
                 "job_id": "JOB_A",
-                "workstation": "CPU_WS"
-            }
+                "workstation": "CPU_WS",
+            },
         ]
 
         return [Event(**event_data) for event_data in events_data]
@@ -447,7 +456,7 @@ class MockTWSClient:
             memory_usage_mb=256.0,
             cpu_usage_percentage=45.0,
             active_connections=5,
-            jobs_per_minute=12.5
+            jobs_per_minute=12.5,
         )
 
     async def get_job_status(self, job_id: str) -> JobStatus:

@@ -12,14 +12,21 @@ import logging  # type: ignore
 from abc import abstractmethod  # type: ignore
 from typing import Any, Optional, Protocol, Union  # type: ignore
 
-from resync.core.cache_hierarchy import \
-    get_cache_hierarchy  # type: ignore[attr-defined]
+from resync.core.cache_hierarchy import (
+    get_cache_hierarchy,
+)  # type: ignore[attr-defined]
 from resync.core.interfaces import (  # type: ignore[attr-defined]
-    IAgentManager, IKnowledgeGraph, ITWSClient)
-from resync.core.logger import \
-    log_with_correlation  # type: ignore[attr-defined]
-from resync.models.tws import (CriticalJob,  # type: ignore[attr-defined]
-                               JobStatus, SystemStatus, WorkstationStatus)
+    IAgentManager,
+    IKnowledgeGraph,
+    ITWSClient,
+)
+from resync.core.logger import log_with_correlation  # type: ignore[attr-defined]
+from resync.models.tws import (
+    CriticalJob,  # type: ignore[attr-defined]
+    JobStatus,
+    SystemStatus,
+    WorkstationStatus,
+)
 
 
 class ITWSService(Protocol):  # type: ignore

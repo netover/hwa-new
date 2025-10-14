@@ -37,8 +37,12 @@ class SensitiveFieldValidator:
 
 
 class EnhancedLoginRequest(BaseModel):
-    username: str = Field(..., min_length=3, max_length=32, example="johndoe")
-    password: str = Field(..., min_length=8, example="SecureP@ss123!")
+    username: str = Field(
+        ..., min_length=3, max_length=32, json_schema_extra={"example": "johndoe"}
+    )
+    password: str = Field(
+        ..., min_length=8, json_schema_extra={"example": "SecureP@ss123!"}
+    )
 
     @validator("password")
     def validate_password(cls, v):
@@ -46,9 +50,13 @@ class EnhancedLoginRequest(BaseModel):
 
 
 class UserCreateWithValidation(BaseModel):
-    username: str = Field(..., min_length=3, max_length=32, example="johndoe")
-    email: EmailStr = Field(..., example="user@example.com")
-    password: str = Field(..., min_length=8, example="SecureP@ss123!")
+    username: str = Field(
+        ..., min_length=3, max_length=32, json_schema_extra={"example": "johndoe"}
+    )
+    email: EmailStr = Field(..., json_schema_extra={"example": "user@example.com"})
+    password: str = Field(
+        ..., min_length=8, json_schema_extra={"example": "SecureP@ss123!"}
+    )
 
     @validator("email")
     def validate_email(cls, v):

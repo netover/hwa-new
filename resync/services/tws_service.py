@@ -20,12 +20,20 @@ from resync.core.cache_hierarchy import get_cache_hierarchy
 from resync.core.circuit_breaker import adaptive_tws_api_breaker
 from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.core.exceptions import TWSConnectionError
-from resync.core.resilience import (circuit_breaker, retry_with_backoff,
-                                    with_timeout)
-from resync.models.tws import (CriticalJob, DependencyTree, Event, JobDetails,
-                               JobExecution, JobStatus, PerformanceData,
-                               PlanDetails, ResourceStatus, SystemStatus,
-                               WorkstationStatus)
+from resync.core.resilience import circuit_breaker, retry_with_backoff, with_timeout
+from resync.models.tws import (
+    CriticalJob,
+    DependencyTree,
+    Event,
+    JobDetails,
+    JobExecution,
+    JobStatus,
+    PerformanceData,
+    PlanDetails,
+    ResourceStatus,
+    SystemStatus,
+    WorkstationStatus,
+)
 from resync.services.http_client_factory import create_async_http_client
 from resync.settings import settings  # New import
 
@@ -346,7 +354,11 @@ class OptimizedTWSClient:
         cache_key = f"job_details:{job_id}"
         cached_data = await self.cache.get(cache_key)
         if cached_data:
-            return cached_data if isinstance(cached_data, dict) else JobDetails(**cached_data)
+            return (
+                cached_data
+                if isinstance(cached_data, dict)
+                else JobDetails(**cached_data)
+            )
 
         # Validate job_id format
         if not SAFE_JOB_ID_PATTERN.match(job_id):
@@ -379,7 +391,7 @@ class OptimizedTWSClient:
                     full_definition=data,
                     dependencies=dependencies.dependencies,
                     resource_requirements=data.get("resource_requirements", {}),
-                    execution_history=history[:10]  # Limit to last 10 executions
+                    execution_history=history[:10],  # Limit to last 10 executions
                 )
 
                 await self.cache.set(cache_key, job_details.dict())
@@ -399,7 +411,11 @@ class OptimizedTWSClient:
         cache_key = f"job_history:{job_name}"
         cached_data = await self.cache.get(cache_key)
         if cached_data:
-            return [JobExecution(**execution) for execution in cached_data] if isinstance(cached_data, list) else []
+            return (
+                [JobExecution(**execution) for execution in cached_data]
+                if isinstance(cached_data, list)
+                else []
+            )
 
         # Validate job_name format
         if not SAFE_JOB_ID_PATTERN.match(job_name):
@@ -436,7 +452,7 @@ class OptimizedTWSClient:
                                 start_time=start_time or None,
                                 end_time=end_time,
                                 duration=execution_data.get("duration"),
-                                error_message=execution_data.get("error_message")
+                                error_message=execution_data.get("error_message"),
                             )
                             executions.append(execution)
                         except Exception as e:
@@ -487,7 +503,11 @@ class OptimizedTWSClient:
         cache_key = "plan_details"
         cached_data = await self.cache.get(cache_key)
         if cached_data:
-            return PlanDetails(**cached_data) if isinstance(cached_data, dict) else PlanDetails(**cached_data)
+            return (
+                PlanDetails(**cached_data)
+                if isinstance(cached_data, dict)
+                else PlanDetails(**cached_data)
+            )
 
         url = "/plan/current"
         async with self._api_request("GET", url) as data:
@@ -513,7 +533,7 @@ class OptimizedTWSClient:
                     creation_date=creation_date or None,
                     jobs_count=data.get("jobs_count", 0),
                     estimated_completion=estimated_completion,
-                    status=data.get("status", "UNKNOWN")
+                    status=data.get("status", "UNKNOWN"),
                 )
 
                 await self.cache.set(cache_key, plan_details.dict())
@@ -533,7 +553,11 @@ class OptimizedTWSClient:
         cache_key = f"job_dependencies:{job_id}"
         cached_data = await self.cache.get(cache_key)
         if cached_data:
-            return DependencyTree(**cached_data) if isinstance(cached_data, dict) else DependencyTree(**cached_data)
+            return (
+                DependencyTree(**cached_data)
+                if isinstance(cached_data, dict)
+                else DependencyTree(**cached_data)
+            )
 
         # Validate job_id format
         if not SAFE_JOB_ID_PATTERN.match(job_id):
@@ -547,13 +571,15 @@ class OptimizedTWSClient:
                     job_id=job_id,
                     dependencies=data.get("dependencies", []),
                     dependents=data.get("dependents", []),
-                    dependency_graph=data.get("dependency_graph", {})
+                    dependency_graph=data.get("dependency_graph", {}),
                 )
 
                 await self.cache.set(cache_key, dependency_tree.dict())
                 return dependency_tree
             else:
-                raise ValueError(f"Unexpected data format for job dependencies {job_id}")
+                raise ValueError(
+                    f"Unexpected data format for job dependencies {job_id}"
+                )
 
     @circuit_breaker(  # type: ignore
         failure_threshold=3, recovery_timeout=30, name="tws_resource_usage"
@@ -567,7 +593,11 @@ class OptimizedTWSClient:
         cache_key = "resource_usage"
         cached_data = await self.cache.get(cache_key)
         if cached_data:
-            return [ResourceStatus(**resource) for resource in cached_data] if isinstance(cached_data, list) else []
+            return (
+                [ResourceStatus(**resource) for resource in cached_data]
+                if isinstance(cached_data, list)
+                else []
+            )
 
         url = f"/model/resource?engineName={self.engine_name}&engineOwner={self.engine_owner}"
         async with self._api_request("GET", url) as data:
@@ -581,8 +611,12 @@ class OptimizedTWSClient:
                                 resource_type=resource_data.get("resource_type", ""),
                                 total_capacity=resource_data.get("total_capacity"),
                                 used_capacity=resource_data.get("used_capacity"),
-                                available_capacity=resource_data.get("available_capacity"),
-                                utilization_percentage=resource_data.get("utilization_percentage")
+                                available_capacity=resource_data.get(
+                                    "available_capacity"
+                                ),
+                                utilization_percentage=resource_data.get(
+                                    "utilization_percentage"
+                                ),
                             )
                             resources.append(resource)
                         except Exception as e:
@@ -603,7 +637,11 @@ class OptimizedTWSClient:
         cache_key = f"event_log:{last_hours}h"
         cached_data = await self.cache.get(cache_key)
         if cached_data:
-            return [Event(**event) for event in cached_data] if isinstance(cached_data, list) else []
+            return (
+                [Event(**event) for event in cached_data]
+                if isinstance(cached_data, list)
+                else []
+            )
 
         url = f"/events?since={last_hours}h&engineName={self.engine_name}&engineOwner={self.engine_owner}"
         async with self._api_request("GET", url) as data:
@@ -628,7 +666,7 @@ class OptimizedTWSClient:
                                 source=event_data.get("source", ""),
                                 message=event_data.get("message", ""),
                                 job_id=event_data.get("job_id"),
-                                workstation=event_data.get("workstation")
+                                workstation=event_data.get("workstation"),
                             )
                             events.append(event)
                         except Exception as e:
@@ -649,7 +687,11 @@ class OptimizedTWSClient:
         cache_key = "performance_metrics"
         cached_data = await self.cache.get(cache_key)
         if cached_data:
-            return PerformanceData(**cached_data) if isinstance(cached_data, dict) else PerformanceData(**cached_data)
+            return (
+                PerformanceData(**cached_data)
+                if isinstance(cached_data, dict)
+                else PerformanceData(**cached_data)
+            )
 
         url = f"/metrics?engineName={self.engine_name}&engineOwner={self.engine_owner}"
         async with self._api_request("GET", url) as data:
@@ -669,7 +711,7 @@ class OptimizedTWSClient:
                     memory_usage_mb=data.get("memory_usage_mb", 0.0),
                     cpu_usage_percentage=data.get("cpu_usage_percentage", 0.0),
                     active_connections=data.get("active_connections", 0),
-                    jobs_per_minute=data.get("jobs_per_minute", 0.0)
+                    jobs_per_minute=data.get("jobs_per_minute", 0.0),
                 )
 
                 await self.cache.set(cache_key, performance_data.dict())

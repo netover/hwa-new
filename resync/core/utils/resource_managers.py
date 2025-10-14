@@ -9,8 +9,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager, contextmanager
-from typing import (Any, AsyncIterator, Callable, Generic, Iterator, Optional,
-                    TypeVar)
+from typing import Any, AsyncIterator, Callable, Generic, Iterator, Optional, TypeVar
 
 logger = logging.getLogger(__name__)
 

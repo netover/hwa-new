@@ -44,15 +44,20 @@ class CriticalJob(BaseModel):
 
 # --- New Data Models for Complete MVP ---
 
+
 class JobExecution(BaseModel):
     """Represents a single execution of a job."""
 
     job_id: str = Field(..., description="The unique identifier for the job execution")
     status: str = Field(..., description="The status of this execution")
     start_time: datetime = Field(..., description="When the job execution started")
-    end_time: Optional[datetime] = Field(None, description="When the job execution ended")
+    end_time: Optional[datetime] = Field(
+        None, description="When the job execution ended"
+    )
     duration: Optional[str] = Field(None, description="Duration of the execution")
-    error_message: Optional[str] = Field(None, description="Error message if execution failed")
+    error_message: Optional[str] = Field(
+        None, description="Error message if execution failed"
+    )
 
 
 class JobDetails(BaseModel):
@@ -63,10 +68,18 @@ class JobDetails(BaseModel):
     workstation: str = Field(..., description="The workstation where the job runs")
     status: str = Field(..., description="The current status of the job")
     job_stream: str = Field(..., description="The job stream the job belongs to")
-    full_definition: Dict[str, Any] = Field(..., description="Complete job definition from TWS")
-    dependencies: List[str] = Field(default_factory=list, description="List of job dependencies")
-    resource_requirements: Dict[str, Any] = Field(default_factory=dict, description="Resource requirements for the job")
-    execution_history: List[JobExecution] = Field(default_factory=list, description="Recent execution history")
+    full_definition: Dict[str, Any] = Field(
+        ..., description="Complete job definition from TWS"
+    )
+    dependencies: List[str] = Field(
+        default_factory=list, description="List of job dependencies"
+    )
+    resource_requirements: Dict[str, Any] = Field(
+        default_factory=dict, description="Resource requirements for the job"
+    )
+    execution_history: List[JobExecution] = Field(
+        default_factory=list, description="Recent execution history"
+    )
 
 
 class PlanDetails(BaseModel):
@@ -75,7 +88,9 @@ class PlanDetails(BaseModel):
     plan_id: str = Field(..., description="The unique identifier for the plan")
     creation_date: datetime = Field(..., description="When the plan was created")
     jobs_count: int = Field(..., description="Total number of jobs in the plan")
-    estimated_completion: Optional[datetime] = Field(None, description="Estimated completion time")
+    estimated_completion: Optional[datetime] = Field(
+        None, description="Estimated completion time"
+    )
     status: str = Field(..., description="Current status of the plan")
 
 
@@ -83,11 +98,17 @@ class ResourceStatus(BaseModel):
     """Information about resource usage in TWS."""
 
     resource_name: str = Field(..., description="The name of the resource")
-    resource_type: str = Field(..., description="The type of resource (CPU, memory, etc.)")
-    total_capacity: Optional[float] = Field(None, description="Total capacity of the resource")
+    resource_type: str = Field(
+        ..., description="The type of resource (CPU, memory, etc.)"
+    )
+    total_capacity: Optional[float] = Field(
+        None, description="Total capacity of the resource"
+    )
     used_capacity: Optional[float] = Field(None, description="Currently used capacity")
     available_capacity: Optional[float] = Field(None, description="Available capacity")
-    utilization_percentage: Optional[float] = Field(None, description="Utilization as percentage")
+    utilization_percentage: Optional[float] = Field(
+        None, description="Utilization as percentage"
+    )
 
 
 class Event(BaseModel):
@@ -100,14 +121,18 @@ class Event(BaseModel):
     source: str = Field(..., description="The source of the event")
     message: str = Field(..., description="The event message")
     job_id: Optional[str] = Field(None, description="Associated job ID if applicable")
-    workstation: Optional[str] = Field(None, description="Associated workstation if applicable")
+    workstation: Optional[str] = Field(
+        None, description="Associated workstation if applicable"
+    )
 
 
 class PerformanceData(BaseModel):
     """Performance metrics for TWS operations."""
 
     timestamp: datetime = Field(..., description="When the metrics were collected")
-    api_response_times: Dict[str, float] = Field(default_factory=dict, description="API response times by endpoint")
+    api_response_times: Dict[str, float] = Field(
+        default_factory=dict, description="API response times by endpoint"
+    )
     cache_hit_rate: float = Field(..., description="Cache hit rate percentage")
     memory_usage_mb: float = Field(..., description="Memory usage in MB")
     cpu_usage_percentage: float = Field(..., description="CPU usage percentage")
@@ -119,9 +144,15 @@ class DependencyTree(BaseModel):
     """Represents the dependency tree for a job."""
 
     job_id: str = Field(..., description="The job ID this tree represents")
-    dependencies: List[str] = Field(default_factory=list, description="Direct dependencies")
-    dependents: List[str] = Field(default_factory=list, description="Jobs that depend on this job")
-    dependency_graph: Dict[str, List[str]] = Field(default_factory=dict, description="Complete dependency graph")
+    dependencies: List[str] = Field(
+        default_factory=list, description="Direct dependencies"
+    )
+    dependents: List[str] = Field(
+        default_factory=list, description="Jobs that depend on this job"
+    )
+    dependency_graph: Dict[str, List[str]] = Field(
+        default_factory=dict, description="Complete dependency graph"
+    )
 
 
 class SystemStatus(BaseModel):

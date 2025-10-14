@@ -5,11 +5,15 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import Field, validator
+from pydantic import Field, validator, ConfigDict
 from pydantic.types import constr
 
-from .common import (BaseValidatedModel, NumericConstraints, StringConstraints,
-                     ValidationPatterns)
+from .common import (
+    BaseValidatedModel,
+    NumericConstraints,
+    StringConstraints,
+    ValidationPatterns,
+)
 
 
 class SortOrder(str, Enum):
@@ -53,10 +57,9 @@ class PaginationParams(BaseValidatedModel):
         description="Number of items per page",
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("page_size")
     def validate_page_size(cls, v):
@@ -94,21 +97,18 @@ class SearchParams(BaseValidatedModel):
 
     whole_words: bool = Field(default=False, description="Match whole words only")
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("query")
     def validate_search_query(cls, v):
         """Validate search query for malicious content."""
         if not v or not v.strip():
             raise ValueError("Search query cannot be empty")
-
         # Check for script injection
         if ValidationPatterns.SCRIPT_PATTERN.search(v):
             raise ValueError("Search query contains potentially malicious content")
-
         # Check for SQL injection patterns
         sql_patterns = [
             r"(\b(union|select|insert|update|delete|drop|create|alter|exec|execute)\b)",
@@ -116,11 +116,9 @@ class SearchParams(BaseValidatedModel):
             r"('|\")(.*)(or|and)(.*)('|\")",
             r"(;|--|/\*|\*/|xp_)",
         ]
-
         for pattern in sql_patterns:
             if re.search(pattern, v, re.IGNORECASE):
                 raise ValueError("Search query contains invalid patterns")
-
         return v
 
     @validator("search_fields")
@@ -128,16 +126,13 @@ class SearchParams(BaseValidatedModel):
         """Validate search fields."""
         if not v:
             return v
-
         # Validate field names
         for field in v:
             if not field.replace("_", "").replace(".", "").isalnum():
                 raise ValueError(f"Invalid search field: {field}")
-
         # Check for duplicate fields
         if len(v) != len(set(v)):
             raise ValueError("Duplicate search fields found")
-
         return v
 
 
@@ -152,17 +147,15 @@ class FilterParams(BaseValidatedModel):
         default="and", pattern=r"^(and|or)$", description="Logic to combine filters"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("filters")
     def validate_filters(cls, v):
         """Validate filter conditions."""
         if not v:
             return v
-
         for i, filter_condition in enumerate(v):
             # Validate filter structure
             required_keys = {"field", "operator", "value"}
@@ -170,30 +163,25 @@ class FilterParams(BaseValidatedModel):
                 raise ValueError(
                     f"Filter at index {i} missing required keys: {required_keys}"
                 )
-
             # Validate field name
             field = filter_condition["field"]
             if not field.replace("_", "").replace(".", "").isalnum():
                 raise ValueError(f"Invalid filter field: {field}")
-
             # Validate operator
             operator = filter_condition["operator"]
             valid_operators = {op.value for op in FilterOperator}
             if operator not in valid_operators:
                 raise ValueError(f"Invalid filter operator: {operator}")
-
             # Validate value based on operator
             value = filter_condition["value"]
             if operator in {"in", "not_in"} and not isinstance(value, list):
                 raise ValueError(f"Filter operator '{operator}' requires a list value")
-
             # Check for malicious content in string values
             if isinstance(value, str):
                 if ValidationPatterns.SCRIPT_PATTERN.search(value):
                     raise ValueError(
                         f"Filter value contains malicious content: {value}"
                     )
-
             # Check for SQL injection in field names and values
             if isinstance(field, str):
                 sql_patterns = [
@@ -205,7 +193,6 @@ class FilterParams(BaseValidatedModel):
                         raise ValueError(
                             f"Filter field contains invalid patterns: {field}"
                         )
-
         return v
 
 
@@ -220,36 +207,30 @@ class SortParams(BaseValidatedModel):
         default_factory=list, description="Sort order for each field", max_length=5
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("sort_by")
     def validate_sort_fields(cls, v):
         """Validate sort fields."""
         if not v:
             return v
-
         # Validate field names
         for field in v:
             if not field.replace("_", "").replace(".", "").isalnum():
                 raise ValueError(f"Invalid sort field: {field}")
-
         # Check for duplicate fields
         if len(v) != len(set(v)):
             raise ValueError("Duplicate sort fields found")
-
         return v
 
     @validator("sort_order")
     def validate_sort_order(cls, v, values):
         """Validate sort order matches sort fields."""
         sort_by = values.get("sort_by", [])
-
         if v and sort_by and len(v) != len(sort_by):
             raise ValueError("Number of sort orders must match number of sort fields")
-
         return v
 
 
@@ -268,19 +249,16 @@ class DateRangeParams(BaseValidatedModel):
         description="Date field to filter on",
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("end_date")
     def validate_date_range(cls, v, values):
         """Validate date range."""
         start_date = values.get("start_date")
-
         if start_date and v and v < start_date:
             raise ValueError("End date must be after start date")
-
         return v
 
 
@@ -315,10 +293,9 @@ class AgentQueryParams(BaseValidatedModel):
         None, description="Filter by tags", max_length=5
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("name", "type", "status", "model_name")
     def validate_text_fields(cls, v):
@@ -332,16 +309,13 @@ class AgentQueryParams(BaseValidatedModel):
         """Validate list fields."""
         if not v:
             return v
-
         # Check for duplicates
         if len(v) != len(set(v)):
             raise ValueError("Duplicate values found in list")
-
         # Validate individual items
         for item in v:
             if ValidationPatterns.SCRIPT_PATTERN.search(item):
                 raise ValueError(f"List item contains malicious content: {item}")
-
         return v
 
 
@@ -368,21 +342,18 @@ class SystemQueryParams(BaseValidatedModel):
         None, description="Filter by alert severity", max_length=3
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("metric_types", "severity_filter")
     def validate_list_fields(cls, v):
         """Validate list fields."""
         if not v:
             return v
-
         # Check for duplicates
         if len(v) != len(set(v)):
             raise ValueError("Duplicate values found in list")
-
         return v
 
 
@@ -411,10 +382,9 @@ class AuditQueryParams(BaseValidatedModel):
         None, description="Filter by severity levels", max_items=3
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("query")
     def validate_search_query(cls, v):
@@ -445,19 +415,16 @@ class FileQueryParams(BaseValidatedModel):
 
     status: Optional[str] = Field(None, description="Filter by file processing status")
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("size_max")
     def validate_size_range(cls, v, values):
         """Validate file size range."""
         size_min = values.get("size_min")
-
         if size_min and v and v < size_min:
             raise ValueError("Maximum size must be greater than minimum size")
-
         return v
 
     @validator("file_types", "status")
@@ -479,10 +446,9 @@ class FileQueryParams(BaseValidatedModel):
 class CombinedQueryParams(PaginationParams, SearchParams, SortParams, DateRangeParams):
     """Combined query parameters for endpoints that support multiple filtering options."""
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
 
 # Export individual parameter types for flexible usage

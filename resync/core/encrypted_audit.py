@@ -75,10 +75,10 @@ class AuditEntry:
             "details": self.details,
             "ip_address": self.ip_address,
             "user_agent": self.user_agent,
-            "session_id": self.session_id
+            "session_id": self.session_id,
         }
 
-        content_str = json.dumps(content, sort_keys=True, separators=(',', ':'))
+        content_str = json.dumps(content, sort_keys=True, separators=(",", ":"))
         self.hash_value = hashlib.sha256(content_str.encode()).hexdigest()
 
     def to_dict(self) -> Dict[str, Any]:
@@ -98,7 +98,7 @@ class AuditEntry:
             "previous_hash": self.previous_hash,
             "chain_hash": self.chain_hash,
             "signature": self.signature,
-            "encryption_key_id": self.encryption_key_id
+            "encryption_key_id": self.encryption_key_id,
         }
 
     @classmethod
@@ -114,7 +114,7 @@ class AuditEntry:
             details=data["details"],
             ip_address=data.get("ip_address"),
             user_agent=data.get("user_agent"),
-            session_id=data.get("session_id")
+            session_id=data.get("session_id"),
         )
 
         # Restore cryptographic fields
@@ -165,10 +165,10 @@ class AuditLogBlock:
             "block_id": self.block_id,
             "created_at": self.created_at,
             "entries": [entry.hash_value for entry in self.entries],
-            "previous_block_hash": self.previous_block_hash
+            "previous_block_hash": self.previous_block_hash,
         }
 
-        content_str = json.dumps(content, sort_keys=True, separators=(',', ':'))
+        content_str = json.dumps(content, sort_keys=True, separators=(",", ":"))
         self.block_hash = hashlib.sha256(content_str.encode()).hexdigest()
         return self.block_hash
 
@@ -226,7 +226,7 @@ class KeyManager:
             key_data=key_data,
             created_at=time.time(),
             expires_at=expires_at,
-            rotation_reason=reason
+            rotation_reason=reason,
         )
 
         self.keys[key_id] = key
@@ -273,7 +273,7 @@ class KeyManager:
                 "expires_at": key.expires_at,
                 "is_active": key.is_active,
                 "is_expired": key.is_expired(),
-                "rotation_reason": key.rotation_reason
+                "rotation_reason": key.rotation_reason,
             }
             for key in self.keys.values()
         ]
@@ -383,7 +383,7 @@ class EncryptedAuditTrail:
         details: Optional[Dict[str, Any]] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
     ) -> str:
         """Log an audit event with cryptographic integrity."""
         entry_id = f"audit_{int(time.time() * 1000000)}_{secrets.token_hex(4)}"
@@ -398,7 +398,7 @@ class EncryptedAuditTrail:
             details=details or {},
             ip_address=ip_address,
             user_agent=user_agent,
-            session_id=session_id
+            session_id=session_id,
         )
 
         # Add to hash chain
@@ -435,7 +435,9 @@ class EncryptedAuditTrail:
     def _calculate_signature(self, entry: AuditEntry) -> str:
         """Calculate HMAC signature for the entry."""
         content = f"{entry.entry_id}:{entry.hash_value}:{entry.chain_hash}"
-        signature = hmac.new(self.key_manager.hmac_key, content.encode(), hashlib.sha256)
+        signature = hmac.new(
+            self.key_manager.hmac_key, content.encode(), hashlib.sha256
+        )
         return signature.hexdigest()
 
     async def search_events(
@@ -445,14 +447,16 @@ class EncryptedAuditTrail:
         event_type: Optional[str] = None,
         user_id: Optional[str] = None,
         resource_id: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[AuditEntry]:
         """Search audit events with optional filters."""
         results = []
 
         # Search in current pending entries
         for entry in self.pending_entries:
-            if self._matches_filters(entry, start_time, end_time, event_type, user_id, resource_id):
+            if self._matches_filters(
+                entry, start_time, end_time, event_type, user_id, resource_id
+            ):
                 results.append(entry)
                 if len(results) >= limit:
                     break
@@ -472,7 +476,7 @@ class EncryptedAuditTrail:
         end_time: Optional[float],
         event_type: Optional[str],
         user_id: Optional[str],
-        resource_id: Optional[str]
+        resource_id: Optional[str],
     ) -> bool:
         """Check if entry matches search filters."""
         if start_time and entry.timestamp < start_time:
@@ -503,7 +507,7 @@ class EncryptedAuditTrail:
             "issues_found": [],
             "tamper_attempts": self.tamper_attempts_detected,
             "pending_entries": len(self.pending_entries),
-            "total_entries": self.total_entries
+            "total_entries": self.total_entries,
         }
 
         try:
@@ -547,18 +551,22 @@ class EncryptedAuditTrail:
         for entry in self.pending_entries:
             # Verify entry hash is correctly calculated
             expected_hash = hashlib.sha256(
-                json.dumps({
-                    "entry_id": entry.entry_id,
-                    "timestamp": entry.timestamp,
-                    "event_type": entry.event_type,
-                    "user_id": entry.user_id,
-                    "resource_id": entry.resource_id,
-                    "action": entry.action,
-                    "details": entry.details,
-                    "ip_address": entry.ip_address,
-                    "user_agent": entry.user_agent,
-                    "session_id": entry.session_id
-                }, sort_keys=True, separators=(',', ':')).encode()
+                json.dumps(
+                    {
+                        "entry_id": entry.entry_id,
+                        "timestamp": entry.timestamp,
+                        "event_type": entry.event_type,
+                        "user_id": entry.user_id,
+                        "resource_id": entry.resource_id,
+                        "action": entry.action,
+                        "details": entry.details,
+                        "ip_address": entry.ip_address,
+                        "user_agent": entry.user_agent,
+                        "session_id": entry.session_id,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
             ).hexdigest()
 
             if entry.hash_value != expected_hash:
@@ -586,20 +594,17 @@ class EncryptedAuditTrail:
             "valid": True,
             "issues": [],
             "blocks_verified": 0,
-            "entries_verified": 0
+            "entries_verified": 0,
         }
 
     async def export_forensic_data(
-        self,
-        start_time: float,
-        end_time: float,
-        include_encrypted: bool = False
+        self, start_time: float, end_time: float, include_encrypted: bool = False
     ) -> Dict[str, Any]:
         """Export audit data for forensic analysis."""
         events = await self.search_events(
             start_time=start_time,
             end_time=end_time,
-            limit=10000  # Large limit for forensic export
+            limit=10000,  # Large limit for forensic export
         )
 
         export_data = {
@@ -607,7 +612,7 @@ class EncryptedAuditTrail:
             "time_range": {"start": start_time, "end": end_time},
             "total_events": len(events),
             "integrity_status": await self.verify_integrity(),
-            "events": [event.to_dict() for event in events]
+            "events": [event.to_dict() for event in events],
         }
 
         if include_encrypted:
@@ -627,8 +632,8 @@ class EncryptedAuditTrail:
             details={
                 "new_key_id": new_key.key_id,
                 "reason": reason,
-                "previous_key_id": self.key_manager.active_key_id
-            }
+                "previous_key_id": self.key_manager.active_key_id,
+            },
         )
 
         logger.info(f"Encryption key rotated: {new_key.key_id}")
@@ -640,26 +645,30 @@ class EncryptedAuditTrail:
             "performance": {
                 "total_entries_logged": self.total_entries,
                 "pending_entries": len(self.pending_entries),
-                "current_chain_hash": self.chain_hash[:16] + "..." if self.chain_hash else "",
-                "active_encryption_key": self.key_manager.active_key_id
+                "current_chain_hash": (
+                    self.chain_hash[:16] + "..." if self.chain_hash else ""
+                ),
+                "active_encryption_key": self.key_manager.active_key_id,
             },
             "security": {
                 "tamper_attempts_detected": self.tamper_attempts_detected,
                 "integrity_violations": self.integrity_violations,
-                "encryption_keys_active": sum(1 for k in self.key_manager.keys.values() if k.is_active),
+                "encryption_keys_active": sum(
+                    1 for k in self.key_manager.keys.values() if k.is_active
+                ),
                 "signatures_enabled": self.config.enable_signatures,
-                "hash_chaining_enabled": self.config.enable_hash_chaining
+                "hash_chaining_enabled": self.config.enable_hash_chaining,
             },
             "storage": {
                 "audit_log_directory": str(self.audit_log_dir),
                 "blocks_created": self.block_counter,
-                "compression_enabled": self.config.compression_enabled
+                "compression_enabled": self.config.compression_enabled,
             },
             "configuration": {
                 "max_entries_per_block": self.config.max_entries_per_block,
                 "flush_interval_seconds": self.config.flush_interval_seconds,
-                "key_rotation_days": self.config.key_rotation_days
-            }
+                "key_rotation_days": self.config.key_rotation_days,
+            },
         }
 
     async def _flush_pending_entries(self) -> None:
@@ -675,7 +684,7 @@ class EncryptedAuditTrail:
             block_id=block_id,
             entries=list(self.pending_entries),
             created_at=time.time(),
-            previous_block_hash=self.chain_hash
+            previous_block_hash=self.chain_hash,
         )
 
         # Generate block hash
@@ -705,11 +714,13 @@ class EncryptedAuditTrail:
 
         # Serialize entries
         entries_data = [entry.to_dict() for entry in block.entries]
-        json_data = json.dumps(entries_data, separators=(',', ':'))
+        json_data = json.dumps(entries_data, separators=(",", ":"))
 
         # Compress if enabled
         if self.config.compression_enabled:
-            json_data = gzip.compress(json_data.encode(), compresslevel=self.config.compression_level)
+            json_data = gzip.compress(
+                json_data.encode(), compresslevel=self.config.compression_level
+            )
         else:
             json_data = json_data.encode()
 
@@ -727,30 +738,32 @@ class EncryptedAuditTrail:
             "entries_count": len(block.entries),
             "block_hash": block.block_hash,
             "previous_block_hash": block.previous_block_hash,
-            "encryption_key_id": block.entries[0].encryption_key_id if block.entries else "",
-            "compressed": self.config.compression_enabled
+            "encryption_key_id": (
+                block.entries[0].encryption_key_id if block.entries else ""
+            ),
+            "compressed": self.config.compression_enabled,
         }
 
         # Combine metadata and encrypted data
         block_data = {
             "metadata": metadata,
-            "encrypted_data": base64.b64encode(block.encrypted_data).decode()
+            "encrypted_data": base64.b64encode(block.encrypted_data).decode(),
         }
 
         # Save to file
         async with asyncio.Lock():  # File system operations need locking
-            with open(block_file, 'w', encoding='utf-8') as f:
-                json.dump(block_data, f, separators=(',', ':'))
+            with open(block_file, "w", encoding="utf-8") as f:
+                json.dump(block_data, f, separators=(",", ":"))
 
     async def _save_chain_state(self) -> None:
         """Save current chain state to disk."""
         chain_file = self.audit_log_dir / "chain_hash.txt"
         counter_file = self.audit_log_dir / "block_counter.txt"
 
-        with open(chain_file, 'w') as f:
+        with open(chain_file, "w") as f:
             f.write(self.chain_hash)
 
-        with open(counter_file, 'w') as f:
+        with open(counter_file, "w") as f:
             f.write(str(self.block_counter))
 
     async def _flush_worker(self) -> None:
@@ -814,7 +827,9 @@ class EncryptedAuditTrail:
                 if self.config.chain_verification_enabled:
                     integrity = await self.verify_integrity(full_chain_check=False)
                     if integrity["integrity_status"] != "valid":
-                        logger.warning("Periodic integrity check failed", results=integrity)
+                        logger.warning(
+                            "Periodic integrity check failed", results=integrity
+                        )
 
             except asyncio.CancelledError:
                 break

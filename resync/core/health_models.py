@@ -6,6 +6,14 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
+class SystemHealthStatus(str, enum.Enum):
+    """Overall system health status enumeration."""
+
+    OK = "ok"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
 class HealthStatus(enum.Enum):
     """Health status indicators with color coding."""
 
@@ -28,6 +36,7 @@ class ComponentType(enum.Enum):
     CACHE = "cache"
     CIRCUIT_BREAKER = "circuit_breaker"
     CONNECTION_POOL = "connection_pool"
+    OTHER = "other"
 
 
 @dataclass
@@ -51,7 +60,7 @@ class HealthCheckResult:
     """Result of a comprehensive health check."""
 
     overall_status: HealthStatus
-    timestamp: datetime
+    timestamp: Optional[datetime]
     correlation_id: Optional[str] = None
     components: Dict[str, ComponentHealth] = field(default_factory=dict)
     summary: Dict[str, Any] = field(default_factory=dict)
@@ -110,7 +119,7 @@ class HealthCheckConfig:
 class HealthStatusHistory:
     """Historical record of health status changes."""
 
-    timestamp: datetime
+    timestamp: Optional[datetime]
     overall_status: HealthStatus
     component_changes: Dict[str, HealthStatus] = field(default_factory=dict)
     alerts_triggered: List[str] = field(default_factory=list)
@@ -146,3 +155,22 @@ def get_status_description(status: HealthStatus) -> str:
         HealthStatus.UNKNOWN: "Component status unavailable",
     }
     return description_map.get(status, "Unknown status")
+
+
+@dataclass
+class RecoveryResult:
+    """Result of a recovery attempt operation."""
+
+    success: bool
+    component_name: str
+    recovery_type: str
+    timestamp: Optional[datetime]
+    message: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    error_details: Optional[str] = None
+    recovery_time_ms: Optional[float] = None
+
+    def __post_init__(self):
+        """Set timestamp if not provided."""
+        if self.timestamp is None:
+            self.timestamp = datetime.now()

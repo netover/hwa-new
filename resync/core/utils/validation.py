@@ -8,7 +8,7 @@ common input validation scenarios in the application.
 from enum import Enum
 from typing import Any, Dict, List, Optional, Type
 
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, validator
 
 
 class LLMProvider(str, Enum):
@@ -28,7 +28,7 @@ class LLMRequest(BaseModel):
         ..., min_length=1, max_length=10000, description="The prompt to send to the LLM"
     )
     model: str = Field(
-        ..., description="The LLM model identifier", regex=r"^[a-zA-Z0-9\-_/.]+$"
+        ..., description="The LLM model identifier", pattern=r"^[a-zA-Z0-9\-_/.]+$"
     )
     max_tokens: int = Field(
         default=200, ge=1, le=4000, description="Maximum tokens in response"
@@ -40,6 +40,8 @@ class LLMRequest(BaseModel):
         default=30.0, ge=1.0, le=300.0, description="Request timeout in seconds"
     )
     provider: Optional[LLMProvider] = Field(default=None, description="LLM provider")
+
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
     @validator("prompt")
     def validate_prompt(cls, v: str):
@@ -55,12 +57,6 @@ class LLMRequest(BaseModel):
             raise ValueError("Model cannot be empty")
         return v.strip()
 
-    class Config:
-        """Pydantic configuration."""
-
-        validate_assignment = True
-        extra = "forbid"
-
 
 class PaginationRequest(BaseModel):
     """Validation model for pagination parameters."""
@@ -68,10 +64,10 @@ class PaginationRequest(BaseModel):
     page: int = Field(default=1, ge=1, description="Page number (1-based)")
     page_size: int = Field(default=50, ge=1, le=1000, description="Items per page")
     sort_by: Optional[str] = Field(
-        default=None, description="Sort field", regex=r"^[a-zA-Z_][a-zA-Z0-9_]*$"
+        default=None, description="Sort field", pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$"
     )
     sort_order: str = Field(
-        default="asc", description="Sort order", regex=r"^(asc|desc)$"
+        default="asc", description="Sort order", pattern=r"^(asc|desc)$"
     )
 
     @property
@@ -104,7 +100,7 @@ class FileUploadRequest(BaseModel):
         ..., min_length=1, max_length=255, description="Original filename"
     )
     content_type: str = Field(
-        ..., description="MIME type", regex=r"^[a-zA-Z0-9\-]+/[a-zA-Z0-9\-]+$"
+        ..., description="MIME type", pattern=r"^[a-zA-Z0-9\-]+/[a-zA-Z0-9\-]+$"
     )
     size: int = Field(
         ..., ge=1, le=50 * 1024 * 1024, description="File size in bytes"
@@ -150,7 +146,7 @@ class ConfigurationUpdate(BaseModel):
     key: str = Field(..., min_length=1, max_length=200, description="Configuration key")
     value: Any = Field(..., description="Configuration value")
     value_type: str = Field(
-        ..., description="Value type", regex=r"^(str|int|float|bool|list|dict)$"
+        ..., description="Value type", pattern=r"^(str|int|float|bool|list|dict)$"
     )
 
     @validator("key")

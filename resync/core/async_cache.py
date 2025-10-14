@@ -8,8 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from resync.core.exceptions import CacheError
 from resync.core.metrics import log_with_correlation, runtime_metrics
-from resync.core.write_ahead_log import (WalEntry, WalOperationType,
-                                         WriteAheadLog)
+from resync.core.write_ahead_log import WalEntry, WalOperationType, WriteAheadLog
 
 logger = logging.getLogger(__name__)
 

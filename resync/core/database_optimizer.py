@@ -43,7 +43,9 @@ class QueryBatch:
             if self.queries:
                 sql, params = self.queries[0]
                 batch_content = f"{sql}|{params}|{self.created_at}"
-                self.batch_id = f"batch_{hashlib.md5(batch_content.encode()).hexdigest()[:8]}"
+                self.batch_id = (
+                    f"batch_{hashlib.md5(batch_content.encode()).hexdigest()[:8]}"
+                )
 
     @property
     def is_full(self) -> bool:
@@ -85,7 +87,7 @@ class QueryBatch:
             "query_count": len(self.queries),
             "query_types": dict(query_types),
             "age": time.time() - self.created_at,
-            "priority": self.priority
+            "priority": self.priority,
         }
 
 
@@ -96,13 +98,17 @@ class QueryOptimizationRule:
     pattern: str  # Regex pattern to match
     optimization: str  # Description of optimization
     priority: int = 1  # Priority for application (1-10)
-    applies_to: Set[str] = field(default_factory=lambda: {"select", "insert", "update", "delete"})
+    applies_to: Set[str] = field(
+        default_factory=lambda: {"select", "insert", "update", "delete"}
+    )
 
     def matches(self, sql: str) -> bool:
         """Check if this rule matches the SQL query."""
         return bool(re.search(self.pattern, sql, re.IGNORECASE))
 
-    def optimize(self, sql: str, params: Tuple[Any, ...]) -> Tuple[str, Tuple[Any, ...]]:
+    def optimize(
+        self, sql: str, params: Tuple[Any, ...]
+    ) -> Tuple[str, Tuple[Any, ...]]:
         """
         Apply optimization to the query.
 
@@ -115,7 +121,9 @@ class QueryOptimizationRule:
 class IndexOptimizationRule(QueryOptimizationRule):
     """Rule for index usage optimization."""
 
-    def optimize(self, sql: str, params: Tuple[Any, ...]) -> Tuple[str, Tuple[Any, ...]]:
+    def optimize(
+        self, sql: str, params: Tuple[Any, ...]
+    ) -> Tuple[str, Tuple[Any, ...]]:
         """Add index hints where beneficial."""
         # This is a simplified example. Real implementation would analyze query patterns
         # and suggest index usage based on table statistics
@@ -126,7 +134,9 @@ class IndexOptimizationRule(QueryOptimizationRule):
 class JoinOptimizationRule(QueryOptimizationRule):
     """Rule for JOIN optimization."""
 
-    def optimize(self, sql: str, params: Tuple[Any, ...]) -> Tuple[str, Tuple[Any, ...]]:
+    def optimize(
+        self, sql: str, params: Tuple[Any, ...]
+    ) -> Tuple[str, Tuple[Any, ...]]:
         """Optimize JOIN operations."""
         # Analyze JOIN patterns and suggest improvements
         return sql, params
@@ -207,10 +217,7 @@ class DatabaseOptimizer:
         self.optimization_rules.sort(key=lambda r: r.priority, reverse=True)
 
     async def optimize_query(
-        self,
-        sql: str,
-        params: Tuple[Any, ...],
-        enable_batching: bool = True
+        self, sql: str, params: Tuple[Any, ...], enable_batching: bool = True
     ) -> Tuple[str, Tuple[Any, ...], Optional[str]]:
         """
         Optimize a single query and optionally batch it.
@@ -233,9 +240,7 @@ class DatabaseOptimizer:
         return optimized_sql, optimized_params, None
 
     async def optimize_batch(
-        self,
-        queries: List[Tuple[str, Tuple[Any, ...]]],
-        batch_strategy: str = "smart"
+        self, queries: List[Tuple[str, Tuple[Any, ...]]], batch_strategy: str = "smart"
     ) -> BatchOptimizationResult:
         """
         Optimize a batch of queries.
@@ -259,10 +264,7 @@ class DatabaseOptimizer:
                 optimized_queries=len(optimized_queries),
                 batches_created=0,
                 estimated_savings_ms=0.0,
-                execution_plan={
-                    "strategy": "individual",
-                    "queries": optimized_queries
-                }
+                execution_plan={"strategy": "individual", "queries": optimized_queries},
             )
 
         # Group queries for batching
@@ -293,14 +295,12 @@ class DatabaseOptimizer:
             execution_plan={
                 "strategy": batch_strategy,
                 "batches": [batch.get_execution_stats() for batch in batches],
-                "total_round_trips_saved": round_trip_savings
-            }
+                "total_round_trips_saved": round_trip_savings,
+            },
         )
 
     async def execute_optimized_batch(
-        self,
-        batch: QueryBatch,
-        executor: callable
+        self, batch: QueryBatch, executor: callable
     ) -> List[Any]:
         """
         Execute an optimized batch using the provided executor.
@@ -332,7 +332,7 @@ class DatabaseOptimizer:
                 batch_id=batch.batch_id,
                 query_count=len(batch.queries),
                 execution_time_ms=execution_time * 1000,
-                estimated_savings=batch.get_execution_stats()
+                estimated_savings=batch.get_execution_stats(),
             )
 
             return results
@@ -342,13 +342,15 @@ class DatabaseOptimizer:
                 "batch_execution_failed",
                 batch_id=batch.batch_id,
                 error=str(e),
-                query_count=len(batch.queries)
+                query_count=len(batch.queries),
             )
             raise
 
     def get_optimizer_stats(self) -> Dict[str, Any]:
         """Get comprehensive optimizer statistics."""
-        active_batches = sum(1 for batch in self.batches.values() if not batch.is_expired)
+        active_batches = sum(
+            1 for batch in self.batches.values() if not batch.is_expired
+        )
 
         return {
             "queries_processed": self.total_queries_processed,
@@ -357,7 +359,7 @@ class DatabaseOptimizer:
             "optimization_savings_ms": self.total_optimization_savings,
             "rules_applied": len(self.optimization_rules),
             "avg_batch_size": self._calculate_avg_batch_size(),
-            "batching_efficiency": self._calculate_batching_efficiency()
+            "batching_efficiency": self._calculate_batching_efficiency(),
         }
 
     async def _batch_processor(self) -> None:
@@ -377,7 +379,8 @@ class DatabaseOptimizer:
 
                 # Process ready batches (this would trigger execution in real implementation)
                 ready_batches = [
-                    batch for batch in self.batches.values()
+                    batch
+                    for batch in self.batches.values()
                     if batch.is_full or (len(batch.queries) > 0 and batch.is_expired)
                 ]
 
@@ -386,7 +389,7 @@ class DatabaseOptimizer:
                     logger.debug(
                         "batch_ready_for_execution",
                         batch_id=batch.batch_id,
-                        query_count=len(batch.queries)
+                        query_count=len(batch.queries),
                     )
 
             except asyncio.CancelledError:
@@ -395,9 +398,7 @@ class DatabaseOptimizer:
                 logger.error(f"Batch processor error: {e}")
 
     def _apply_optimization_rules(
-        self,
-        sql: str,
-        params: Tuple[Any, ...]
+        self, sql: str, params: Tuple[Any, ...]
     ) -> Tuple[str, Tuple[Any, ...]]:
         """Apply all applicable optimization rules to a query."""
         optimized_sql = sql
@@ -406,31 +407,35 @@ class DatabaseOptimizer:
         for rule in self.optimization_rules:
             if rule.matches(optimized_sql):
                 try:
-                    optimized_sql, optimized_params = rule.optimize(optimized_sql, optimized_params)
+                    optimized_sql, optimized_params = rule.optimize(
+                        optimized_sql, optimized_params
+                    )
                     logger.debug(
                         "optimization_rule_applied",
                         rule=rule.optimization,
-                        sql_preview=optimized_sql[:50]
+                        sql_preview=optimized_sql[:50],
                     )
                 except Exception as e:
                     logger.warning(
-                        "optimization_rule_failed",
-                        rule=rule.optimization,
-                        error=str(e)
+                        "optimization_rule_failed", rule=rule.optimization, error=str(e)
                     )
 
         return optimized_sql, optimized_params
 
-    async def _try_add_to_batch(self, sql: str, params: Tuple[Any, ...]) -> Optional[str]:
+    async def _try_add_to_batch(
+        self, sql: str, params: Tuple[Any, ...]
+    ) -> Optional[str]:
         """Try to add query to an existing batch. Returns batch_id if successful."""
         # Simple batching strategy - group by query type
         query_type = self._classify_query_type(sql)
 
         # Look for existing batch of same type
         for batch_id, batch in self.batches.items():
-            if (batch_id.startswith(f"{query_type}_") and
-                not batch.is_full and
-                not batch.is_expired):
+            if (
+                batch_id.startswith(f"{query_type}_")
+                and not batch.is_full
+                and not batch.is_expired
+            ):
 
                 if batch.add_query(sql, params):
                     return batch_id
@@ -459,7 +464,9 @@ class DatabaseOptimizer:
         else:
             return "other"
 
-    def _create_smart_batches(self, queries: List[Tuple[str, Tuple[Any, ...]]]) -> List[QueryBatch]:
+    def _create_smart_batches(
+        self, queries: List[Tuple[str, Tuple[Any, ...]]]
+    ) -> List[QueryBatch]:
         """Create batches using smart grouping strategy."""
         # Group by query type and similar structure
         type_groups = defaultdict(list)
@@ -480,13 +487,15 @@ class DatabaseOptimizer:
             else:
                 # Split large groups into multiple batches
                 for i in range(0, len(group_queries), self.max_batch_size):
-                    chunk = group_queries[i:i + self.max_batch_size]
+                    chunk = group_queries[i : i + self.max_batch_size]
                     batch = QueryBatch(queries=chunk)
                     batches.append(batch)
 
         return batches
 
-    def _create_type_based_batches(self, queries: List[Tuple[str, Tuple[Any, ...]]]) -> List[QueryBatch]:
+    def _create_type_based_batches(
+        self, queries: List[Tuple[str, Tuple[Any, ...]]]
+    ) -> List[QueryBatch]:
         """Create batches grouped by query type only."""
         type_groups = defaultdict(list)
 
@@ -502,7 +511,7 @@ class DatabaseOptimizer:
             else:
                 # Split large groups
                 for i in range(0, len(group_queries), self.max_batch_size):
-                    chunk = group_queries[i:i + self.max_batch_size]
+                    chunk = group_queries[i : i + self.max_batch_size]
                     batch = QueryBatch(queries=chunk)
                     batches.append(batch)
 
@@ -542,34 +551,42 @@ class DatabaseOptimizer:
     def _setup_optimization_rules(self) -> None:
         """Set up default optimization rules."""
         # Index optimization rule
-        self.add_optimization_rule(IndexOptimizationRule(
-            pattern=r"SELECT.*WHERE.*=.*",
-            optimization="Consider adding index on WHERE column",
-            priority=8
-        ))
+        self.add_optimization_rule(
+            IndexOptimizationRule(
+                pattern=r"SELECT.*WHERE.*=.*",
+                optimization="Consider adding index on WHERE column",
+                priority=8,
+            )
+        )
 
         # JOIN optimization rule
-        self.add_optimization_rule(JoinOptimizationRule(
-            pattern=r"JOIN.*ON.*=.*",
-            optimization="Review JOIN conditions for optimization",
-            priority=7
-        ))
+        self.add_optimization_rule(
+            JoinOptimizationRule(
+                pattern=r"JOIN.*ON.*=.*",
+                optimization="Review JOIN conditions for optimization",
+                priority=7,
+            )
+        )
 
         # Subquery optimization
-        self.add_optimization_rule(QueryOptimizationRule(
-            pattern=r"SELECT.*IN\s*\(",
-            optimization="Consider JOIN instead of IN subquery",
-            priority=6,
-            applies_to={"select"}
-        ))
+        self.add_optimization_rule(
+            QueryOptimizationRule(
+                pattern=r"SELECT.*IN\s*\(",
+                optimization="Consider JOIN instead of IN subquery",
+                priority=6,
+                applies_to={"select"},
+            )
+        )
 
         # LIKE optimization
-        self.add_optimization_rule(QueryOptimizationRule(
-            pattern=r"LIKE\s*'%.*%'",
-            optimization="Leading wildcard in LIKE prevents index usage",
-            priority=9,
-            applies_to={"select"}
-        ))
+        self.add_optimization_rule(
+            QueryOptimizationRule(
+                pattern=r"LIKE\s*'%.*%'",
+                optimization="Leading wildcard in LIKE prevents index usage",
+                priority=9,
+                applies_to={"select"},
+            )
+        )
 
 
 # Global optimizer instance

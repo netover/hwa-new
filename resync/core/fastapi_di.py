@@ -19,14 +19,19 @@ from resync.core.audit_queue import AsyncAuditQueue
 from resync.core.connection_manager import ConnectionManager
 from resync.core.di_container import DIContainer, ServiceLifetime, container
 from resync.core.file_ingestor import create_file_ingestor
-from resync.core.interfaces import (IAgentManager, IAuditQueue,
-                                    IConnectionManager, IFileIngestor,
-                                    IKnowledgeGraph, ITWSClient)
+from resync.core.interfaces import (
+    IAgentManager,
+    IAuditQueue,
+    IConnectionManager,
+    IFileIngestor,
+    IKnowledgeGraph,
+    ITWSClient,
+)
 from resync.core.knowledge_graph import AsyncKnowledgeGraph
+
 # --- Logging Setup ---
 from resync.core.structured_logger import get_logger
-from resync.core.teams_integration import (TeamsIntegration,
-                                           get_teams_integration)
+from resync.core.teams_integration import TeamsIntegration, get_teams_integration
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings

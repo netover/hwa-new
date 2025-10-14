@@ -3,10 +3,14 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from resync.core.exceptions import (ToolConnectionError, ToolExecutionError,
-                                    ToolProcessingError, TWSConnectionError)
+from resync.core.exceptions import (
+    ToolConnectionError,
+    ToolExecutionError,
+    ToolProcessingError,
+    TWSConnectionError,
+)
 from resync.services.tws_service import OptimizedTWSClient
 
 # --- Logging Setup ---
@@ -25,8 +29,7 @@ class TWSToolReadOnly(BaseModel):
         description="The TWS client instance, injected at runtime.",
     )
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class TWSStatusTool(TWSToolReadOnly):

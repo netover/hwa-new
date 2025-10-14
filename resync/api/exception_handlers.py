@@ -12,14 +12,22 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError as PydanticValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from resync.api.models.responses import (ValidationErrorDetail,
-                                         create_problem_detail,
-                                         create_validation_problem_detail)
+from resync.api.models.responses import (
+    ValidationErrorDetail,
+    create_problem_detail,
+    create_validation_problem_detail,
+)
 from resync.core.context import get_correlation_id
-from resync.core.exceptions import (AuthenticationError, AuthorizationError,
-                                    BaseAppException, InternalError,
-                                    RateLimitError, ResourceConflictError,
-                                    ResourceNotFoundError, ValidationError)
+from resync.core.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    BaseAppException,
+    InternalError,
+    RateLimitError,
+    ResourceConflictError,
+    ResourceNotFoundError,
+    ValidationError,
+)
 from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)

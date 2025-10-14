@@ -50,14 +50,14 @@ class RetentionPolicy(Enum):
     """Standard GDPR retention policy durations."""
 
     FINANCIAL_RECORDS = 7 * 365  # 7 years for financial records
-    HEALTH_RECORDS = 10 * 365   # 10 years for health records
-    CONTRACT_DATA = 7 * 365     # 7 years for contract-related data
-    TAX_RECORDS = 7 * 365       # 7 years for tax-related data
+    HEALTH_RECORDS = 10 * 365  # 10 years for health records
+    CONTRACT_DATA = 7 * 365  # 7 years for contract-related data
+    TAX_RECORDS = 7 * 365  # 7 years for tax-related data
     EMPLOYMENT_RECORDS = 5 * 365  # 5 years for employment data
-    MARKETING_DATA = 3 * 365    # 3 years for marketing data
-    WEB_LOGS = 1 * 365          # 1 year for web server logs
-    ANALYTICS_DATA = 2 * 365    # 2 years for analytics data
-    TEMPORARY_DATA = 30         # 30 days for temporary data
+    MARKETING_DATA = 3 * 365  # 3 years for marketing data
+    WEB_LOGS = 1 * 365  # 1 year for web server logs
+    ANALYTICS_DATA = 2 * 365  # 2 years for analytics data
+    TEMPORARY_DATA = 30  # 30 days for temporary data
 
 
 class ConsentStatus(Enum):
@@ -146,7 +146,9 @@ class DataErasureRequest:
 
     def generate_verification_hash(self, deleted_data: List[Dict[str, Any]]) -> str:
         """Generate verification hash of deleted data."""
-        data_str = json.dumps(sorted(deleted_data, key=lambda x: str(x)), sort_keys=True)
+        data_str = json.dumps(
+            sorted(deleted_data, key=lambda x: str(x)), sort_keys=True
+        )
         return hashlib.sha256(data_str.encode()).hexdigest()
 
 
@@ -209,13 +211,26 @@ class DataAnonymizer:
 
         # Common PII fields to anonymize
         pii_fields = [
-            'name', 'first_name', 'last_name', 'full_name',
-            'email', 'email_address',
-            'phone', 'phone_number', 'mobile',
-            'address', 'street_address', 'city', 'postal_code',
-            'social_security_number', 'ssn', 'tax_id',
-            'birth_date', 'date_of_birth',
-            'ip_address', 'user_agent'
+            "name",
+            "first_name",
+            "last_name",
+            "full_name",
+            "email",
+            "email_address",
+            "phone",
+            "phone_number",
+            "mobile",
+            "address",
+            "street_address",
+            "city",
+            "postal_code",
+            "social_security_number",
+            "ssn",
+            "tax_id",
+            "birth_date",
+            "date_of_birth",
+            "ip_address",
+            "user_agent",
         ]
 
         for field in pii_fields:
@@ -229,9 +244,7 @@ class DataAnonymizer:
         pseudonymized = data.copy()
 
         # Fields to pseudonymize (deterministic hash based on user_id)
-        pseudonymize_fields = [
-            'email', 'phone_number', 'ip_address'
-        ]
+        pseudonymize_fields = ["email", "phone_number", "ip_address"]
 
         for field in pseudonymize_fields:
             if field in pseudonymized and pseudonymized[field]:
@@ -388,7 +401,7 @@ class GDPRComplianceManager:
                 retention_days=RetentionPolicy.MARKETING_DATA.value,
                 anonymization_required=True,
                 legal_basis="consent",
-                purpose_description="User identification and communication"
+                purpose_description="User identification and communication",
             ),
             DataCategory.FINANCIAL_DATA: DataRetentionPolicy(
                 category=DataCategory.FINANCIAL_DATA,
@@ -397,7 +410,7 @@ class GDPRComplianceManager:
                 encryption_required=True,
                 special_protection=True,
                 legal_basis="contract_performance",
-                purpose_description="Payment processing and financial records"
+                purpose_description="Payment processing and financial records",
             ),
             DataCategory.HEALTH_DATA: DataRetentionPolicy(
                 category=DataCategory.HEALTH_DATA,
@@ -406,7 +419,7 @@ class GDPRComplianceManager:
                 encryption_required=True,
                 special_protection=True,
                 legal_basis="explicit_consent",
-                purpose_description="Health information processing"
+                purpose_description="Health information processing",
             ),
             DataCategory.AUDIT_DATA: DataRetentionPolicy(
                 category=DataCategory.AUDIT_DATA,
@@ -414,31 +427,28 @@ class GDPRComplianceManager:
                 anonymization_required=False,
                 encryption_required=True,
                 legal_basis="legal_obligation",
-                purpose_description="Security and compliance auditing"
+                purpose_description="Security and compliance auditing",
             ),
             DataCategory.ANALYTICS_DATA: DataRetentionPolicy(
                 category=DataCategory.ANALYTICS_DATA,
                 retention_days=RetentionPolicy.ANALYTICS_DATA.value,
                 anonymization_required=True,
                 legal_basis="legitimate_interest",
-                purpose_description="Usage analytics and improvement"
-            )
+                purpose_description="Usage analytics and improvement",
+            ),
         }
 
     def set_retention_policy(
-        self,
-        category: DataCategory,
-        retention_days: int,
-        **kwargs
+        self, category: DataCategory, retention_days: int, **kwargs
     ) -> None:
         """Set custom retention policy for a data category."""
         policy = DataRetentionPolicy(
-            category=category,
-            retention_days=retention_days,
-            **kwargs
+            category=category, retention_days=retention_days, **kwargs
         )
         self.retention_policies[category] = policy
-        logger.info(f"Updated retention policy for {category.value}: {retention_days} days")
+        logger.info(
+            f"Updated retention policy for {category.value}: {retention_days} days"
+        )
 
     async def record_user_consent(
         self,
@@ -447,7 +457,7 @@ class GDPRComplianceManager:
         purpose: str,
         ip_address: str,
         user_agent: str,
-        expiry_days: Optional[int] = None
+        expiry_days: Optional[int] = None,
     ) -> str:
         """Record user consent for data processing."""
         consent_id = f"consent_{user_id}_{int(time.time())}"
@@ -465,7 +475,7 @@ class GDPRComplianceManager:
             purpose=purpose,
             data_categories=set(data_categories),
             ip_address=ip_address,
-            user_agent=user_agent
+            user_agent=user_agent,
         )
 
         self.consent_records[user_id].append(consent)
@@ -476,7 +486,7 @@ class GDPRComplianceManager:
             user_id=user_id,
             consent_id=consent_id,
             data_categories=[c.value for c in data_categories],
-            purpose=purpose
+            purpose=purpose,
         )
 
         logger.info(f"User consent recorded: {consent_id}")
@@ -488,14 +498,15 @@ class GDPRComplianceManager:
             return False
 
         for consent in self.consent_records[user_id]:
-            if consent.consent_id == consent_id and consent.status == ConsentStatus.GRANTED:
+            if (
+                consent.consent_id == consent_id
+                and consent.status == ConsentStatus.GRANTED
+            ):
                 consent.withdraw()
 
                 # Audit log
                 await self._audit_event(
-                    "consent_withdrawn",
-                    user_id=user_id,
-                    consent_id=consent_id
+                    "consent_withdrawn", user_id=user_id, consent_id=consent_id
                 )
 
                 # Trigger data erasure if necessary
@@ -507,10 +518,7 @@ class GDPRComplianceManager:
         return False
 
     async def request_data_erasure(
-        self,
-        user_id: str,
-        data_categories: List[DataCategory],
-        reason: str = ""
+        self, user_id: str, data_categories: List[DataCategory], reason: str = ""
     ) -> str:
         """Request data erasure for a user (Right to be Forgotten)."""
         request_id = f"erasure_{user_id}_{int(time.time())}"
@@ -520,7 +528,7 @@ class GDPRComplianceManager:
             user_id=user_id,
             requested_at=time.time(),
             data_categories=set(data_categories),
-            reason=reason
+            reason=reason,
         )
 
         self.erasure_requests[request_id] = request
@@ -531,7 +539,7 @@ class GDPRComplianceManager:
             user_id=user_id,
             request_id=request_id,
             data_categories=[c.value for c in data_categories],
-            reason=reason
+            reason=reason,
         )
 
         # Start erasure process asynchronously
@@ -545,7 +553,7 @@ class GDPRComplianceManager:
         user_id: str,
         data_categories: List[DataCategory],
         format: str = "json",
-        include_audit_data: bool = False
+        include_audit_data: bool = False,
     ) -> str:
         """Request data portability for a user."""
         request_id = f"portability_{user_id}_{int(time.time())}"
@@ -556,7 +564,7 @@ class GDPRComplianceManager:
             requested_at=time.time(),
             format=format,
             data_categories=set(data_categories),
-            include_audit_data=include_audit_data
+            include_audit_data=include_audit_data,
         )
 
         self.portability_requests[request_id] = request
@@ -567,7 +575,7 @@ class GDPRComplianceManager:
             user_id=user_id,
             request_id=request_id,
             format=format,
-            data_categories=[c.value for c in data_categories]
+            data_categories=[c.value for c in data_categories],
         )
 
         # Start portability process asynchronously
@@ -577,9 +585,7 @@ class GDPRComplianceManager:
         return request_id
 
     async def check_data_retention_compliance(
-        self,
-        data_category: DataCategory,
-        created_at: float
+        self, data_category: DataCategory, created_at: float
     ) -> Dict[str, Any]:
         """Check if data complies with retention policies."""
         policy = self.retention_policies.get(data_category)
@@ -592,14 +598,22 @@ class GDPRComplianceManager:
             "compliant": not is_expired,
             "expired": is_expired,
             "retention_days": policy.retention_days,
-            "days_remaining": max(0, int((created_at + policy.retention_days * 24 * 3600 - time.time()) / 86400)),
+            "days_remaining": max(
+                0,
+                int(
+                    (created_at + policy.retention_days * 24 * 3600 - time.time())
+                    / 86400
+                ),
+            ),
             "anonymization_required": policy.anonymization_required,
             "encryption_required": policy.encryption_required,
-            "special_protection": policy.special_protection
+            "special_protection": policy.special_protection,
         }
 
         if is_expired:
-            result["action_required"] = "data_erasure" if policy.anonymization_required else "data_deletion"
+            result["action_required"] = (
+                "data_erasure" if policy.anonymization_required else "data_deletion"
+            )
 
         return result
 
@@ -609,7 +623,7 @@ class GDPRComplianceManager:
         affected_users: List[str],
         data_categories: List[DataCategory],
         breach_description: str,
-        detection_time: Optional[float] = None
+        detection_time: Optional[float] = None,
     ) -> str:
         """Report a data breach incident."""
         breach_id = f"breach_{int(time.time())}_{hashlib.md5(breach_description.encode()).hexdigest()[:8]}"
@@ -625,7 +639,7 @@ class GDPRComplianceManager:
             "description": breach_description,
             "status": "reported",
             "notification_sent": False,
-            "gdpr_compliant": False
+            "gdpr_compliant": False,
         }
 
         self.breach_incidents.append(breach_incident)
@@ -636,7 +650,7 @@ class GDPRComplianceManager:
             breach_id=breach_id,
             breach_type=breach_type,
             affected_users_count=len(affected_users),
-            data_categories=[c.value for c in data_categories]
+            data_categories=[c.value for c in data_categories],
         )
 
         # Trigger breach response
@@ -647,42 +661,63 @@ class GDPRComplianceManager:
 
     def get_compliance_status(self) -> Dict[str, Any]:
         """Get overall GDPR compliance status."""
-        total_consents = sum(len(consents) for consents in self.consent_records.values())
+        total_consents = sum(
+            len(consents) for consents in self.consent_records.values()
+        )
         valid_consents = sum(
-            1 for consents in self.consent_records.values()
+            1
+            for consents in self.consent_records.values()
             for consent in consents
             if consent.is_valid
         )
 
-        pending_erasure = sum(1 for req in self.erasure_requests.values() if req.status == "pending")
-        pending_portability = sum(1 for req in self.portability_requests.values() if req.status == "pending")
+        pending_erasure = sum(
+            1 for req in self.erasure_requests.values() if req.status == "pending"
+        )
+        pending_portability = sum(
+            1 for req in self.portability_requests.values() if req.status == "pending"
+        )
 
         return {
             "consent_management": {
                 "total_consents": total_consents,
                 "valid_consents": valid_consents,
-                "consent_compliance_rate": valid_consents / max(1, total_consents)
+                "consent_compliance_rate": valid_consents / max(1, total_consents),
             },
             "data_erasure": {
                 "pending_requests": pending_erasure,
-                "completed_requests": sum(1 for req in self.erasure_requests.values() if req.status == "completed")
+                "completed_requests": sum(
+                    1
+                    for req in self.erasure_requests.values()
+                    if req.status == "completed"
+                ),
             },
             "data_portability": {
                 "pending_requests": pending_portability,
-                "completed_requests": sum(1 for req in self.portability_requests.values() if req.status == "completed")
+                "completed_requests": sum(
+                    1
+                    for req in self.portability_requests.values()
+                    if req.status == "completed"
+                ),
             },
             "data_breaches": {
                 "total_breaches": len(self.breach_incidents),
-                "unresolved_breaches": sum(1 for b in self.breach_incidents if b["status"] != "resolved")
+                "unresolved_breaches": sum(
+                    1 for b in self.breach_incidents if b["status"] != "resolved"
+                ),
             },
             "retention_policies": {
                 "configured_policies": len(self.retention_policies),
-                "special_protection_categories": sum(1 for p in self.retention_policies.values() if p.special_protection)
+                "special_protection_categories": sum(
+                    1 for p in self.retention_policies.values() if p.special_protection
+                ),
             },
             "audit_trail": {
                 "total_events": len(self.audit_trail),
-                "recent_events": list(self.audit_trail)[-10:] if self.audit_trail else []
-            }
+                "recent_events": (
+                    list(self.audit_trail)[-10:] if self.audit_trail else []
+                ),
+            },
         }
 
     async def _cleanup_worker(self) -> None:
@@ -730,8 +765,11 @@ class GDPRComplianceManager:
                 # Check for overdue breach notifications
                 current_time = time.time()
                 for breach in self.breach_incidents:
-                    if (not breach["notification_sent"] and
-                        current_time - breach["reported_at"] > self.config.breach_notification_hours * 3600):
+                    if (
+                        not breach["notification_sent"]
+                        and current_time - breach["reported_at"]
+                        > self.config.breach_notification_hours * 3600
+                    ):
                         await self._send_breach_notification(breach)
 
             except asyncio.CancelledError:
@@ -747,7 +785,7 @@ class GDPRComplianceManager:
         audit_entry = {
             "timestamp": time.time(),
             "event_type": event_type,
-            "details": kwargs
+            "details": kwargs,
         }
 
         self.audit_trail.append(audit_entry)
@@ -771,7 +809,7 @@ class GDPRComplianceManager:
                 "data_erasure_completed",
                 request_id=request.request_id,
                 user_id=request.user_id,
-                affected_records=affected_records
+                affected_records=affected_records,
             )
 
             logger.info(f"Data erasure completed: {request.request_id}")
@@ -788,7 +826,9 @@ class GDPRComplianceManager:
             # This would gather all user data and prepare for download
             # For simulation, we'll just mark as completed
             request.data_size_bytes = 1024  # Simulated
-            request.download_url = f"/api/gdpr/portability/{request.request_id}/download"
+            request.download_url = (
+                f"/api/gdpr/portability/{request.request_id}/download"
+            )
             request.completed_at = time.time()
             request.status = "completed"
 
@@ -796,7 +836,7 @@ class GDPRComplianceManager:
                 "data_portability_completed",
                 request_id=request.request_id,
                 user_id=request.user_id,
-                data_size_bytes=request.data_size_bytes
+                data_size_bytes=request.data_size_bytes,
             )
 
             logger.info(f"Data portability completed: {request.request_id}")
@@ -805,12 +845,14 @@ class GDPRComplianceManager:
             request.status = "failed"
             logger.error(f"Data portability failed: {request.request_id} - {e}")
 
-    async def _handle_consent_withdrawal(self, user_id: str, data_categories: Set[DataCategory]) -> None:
+    async def _handle_consent_withdrawal(
+        self, user_id: str, data_categories: Set[DataCategory]
+    ) -> None:
         """Handle consent withdrawal by triggering data erasure."""
         await self.request_data_erasure(
             user_id=user_id,
             data_categories=list(data_categories),
-            reason="consent_withdrawn"
+            reason="consent_withdrawn",
         )
 
     async def _cleanup_expired_consents(self) -> None:
@@ -870,7 +912,7 @@ class GDPRComplianceManager:
         await self._audit_event(
             "data_breach_handling_initiated",
             breach_id=breach["breach_id"],
-            affected_users_count=breach["affected_users_count"]
+            affected_users_count=breach["affected_users_count"],
         )
 
         logger.warning(f"Data breach handling initiated: {breach['breach_id']}")
@@ -883,7 +925,7 @@ class GDPRComplianceManager:
         await self._audit_event(
             "breach_notification_sent",
             breach_id=breach["breach_id"],
-            notification_time=time.time()
+            notification_time=time.time(),
         )
 
         logger.info(f"Breach notification sent: {breach['breach_id']}")

@@ -5,15 +5,25 @@ Query handlers for TWS operations in the CQRS pattern.
 from resync.core.cache_hierarchy import get_cache_hierarchy
 from resync.core.interfaces import ITWSClient
 from resync.cqrs.base import IQueryHandler, QueryResult
-from resync.cqrs.queries import (CheckTWSConnectionQuery,
-                                 GetCriticalPathStatusQuery, GetEventLogQuery,
-                                 GetJobDependenciesQuery, GetJobDetailsQuery,
-                                 GetJobHistoryQuery, GetJobLogQuery,
-                                 GetJobsStatusQuery, GetJobStatusBatchQuery,
-                                 GetJobStatusQuery, GetPerformanceMetricsQuery,
-                                 GetPlanDetailsQuery, GetResourceUsageQuery,
-                                 GetSystemHealthQuery, GetSystemStatusQuery,
-                                 GetWorkstationsStatusQuery, SearchJobsQuery)
+from resync.cqrs.queries import (
+    CheckTWSConnectionQuery,
+    GetCriticalPathStatusQuery,
+    GetEventLogQuery,
+    GetJobDependenciesQuery,
+    GetJobDetailsQuery,
+    GetJobHistoryQuery,
+    GetJobLogQuery,
+    GetJobsStatusQuery,
+    GetJobStatusBatchQuery,
+    GetJobStatusQuery,
+    GetPerformanceMetricsQuery,
+    GetPlanDetailsQuery,
+    GetResourceUsageQuery,
+    GetSystemHealthQuery,
+    GetSystemStatusQuery,
+    GetWorkstationsStatusQuery,
+    SearchJobsQuery,
+)
 
 
 class GetSystemStatusQueryHandler(IQueryHandler[GetSystemStatusQuery, QueryResult]):
@@ -383,7 +393,9 @@ class GetPlanDetailsQueryHandler(IQueryHandler[GetPlanDetailsQuery, QueryResult]
             return QueryResult(success=False, error=str(e))
 
 
-class GetJobDependenciesQueryHandler(IQueryHandler[GetJobDependenciesQuery, QueryResult]):
+class GetJobDependenciesQueryHandler(
+    IQueryHandler[GetJobDependenciesQuery, QueryResult]
+):
     """Handler for getting job dependencies."""
 
     def __init__(self, tws_client: ITWSClient):
@@ -464,7 +476,9 @@ class GetEventLogQueryHandler(IQueryHandler[GetEventLogQuery, QueryResult]):
             return QueryResult(success=False, error=str(e))
 
 
-class GetPerformanceMetricsQueryHandler(IQueryHandler[GetPerformanceMetricsQuery, QueryResult]):
+class GetPerformanceMetricsQueryHandler(
+    IQueryHandler[GetPerformanceMetricsQuery, QueryResult]
+):
     """Handler for getting performance metrics."""
 
     def __init__(self, tws_client: ITWSClient):

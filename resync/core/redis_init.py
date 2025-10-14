@@ -7,8 +7,13 @@ import sys
 from typing import Optional
 
 import redis.asyncio as redis
-from redis.exceptions import (AuthenticationError, BusyLoadingError,
-                              ConnectionError, RedisError, TimeoutError)
+from redis.exceptions import (
+    AuthenticationError,
+    BusyLoadingError,
+    ConnectionError,
+    RedisError,
+    TimeoutError,
+)
 
 from resync.settings import settings
 
@@ -165,7 +170,7 @@ class RedisInitializer:
     async def _initialize_idempotency(self, redis_client: redis.Redis):
         """Initialize idempotency manager atomically."""
         from resync.core.container import app_container
-        from resync.core.idempotency import IdempotencyManager
+        from resync.core.idempotency.manager import IdempotencyManager
 
         # Ensure idempotency manager gets the validated client
         idempotency_manager = IdempotencyManager(redis_client)

@@ -37,17 +37,17 @@ class SmartPoolConfig:
 
     # Health check settings
     health_check_interval: float = 30.0  # 30 seconds
-    health_check_timeout: float = 5.0    # 5 seconds
+    health_check_timeout: float = 5.0  # 5 seconds
     max_health_check_failures: int = 3
 
     # Scaling thresholds
-    scale_up_threshold: float = 0.8      # 80% utilization
-    scale_down_threshold: float = 0.3    # 30% utilization
+    scale_up_threshold: float = 0.8  # 80% utilization
+    scale_down_threshold: float = 0.3  # 30% utilization
 
     # Connection lifecycle
-    max_connection_age: float = 3600.0   # 1 hour
-    max_connection_uses: int = 100       # Reuse up to 100 times
-    idle_timeout: float = 300.0          # 5 minutes
+    max_connection_age: float = 3600.0  # 1 hour
+    max_connection_uses: int = 100  # Reuse up to 100 times
+    idle_timeout: float = 300.0  # 5 minutes
 
 
 @dataclass
@@ -81,11 +81,11 @@ class ConnectionStats:
     def should_retire(self, config: SmartPoolConfig) -> bool:
         """Check if connection should be retired."""
         return (
-            self.age > config.max_connection_age or
-            self.use_count >= config.max_connection_uses or
-            self.idle_time > config.idle_timeout or
-            self.health_check_failures >= config.max_health_check_failures or
-            not self.is_healthy
+            self.age > config.max_connection_age
+            or self.use_count >= config.max_connection_uses
+            or self.idle_time > config.idle_timeout
+            or self.health_check_failures >= config.max_health_check_failures
+            or not self.is_healthy
         )
 
 
@@ -179,7 +179,7 @@ class SmartConnectionPool:
         logger.info(
             "smart_connection_pool_started",
             min_connections=self.config.min_connections,
-            max_connections=self.config.max_connections
+            max_connections=self.config.max_connections,
         )
 
     async def stop(self) -> None:
@@ -280,7 +280,9 @@ class SmartConnectionPool:
 
             # Store connection and stats
             self._connections[connection_id] = connection
-            self._connection_stats[connection_id] = ConnectionStats(connection_id=connection_id)
+            self._connection_stats[connection_id] = ConnectionStats(
+                connection_id=connection_id
+            )
 
             # Add to active set
             self._active_connections.add(connection_id)
@@ -305,8 +307,7 @@ class SmartConnectionPool:
         try:
             # Wait with timeout
             connection_id = await asyncio.wait_for(
-                future,
-                timeout=self.config.connection_timeout
+                future, timeout=self.config.connection_timeout
             )
             return connection_id
 
@@ -339,8 +340,12 @@ class SmartConnectionPool:
         # Update pool metrics
         if len(self._latency_history) >= 10:
             sorted_latencies = sorted(self._latency_history)
-            self.metrics.avg_request_latency = sum(sorted_latencies) / len(sorted_latencies)
-            self.metrics.p95_latency = sorted_latencies[int(0.95 * len(sorted_latencies))]
+            self.metrics.avg_request_latency = sum(sorted_latencies) / len(
+                sorted_latencies
+            )
+            self.metrics.p95_latency = sorted_latencies[
+                int(0.95 * len(sorted_latencies))
+            ]
 
         # Return connection to idle pool
         await self._release_connection(connection_id)
@@ -433,9 +438,7 @@ class SmartConnectionPool:
 
             except Exception as e:
                 logger.warning(
-                    "health_check_failed",
-                    connection_id=connection_id,
-                    error=str(e)
+                    "health_check_failed", connection_id=connection_id, error=str(e)
                 )
                 self._connection_stats[connection_id].health_check_failures += 1
 
@@ -453,6 +456,7 @@ class SmartConnectionPool:
 
         # Simulate occasional failures (1% failure rate)
         import random
+
         return random.random() > 0.01
 
     def get_pool_stats(self) -> Dict[str, Any]:
@@ -480,8 +484,10 @@ class SmartConnectionPool:
                 "turnover_rate": self.metrics.connection_turnover_rate,
             },
             "scaling_signals": {
-                "should_scale_up": self.metrics.get_utilization() > self.config.scale_up_threshold,
-                "should_scale_down": self.metrics.get_utilization() < self.config.scale_down_threshold,
+                "should_scale_up": self.metrics.get_utilization()
+                > self.config.scale_up_threshold,
+                "should_scale_down": self.metrics.get_utilization()
+                < self.config.scale_down_threshold,
                 "queue_pressure": self.metrics.get_queue_ratio(),
             },
             "config": {
@@ -489,7 +495,7 @@ class SmartConnectionPool:
                 "max_connections": self.config.max_connections,
                 "scale_up_threshold": self.config.scale_up_threshold,
                 "scale_down_threshold": self.config.scale_down_threshold,
-            }
+            },
         }
 
     async def force_health_check(self) -> Dict[str, Any]:
@@ -498,7 +504,8 @@ class SmartConnectionPool:
 
         return {
             "timestamp": time.time(),
-            "healthy_connections": self.metrics.total_connections - self.metrics.unhealthy_connections,
+            "healthy_connections": self.metrics.total_connections
+            - self.metrics.unhealthy_connections,
             "unhealthy_connections": self.metrics.unhealthy_connections,
             "health_success_rate": self.metrics.health_check_success_rate,
             "connection_details": {
@@ -509,5 +516,5 @@ class SmartConnectionPool:
                     "failures": stats.health_check_failures,
                 }
                 for conn_id, stats in self._connection_stats.items()
-            }
+            },
         }

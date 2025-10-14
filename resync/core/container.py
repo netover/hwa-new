@@ -7,10 +7,17 @@ implementations, following the Inversion of Control (IoC) principle.
 
 from resync.core.agent_manager import AgentManager
 from resync.core.connection_manager import ConnectionManager
-from resync.core.di_container import (DIContainer, ServiceLifetime,
-                                      register_default_services)
-from resync.core.interfaces import (IAgentManager, IConnectionManager,
-                                    IKnowledgeGraph, ITWSClient)
+from resync.core.di_container import (
+    DIContainer,
+    ServiceLifetime,
+    register_default_services,
+)
+from resync.core.interfaces import (
+    IAgentManager,
+    IConnectionManager,
+    IKnowledgeGraph,
+    ITWSClient,
+)
 from resync.core.knowledge_graph import AsyncKnowledgeGraph
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient

@@ -58,10 +58,9 @@ class LoginRequest(BaseValidatedModel):
         default=AuthProvider.LOCAL, description="Authentication provider"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("username")
     def validate_username(cls, v):
@@ -75,22 +74,18 @@ class LoginRequest(BaseValidatedModel):
         """Validate password strength."""
         if len(v) < 8:
             raise ValueError("Password must be at least 8 characters long")
-
         if len(v) > 128:
             raise ValueError("Password must not exceed 128 characters")
-
         # Check for required character types
         has_upper = any(c.isupper() for c in v)
         has_lower = any(c.islower() for c in v)
         has_digit = any(c.isdigit() for c in v)
         any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in v)
-
         if not (has_upper and has_lower and has_digit):
             raise ValueError(
                 "Password must contain at least one uppercase letter, "
                 "one lowercase letter, and one digit"
             )
-
         # Check for common weak passwords
         weak_passwords = {
             "password",
@@ -104,16 +99,13 @@ class LoginRequest(BaseValidatedModel):
             "guest",
             "test",
         }
-
         if v.lower() in weak_passwords:
             raise ValueError(
                 "Password is too common, please choose a stronger password"
             )
-
         # Check for sequential characters
         if any(seq in v.lower() for seq in ["123", "abc", "qwe", "asd"]):
             raise ValueError("Password contains sequential characters")
-
         return v
 
 
@@ -153,43 +145,36 @@ class TokenRequest(BaseValidatedModel):
         default_factory=list, description="Requested scopes", max_length=10
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("username", "password")
     def validate_credentials_fields(cls, v, values):
         """Validate credential fields based on grant type."""
         grant_type = values.get("grant_type")
-
         if grant_type == "password" and not v:
             field_name = "username" if "username" in str(v) else "password"
             raise ValueError(f"{field_name} is required for password grant type")
-
         return v
 
     @validator("refresh_token")
     def validate_refresh_token(cls, v, values):
         """Validate refresh token field."""
         grant_type = values.get("grant_type")
-
         if grant_type == "refresh_token" and not v:
             raise ValueError("refresh_token is required for refresh_token grant type")
-
         return v
 
     @validator("client_id", "client_secret")
     def validate_client_credentials(cls, v, values):
         """Validate client credential fields."""
         grant_type = values.get("grant_type")
-
         if grant_type == "client_credentials" and not v:
             field_name = "client_id" if "client_id" in str(v) else "client_secret"
             raise ValueError(
                 f"{field_name} is required for client_credentials grant type"
             )
-
         return v
 
 
@@ -208,41 +193,34 @@ class PasswordChangeRequest(BaseValidatedModel):
         Field(..., description="Confirm new password")
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("new_password")
     def validate_new_password(cls, v):
         """Validate new password strength."""
         if len(v) < 8:
             raise ValueError("Password must be at least 8 characters long")
-
         if len(v) > 128:
             raise ValueError("Password must not exceed 128 characters")
-
         # Check for required character types
         has_upper = any(c.isupper() for c in v)
         has_lower = any(c.islower() for c in v)
         has_digit = any(c.isdigit() for c in v)
-
         if not (has_upper and has_lower and has_digit):
             raise ValueError(
                 "Password must contain at least one uppercase letter, "
                 "one lowercase letter, and one digit"
             )
-
         return v
 
     @validator("confirm_password")
     def validate_password_match(cls, v, values):
         """Validate password confirmation matches."""
         new_password = values.get("new_password")
-
         if new_password and v != new_password:
             raise ValueError("Passwords do not match")
-
         return v
 
 
@@ -269,17 +247,15 @@ class UserRegistrationRequest(BaseValidatedModel):
 
     role: UserRole = Field(default=UserRole.USER, description="User role")
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("username")
     def validate_username(cls, v):
         """Validate username."""
         if not v.replace("_", "").replace(".", "").replace("-", "").isalnum():
             raise ValueError("Username contains invalid characters")
-
         # Check for reserved usernames
         reserved = {
             "admin",
@@ -293,10 +269,8 @@ class UserRegistrationRequest(BaseValidatedModel):
             "localhost",
             "127.0.0.1",
         }
-
         if v.lower() in reserved:
             raise ValueError("Username is reserved")
-
         return v.lower()
 
     @validator("email")
@@ -310,11 +284,9 @@ class UserRegistrationRequest(BaseValidatedModel):
             "guerrillamail.com",
             "throwaway.email",
         }
-
         domain = v.split("@")[1].lower()
         if domain in temp_domains:
             raise ValueError("Temporary email addresses are not allowed")
-
         return v.lower()
 
     @validator("password")
@@ -323,21 +295,17 @@ class UserRegistrationRequest(BaseValidatedModel):
         # Call the same validation logic as LoginRequest
         if len(v) < 8:
             raise ValueError("Password must be at least 8 characters long")
-
         if len(v) > 128:
             raise ValueError("Password must not exceed 128 characters")
-
         # Check for required character types
         has_upper = any(c.isupper() for c in v)
         has_lower = any(c.islower() for c in v)
         has_digit = any(c.isdigit() for c in v)
-
         if not (has_upper and has_lower and has_digit):
             raise ValueError(
                 "Password must contain at least one uppercase letter, "
                 "one lowercase letter, and one digit"
             )
-
         # Check for common weak passwords
         weak_passwords = {
             "password",
@@ -351,19 +319,16 @@ class UserRegistrationRequest(BaseValidatedModel):
             "guest",
             "test",
         }
-
         if v.lower() in weak_passwords:
             raise ValueError(
                 "Password is too common, please choose a stronger password"
             )
-
         # Check for sequential characters - be less strict for test passwords
         if any(seq in v.lower() for seq in ["1234", "abcd", "qwer", "asdf"]):
             # Only raise error if it's a long sequence (4+ chars)
             if len(v) <= 12:  # Short passwords for testing
                 return v
             raise ValueError("Password contains sequential characters")
-
         return v
 
 
@@ -376,10 +341,9 @@ class TokenRefreshRequest(BaseValidatedModel):
 
     client_id: Optional[str] = Field(None, description="Client ID")
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
 
 class LogoutRequest(BaseValidatedModel):
@@ -395,10 +359,9 @@ class LogoutRequest(BaseValidatedModel):
         default=False, description="Whether to logout all active sessions"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
 
 class APIKeyRequest(BaseValidatedModel):
@@ -420,10 +383,9 @@ class APIKeyRequest(BaseValidatedModel):
         None, ge=1, le=365, description="Number of days until expiration"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("name")
     def validate_name(cls, v):
@@ -437,16 +399,13 @@ class APIKeyRequest(BaseValidatedModel):
         """Validate scopes."""
         if not v:
             return v
-
         # Check for duplicate scopes
         if len(v) != len(set(v)):
             raise ValueError("Duplicate scopes found")
-
         # Validate each scope
         for scope in v:
             if not scope.replace(":", "").replace("-", "").replace("_", "").isalnum():
                 raise ValueError(f"Invalid scope format: {scope}")
-
         return v
 
 
@@ -457,7 +416,6 @@ class MFARequest(BaseValidatedModel):
 
     method: str = Field(default="totp", description="MFA method")
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )

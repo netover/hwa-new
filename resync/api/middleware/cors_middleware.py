@@ -8,8 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from resync.api.middleware.cors_config import (CORSPolicy, Environment,
-                                               cors_config)
+from resync.api.middleware.cors_config import CORSPolicy, Environment, cors_config
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)

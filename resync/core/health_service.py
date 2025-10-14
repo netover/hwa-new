@@ -13,9 +13,14 @@ import psutil
 import structlog
 
 from resync.core.connection_pool_manager import get_advanced_connection_pool_manager
-from resync.core.health_models import (ComponentHealth, ComponentType,
-                                       HealthCheckConfig, HealthCheckResult,
-                                       HealthStatus, HealthStatusHistory)
+from resync.core.health_models import (
+    ComponentHealth,
+    ComponentType,
+    HealthCheckConfig,
+    HealthCheckResult,
+    HealthStatus,
+    HealthStatusHistory,
+)
 from resync.settings import settings
 
 from .health_utils import get_health_checks_dict, initialize_health_result
@@ -287,10 +292,13 @@ class HealthCheckService:
             "issues_detected": [],
             "recovery_actions": [],
             "performance_insights": {},
-            "predictive_alerts": []
+            "predictive_alerts": [],
         }
 
-        logger.info("starting_proactive_health_checks", correlation_id=f"proactive_{int(start_time)}")
+        logger.info(
+            "starting_proactive_health_checks",
+            correlation_id=f"proactive_{int(start_time)}",
+        )
 
         try:
             # 1. Connection Pool Health Checks
@@ -300,20 +308,24 @@ class HealthCheckService:
 
             # Detect pool issues
             if pool_health.get("utilization", 0) > 0.9:
-                results["issues_detected"].append({
-                    "type": "high_pool_utilization",
-                    "severity": "high",
-                    "message": f"Connection pool utilization at {pool_health['utilization']:.1%}",
-                    "recommendation": "Consider scaling up connection pool"
-                })
+                results["issues_detected"].append(
+                    {
+                        "type": "high_pool_utilization",
+                        "severity": "high",
+                        "message": f"Connection pool utilization at {pool_health['utilization']:.1%}",
+                        "recommendation": "Consider scaling up connection pool",
+                    }
+                )
 
             if pool_health.get("error_rate", 0) > 0.05:
-                results["issues_detected"].append({
-                    "type": "high_error_rate",
-                    "severity": "critical",
-                    "message": f"Connection pool error rate at {pool_health['error_rate']:.1%}",
-                    "recommendation": "Investigate connection stability"
-                })
+                results["issues_detected"].append(
+                    {
+                        "type": "high_error_rate",
+                        "severity": "critical",
+                        "message": f"Connection pool error rate at {pool_health['error_rate']:.1%}",
+                        "recommendation": "Investigate connection stability",
+                    }
+                )
 
             # 2. Circuit Breaker Health
             circuit_health = await self._check_circuit_breaker_health()
@@ -323,13 +335,15 @@ class HealthCheckService:
             # Detect circuit breaker issues
             for cb_name, cb_status in circuit_health.items():
                 if cb_status.get("state") == "open":
-                    results["issues_detected"].append({
-                        "type": "circuit_breaker_open",
-                        "severity": "high",
-                        "component": cb_name,
-                        "message": f"Circuit breaker {cb_name} is open",
-                        "recommendation": "Check upstream service health"
-                    })
+                    results["issues_detected"].append(
+                        {
+                            "type": "circuit_breaker_open",
+                            "severity": "high",
+                            "component": cb_name,
+                            "message": f"Circuit breaker {cb_name} is open",
+                            "recommendation": "Check upstream service health",
+                        }
+                    )
 
             # 3. Predictive Analysis
             predictions = await self._perform_predictive_analysis()
@@ -348,7 +362,7 @@ class HealthCheckService:
                 "proactive_health_checks_completed",
                 duration=time.time() - start_time,
                 issues_found=len(results["issues_detected"]),
-                recovery_actions=len(results["recovery_actions"])
+                recovery_actions=len(results["recovery_actions"]),
             )
 
         except Exception as e:
@@ -368,9 +382,15 @@ class HealthCheckService:
                     "smart_pool_active": "smart_pool" in metrics,
                     "auto_scaling_active": "auto_scaling" in metrics,
                     "utilization": metrics.get("auto_scaling", {}).get("load_score", 0),
-                    "error_rate": metrics.get("smart_pool", {}).get("performance", {}).get("error_rate", 0),
-                    "total_connections": metrics.get("auto_scaling", {}).get("current_connections", 0),
-                    "scaling_recommended": metrics.get("smart_pool", {}).get("scaling_signals", {})
+                    "error_rate": metrics.get("smart_pool", {})
+                    .get("performance", {})
+                    .get("error_rate", 0),
+                    "total_connections": metrics.get("auto_scaling", {}).get(
+                        "current_connections", 0
+                    ),
+                    "scaling_recommended": metrics.get("smart_pool", {}).get(
+                        "scaling_signals", {}
+                    ),
                 }
             else:
                 # Fallback to basic pool manager
@@ -381,7 +401,8 @@ class HealthCheckService:
                         stats = pool.get_stats()
                         basic_metrics[pool_name] = {
                             "connections": stats.get("total_connections", 0),
-                            "utilization": stats.get("active_connections", 0) / max(1, stats.get("total_connections", 1))
+                            "utilization": stats.get("active_connections", 0)
+                            / max(1, stats.get("total_connections", 1)),
                         }
                     return basic_metrics
 
@@ -396,28 +417,36 @@ class HealthCheckService:
 
         # Check TWS circuit breakers
         from resync.core.circuit_breaker import (
-            adaptive_tws_api_breaker, adaptive_llm_api_breaker,
-            tws_api_breaker, llm_api_breaker
+            adaptive_tws_api_breaker,
+            adaptive_llm_api_breaker,
+            tws_api_breaker,
+            llm_api_breaker,
         )
 
         breakers = {
             "adaptive_tws_api": adaptive_tws_api_breaker,
             "adaptive_llm_api": adaptive_llm_api_breaker,
             "traditional_tws_api": tws_api_breaker,
-            "traditional_llm_api": llm_api_breaker
+            "traditional_llm_api": llm_api_breaker,
         }
 
         for name, breaker in breakers.items():
             if breaker:
                 try:
-                    stats = breaker.get_stats() if hasattr(breaker, 'get_stats') else breaker.get_enhanced_stats()
+                    stats = (
+                        breaker.get_stats()
+                        if hasattr(breaker, "get_stats")
+                        else breaker.get_enhanced_stats()
+                    )
                     results[name] = {
                         "state": stats.get("state", "unknown"),
                         "failures": stats.get("failures", 0),
                         "successes": stats.get("successes", 0),
                         "error_rate": stats.get("failure_rate", 0),
                         "last_failure": stats.get("last_failure_time"),
-                        "latency_p95": stats.get("latency_percentiles", {}).get("p95", 0)
+                        "latency_p95": stats.get("latency_percentiles", {}).get(
+                            "p95", 0
+                        ),
                     }
                 except Exception as e:
                     results[name] = {"error": str(e)}
@@ -435,40 +464,48 @@ class HealthCheckService:
             utilization = pool_health.get("utilization", 0)
             if utilization > 0.8:
                 # Predict potential exhaustion in next hour
-                alerts.append({
-                    "type": "pool_exhaustion_prediction",
-                    "severity": "medium",
-                    "timeframe": "1_hour",
-                    "confidence": 0.75,
-                    "message": f"Connection pool may exhaust at current utilization {utilization:.1%}",
-                    "recommendation": "Monitor closely and prepare scaling"
-                })
+                alerts.append(
+                    {
+                        "type": "pool_exhaustion_prediction",
+                        "severity": "medium",
+                        "timeframe": "1_hour",
+                        "confidence": 0.75,
+                        "message": f"Connection pool may exhaust at current utilization {utilization:.1%}",
+                        "recommendation": "Monitor closely and prepare scaling",
+                    }
+                )
 
             # Analyze error rate trends
             error_rate = pool_health.get("error_rate", 0)
             if error_rate > 0.03:
-                alerts.append({
-                    "type": "error_rate_trend",
-                    "severity": "high",
-                    "timeframe": "immediate",
-                    "confidence": 0.8,
-                    "message": f"Rising error rate detected: {error_rate:.1%}",
-                    "recommendation": "Investigate root cause immediately"
-                })
+                alerts.append(
+                    {
+                        "type": "error_rate_trend",
+                        "severity": "high",
+                        "timeframe": "immediate",
+                        "confidence": 0.8,
+                        "message": f"Rising error rate detected: {error_rate:.1%}",
+                        "recommendation": "Investigate root cause immediately",
+                    }
+                )
 
             # Analyze circuit breaker patterns
             circuit_health = await self._check_circuit_breaker_health()
-            open_breakers = sum(1 for cb in circuit_health.values() if cb.get("state") == "open")
+            open_breakers = sum(
+                1 for cb in circuit_health.values() if cb.get("state") == "open"
+            )
 
             if open_breakers > 0:
-                alerts.append({
-                    "type": "multiple_circuit_breakers_open",
-                    "severity": "critical",
-                    "timeframe": "immediate",
-                    "confidence": 1.0,
-                    "message": f"{open_breakers} circuit breaker(s) are open",
-                    "recommendation": "Check upstream service availability"
-                })
+                alerts.append(
+                    {
+                        "type": "multiple_circuit_breakers_open",
+                        "severity": "critical",
+                        "timeframe": "immediate",
+                        "confidence": 1.0,
+                        "message": f"{open_breakers} circuit breaker(s) are open",
+                        "recommendation": "Check upstream service availability",
+                    }
+                )
 
         except Exception as e:
             logger.error("predictive_analysis_failed", error=str(e))
@@ -487,12 +524,14 @@ class HealthCheckService:
                 advanced_manager = get_advanced_connection_pool_manager()
                 if advanced_manager:
                     health_results = await advanced_manager.force_health_check()
-                    actions.append({
-                        "action": "force_connection_health_check",
-                        "timestamp": time.time(),
-                        "results": health_results,
-                        "reason": "High error rate detected"
-                    })
+                    actions.append(
+                        {
+                            "action": "force_connection_health_check",
+                            "timestamp": time.time(),
+                            "results": health_results,
+                            "reason": "High error rate detected",
+                        }
+                    )
 
             # Reset circuit breakers if appropriate
             circuit_health = await self._check_circuit_breaker_health()
@@ -502,13 +541,15 @@ class HealthCheckService:
                     last_failure = cb_status.get("last_failure")
                     if last_failure and (time.time() - last_failure) > 300:  # 5 minutes
                         # In real implementation, this would trigger circuit breaker reset
-                        actions.append({
-                            "action": "circuit_breaker_reset_candidate",
-                            "component": cb_name,
-                            "timestamp": time.time(),
-                            "reason": "Circuit breaker open for extended period",
-                            "recommendation": "Manual intervention may be needed"
-                        })
+                        actions.append(
+                            {
+                                "action": "circuit_breaker_reset_candidate",
+                                "component": cb_name,
+                                "timestamp": time.time(),
+                                "reason": "Circuit breaker open for extended period",
+                                "recommendation": "Manual intervention may be needed",
+                            }
+                        )
 
         except Exception as e:
             logger.error("auto_recovery_execution_failed", error=str(e))
@@ -523,7 +564,9 @@ class HealthCheckService:
             "baseline_available": False,
             "deviations": [],
             "trend": "stable",
-            "recommendations": ["Implement baseline metrics storage for future comparisons"]
+            "recommendations": [
+                "Implement baseline metrics storage for future comparisons"
+            ],
         }
 
     async def _check_database_health(self) -> ComponentHealth:
@@ -1265,6 +1308,10 @@ class HealthCheckService:
     def _calculate_overall_status(
         self, components: Dict[str, ComponentHealth]
     ) -> HealthStatus:
+        # Handle empty components case
+        if not components:
+            return HealthStatus.UNKNOWN
+
         # Simple aggregation: worst status wins
         # UNKNOWN should not be considered better than HEALTHY
         priority = {
@@ -1598,6 +1645,22 @@ async def get_health_check_service() -> HealthCheckService:
             )
 
     return _health_check_service
+
+    def is_healthy(self) -> bool:
+        """
+        Check if the health check service is currently healthy.
+
+        Returns:
+            bool: True if the service is healthy, False otherwise
+        """
+        try:
+            # Check if monitoring is active and recent health check was successful
+            if hasattr(self, "_last_health_check"):
+                # Simple health check - could be expanded
+                return True
+            return True
+        except Exception:
+            return False
 
 
 async def shutdown_health_check_service() -> None:

@@ -9,7 +9,7 @@ Referência: https://tools.ietf.org/html/rfc8288
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # ============================================================================
 # MODELS
@@ -28,15 +28,23 @@ class Link(BaseModel):
     """
 
     href: str = Field(
-        ..., description="URI do recurso", example="/api/v1/resources/123"
+        ...,
+        description="URI do recurso",
+        json_schema_extra={"example": "/api/v1/resources/123"},
     )
 
-    rel: str = Field(..., description="Relação do link", example="self")
+    rel: str = Field(
+        ..., description="Relação do link", json_schema_extra={"example": "self"}
+    )
 
-    method: str = Field(default="GET", description="Método HTTP", example="GET")
+    method: str = Field(
+        default="GET", description="Método HTTP", json_schema_extra={"example": "GET"}
+    )
 
     title: Optional[str] = Field(
-        None, description="Título descritivo", example="Get resource details"
+        None,
+        description="Título descritivo",
+        json_schema_extra={"example": "Get resource details"},
     )
 
     type: Optional[str] = Field(
@@ -60,8 +68,7 @@ class HATEOASResponse(BaseModel):
         description="Links relacionados ao recurso",
     )
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 # ============================================================================

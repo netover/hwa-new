@@ -7,11 +7,16 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
-from resync.core.health_models import (ComponentType, HealthStatus,
-                                       get_status_color,
-                                       get_status_description)
-from resync.core.health_service import (get_health_check_service,
-                                        shutdown_health_check_service)
+from resync.core.health_models import (
+    ComponentType,
+    HealthStatus,
+    get_status_color,
+    get_status_description,
+)
+from resync.core.health_service import (
+    get_health_check_service,
+    shutdown_health_check_service,
+)
 from resync.core.metrics import runtime_metrics
 
 logger = logging.getLogger(__name__)

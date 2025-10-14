@@ -40,10 +40,10 @@ logger = get_logger(__name__)
 class MetricType(Enum):
     """Types of metrics supported."""
 
-    COUNTER = "counter"      # Monotonically increasing value
-    GAUGE = "gauge"         # Value that can go up and down
-    HISTOGRAM = "histogram" # Distribution of values
-    SUMMARY = "summary"     # Quantiles and sum
+    COUNTER = "counter"  # Monotonically increasing value
+    GAUGE = "gauge"  # Value that can go up and down
+    HISTOGRAM = "histogram"  # Distribution of values
+    SUMMARY = "summary"  # Quantiles and sum
 
 
 class MetricCategory(Enum):
@@ -73,7 +73,9 @@ class MetricDefinition:
         """Get Prometheus-compatible metric name."""
         return self.name.replace(".", "_").replace("-", "_")
 
-    def to_prometheus_format(self, value: Union[int, float], labels: Optional[Dict[str, str]] = None) -> str:
+    def to_prometheus_format(
+        self, value: Union[int, float], labels: Optional[Dict[str, str]] = None
+    ) -> str:
         """Convert metric to Prometheus format."""
         prom_name = self.get_prometheus_name()
         label_str = ""
@@ -116,7 +118,7 @@ class AlertRule:
             "expr": self.query,
             "for": self.duration,
             "labels": self.labels,
-            "annotations": self.annotations
+            "annotations": self.annotations,
         }
 
 
@@ -128,7 +130,9 @@ class GrafanaDashboard:
     description: str
     tags: List[str] = field(default_factory=lambda: ["hwa-new", "auto-generated"])
     panels: List[Dict[str, Any]] = field(default_factory=list)
-    time_range: Dict[str, str] = field(default_factory=lambda: {"from": "now-1h", "to": "now"})
+    time_range: Dict[str, str] = field(
+        default_factory=lambda: {"from": "now-1h", "to": "now"}
+    )
     refresh: str = "30s"
 
     def to_grafana_format(self) -> Dict[str, Any]:
@@ -152,7 +156,7 @@ class GrafanaDashboard:
                 "hideControls": False,
                 "id": None,
                 "style": "dark",
-                "timezone": "browser"
+                "timezone": "browser",
             }
         }
 
@@ -241,14 +245,14 @@ class MetricsCollector:
                 description="CPU usage percentage",
                 metric_type=MetricType.GAUGE,
                 category=MetricCategory.SYSTEM,
-                unit="percent"
+                unit="percent",
             ),
             MetricDefinition(
                 name="system.memory.usage",
                 description="Memory usage percentage",
                 metric_type=MetricType.GAUGE,
                 category=MetricCategory.SYSTEM,
-                unit="percent"
+                unit="percent",
             ),
             MetricDefinition(
                 name="system.disk.usage",
@@ -256,16 +260,15 @@ class MetricsCollector:
                 metric_type=MetricType.GAUGE,
                 category=MetricCategory.SYSTEM,
                 unit="percent",
-                labels=["mount_point"]
+                labels=["mount_point"],
             ),
-
             # Application metrics
             MetricDefinition(
                 name="app.http.requests.total",
                 description="Total HTTP requests",
                 metric_type=MetricType.COUNTER,
                 category=MetricCategory.APPLICATION,
-                labels=["method", "endpoint", "status"]
+                labels=["method", "endpoint", "status"],
             ),
             MetricDefinition(
                 name="app.http.request.duration",
@@ -274,9 +277,8 @@ class MetricsCollector:
                 category=MetricCategory.APPLICATION,
                 unit="seconds",
                 labels=["method", "endpoint"],
-                buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0]
+                buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0],
             ),
-
             # Performance metrics
             MetricDefinition(
                 name="app.performance.response_time",
@@ -284,55 +286,52 @@ class MetricsCollector:
                 metric_type=MetricType.HISTOGRAM,
                 category=MetricCategory.PERFORMANCE,
                 unit="seconds",
-                buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0]
+                buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0],
             ),
             MetricDefinition(
                 name="app.performance.error_rate",
                 description="Application error rate",
                 metric_type=MetricType.GAUGE,
                 category=MetricCategory.PERFORMANCE,
-                unit="percent"
+                unit="percent",
             ),
-
             # Security metrics
             MetricDefinition(
                 name="security.auth.attempts",
                 description="Authentication attempts",
                 metric_type=MetricType.COUNTER,
                 category=MetricCategory.SECURITY,
-                labels=["result", "method"]
+                labels=["result", "method"],
             ),
             MetricDefinition(
                 name="security.threats.detected",
                 description="Security threats detected",
                 metric_type=MetricType.COUNTER,
                 category=MetricCategory.SECURITY,
-                labels=["threat_type", "severity"]
+                labels=["threat_type", "severity"],
             ),
-
             # Health metrics
             MetricDefinition(
                 name="health.service.status",
                 description="Service health status",
                 metric_type=MetricType.GAUGE,
                 category=MetricCategory.HEALTH,
-                labels=["service", "component"]
+                labels=["service", "component"],
             ),
-
             # Business metrics
             MetricDefinition(
                 name="business.transactions.total",
                 description="Total business transactions",
                 metric_type=MetricType.COUNTER,
                 category=MetricCategory.BUSINESS,
-                labels=["type", "status"]
+                labels=["type", "status"],
             ),
             MetricDefinition(
                 name="business.user.sessions",
                 description="Active user sessions",
                 metric_type=MetricType.GAUGE,
-                category=MetricCategory.BUSINESS
-            )
+                category=MetricCategory.BUSINESS,
+            ),
         ]
 
         for metric in standard_metrics:
@@ -392,7 +391,9 @@ class MetricsCollector:
         self.http_app = web.Application()
 
         # Add metrics endpoint
-        self.http_app.router.add_get(self.config.prometheus_path, self._metrics_endpoint)
+        self.http_app.router.add_get(
+            self.config.prometheus_path, self._metrics_endpoint
+        )
 
         # Add health endpoint
         self.http_app.router.add_get("/health", self._health_endpoint)
@@ -400,10 +401,12 @@ class MetricsCollector:
         self.http_runner = web.AppRunner(self.http_app)
         await self.http_runner.setup()
 
-        site = web.TCPSite(self.http_runner, '0.0.0.0', self.config.prometheus_port)
+        site = web.TCPSite(self.http_runner, "0.0.0.0", self.config.prometheus_port)
         await site.start()
 
-        logger.info(f"Metrics HTTP server started on port {self.config.prometheus_port}")
+        logger.info(
+            f"Metrics HTTP server started on port {self.config.prometheus_port}"
+        )
 
     async def _initialize_grafana(self) -> None:
         """Initialize Grafana integration."""
@@ -412,14 +415,16 @@ class MetricsCollector:
 
         headers = {
             "Authorization": f"Bearer {self.config.grafana_api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
         self.grafana_session = aiohttp.ClientSession(headers=headers)
 
         # Test connection
         try:
-            async with self.grafana_session.get(f"{self.config.grafana_url}/api/health") as response:
+            async with self.grafana_session.get(
+                f"{self.config.grafana_url}/api/health"
+            ) as response:
                 if response.status == 200:
                     logger.info("Grafana integration initialized")
                     if self.config.auto_create_dashboards:
@@ -435,23 +440,23 @@ class MetricsCollector:
         self.alert_rules = [
             AlertRule(
                 name="HighCPUUsage",
-                query='system_cpu_usage > 90',
+                query="system_cpu_usage > 90",
                 duration="5m",
                 labels={"severity": "warning"},
                 annotations={
                     "summary": "High CPU usage detected",
-                    "description": "CPU usage is above 90% for more than 5 minutes"
-                }
+                    "description": "CPU usage is above 90% for more than 5 minutes",
+                },
             ),
             AlertRule(
                 name="HighMemoryUsage",
-                query='system_memory_usage > 95',
+                query="system_memory_usage > 95",
                 duration="2m",
                 labels={"severity": "critical"},
                 annotations={
                     "summary": "High memory usage detected",
-                    "description": "Memory usage is above 95% for more than 2 minutes"
-                }
+                    "description": "Memory usage is above 95% for more than 2 minutes",
+                },
             ),
             AlertRule(
                 name="HighErrorRate",
@@ -460,9 +465,9 @@ class MetricsCollector:
                 labels={"severity": "critical"},
                 annotations={
                     "summary": "High error rate detected",
-                    "description": "HTTP error rate is above 10% for more than 5 minutes"
-                }
-            )
+                    "description": "HTTP error rate is above 10% for more than 5 minutes",
+                },
+            ),
         ]
 
         logger.info(f"Loaded {len(self.alert_rules)} alert rules")
@@ -481,7 +486,7 @@ class MetricsCollector:
         self,
         name: str,
         value: Union[int, float],
-        labels: Optional[Dict[str, str]] = None
+        labels: Optional[Dict[str, str]] = None,
     ) -> None:
         """Record a metric value."""
         if name not in self.metrics_definitions:
@@ -489,14 +494,14 @@ class MetricsCollector:
             return
 
         metric_value = MetricValue(
-            definition=self.metrics_definitions[name],
-            value=value,
-            labels=labels or {}
+            definition=self.metrics_definitions[name], value=value, labels=labels or {}
         )
 
         self.metrics_buffer.append(metric_value)
 
-    def increment_counter(self, name: str, labels: Optional[Dict[str, str]] = None, value: int = 1) -> None:
+    def increment_counter(
+        self, name: str, labels: Optional[Dict[str, str]] = None, value: int = 1
+    ) -> None:
         """Increment a counter metric."""
         definition = self.metrics_definitions.get(name)
         if not definition or definition.metric_type != MetricType.COUNTER:
@@ -507,7 +512,12 @@ class MetricsCollector:
         # This is a simplified implementation
         self.record_metric(name, value, labels)
 
-    def set_gauge(self, name: str, value: Union[int, float], labels: Optional[Dict[str, str]] = None) -> None:
+    def set_gauge(
+        self,
+        name: str,
+        value: Union[int, float],
+        labels: Optional[Dict[str, str]] = None,
+    ) -> None:
         """Set a gauge metric value."""
         definition = self.metrics_definitions.get(name)
         if not definition or definition.metric_type != MetricType.GAUGE:
@@ -516,7 +526,9 @@ class MetricsCollector:
 
         self.record_metric(name, value, labels)
 
-    def observe_histogram(self, name: str, value: float, labels: Optional[Dict[str, str]] = None) -> None:
+    def observe_histogram(
+        self, name: str, value: float, labels: Optional[Dict[str, str]] = None
+    ) -> None:
         """Observe a value in a histogram metric."""
         definition = self.metrics_definitions.get(name)
         if not definition or definition.metric_type != MetricType.HISTOGRAM:
@@ -542,8 +554,8 @@ class MetricsCollector:
         output_lines = [
             "# HELP hwa_new_metrics HWA-New application metrics",
             "# TYPE hwa_new_metrics gauge",
-            f"hwa_new_metrics {{service=\"hwa-new\",version=\"1.0.0\"}} 1",
-            ""
+            f'hwa_new_metrics {{service="hwa-new",version="1.0.0"}} 1',
+            "",
         ]
 
         # Group metrics by name
@@ -556,8 +568,12 @@ class MetricsCollector:
             definition = values[0].definition
 
             # Metric metadata
-            output_lines.append(f"# HELP {definition.get_prometheus_name()} {definition.description}")
-            output_lines.append(f"# TYPE {definition.get_prometheus_name()} {definition.metric_type.value}")
+            output_lines.append(
+                f"# HELP {definition.get_prometheus_name()} {definition.description}"
+            )
+            output_lines.append(
+                f"# TYPE {definition.get_prometheus_name()} {definition.metric_type.value}"
+            )
 
             # Metric values
             for value in values[-10:]:  # Last 10 values to avoid duplicates
@@ -567,7 +583,9 @@ class MetricsCollector:
             output_lines.append("")
 
         response_text = "\n".join(output_lines)
-        return web.Response(text=response_text, content_type="text/plain; charset=utf-8")
+        return web.Response(
+            text=response_text, content_type="text/plain; charset=utf-8"
+        )
 
     async def _health_endpoint(self, request: web.Request) -> web.Response:
         """Health check endpoint."""
@@ -578,8 +596,8 @@ class MetricsCollector:
             "metrics": {
                 "buffer_size": len(self.metrics_buffer),
                 "definitions_count": len(self.metrics_definitions),
-                "custom_collectors": len(self.custom_collectors)
-            }
+                "custom_collectors": len(self.custom_collectors),
+            },
         }
 
         return web.json_response(health_data)
@@ -605,7 +623,7 @@ class MetricsCollector:
                     self.set_gauge(
                         "system.disk.usage",
                         usage.percent,
-                        {"mount_point": partition.mountpoint}
+                        {"mount_point": partition.mountpoint},
                     )
                 except PermissionError:
                     continue
@@ -643,19 +661,21 @@ class MetricsCollector:
             self._create_system_dashboard(),
             self._create_application_dashboard(),
             self._create_security_dashboard(),
-            self._create_business_dashboard()
+            self._create_business_dashboard(),
         ]
 
         for dashboard in dashboards:
             try:
                 async with self.grafana_session.post(
                     f"{self.config.grafana_url}/api/dashboards/db",
-                    json=dashboard.to_grafana_format()
+                    json=dashboard.to_grafana_format(),
                 ) as response:
                     if response.status == 200:
                         logger.info(f"Created Grafana dashboard: {dashboard.title}")
                     else:
-                        logger.warning(f"Failed to create dashboard {dashboard.title}: {response.status}")
+                        logger.warning(
+                            f"Failed to create dashboard {dashboard.title}: {response.status}"
+                        )
             except Exception as e:
                 logger.error(f"Dashboard creation failed: {e}")
 
@@ -663,29 +683,25 @@ class MetricsCollector:
         """Create system metrics dashboard."""
         dashboard = GrafanaDashboard(
             title="HWA-New System Metrics",
-            description="System-level metrics for HWA-New"
+            description="System-level metrics for HWA-New",
         )
 
         # CPU Usage Panel
         cpu_panel = {
             "title": "CPU Usage",
             "type": "graph",
-            "targets": [{
-                "expr": "system_cpu_usage",
-                "legendFormat": "CPU Usage %"
-            }],
-            "yAxes": [{"unit": "percent"}]
+            "targets": [{"expr": "system_cpu_usage", "legendFormat": "CPU Usage %"}],
+            "yAxes": [{"unit": "percent"}],
         }
 
         # Memory Usage Panel
         memory_panel = {
             "title": "Memory Usage",
             "type": "graph",
-            "targets": [{
-                "expr": "system_memory_usage",
-                "legendFormat": "Memory Usage %"
-            }],
-            "yAxes": [{"unit": "percent"}]
+            "targets": [
+                {"expr": "system_memory_usage", "legendFormat": "Memory Usage %"}
+            ],
+            "yAxes": [{"unit": "percent"}],
         }
 
         dashboard.panels = [cpu_panel, memory_panel]
@@ -695,27 +711,28 @@ class MetricsCollector:
         """Create application metrics dashboard."""
         dashboard = GrafanaDashboard(
             title="HWA-New Application Metrics",
-            description="Application-level metrics for HWA-New"
+            description="Application-level metrics for HWA-New",
         )
 
         # HTTP Requests Panel
         http_panel = {
             "title": "HTTP Requests",
             "type": "graph",
-            "targets": [{
-                "expr": 'rate(app_http_requests_total[5m])',
-                "legendFormat": "Requests/sec"
-            }]
+            "targets": [
+                {
+                    "expr": "rate(app_http_requests_total[5m])",
+                    "legendFormat": "Requests/sec",
+                }
+            ],
         }
 
         # Response Time Panel
         response_time_panel = {
             "title": "Response Time",
             "type": "heatmap",
-            "targets": [{
-                "expr": "app_http_request_duration_bucket",
-                "legendFormat": "{{le}}"
-            }]
+            "targets": [
+                {"expr": "app_http_request_duration_bucket", "legendFormat": "{{le}}"}
+            ],
         }
 
         dashboard.panels = [http_panel, response_time_panel]
@@ -725,27 +742,31 @@ class MetricsCollector:
         """Create security metrics dashboard."""
         dashboard = GrafanaDashboard(
             title="HWA-New Security Metrics",
-            description="Security-related metrics for HWA-New"
+            description="Security-related metrics for HWA-New",
         )
 
         # Authentication Attempts Panel
         auth_panel = {
             "title": "Authentication Attempts",
             "type": "graph",
-            "targets": [{
-                "expr": 'rate(security_auth_attempts_total[5m])',
-                "legendFormat": "{{result}}"
-            }]
+            "targets": [
+                {
+                    "expr": "rate(security_auth_attempts_total[5m])",
+                    "legendFormat": "{{result}}",
+                }
+            ],
         }
 
         # Threats Detected Panel
         threats_panel = {
             "title": "Threats Detected",
             "type": "graph",
-            "targets": [{
-                "expr": 'rate(security_threats_detected_total[5m])',
-                "legendFormat": "{{threat_type}}"
-            }]
+            "targets": [
+                {
+                    "expr": "rate(security_threats_detected_total[5m])",
+                    "legendFormat": "{{threat_type}}",
+                }
+            ],
         }
 
         dashboard.panels = [auth_panel, threats_panel]
@@ -755,27 +776,28 @@ class MetricsCollector:
         """Create business metrics dashboard."""
         dashboard = GrafanaDashboard(
             title="HWA-New Business Metrics",
-            description="Business-level metrics for HWA-New"
+            description="Business-level metrics for HWA-New",
         )
 
         # Transactions Panel
         transactions_panel = {
             "title": "Business Transactions",
             "type": "graph",
-            "targets": [{
-                "expr": 'rate(business_transactions_total[5m])',
-                "legendFormat": "{{type}} - {{status}}"
-            }]
+            "targets": [
+                {
+                    "expr": "rate(business_transactions_total[5m])",
+                    "legendFormat": "{{type}} - {{status}}",
+                }
+            ],
         }
 
         # User Sessions Panel
         sessions_panel = {
             "title": "Active User Sessions",
             "type": "singlestat",
-            "targets": [{
-                "expr": "business_user_sessions",
-                "legendFormat": "Active Sessions"
-            }]
+            "targets": [
+                {"expr": "business_user_sessions", "legendFormat": "Active Sessions"}
+            ],
         }
 
         dashboard.panels = [transactions_panel, sessions_panel]
@@ -795,7 +817,10 @@ class MetricsCollector:
 
                 # Clean old metrics from buffer
                 cutoff_time = time.time() - (self.config.metrics_retention_hours * 3600)
-                while self.metrics_buffer and self.metrics_buffer[0].timestamp < cutoff_time:
+                while (
+                    self.metrics_buffer
+                    and self.metrics_buffer[0].timestamp < cutoff_time
+                ):
                     self.metrics_buffer.popleft()
 
             except asyncio.CancelledError:
@@ -806,10 +831,12 @@ class MetricsCollector:
     def get_alert_rules_prometheus_format(self) -> str:
         """Get alert rules in Prometheus format."""
         rules = {
-            "groups": [{
-                "name": "hwa_new_alerts",
-                "rules": [rule.to_prometheus_rule() for rule in self.alert_rules]
-            }]
+            "groups": [
+                {
+                    "name": "hwa_new_alerts",
+                    "rules": [rule.to_prometheus_rule() for rule in self.alert_rules],
+                }
+            ]
         }
         return json.dumps(rules, indent=2)
 
@@ -825,22 +852,22 @@ class MetricsCollector:
                 "collect_interval_seconds": self.config.collect_interval_seconds,
                 "enable_system_metrics": self.config.enable_system_metrics,
                 "enable_business_metrics": self.config.enable_business_metrics,
-                "grafana_integration": self.config.grafana_url is not None
+                "grafana_integration": self.config.grafana_url is not None,
             },
             "metrics": {
                 "total_definitions": len(self.metrics_definitions),
                 "by_category": dict(metrics_by_category),
                 "buffer_size": len(self.metrics_buffer),
-                "custom_collectors": len(self.custom_collectors)
+                "custom_collectors": len(self.custom_collectors),
             },
             "alerting": {
                 "rules_count": len(self.alert_rules),
-                "enabled": self.config.enable_alerting
+                "enabled": self.config.enable_alerting,
             },
             "health": {
                 "running": self._running,
-                "http_server_active": self.http_runner is not None
-            }
+                "http_server_active": self.http_runner is not None,
+            },
         }
 
 

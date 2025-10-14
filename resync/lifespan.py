@@ -18,15 +18,23 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
-from redis.exceptions import (AuthenticationError, BusyLoadingError,
-                              ConnectionError, ResponseError, TimeoutError)
+from redis.exceptions import (
+    AuthenticationError,
+    BusyLoadingError,
+    ConnectionError,
+    ResponseError,
+    TimeoutError,
+)
 
 from resync.api_gateway.container import setup_dependencies
 from resync.core.container import app_container
-from resync.core.exceptions import (ConfigurationError, RedisAuthError,
-                                    RedisConnectionError,
-                                    RedisInitializationError,
-                                    RedisTimeoutError)
+from resync.core.exceptions import (
+    ConfigurationError,
+    RedisAuthError,
+    RedisConnectionError,
+    RedisInitializationError,
+    RedisTimeoutError,
+)
 from resync.core.interfaces import IAgentManager, IKnowledgeGraph, ITWSClient
 from resync.core.redis_init import RedisInitializer
 from resync.core.structured_logger import get_logger
@@ -145,8 +153,7 @@ async def initialize_redis_with_retry(
         try:
             async with redis_connection_manager() as redis_client:
                 # Inicializar idempotency manager
-                from resync.api.dependencies import \
-                    initialize_idempotency_manager
+                from resync.api.dependencies import initialize_idempotency_manager
 
                 await initialize_idempotency_manager(redis_client)
 

@@ -10,13 +10,13 @@ from typing import Any, Awaitable, Callable, Optional  # type: ignore
 from fastapi import HTTPException, Request, Response  # type: ignore
 from fastapi.responses import JSONResponse  # type: ignore
 
-from resync.core.audit_log import \
-    get_audit_log_manager  # type: ignore[attr-defined]
-from resync.core.logger import \
-    log_with_correlation  # type: ignore[attr-defined]
+from resync.core.audit_log import get_audit_log_manager  # type: ignore[attr-defined]
+from resync.core.logger import log_with_correlation  # type: ignore[attr-defined]
 from resync.core.metrics import runtime_metrics  # type: ignore[attr-defined]
 from resync.core.rate_limiter import (  # type: ignore[attr-defined]
-    authenticated_rate_limit, public_rate_limit)
+    authenticated_rate_limit,
+    public_rate_limit,
+)
 
 # from resync.core.security import validate_api_key  # type: ignore[attr-defined]
 
