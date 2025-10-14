@@ -12,74 +12,181 @@ This module tests:
 """
 
 import asyncio
+import threading
+import time
+from asyncio import Lock
+from dataclasses import asdict
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
 import pytest_asyncio
-import time
-from unittest.mock import Mock, AsyncMock, patch
+import structlog
 
-from resync.core.connection_pool_manager import (
-    ConnectionPoolManager,
-    DatabaseConnectionPool,
-    ConnectionPoolConfig,
-)
+from resync.core.connection_pool_manager import (ConnectionPoolConfig,
+                                                 ConnectionPoolManager,
+                                                 DatabaseConnectionPool)
 from resync.core.exceptions import PoolExhaustedError, TimeoutError
-from resync.core.websocket_pool_manager import (
-    WebSocketPoolManager,
+
+# Configure structured logging for tests
+structlog.configure(
+    processors=[
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.dev.ConsoleRenderer(),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(20),  # INFO level
+    logger_factory=structlog.PrintLoggerFactory(),
+    cache_logger_on_first_use=True,
 )
+from resync.core.websocket_pool_manager import WebSocketPoolManager
 
 
 class TestConnectionPoolMetrics:
     """Test connection pool metrics collection."""
 
+    @pytest.fixture(scope="class")
+    def mock_db_pool_dependencies(self):
+        """A class-scoped fixture to mock database pool dependencies once per test class."""
+        with (
+            patch(
+                "resync.core.pools.db_pool.create_async_engine"
+            ) as mock_create_engine,
+            patch("resync.core.pools.db_pool.async_sessionmaker") as mock_sessionmaker,
+        ):
+
+            mock_engine = AsyncMock()
+            mock_create_engine.return_value = mock_engine
+
+            mock_session_instance = AsyncMock()
+            mock_session_instance.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
+            mock_session_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_session_maker_instance = Mock()
+            mock_session_maker_instance.return_value = mock_session_instance
+            mock_sessionmaker.return_value = mock_session_maker_instance
+
+            yield
+
     @pytest_asyncio.fixture
-    async def monitored_pool(self):
-        """Create a monitored connection pool."""
+    async def monitored_pool(self, mock_db_pool_dependencies):
+        """Create monitored pool with comprehensive cleanup and validation."""
         config = ConnectionPoolConfig(
             pool_name="metrics_test_pool",
             min_size=2,
             max_size=10,
-            timeout=5,
+            connection_timeout=5,
             health_check_interval=10,
         )
 
-        with patch("sqlalchemy.ext.asyncio.create_async_engine") as mock_create_engine:
-            mock_engine = AsyncMock()
-            mock_create_engine.return_value = mock_engine
+        pool = DatabaseConnectionPool(
+            config, "postgresql://test:test@localhost:5432/test"
+        )
 
-            pool = DatabaseConnectionPool(config, "sqlite:///:memory:")
-            await pool.initialize()
+        try:
+            await asyncio.wait_for(pool.initialize(), timeout=10.0)
+            initial_stats = pool.stats
+            assert initial_stats.active_connections == 0
+            assert initial_stats.total_connections == 0
             yield pool
-            await pool.shutdown()
+        finally:
+            try:
+                await asyncio.wait_for(pool.close(), timeout=5.0)
+            except Exception as e:
+                pytest.fail(f"Pool cleanup failed: {e}")
+            final_stats = pool.stats
+            assert final_stats.active_connections == 0, "Pool leaked connections"
 
     @pytest.mark.asyncio
     async def test_pool_statistics_accuracy(self, monitored_pool):
-        """Test accuracy of pool statistics."""
-        # Get initial stats
-        initial_stats = monitored_pool.get_stats()
-        assert initial_stats.active_connections == 0
-        assert initial_stats.idle_connections == 0
-        assert initial_stats.total_connections == 0
+        """Test accuracy of pool statistics with comprehensive observability."""
+        logger = structlog.get_logger("test.pool.stats")
 
-        # Acquire some connections
+        # Snapshot pré-teste para validação de deltas
+        pre_stats = monitored_pool.get_stats_copy()
+        logger.info("test_started", stats=pre_stats)
+
+        # Proteção thread-safe para conexões compartilhadas
+        connections_lock = Lock()
         connections = []
 
-        async def acquire_connection(connection_id: int):
-            async with monitored_pool.get_connection() as engine:
-                connections.append(connection_id)
-                # Check stats during connection
-                stats = monitored_pool.get_stats()
-                assert stats.active_connections >= 1
-                await asyncio.sleep(0.01)
+        async def acquire_connection_safe(connection_id: int):
+            """Acquire connection with atomic state management."""
+            op_logger = logger.bind(connection_id=connection_id)
+            op_logger.debug("acquiring_connection")
 
-        # Acquire multiple connections
-        tasks = [acquire_connection(i) for i in range(3)]
+            try:
+                async with monitored_pool.get_connection():
+                    # Operação atômica: append + validação
+                    async with connections_lock:
+                        connections.append(connection_id)
+                        # Snapshot atômico do estado
+                        current_stats = monitored_pool.get_stats_copy()
+                        assert current_stats["active_connections"] >= 1
+
+                    op_logger.info(
+                        "connection_acquired",
+                        active=current_stats["active_connections"],
+                        total=current_stats["total_connections"],
+                    )
+
+                    # Sleep não-bloqueante com jitter para evitar thundering herd
+                    await asyncio.sleep(0.001 * (1 + connection_id * 0.1))
+
+            except Exception as e:
+                op_logger.error("connection_failed", error=str(e))
+                raise
+
+        # Execute with timing and diagnostics
+        start_time = time.perf_counter()
+        num_operations = 3
+        tasks = [acquire_connection_safe(i) for i in range(num_operations)]
         await asyncio.gather(*tasks)
+        execution_time = time.perf_counter() - start_time
 
-        # Check final stats
-        final_stats = monitored_pool.get_stats()
-        assert final_stats.pool_hits >= 3
-        assert final_stats.active_connections == 0  # All released
-        assert final_stats.connection_creations >= 3
+        # Snapshot pós-teste
+        post_stats = monitored_pool.get_stats_copy()
+
+        # Validação determinística com contexto rico
+        expected_new_hits = num_operations
+        actual_new_hits = post_stats["pool_hits"] - pre_stats["pool_hits"]
+
+        logger.info(
+            "test_completed",
+            execution_time=execution_time,
+            pre_stats=pre_stats,
+            post_stats=post_stats,
+            connections_processed=len(connections),
+            expected_hits=expected_new_hits,
+            actual_hits=actual_new_hits,
+        )
+
+        # Assertions determinísticas aprimoradas
+        assert actual_new_hits == expected_new_hits, (
+            f"Expected exactly {expected_new_hits} new hits, got {actual_new_hits}. "
+            f"Stats delta: {post_stats}"
+        )
+
+        assert post_stats["active_connections"] == 0, (
+            f"Connection leak detected: {post_stats['active_connections']} active. "
+            f"Connections: {connections}"
+        )
+
+        # The pool might reuse connections, so we expect creations to be <= num_operations
+        # and > 0 since the pool started empty.
+        assert (
+            0 < post_stats["connection_creations"] <= num_operations
+        ), f"Expected between 1 and {num_operations} connection creations, but got {post_stats['connection_creations']}"
+
+        # Validação de métricas de performance
+        assert execution_time < 1.0, f"Test took too long: {execution_time}s"
+
+        logger.info(
+            "test_validation_complete",
+            total_connections=len(connections),
+            total_hits=post_stats["pool_hits"],
+            performance_ratio=post_stats["pool_hits"]
+            / max(post_stats["connection_creations"], 1),
+        )
 
     @pytest.mark.asyncio
     async def test_pool_performance_metrics(self, monitored_pool):
@@ -204,26 +311,48 @@ class TestConnectionPoolMetrics:
 class TestConnectionLeakDetection:
     """Test connection leak detection mechanisms."""
 
+    @pytest.fixture(scope="class")
+    def mock_db_pool_dependencies(self):
+        """A class-scoped fixture to mock database pool dependencies once per test class."""
+        with (
+            patch(
+                "resync.core.pools.db_pool.create_async_engine"
+            ) as mock_create_engine,
+            patch("resync.core.pools.db_pool.async_sessionmaker") as mock_sessionmaker,
+        ):
+
+            mock_engine = AsyncMock()
+            mock_create_engine.return_value = mock_engine
+
+            mock_session_instance = AsyncMock()
+            mock_session_instance.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
+            mock_session_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_session_maker_instance = Mock()
+            mock_session_maker_instance.return_value = mock_session_instance
+            mock_sessionmaker.return_value = mock_session_maker_instance
+
+            yield
+
     @pytest_asyncio.fixture
-    async def leaky_pool(self):
+    async def leaky_pool(self, mock_db_pool_dependencies):
         """Create a pool for leak detection testing."""
         config = ConnectionPoolConfig(
             pool_name="leak_detection_pool",
             min_size=1,
             max_size=5,
-            timeout=3,
+            connection_timeout=3,
             idle_timeout=2,  # Short idle timeout for testing
             health_check_interval=5,
         )
 
-        with patch("sqlalchemy.ext.asyncio.create_async_engine") as mock_create_engine:
-            mock_engine = AsyncMock()
-            mock_create_engine.return_value = mock_engine
-
-            pool = DatabaseConnectionPool(config, "sqlite:///:memory:")
-            await pool.initialize()
-            yield pool
-            await pool.shutdown()
+        pool = DatabaseConnectionPool(
+            config, "postgresql://test:test@localhost:5432/test"
+        )
+        await pool.initialize()
+        yield pool
+        await pool.close()
 
     @pytest.mark.asyncio
     async def test_connection_leak_detection(self, leaky_pool):

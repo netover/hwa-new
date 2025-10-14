@@ -357,7 +357,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                         return json.loads(response.body.decode("utf-8"))
                     elif isinstance(response.body, str):
                         return json.loads(response.body)
-                    elif hasattr(response.body, 'decode'):
+                    elif hasattr(response.body, "decode"):
                         return json.loads(response.body.decode("utf-8"))
                     else:
                         # Fallback for other types

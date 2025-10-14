@@ -10,12 +10,12 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Optional, Dict, List, Generator
+from typing import Any, Dict, Generator, List, Optional
 
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import Column, DateTime, Integer, String, Text, create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from resync.settings import settings
@@ -62,8 +62,7 @@ class AuditLogResponse(BaseModel):
     source_component: Optional[str]
     severity: Optional[str]
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AuditLogManager:

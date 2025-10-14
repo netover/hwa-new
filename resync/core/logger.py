@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
 import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import structlog
 
@@ -13,8 +13,8 @@ def setup_logging() -> None:
     """
     Configures structured logging for the application with JSON format.
     """
-    from logging.handlers import RotatingFileHandler
     import os
+    from logging.handlers import RotatingFileHandler
 
     # Get log level from environment or settings
     log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()

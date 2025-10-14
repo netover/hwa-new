@@ -8,9 +8,9 @@ Este módulo implementa uma hierarquia completa de exceções seguindo as melhor
 - Separação entre erros de cliente (4xx) e servidor (5xx)
 """
 
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
-from datetime import datetime
 
 
 class ErrorCode(str, Enum):

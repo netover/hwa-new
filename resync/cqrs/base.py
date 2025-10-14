@@ -8,8 +8,8 @@ Command Query Responsibility Segregation (CQRS) pattern in Resync.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Generic, TypeVar, Union
-from pydantic import BaseModel
 
+from pydantic import BaseModel
 
 # Generic type variables
 TCommand = TypeVar("TCommand", bound="ICommand")

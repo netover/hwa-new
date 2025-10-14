@@ -5,13 +5,18 @@ API Gateway core components - routing, authentication, and cross-cutting concern
 from __future__ import annotations  # type: ignore
 
 import logging  # type: ignore
-from typing import Any, Optional, Callable, Awaitable  # type: ignore
-from fastapi import Request, Response, HTTPException  # type: ignore
+from typing import Any, Awaitable, Callable, Optional  # type: ignore
+
+from fastapi import HTTPException, Request, Response  # type: ignore
 from fastapi.responses import JSONResponse  # type: ignore
-from resync.core.logger import log_with_correlation  # type: ignore[attr-defined]
-from resync.core.rate_limiter import authenticated_rate_limit, public_rate_limit  # type: ignore[attr-defined]
+
 from resync.core.audit_log import get_audit_log_manager  # type: ignore[attr-defined]
+from resync.core.logger import log_with_correlation  # type: ignore[attr-defined]
 from resync.core.metrics import runtime_metrics  # type: ignore[attr-defined]
+from resync.core.rate_limiter import (  # type: ignore[attr-defined]
+    authenticated_rate_limit,
+    public_rate_limit,
+)
 
 # from resync.core.security import validate_api_key  # type: ignore[attr-defined]
 

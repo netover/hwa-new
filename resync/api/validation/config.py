@@ -5,7 +5,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Union
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, validator
 
 
 class ValidationMode(str, Enum):
@@ -145,25 +145,21 @@ class ValidationConfigModel(BaseModel):
         default=60, ge=10, le=3600, description="Circuit breaker timeout in seconds"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("skip_paths")
     def validate_skip_paths(cls, v):
         """Validate skip paths."""
         if not v:
             return v
-
         # Validate path format
         for path in v:
             if not path.startswith("/"):
                 raise ValueError(f"Skip path must start with '/': {path}")
-
             if ".." in path or "//" in path:
                 raise ValueError(f"Invalid skip path format: {path}")
-
         # Remove duplicates while preserving order
         seen = set()
         unique_paths = []
@@ -171,7 +167,6 @@ class ValidationConfigModel(BaseModel):
             if path not in seen:
                 seen.add(path)
                 unique_paths.append(path)
-
         return unique_paths
 
     @validator("custom_validators")
@@ -179,24 +174,19 @@ class ValidationConfigModel(BaseModel):
         """Validate custom validator configurations."""
         if not v:
             return v
-
         for name, config in v.items():
             if not name.replace("_", "").replace("-", "").isalnum():
                 raise ValueError(f"Invalid custom validator name: {name}")
-
             if not isinstance(config, dict):
                 raise ValueError(f"Custom validator '{name}' must be a dictionary")
-
             # Validate config structure
             required_keys = {"type", "enabled"}
             if not all(key in config for key in required_keys):
                 raise ValueError(
                     f"Custom validator '{name}' missing required keys: {required_keys}"
                 )
-
             if not isinstance(config["enabled"], bool):
                 raise ValueError(f"Custom validator '{name}' enabled must be boolean")
-
         return v
 
     @validator("allowed_file_types")
@@ -204,12 +194,10 @@ class ValidationConfigModel(BaseModel):
         """Validate allowed file types."""
         if not v:
             raise ValueError("At least one allowed file type must be specified")
-
         # Validate MIME type format
         for mime_type in v:
             if not re.match(r"^[a-zA-Z0-9\-]+\/[a-zA-Z0-9\-\+]+(;.*)?$", mime_type):
                 raise ValueError(f"Invalid MIME type format: {mime_type}")
-
         # Remove duplicates while preserving order
         seen = set()
         unique_types = []
@@ -217,7 +205,6 @@ class ValidationConfigModel(BaseModel):
             if mime_type not in seen:
                 seen.add(mime_type)
                 unique_types.append(mime_type)
-
         return unique_types
 
 
@@ -249,10 +236,9 @@ class AgentValidationConfig(BaseModel):
         default=True, description="Validate model compatibility"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
 
 class ChatValidationConfig(BaseModel):
@@ -278,10 +264,9 @@ class ChatValidationConfig(BaseModel):
         default_factory=list, description="Keywords to block in messages", max_items=100
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
 
 class SecurityValidationConfig(BaseModel):
@@ -322,10 +307,9 @@ class SecurityValidationConfig(BaseModel):
         default=False, description="Enable CAPTCHA validation"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
 
 class RateLimitConfig(BaseModel):
@@ -357,10 +341,9 @@ class RateLimitConfig(BaseModel):
         default=False, description="Enable user-based rate limiting"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
 
 class ValidationSettings:

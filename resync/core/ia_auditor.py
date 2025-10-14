@@ -1,11 +1,17 @@
 # resync/core/ia_auditor.py
 import asyncio
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import httpx
 
 from resync.core.audit_lock import DistributedAuditLock
 from resync.core.audit_queue import AsyncAuditQueue
+from resync.core.constants import (
+    AUDIT_DELETION_CONFIDENCE_THRESHOLD,
+    AUDIT_FLAGGING_CONFIDENCE_THRESHOLD,
+    AUDIT_HIGH_RATING_THRESHOLD,
+    RECENT_MEMORIES_FETCH_LIMIT,
+)
 from resync.core.exceptions import (
     AuditError,
     DatabaseError,
@@ -14,10 +20,10 @@ from resync.core.exceptions import (
     ParsingError,
 )
 from resync.core.knowledge_graph import AsyncKnowledgeGraph
+from resync.core.structured_logger import get_logger
 from resync.core.utils.json_parser import parse_llm_json_response
 from resync.core.utils.llm import call_llm
 from resync.settings import settings
-from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -26,14 +32,8 @@ knowledge_graph = AsyncKnowledgeGraph()
 audit_lock = DistributedAuditLock()
 audit_queue = AsyncAuditQueue()
 
-# --- Constants for IA Auditor Logic ---
-AUDIT_DELETION_CONFIDENCE_THRESHOLD = 0.85
-AUDIT_FLAGGING_CONFIDENCE_THRESHOLD = 0.6
-AUDIT_HIGH_RATING_THRESHOLD = 3
-RECENT_MEMORIES_FETCH_LIMIT = 100
 
-
-async def _validate_memory_for_analysis(mem: Dict[str, Any]) -> bool:
+async def _validate_memory_for_analysis(mem: dict[str, Any]) -> bool:
     """Checks if a memory is valid for analysis."""
     memory_id = str(mem.get("id", ""))
     if await knowledge_graph.is_memory_already_processed(memory_id):
@@ -63,7 +63,7 @@ async def _validate_memory_for_analysis(mem: Dict[str, Any]) -> bool:
 
 async def _get_llm_analysis(
     user_query: str, agent_response: str
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Gets the analysis of a memory from the LLM."""
     prompt = f"""
     You are an expert TWS (IBM MQ/Workload Scheduler) auditor.
@@ -107,8 +107,8 @@ async def _get_llm_analysis(
 
 
 async def _perform_action_on_memory(
-    mem: Dict[str, Any], analysis: Dict[str, Any]
-) -> Optional[Tuple[str, Union[str, Dict[str, Any]]]]:
+    mem: dict[str, Any], analysis: dict[str, Any]
+) -> tuple[str, str | dict[str, Any]] | None:
     """Performs the appropriate action on a memory based on the LLM analysis."""
     memory_id = str(mem.get("id", ""))
     confidence = float(analysis.get("confidence", 0))
@@ -145,9 +145,71 @@ async def _perform_action_on_memory(
     return None
 
 
+async def _fetch_recent_memories() -> list[dict[str, Any]]:
+    """Fetches recent memories from knowledge graph."""
+    try:
+        memories = await knowledge_graph.get_memories(limit=RECENT_MEMORIES_FETCH_LIMIT)
+        return memories or []
+    except KnowledgeGraphError as e:
+        logger.error("failed_to_fetch_memories", error=str(e), exc_info=True)
+        raise AuditError("Failed to fetch memories for analysis") from e
+
+
+async def _process_memory_batch(
+    memories: list[dict[str, Any]],
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """
+    Processes a batch of memories through concurrent analysis.
+
+    Returns:
+        Tuple of (deleted_memory_ids, flagged_memories)
+    """
+    tasks = [analyze_memory(mem) for mem in memories]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Log exceptions but don't fail the batch
+    [
+        logger.warning("memory_analysis_failed", error=str(result))
+        for result in results
+        if isinstance(result, Exception)
+    ]
+
+    # Extract valid results and categorize by action
+    valid_results = [
+        (action, data)
+        for r in results
+        if r and not isinstance(r, Exception)
+        for action, data in [r]
+    ]
+
+    deleted = [data for action, data in valid_results if action == "delete"]
+    flagged = [data for action, data in valid_results if action == "flag"]
+
+    return deleted, flagged
+
+
+async def _store_flagged_memories(flagged: list[dict[str, Any]]) -> None:
+    """Stores flagged memories in audit queue for human review."""
+    for mem in flagged:
+        try:
+            await audit_queue.enqueue_for_review(
+                memory_id=str(mem["id"]),
+                reason=mem.get("ia_audit_reason", "Flagged by IA"),
+                confidence=float(mem.get("ia_audit_confidence", 0.0)),
+                memory_content=mem,
+            )
+        except DatabaseError as e:
+            logger.error(
+                "failed_to_enqueue_flagged_memory",
+                memory_id=str(mem.get("id")),
+                error=str(e),
+                exc_info=True,
+            )
+
+
 async def analyze_memory(
-    mem: Dict[str, Any],
-) -> Optional[Tuple[str, Union[str, Dict[str, Any]]]]:
+    mem: dict[str, Any],
+) -> tuple[str, str | dict[str, Any]] | None:
     """Analyzes a single memory and returns an action if necessary."""
     memory_id = str(mem.get("id", ""))
     try:
@@ -201,66 +263,36 @@ async def _cleanup_locks() -> None:
         logger.warning("error_cleaning_up_expired_locks", exc_info=True)
 
 
-async def _fetch_recent_memories() -> Optional[List[Dict[str, Any]]]:
-    """Fetches recent conversations from the knowledge graph."""
-    try:
-        return await knowledge_graph.get_all_recent_conversations(
-            RECENT_MEMORIES_FETCH_LIMIT
-        )
-    except (KnowledgeGraphError, DatabaseError) as e:
-        logger.error(
-            "could_not_fetch_memories_from_database",
-            error=str(e),
-            exc_info=True,
-        )
-        return None
+# Old functions removed - replaced by refactored versions above
 
 
-async def _analyze_memories_concurrently(
-    memories: List[Dict[str, Any]],
-) -> List[Optional[Tuple[str, Union[str, Dict[str, Any]]]]]:
-    """Analyzes a list of memories in parallel."""
-    tasks = [analyze_memory(mem) for mem in memories]
-    return await asyncio.gather(*tasks)
-
-
-async def _process_analysis_results(
-    results: List[Optional[Tuple[str, Union[str, Dict[str, Any]]]]],
-) -> Tuple[List[str], List[Dict[str, Any]]]:
-    """Processes the results from memory analysis, sorting them into actions."""
-    to_delete: List[str] = []
-    to_flag: List[Dict[str, Any]] = []
-    for result in results:
-        if result:
-            action, value = result
-            if action == "delete" and isinstance(value, str):
-                to_delete.append(value)
-            elif action == "flag" and isinstance(value, dict):
-                to_flag.append(value)
-                await audit_queue.add_audit_record(value)
-    return to_delete, to_flag
-
-
-async def analyze_and_flag_memories() -> Dict[str, Union[int, str]]:
+async def analyze_and_flag_memories() -> dict[str, int | str]:
     """
-    Analyzes recent memories, skipping those already reviewed, and flags
-    or removes incorrect ones. Uses atomic operations with distributed locking
-    to prevent race conditions and duplicate flagging.
+    Orchestrates the memory analysis workflow.
+
+    Fetches recent memories, processes them concurrently, and handles
+    the results by deleting incorrect memories and queuing flagged ones
+    for human review.
+
+    Returns:
+        Dictionary with counts of deleted and flagged memories
     """
-    logger.info("analyzing_recent_memories")
     await _cleanup_locks()
 
-    recent_memories = await _fetch_recent_memories()
-    if recent_memories is None:
-        return {"deleted": 0, "flagged": 0, "error": "database_fetch_failed"}
+    memories = await _fetch_recent_memories()
+    if not memories:
+        logger.info("no_memories_to_analyze")
+        return {"deleted": 0, "flagged": 0}
 
-    analysis_results = await _analyze_memories_concurrently(recent_memories)
-    to_delete, to_flag = await _process_analysis_results(analysis_results)
+    deleted, flagged = await _process_memory_batch(memories)
 
-    for mem_id in to_delete:
-        await knowledge_graph.delete_memory(mem_id)
+    if flagged:
+        await _store_flagged_memories(flagged)
 
     logger.info(
-        "finished_analyzing_memories", deleted=len(to_delete), flagged=len(to_flag)
+        "memory_analysis_completed",
+        deleted_count=len(deleted),
+        flagged_count=len(flagged),
     )
-    return {"deleted": len(to_delete), "flagged": len(to_flag)}
+
+    return {"deleted": len(deleted), "flagged": len(flagged)}

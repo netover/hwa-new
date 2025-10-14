@@ -73,37 +73,30 @@ class FileUploadRequest(BaseValidatedModel):
         default=False, description="Whether to generate thumbnail"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("filename")
     def validate_filename(cls, v):
         """Validate filename for security and format."""
         if not v or not v.strip():
             raise ValueError("Filename cannot be empty")
-
         # Remove path traversal attempts
         v = os.path.basename(v)
-
         # Check for dangerous patterns
         if ValidationPatterns.PATH_TRAVERSAL_PATTERN.search(v):
             raise ValueError("Filename contains path traversal patterns")
-
         if ValidationPatterns.SCRIPT_PATTERN.search(v):
             raise ValueError("Filename contains potentially malicious content")
-
         # Check for double extensions (potential evasion)
         if v.count(".") > 2:
             raise ValueError("Filename has too many extensions")
-
         # Validate extension
         extension = os.path.splitext(v)[1].lower()
         if extension:
             if not re.match(r"^\.[a-zA-Z0-9]{1,10}$", extension):
                 raise ValueError("Invalid file extension")
-
         return v
 
     @validator("content_type")
@@ -111,11 +104,9 @@ class FileUploadRequest(BaseValidatedModel):
         """Validate MIME content type."""
         if not v or not v.strip():
             raise ValueError("Content type cannot be empty")
-
         # Basic MIME type validation
         if not re.match(r"^[a-zA-Z0-9\-]+\/[a-zA-Z0-9\-\+]+(;.*)?$", v):
             raise ValueError("Invalid MIME content type format")
-
         # Check for dangerous content types
         dangerous_types = {
             "application/x-php",
@@ -135,11 +126,9 @@ class FileUploadRequest(BaseValidatedModel):
             "application/x-sharedlib",
             "application/x-dosexec",
         }
-
         base_type = v.split(";")[0].lower()
         if base_type in dangerous_types:
             raise ValueError(f"Dangerous content type not allowed: {base_type}")
-
         return v
 
     @validator("file_size")
@@ -149,12 +138,10 @@ class FileUploadRequest(BaseValidatedModel):
             raise ValueError(
                 f"File size exceeds maximum allowed: {NumericConstraints.MAX_FILE_SIZE} bytes"
             )
-
         if v > NumericConstraints.MAX_FILE_SIZE // 2:
             import logging
 
             logging.warning(f"Large file upload detected: {v} bytes")
-
         return v
 
     @validator("purpose")
@@ -162,11 +149,9 @@ class FileUploadRequest(BaseValidatedModel):
         """Validate file upload purpose."""
         if not v or not v.strip():
             raise ValueError("Purpose cannot be empty")
-
         # Check for script injection
         if ValidationPatterns.SCRIPT_PATTERN.search(v):
             raise ValueError("Purpose contains potentially malicious content")
-
         return v
 
     @validator("metadata")
@@ -174,13 +159,11 @@ class FileUploadRequest(BaseValidatedModel):
         """Validate metadata dictionary."""
         if not v:
             return v
-
         # Check metadata keys and values
         for key, value in v.items():
             # Validate key
             if not key.replace("_", "").replace("-", "").isalnum():
                 raise ValueError(f"Invalid metadata key: {key}")
-
             # Validate string values
             if isinstance(value, str):
                 if len(value) > 1000:  # Max metadata value length
@@ -189,7 +172,6 @@ class FileUploadRequest(BaseValidatedModel):
                     raise ValueError(
                         f"Metadata value contains malicious content for key '{key}'"
                     )
-
             # Validate nested dictionaries
             elif isinstance(value, dict):
                 if len(value) > 10:  # Max nested items
@@ -203,7 +185,6 @@ class FileUploadRequest(BaseValidatedModel):
                         raise ValueError(
                             "Nested metadata value contains malicious content"
                         )
-
         return v
 
     @model_validator(mode="before")
@@ -212,11 +193,9 @@ class FileUploadRequest(BaseValidatedModel):
         if isinstance(values, dict):
             content_type = values.get("content_type")
             file_type = values.get("file_type")
-
             if content_type and file_type:
                 # Infer expected file type from content type
                 main_type = content_type.split("/")[0].lower()
-
                 type_mapping = {
                     "text": FileType.DOCUMENT,
                     "image": FileType.IMAGE,
@@ -224,16 +203,13 @@ class FileUploadRequest(BaseValidatedModel):
                     "audio": FileType.AUDIO,
                     "application": FileType.DOCUMENT,  # Default for application types
                 }
-
                 expected_type = type_mapping.get(main_type, FileType.OTHER)
-
                 if file_type != expected_type:
                     import logging
 
                     logging.warning(
                         f"File type '{file_type}' doesn't match content type '{content_type}'"
                     )
-
         return values
 
 
@@ -270,10 +246,9 @@ class FileChunkUploadRequest(BaseValidatedModel):
         None, description="MD5 hash of chunk data", pattern=r"^[a-fA-F0-9]{32}$"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("chunk_index", "total_chunks")
     def validate_chunk_numbers(cls, v, values):
@@ -281,10 +256,8 @@ class FileChunkUploadRequest(BaseValidatedModel):
         if "chunk_index" in values and "total_chunks" in values:
             chunk_index = values["chunk_index"]
             total_chunks = values["total_chunks"]
-
             if chunk_index >= total_chunks:
                 raise ValueError("Chunk index must be less than total chunks")
-
         return v
 
     @validator("file_size")
@@ -292,13 +265,11 @@ class FileChunkUploadRequest(BaseValidatedModel):
         """Validate total file size."""
         chunk_size = values.get("chunk_size")
         total_chunks = values.get("total_chunks")
-
         if chunk_size and total_chunks:
             expected_size = chunk_size * total_chunks
             # Allow some variance for the last chunk
             if abs(v - expected_size) > NumericConstraints.MAX_CHUNK_SIZE:
                 raise ValueError("File size doesn't match expected size from chunks")
-
         return v
 
 
@@ -321,29 +292,23 @@ class FileUpdateRequest(BaseValidatedModel):
         None, description="File tags", max_length=10
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("filename")
     def validate_filename(cls, v):
         """Validate filename if provided."""
         if v is None:
             return v
-
         if not v.strip():
             raise ValueError("Filename cannot be empty")
-
         # Remove path traversal attempts
         v = os.path.basename(v)
-
         if ValidationPatterns.PATH_TRAVERSAL_PATTERN.search(v):
             raise ValueError("Filename contains path traversal patterns")
-
         if ValidationPatterns.SCRIPT_PATTERN.search(v):
             raise ValueError("Filename contains potentially malicious content")
-
         return v
 
     @validator("purpose")
@@ -351,13 +316,10 @@ class FileUpdateRequest(BaseValidatedModel):
         """Validate purpose if provided."""
         if v is None:
             return v
-
         if not v.strip():
             raise ValueError("Purpose cannot be empty")
-
         if ValidationPatterns.SCRIPT_PATTERN.search(v):
             raise ValueError("Purpose contains potentially malicious content")
-
         return v
 
     @validator("metadata")
@@ -365,12 +327,10 @@ class FileUpdateRequest(BaseValidatedModel):
         """Validate metadata if provided."""
         if v is None:
             return v
-
         # Check metadata keys and values
         for key, value in v.items():
             if not key.replace("_", "").replace("-", "").isalnum():
                 raise ValueError(f"Invalid metadata key: {key}")
-
             if isinstance(value, str):
                 if len(value) > 1000:
                     raise ValueError(f"Metadata value too long for key '{key}'")
@@ -378,7 +338,6 @@ class FileUpdateRequest(BaseValidatedModel):
                     raise ValueError(
                         f"Metadata value contains malicious content for key '{key}'"
                     )
-
         return v
 
     @validator("tags")
@@ -386,16 +345,13 @@ class FileUpdateRequest(BaseValidatedModel):
         """Validate file tags."""
         if v is None:
             return v
-
         # Check for duplicates
         if len(v) != len(set(v)):
             raise ValueError("Duplicate tags found")
-
         # Validate individual tags
         for tag in v:
             if ValidationPatterns.SCRIPT_PATTERN.search(tag):
                 raise ValueError(f"Tag contains malicious content: {tag}")
-
         return v
 
 
@@ -420,10 +376,9 @@ class FileProcessingRequest(BaseValidatedModel):
         None, description="Callback URL for processing completion"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("operations")
     def validate_operations(cls, v):
@@ -445,16 +400,13 @@ class FileProcessingRequest(BaseValidatedModel):
             "sign",
             "validate",
         }
-
         # Check for valid operations
         invalid_ops = set(v) - valid_operations
         if invalid_ops:
             raise ValueError(f"Invalid operations: {invalid_ops}")
-
         # Check for duplicates
         if len(v) != len(set(v)):
             raise ValueError("Duplicate operations found")
-
         return v
 
     @validator("callback_url")
@@ -462,13 +414,10 @@ class FileProcessingRequest(BaseValidatedModel):
         """Validate callback URL."""
         if v is None:
             return v
-
         if not v.startswith(("http://", "https://")):
             raise ValueError("Callback URL must use HTTP or HTTPS protocol")
-
         if ValidationPatterns.SCRIPT_PATTERN.search(v):
             raise ValueError("Callback URL contains potentially malicious content")
-
         return v
 
     @validator("configuration")
@@ -476,12 +425,10 @@ class FileProcessingRequest(BaseValidatedModel):
         """Validate processing configuration."""
         if not v:
             return v
-
         # Validate configuration keys and values
         for key, value in v.items():
             if not key.replace("_", "-").replace(".", "").isalnum():
                 raise ValueError(f"Invalid configuration key: {key}")
-
             if isinstance(value, str):
                 if len(value) > 500:
                     raise ValueError(f"Configuration value too long for key '{key}'")
@@ -489,7 +436,6 @@ class FileProcessingRequest(BaseValidatedModel):
                     raise ValueError(
                         f"Configuration value contains malicious content for key '{key}'"
                     )
-
         return v
 
 
@@ -522,22 +468,19 @@ class RAGUploadRequest(BaseValidatedModel):
         max_length=20,
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("files")
     def validate_files_list(cls, v):
         """Validate files list."""
         if len(v) > 10:
             raise ValueError("Too many files. Maximum 10 files allowed.")
-
         # Check for duplicate filenames
         filenames = [f.filename for f in v]
         if len(filenames) != len(set(filenames)):
             raise ValueError("Duplicate filenames found")
-
         return v
 
     @validator("collection_name")
@@ -545,10 +488,8 @@ class RAGUploadRequest(BaseValidatedModel):
         """Validate collection name."""
         if not v or not v.strip():
             raise ValueError("Collection name cannot be empty")
-
         if ValidationPatterns.SCRIPT_PATTERN.search(v):
             raise ValueError("Collection name contains potentially malicious content")
-
         return v
 
     @validator("chunk_size", "chunk_overlap")
@@ -556,7 +497,6 @@ class RAGUploadRequest(BaseValidatedModel):
         """Validate chunk configuration."""
         if v <= 0:
             raise ValueError("Chunk size and overlap must be positive")
-
         return v
 
     @model_validator(mode="before")
@@ -565,10 +505,8 @@ class RAGUploadRequest(BaseValidatedModel):
         if isinstance(values, dict):
             chunk_size = values.get("chunk_size", 1000)
             chunk_overlap = values.get("chunk_overlap", 200)
-
             if chunk_overlap >= chunk_size:
                 raise ValueError("Chunk overlap must be less than chunk size")
-
         return values
 
     @validator("metadata_template")
@@ -576,16 +514,13 @@ class RAGUploadRequest(BaseValidatedModel):
         """Validate metadata template."""
         if not v:
             return v
-
         for key, template in v.items():
             if not key.replace("_", "").isalnum():
                 raise ValueError(f"Invalid metadata template key: {key}")
-
             if ValidationPatterns.SCRIPT_PATTERN.search(template):
                 raise ValueError(
                     f"Metadata template contains malicious content for key '{key}'"
                 )
-
         return v
 
 
@@ -604,10 +539,9 @@ class FileInfo(BaseValidatedModel):
     metadata: Dict[str, Any] = Field(default_factory=dict, description="File metadata")
     tags: List[str] = Field(default_factory=list, description="File tags")
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
 
 __all__ = [

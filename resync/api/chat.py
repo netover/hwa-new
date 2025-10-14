@@ -1,3 +1,11 @@
+"""Chat and agent interaction API endpoints.
+
+This module provides WebSocket endpoints for real-time chat interactions
+with AI agents, supporting both streaming and non-streaming responses.
+It handles agent management, conversation context, and error handling
+for chat-based interactions.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,6 +15,7 @@ from typing import Any
 from agno.agent import Agent
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
+from resync.api.utils.stream_handler import AgentResponseStreamer
 from resync.core.exceptions import (
     AgentExecutionError,
     AuditError,
@@ -15,10 +24,7 @@ from resync.core.exceptions import (
     LLMError,
     ToolExecutionError,
 )
-from resync.core.fastapi_di import (
-    get_agent_manager,
-    get_knowledge_graph,
-)
+from resync.core.fastapi_di import get_agent_manager, get_knowledge_graph
 from resync.core.ia_auditor import analyze_and_flag_memories
 from resync.core.interfaces import IAgentManager, IKnowledgeGraph
 from resync.core.llm_wrapper import optimized_llm
@@ -126,68 +132,7 @@ async def _get_optimized_response(
         return query
 
 
-async def _stream_agent_response(websocket: WebSocket, agent: Agent, query: str) -> str:
-    """Streams the agent's response to the WebSocket and returns the full message."""
-    full_response = ""
-    try:
-        stream_method = getattr(agent, "stream", None)
-        if callable(stream_method):
-            stream_result = stream_method(query)
-            # Check if the result is an async generator
-            if hasattr(stream_result, "__aiter__"):
-                try:
-                    async for chunk in stream_result:
-                        chunk_str = str(chunk)
-                        full_response += chunk_str
-                        await websocket.send_json(
-                            {
-                                "type": "stream",
-                                "sender": "agent",
-                                "message": chunk_str,
-                            }
-                        )
-                    await websocket.send_json({"type": "stream_end"})
-                except TypeError:
-                    # If not an async iterator, handle as a single response
-                    full_response = str(stream_result)
-                    await websocket.send_json(
-                        {
-                            "type": "stream",
-                            "sender": "agent",
-                            "message": full_response,
-                        }
-                    )
-            else:
-                # Handle non-async-generator stream results
-                full_response = str(stream_result)
-                await websocket.send_json(
-                    {
-                        "type": "stream",
-                        "sender": "agent",
-                        "message": full_response,
-                    }
-                )
-        else:
-            # Fallback to non-streaming response
-            response = await agent.arun(query)
-            full_response = str(response)
-            await websocket.send_json(
-                {
-                    "type": "stream",
-                    "sender": "agent",
-                    "message": full_response,
-                }
-            )
-    except Exception as e:
-        logger.error(f"Error streaming agent response: {e}", exc_info=True)
-        # Fallback to a safe error message
-        error_message = "Ocorreu um erro ao processar sua solicitação."
-        await websocket.send_json(
-            {"type": "error", "sender": "system", "message": error_message}
-        )
-        return error_message  # Return the error message as the full response
-
-    return full_response
+# Streaming logic moved to resync.api.utils.stream_handler.AgentResponseStreamer
 
 
 async def _finalize_and_store_interaction(
@@ -283,7 +228,8 @@ async def _handle_agent_interaction(
         )
 
         # 2. Stream the agent's response to the client and get the full response
-        full_response = await _stream_agent_response(websocket, agent, enhanced_query)
+        streamer = AgentResponseStreamer(websocket)
+        full_response = await streamer.stream_response(agent, enhanced_query)
 
         # 3. Finalize the interaction: send final message, store, and audit
         await _finalize_and_store_interaction(

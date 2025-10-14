@@ -99,15 +99,21 @@ def test_extract_validation_errors():
     assert errors[0]["msg"] == "Field required"
 
 
-def test_get_error_status_code():
+@pytest.mark.parametrize(
+    "error_category,expected_status",
+    [
+        (ErrorCategory.VALIDATION, 400),
+        (ErrorCategory.AUTHENTICATION, 401),
+        (ErrorCategory.AUTHORIZATION, 403),
+        (ErrorCategory.BUSINESS_LOGIC, 404),
+        (ErrorCategory.SYSTEM, 500),
+        (ErrorCategory.EXTERNAL_SERVICE, 503),
+        (ErrorCategory.RATE_LIMIT, 429),
+    ],
+)
+def test_get_error_status_code(error_category, expected_status):
     """Test HTTP status code mapping from error categories."""
-    assert get_error_status_code(ErrorCategory.VALIDATION) == 400
-    assert get_error_status_code(ErrorCategory.AUTHENTICATION) == 401
-    assert get_error_status_code(ErrorCategory.AUTHORIZATION) == 403
-    assert get_error_status_code(ErrorCategory.BUSINESS_LOGIC) == 400
-    assert get_error_status_code(ErrorCategory.SYSTEM) == 500
-    assert get_error_status_code(ErrorCategory.EXTERNAL_SERVICE) == 503
-    assert get_error_status_code(ErrorCategory.RATE_LIMIT) == 429
+    assert get_error_status_code(error_category) == expected_status
 
 
 def test_create_error_response_from_exception_resync_exceptions():

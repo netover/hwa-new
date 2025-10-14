@@ -5,10 +5,11 @@ dependency injection system. It includes functions for creating FastAPI dependen
 that resolve services from the container.
 """
 
+from __future__ import annotations
+
 import inspect
-import logging
 from functools import wraps
-from typing import Any, Callable, Dict, Optional, Type, TypeVar, get_type_hints
+from typing import Any, Callable, Type, TypeVar, get_type_hints
 
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -27,13 +28,13 @@ from resync.core.interfaces import (
     ITWSClient,
 )
 from resync.core.knowledge_graph import AsyncKnowledgeGraph
+
+# --- Logging Setup ---
+from resync.core.structured_logger import get_logger
 from resync.core.teams_integration import TeamsIntegration, get_teams_integration
 from resync.services.mock_tws_service import MockTWSClient
 from resync.services.tws_service import OptimizedTWSClient
 from resync.settings import settings
-
-# --- Logging Setup ---
-from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -229,7 +230,7 @@ class DIMiddleware(BaseHTTPMiddleware):
 
 
 def inject_container(
-    app: FastAPI, container_instance: Optional[DIContainer] = None
+    app: FastAPI, container_instance: DIContainer | None = None
 ) -> None:
     """
     Configure the application to use the DI container.
@@ -272,7 +273,7 @@ def with_injection(func: Callable) -> Callable:
     parameters = list(signature.parameters.values())
     type_hints = get_type_hints(func)
 
-    async def inject_dependencies(kwargs: Dict[str, Any]) -> None:
+    async def inject_dependencies(kwargs: dict[str, Any]) -> None:
         """Helper to inject dependencies into kwargs."""
         for param in parameters:
             if param.name in kwargs:

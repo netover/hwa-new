@@ -5,11 +5,11 @@ This module contains standard error handling patterns that can be reused
 across multiple modules in the application.
 """
 
+import asyncio
 import logging
 import time
-from typing import Any, Callable, Type, TypeVar, cast, Optional
-import asyncio
 from functools import wraps
+from typing import Any, Callable, Optional, Type, TypeVar, cast
 
 from ..exceptions import ResyncException
 

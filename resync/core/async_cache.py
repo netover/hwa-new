@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from resync.core.exceptions import CacheError
 from resync.core.metrics import log_with_correlation, runtime_metrics
-from resync.core.write_ahead_log import WriteAheadLog, WalOperationType, WalEntry
+from resync.core.write_ahead_log import WalEntry, WalOperationType, WriteAheadLog
 
 logger = logging.getLogger(__name__)
 
@@ -1845,6 +1845,7 @@ async def get_redis_client():
     """
     try:
         from redis.asyncio import Redis as AsyncRedis
+
         from resync.settings import settings
 
         # Create async Redis client

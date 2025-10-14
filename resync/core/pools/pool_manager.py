@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional
 
 from resync.core.exceptions import TWSConnectionError
 from resync.core.pools.base_pool import (
@@ -15,15 +15,9 @@ from resync.core.pools.base_pool import (
     ConnectionPoolConfig,
     ConnectionPoolStats,
 )
-from resync.settings import settings
 from resync.core.pools.db_pool import DatabaseConnectionPool
-from resync.core.pools.redis_pool import RedisConnectionPool
 from resync.core.pools.http_pool import HTTPConnectionPool
-from resync.core.pools.base_pool import (
-    ConnectionPool,
-    ConnectionPoolConfig,
-    ConnectionPoolStats,
-)
+from resync.core.pools.redis_pool import RedisConnectionPool
 from resync.settings import settings
 
 # --- Logging Setup ---

@@ -7,17 +7,15 @@ Este módulo demonstra o uso completo de:
 - Respostas padronizadas
 """
 
-from typing import List, Optional, Annotated, Dict, Any
 from datetime import datetime
+from typing import Annotated, Any, Dict, List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Query, Request, status
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from resync.api.models.responses import (
-    create_paginated_response,
-)
 from resync.api.models.links import LinkBuilder
+from resync.api.models.responses import create_paginated_response
 from resync.core.exceptions import ResourceNotFoundError, ValidationError
 from resync.core.structured_logger import get_logger
 
@@ -41,17 +39,17 @@ class Book(BaseModel):
     published_year: Optional[int] = Field(None, description="Ano de publicação")
     created_at: str = Field(..., description="Data de criação")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
-                "id": "550e8400-e29b-41d4-a716-446655440000",
-                "title": "Clean Code",
-                "author": "Robert C. Martin",
+                "title": "Effective Java",
+                "author": "Joshua Bloch",
                 "isbn": "978-0132350884",
                 "published_year": 2008,
                 "created_at": "2024-01-15T10:30:00Z",
             }
         }
+    )
 
 
 class BookOut(Book):

@@ -301,7 +301,11 @@ class ITWSClient(Protocol):
         ...
 
     async def validate_connection(
-        self, host: Optional[str] = None, port: Optional[int] = None, user: Optional[str] = None, password: Optional[str] = None
+        self,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        user: Optional[str] = None,
+        password: Optional[str] = None,
     ) -> dict[str, bool]:
         """Validates TWS connection parameters."""
         ...

@@ -71,3 +71,6 @@ jules-scratch/
 
 # YoYo AI version control directory
 .yoyo/
+
+# Node.js
+node_modules/

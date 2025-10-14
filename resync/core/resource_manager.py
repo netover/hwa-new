@@ -11,9 +11,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager, contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, AsyncIterator, Callable, Dict, Iterator, List, Optional, TypeVar
-from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 

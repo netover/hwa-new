@@ -10,6 +10,7 @@ from resync.core.fastapi_di import get_agent_manager
 sample_agent_config_1 = AgentConfig(
     id="test-agent-1",
     name="Test Agent 1",
+    agent_type="chat",
     role="Tester",
     goal="To be tested",
     backstory="Born in a test",
@@ -20,6 +21,7 @@ sample_agent_config_1 = AgentConfig(
 sample_agent_config_2 = AgentConfig(
     id="test-agent-2",
     name="Test Agent 2",
+    agent_type="task",
     role="Another Tester",
     goal="To also be tested",
     backstory="Born in another test",

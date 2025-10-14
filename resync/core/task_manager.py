@@ -1,11 +1,22 @@
+"""Asynchronous task management system.
+
+This module provides a comprehensive task execution framework with:
+- Priority-based task scheduling
+- Retry logic with configurable delays
+- Timeout handling for long-running tasks
+- Concurrent execution with configurable worker pools
+- Task status tracking and statistics
+- Graceful shutdown and cleanup
+"""
+
 from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any, Dict, Optional, Callable, Awaitable
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
-from datetime import datetime, timedelta
+from typing import Any, Awaitable, Callable
 
 from resync.core.structured_logger import get_logger
 
@@ -37,20 +48,20 @@ class Task:
 
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
-    func: Optional[Callable] = None
-    args: tuple = field(default_factory=tuple)
-    kwargs: dict = field(default_factory=dict)
+    func: Callable[..., Any] | None = None
+    args: tuple[Any, ...] = field(default_factory=tuple)
+    kwargs: dict[str, Any] = field(default_factory=dict)
     status: TaskStatus = TaskStatus.PENDING
     priority: TaskPriority = TaskPriority.NORMAL
     created_at: datetime = field(default_factory=datetime.now)
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     result: Any = None
-    error: Optional[Exception] = None
+    error: Exception | None = None
     max_retries: int = 0
     retry_count: int = 0
     retry_delay: float = 1.0
-    timeout: Optional[float] = None
+    timeout: float | None = None
 
 
 class TaskManager:
@@ -58,9 +69,11 @@ class TaskManager:
 
     def __init__(self, max_workers: int = 10):
         self.max_workers = max_workers
-        self.tasks: Dict[str, Task] = {}
-        self.task_queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
-        self.running_tasks: Dict[str, asyncio.Task] = {}
+        self.tasks: dict[str, Task] = {}
+        self.task_queue: asyncio.PriorityQueue[tuple[int, str]] = (
+            asyncio.PriorityQueue()
+        )
+        self.running_tasks: dict[str, asyncio.Task[Any]] = {}
         self.semaphore = asyncio.Semaphore(max_workers)
         self._shutdown = False
 
@@ -88,14 +101,31 @@ class TaskManager:
         self,
         name: str,
         func: Callable[..., Awaitable[Any]],
-        *args,
+        *args: Any,
         priority: TaskPriority = TaskPriority.NORMAL,
         max_retries: int = 0,
         retry_delay: float = 1.0,
-        timeout: Optional[float] = None,
-        **kwargs,
+        timeout: float | None = None,
+        **kwargs: Any,
     ) -> str:
-        """Submit a task for execution."""
+        """Submit a task for asynchronous execution.
+
+        Args:
+            name: Human-readable task name for monitoring
+            func: Async callable to execute
+            *args: Positional arguments for the function
+            priority: Task execution priority (LOW/NORMAL/HIGH)
+            max_retries: Maximum retry attempts on failure
+            retry_delay: Delay between retry attempts in seconds
+            timeout: Maximum execution time in seconds
+            **kwargs: Keyword arguments for the function
+
+        Returns:
+            Unique task identifier string
+
+        Raises:
+            ValueError: If task manager is not running
+        """
 
         task = Task(
             name=name,
@@ -117,7 +147,7 @@ class TaskManager:
         logger.info(f"Task submitted: {task.id} - {name}")
         return task.id
 
-    async def get_task(self, task_id: str) -> Optional[Task]:
+    async def get_task(self, task_id: str) -> Task | None:
         """Get task by ID."""
         return self.tasks.get(task_id)
 
@@ -182,53 +212,14 @@ class TaskManager:
         # Create the actual asyncio task
         async def task_wrapper():
             try:
-                if asyncio.iscoroutinefunction(task.func):
-                    if task.timeout:
-                        result = await asyncio.wait_for(
-                            task.func(*task.args, **task.kwargs), timeout=task.timeout
-                        )
-                    else:
-                        result = await task.func(*task.args, **task.kwargs)
-                else:
-                    # Run sync function in executor
-                    loop = asyncio.get_event_loop()
-                    if task.timeout:
-                        result = await asyncio.wait_for(
-                            loop.run_in_executor(
-                                None, task.func, *task.args, **task.kwargs
-                            ),
-                            timeout=task.timeout,
-                        )
-                    else:
-                        result = await loop.run_in_executor(
-                            None, task.func, *task.args, **task.kwargs
-                        )
-
-                task.result = result
-                task.status = TaskStatus.COMPLETED
-                task.completed_at = datetime.now()
-
-                logger.info(f"Task completed: {task.id} - {task.name}")
+                result = await self._run_task_function(task)
+                await self._handle_task_success(task, result)
 
             except asyncio.CancelledError:
-                task.status = TaskStatus.CANCELLED
-                task.completed_at = datetime.now()
-                logger.info(f"Task cancelled: {task.id} - {task.name}")
+                await self._handle_task_cancellation(task)
 
             except Exception as e:
-                task.error = e
-                logger.error(f"Task failed: {task.id} - {task.name}: {e}")
-
-                # Handle retries
-                if task.retry_count < task.max_retries:
-                    task.retry_count += 1
-                    task.status = TaskStatus.PENDING
-
-                    # Schedule retry
-                    asyncio.create_task(self._schedule_retry(task))
-                else:
-                    task.status = TaskStatus.FAILED
-                    task.completed_at = datetime.now()
+                await self._handle_task_failure(task, e)
 
         # Start the task
         asyncio_task = asyncio.create_task(task_wrapper())
@@ -240,6 +231,67 @@ class TaskManager:
         finally:
             self.running_tasks.pop(task.id, None)
 
+    async def _run_task_function(self, task: Task) -> Any:
+        """Execute the task function with appropriate handling."""
+        if asyncio.iscoroutinefunction(task.func):
+            return await self._run_async_function(task)
+        else:
+            return await self._run_sync_function(task)
+
+    async def _run_async_function(self, task: Task) -> Any:
+        """Run an async task function."""
+        if task.func is None:
+            raise ValueError("Task function is not set")
+        if task.timeout:
+            return await asyncio.wait_for(
+                task.func(*task.args, **task.kwargs), timeout=task.timeout
+            )
+        else:
+            return await task.func(*task.args, **task.kwargs)
+
+    async def _run_sync_function(self, task: Task) -> Any:
+        """Run a sync task function in executor."""
+        if task.func is None:
+            raise ValueError("Task function is not set")
+        loop = asyncio.get_event_loop()
+        if task.timeout:
+            return await asyncio.wait_for(
+                loop.run_in_executor(None, task.func, *task.args, **task.kwargs),
+                timeout=task.timeout,
+            )
+        else:
+            return await loop.run_in_executor(
+                None, task.func, *task.args, **task.kwargs
+            )
+
+    async def _handle_task_success(self, task: Task, result: Any) -> None:
+        """Handle successful task completion."""
+        task.result = result
+        task.status = TaskStatus.COMPLETED
+        task.completed_at = datetime.now()
+        logger.info(f"Task completed: {task.id} - {task.name}")
+
+    async def _handle_task_cancellation(self, task: Task) -> None:
+        """Handle task cancellation."""
+        task.status = TaskStatus.CANCELLED
+        task.completed_at = datetime.now()
+        logger.info(f"Task cancelled: {task.id} - {task.name}")
+
+    async def _handle_task_failure(self, task: Task, error: Exception) -> None:
+        """Handle task failure and retry logic."""
+        task.error = error
+        logger.error(f"Task failed: {task.id} - {task.name}: {error}")
+
+        # Handle retries
+        if task.retry_count < task.max_retries:
+            task.retry_count += 1
+            task.status = TaskStatus.PENDING
+            # Schedule retry
+            asyncio.create_task(self._schedule_retry(task))
+        else:
+            task.status = TaskStatus.FAILED
+            task.completed_at = datetime.now()
+
     async def _schedule_retry(self, task: Task):
         """Schedule a task retry with delay."""
 
@@ -250,14 +302,12 @@ class TaskManager:
             priority_value = -task.priority.value
             await self.task_queue.put((priority_value, task.id))
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get task manager statistics."""
 
-        status_counts = {}
-        for task in self.tasks.values():
-            status_counts[task.status.value] = (
-                status_counts.get(task.status.value, 0) + 1
-            )
+        from collections import Counter
+
+        status_counts = Counter(task.status.value for task in self.tasks.values())
 
         return {
             "total_tasks": len(self.tasks),

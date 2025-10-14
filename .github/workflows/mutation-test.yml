@@ -29,18 +29,30 @@ jobs:
       with:
         python-version: '3.13'
 
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+        installer-parallel: true
+
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+
     - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      run: poetry install --no-interaction --no-root
 
     - name: Run unit and integration tests
       run: |
-        pytest tests/ --tb=short -x
+        poetry run pytest tests/ --tb=short -x
 
     - name: Run mutation tests
       run: |
-        python scripts/mutation_test.py
+        poetry run python scripts/mutation_test.py
 
     - name: Upload mutation results
       uses: actions/upload-artifact@v4

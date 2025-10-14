@@ -8,19 +8,16 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
-from pydantic.types import constr
 
 from resync.api.auth import verify_admin_credentials
 from resync.core.fastapi_di import get_teams_integration, get_tws_client
 from resync.core.interfaces import ITWSClient
-from resync.core.teams_integration import (
-    TeamsIntegration,
-)
+from resync.core.teams_integration import TeamsIntegration
 from resync.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -38,26 +35,26 @@ tws_client_dependency = Depends(get_tws_client)
 class TeamsConfigUpdate(BaseModel):
     """Teams configuration update model."""
 
-    enabled: Optional[bool] = Field(None, description="Enable Teams integration")
-    webhook_url: Optional[str] = Field(None, description="Teams webhook URL")
-    channel_name: Optional[str] = Field(None, description="Teams channel name")
-    bot_name: Optional[str] = Field(
+    enabled: bool | None = Field(None, description="Enable Teams integration")
+    webhook_url: str | None = Field(None, description="Teams webhook URL")
+    channel_name: str | None = Field(None, description="Teams channel name")
+    bot_name: str | None = Field(
         None, min_length=1, max_length=50, description="Bot display name"
     )
-    avatar_url: Optional[str] = Field(None, description="Bot avatar URL")
-    enable_conversation_learning: Optional[bool] = Field(
+    avatar_url: str | None = Field(None, description="Bot avatar URL")
+    enable_conversation_learning: bool | None = Field(
         None, description="Enable conversation learning"
     )
-    enable_job_notifications: Optional[bool] = Field(
+    enable_job_notifications: bool | None = Field(
         None, description="Enable job status notifications"
     )
-    monitored_tws_instances: Optional[List[str]] = Field(
+    monitored_tws_instances: list[str] | None = Field(
         None, description="List of monitored TWS instances"
     )
-    job_status_filters: Optional[List[str]] = Field(
+    job_status_filters: list[str] | None = Field(
         None, description="Job status filters for notifications"
     )
-    notification_types: Optional[List[str]] = Field(
+    notification_types: list[str] | None = Field(
         None, description="Types of notifications to send"
     )
 
@@ -98,8 +95,9 @@ async def admin_dashboard(request: Request) -> HTMLResponse:
     """
     try:
         # Create a new Jinja2Templates instance to avoid CSP/asyncio issues
-        from fastapi.templating import Jinja2Templates
         from pathlib import Path
+
+        from fastapi.templating import Jinja2Templates
 
         templates_dir = Path(settings.BASE_DIR) / "templates"
         templates = Jinja2Templates(directory=str(templates_dir))

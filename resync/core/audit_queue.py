@@ -22,8 +22,8 @@ from resync.core.exceptions import (
     DataParsingError,
     FileProcessingError,
 )
-from resync.settings import settings
 from resync.core.structured_logger import get_logger
+from resync.settings import settings
 
 logger = get_logger(__name__)
 

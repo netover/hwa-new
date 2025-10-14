@@ -1,3 +1,10 @@
+"""CORS monitoring and analytics API endpoints.
+
+This module provides monitoring capabilities for CORS (Cross-Origin Resource Sharing)
+requests, including analytics, statistics, and security monitoring for cross-origin
+access patterns and potential security threats.
+"""
+
 import logging
 from typing import List
 
@@ -48,7 +55,9 @@ async def get_cors_config(request: Request) -> CorsConfigResponse:
     )
 
 
-@cors_monitor_router.post("/test", response_model=CorsTestResponse, summary="Test CORS policy")
+@cors_monitor_router.post(
+    "/test", response_model=CorsTestResponse, summary="Test CORS policy"
+)
 async def test_cors_policy(
     params: CorsTestParams = Depends(),
 ) -> CorsTestResponse:

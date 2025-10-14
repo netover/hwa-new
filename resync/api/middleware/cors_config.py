@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import logging
 import re
+import socket
 from enum import Enum
 from typing import List, Union
 from urllib.parse import urlparse
-import socket
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, validator
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +149,6 @@ class CORSPolicy(BaseModel):
         """Validate regex patterns are compilable and not allowed in production."""
         environment = values.get("environment")
 
-
         try:
             re.compile(v)
         except re.error as e:
@@ -271,11 +270,10 @@ class CORSPolicy(BaseModel):
             "max_age": self.max_age,
         }
 
-    class Config:
-        """Pydantic configuration."""
-
-        use_enum_values = True
-        validate_assignment = True
+    model_config = ConfigDict(
+        use_enum_values=True,
+        validate_assignment=True,
+    )
 
 
 class CORSConfig(BaseModel):

@@ -7,7 +7,7 @@ import secrets
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from resync.csp_validation import process_csp_report, CSPValidationError
+from resync.csp_validation import CSPValidationError, process_csp_report
 
 logger = logging.getLogger(__name__)
 

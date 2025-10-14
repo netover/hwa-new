@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator, field_serializer, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
 
 class SyncItem(BaseModel):

@@ -3,18 +3,73 @@ CQRS dispatcher for routing commands and queries to their respective handlers.
 """
 
 from typing import Dict, Type
+
 from resync.cqrs.base import (
-    ICommand,
-    IQuery,
-    ICommandHandler,
-    IQueryHandler,
     CommandResult,
+    ICommand,
+    ICommandHandler,
+    IQuery,
+    IQueryHandler,
     QueryResult,
 )
-from resync.cqrs.commands import *
-from resync.cqrs.queries import *
-from resync.cqrs.command_handlers import *
-from resync.cqrs.query_handlers import *
+from resync.cqrs.command_handlers import (
+    ExecuteJobCommandHandler,
+    GetCriticalPathStatusCommandHandler,
+    GetJobsStatusCommandHandler,
+    GetJobStatusBatchCommandHandler,
+    GetSystemHealthCommandHandler,
+    GetSystemStatusCommandHandler,
+    GetWorkstationsStatusCommandHandler,
+    UpdateJobStatusCommandHandler,
+)
+from resync.cqrs.commands import (
+    ExecuteJobCommand,
+    GetCriticalPathStatusCommand,
+    GetJobsStatusCommand,
+    GetJobStatusBatchCommand,
+    GetSystemHealthCommand,
+    GetSystemStatusCommand,
+    GetWorkstationsStatusCommand,
+    UpdateJobStatusCommand,
+)
+from resync.cqrs.queries import (
+    CheckTWSConnectionQuery,
+    GetCriticalPathStatusQuery,
+    GetEventLogQuery,
+    GetJobDependenciesQuery,
+    GetJobDetailsQuery,
+    GetJobHistoryQuery,
+    GetJobLogQuery,
+    GetJobsStatusQuery,
+    GetJobStatusBatchQuery,
+    GetJobStatusQuery,
+    GetPerformanceMetricsQuery,
+    GetPlanDetailsQuery,
+    GetResourceUsageQuery,
+    GetSystemHealthQuery,
+    GetSystemStatusQuery,
+    GetWorkstationsStatusQuery,
+    SearchJobsQuery,
+)
+from resync.cqrs.query_handlers import (
+    CheckTWSConnectionQueryHandler,
+    GetCriticalPathStatusQueryHandler,
+    GetEventLogQueryHandler,
+    GetJobDependenciesQueryHandler,
+    GetJobDetailsQueryHandler,
+    GetJobHistoryQueryHandler,
+    GetJobLogQueryHandler,
+    GetJobsStatusQueryHandler,
+    GetJobStatusBatchQueryHandler,
+    GetJobStatusQueryHandler,
+    GetPerformanceMetricsQueryHandler,
+    GetPlanDetailsQueryHandler,
+    GetResourceUsageQueryHandler,
+    GetSystemHealthQueryHandler,
+    GetSystemStatusQueryHandler,
+    GetWorkstationsStatusQueryHandler,
+    SearchJobsQueryHandler,
+)
 
 
 class CQRSDispatcher:
@@ -124,4 +179,25 @@ def initialize_dispatcher(tws_client, tws_monitor):
     )
     dispatcher.register_query_handler(
         CheckTWSConnectionQuery, CheckTWSConnectionQueryHandler(tws_client)
+    )
+
+    # Register new query handlers
+    dispatcher.register_query_handler(
+        GetJobDetailsQuery, GetJobDetailsQueryHandler(tws_client)
+    )
+    dispatcher.register_query_handler(
+        GetJobHistoryQuery, GetJobHistoryQueryHandler(tws_client)
+    )
+    dispatcher.register_query_handler(GetJobLogQuery, GetJobLogQueryHandler(tws_client))
+    dispatcher.register_query_handler(
+        GetPlanDetailsQuery, GetPlanDetailsQueryHandler(tws_client)
+    )
+    dispatcher.register_query_handler(
+        GetJobDependenciesQuery, GetJobDependenciesQueryHandler(tws_client)
+    )
+    dispatcher.register_query_handler(
+        GetResourceUsageQuery, GetResourceUsageQueryHandler(tws_client)
+    )
+    dispatcher.register_query_handler(
+        GetEventLogQuery, GetEventLogQueryHandler(tws_client)
     )

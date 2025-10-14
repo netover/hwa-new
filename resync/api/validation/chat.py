@@ -82,33 +82,28 @@ class ChatMessage(BaseValidatedModel):
         default_factory=datetime.utcnow, description="Message timestamp"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
-        validate_assignment = True
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+    )
 
     @validator("content")
     def validate_message_content(cls, v):
         """Validate message content for malicious patterns."""
         if not v or not v.strip():
             raise ValueError("Message content cannot be empty")
-
         # Check for script injection
         if ValidationPatterns.SCRIPT_PATTERN.search(v):
             raise ValueError("Message contains potentially malicious content")
-
         # Check for command injection
         if ValidationPatterns.COMMAND_INJECTION_PATTERN.search(v):
             raise ValueError("Message contains invalid characters")
-
         # Check for excessive length
         if len(v) > NumericConstraints.MAX_MESSAGE_LENGTH:
             raise ValueError(
                 f"Message content exceeds maximum length of "
                 f"{NumericConstraints.MAX_MESSAGE_LENGTH} characters"
             )
-
         return v
 
     @validator("sender", "recipient")
@@ -123,17 +118,14 @@ class ChatMessage(BaseValidatedModel):
         """Validate message metadata."""
         if not v:
             return v
-
         # Check metadata size
         if len(str(v)) > 1000:  # Limit metadata size
             raise ValueError("Metadata is too large")
-
         # Sanitize metadata values
         sanitized_metadata = {}
         for key, value in v.items():
             if not key.replace("_", "").replace("-", "").isalnum():
                 raise ValueError(f"Invalid metadata key: {key}")
-
             if isinstance(value, str):
                 if ValidationPatterns.SCRIPT_PATTERN.search(value):
                     raise ValueError(
@@ -142,7 +134,6 @@ class ChatMessage(BaseValidatedModel):
                 sanitized_metadata[key] = value.strip()
             else:
                 sanitized_metadata[key] = value
-
         return sanitized_metadata
 
 
@@ -187,34 +178,27 @@ class WebSocketMessage(BaseValidatedModel):
         default_factory=datetime.utcnow, description="Message timestamp"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
-        validate_assignment = True
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+    )
 
     @validator("message")
     def validate_message_content(cls, v, values):
         """Validate message content based on type."""
         if v is None:
             return v
-
         message_type = values.get("type")
-
         # Validate content based on message type
         if message_type == "error" and not v:
             raise ValueError("Error messages must have content")
-
         if message_type == "message" and not v:
             raise ValueError("Regular messages must have content")
-
         # Check for malicious content
         if ValidationPatterns.SCRIPT_PATTERN.search(v):
             raise ValueError("Message contains potentially malicious content")
-
         if ValidationPatterns.COMMAND_INJECTION_PATTERN.search(v):
             raise ValueError("Message contains invalid characters")
-
         return v
 
     @validator("metadata")
@@ -222,11 +206,9 @@ class WebSocketMessage(BaseValidatedModel):
         """Validate WebSocket message metadata."""
         if not v:
             return v
-
         # Limit metadata size for WebSocket messages
         if len(str(v)) > 500:
             raise ValueError("Metadata is too large for WebSocket message")
-
         return v
 
 
@@ -269,11 +251,10 @@ class ChatSession(BaseValidatedModel):
         None, description="Session expiration timestamp"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
-        validate_assignment = True
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+    )
 
 
 class ChatHistoryRequest(BaseValidatedModel):
@@ -321,19 +302,16 @@ class ChatHistoryRequest(BaseValidatedModel):
         default=False, description="Whether to include message metadata"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("end_date")
     def validate_date_range(cls, v, values):
         """Validate date range."""
         start_date = values.get("start_date")
-
         if start_date and v and v < start_date:
             raise ValueError("End date must be after start date")
-
         return v
 
     @validator("search_query")
@@ -361,24 +339,20 @@ class MessageReaction(BaseValidatedModel):
         default_factory=datetime.utcnow, description="Reaction timestamp"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("reaction")
     def validate_reaction(cls, v):
         """Validate reaction format."""
         # Allow common emojis and simple text reactions
         allowed_reactions = {"👍", "👎", "❤️", "😊", "😢", "😡", "⭐", "🔥", "💯"}
-
         if v in allowed_reactions:
             return v
-
         # Allow simple text reactions (1-3 characters)
         if len(v) <= 3 and v.isalnum():
             return v
-
         raise ValueError("Invalid reaction format")
 
 
@@ -401,21 +375,17 @@ class ChatExportRequest(BaseValidatedModel):
         None, description="Date range for export"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        extra = "forbid"
+    model_config = ConfigDict(
+        extra="forbid",
+    )
 
     @validator("date_range")
     def validate_date_range(cls, v):
         """Validate date range."""
         if not v:
             return v
-
         if "start" not in v or "end" not in v:
             raise ValueError("Date range must include both 'start' and 'end' dates")
-
         if v["start"] >= v["end"]:
             raise ValueError("Start date must be before end date")
-
         return v

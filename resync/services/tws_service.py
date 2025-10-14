@@ -1,29 +1,52 @@
+"""TWS (Tivoli Workload Scheduler) service integration.
+
+This module provides comprehensive integration with IBM Tivoli Workload Scheduler,
+including job monitoring, workstation status, critical path analysis, and
+real-time data retrieval through optimized HTTP client connections.
+"""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import re
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, List
+from typing import Any, AsyncGenerator
 
 import httpx
+from dateutil import parser
 
 from resync.core.cache_hierarchy import get_cache_hierarchy
+from resync.core.circuit_breaker import adaptive_tws_api_breaker
 from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.core.exceptions import TWSConnectionError
 from resync.core.resilience import circuit_breaker, retry_with_backoff, with_timeout
 from resync.models.tws import (
     CriticalJob,
+    DependencyTree,
+    Event,
+    JobDetails,
+    JobExecution,
     JobStatus,
+    PerformanceData,
+    PlanDetails,
+    ResourceStatus,
     SystemStatus,
     WorkstationStatus,
 )
+from resync.services.http_client_factory import create_async_http_client
 from resync.settings import settings  # New import
 
 # --- Logging Setup ---
 logger = logging.getLogger(__name__)
 
 # Regex para validar job_ids, permitindo alfanuméricos, underscores e hifens.
+
+# NOTE: Circuit Breaker Evolution
+# This service now supports both traditional circuit breakers (via decorators)
+# and adaptive circuit breakers with latency monitoring (via adaptive_tws_api_breaker).
+# For new implementations, consider using adaptive_tws_api_breaker.call_with_latency()
+# for better observability and automatic threshold adaptation.
 SAFE_JOB_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 # --- Constants ---
@@ -70,22 +93,10 @@ class OptimizedTWSClient:
             logger.info("Using connection pool manager for TWS HTTP client")
         else:
             # Legacy direct httpx client for backward compatibility
-            self.client = httpx.AsyncClient(
+            self.client = create_async_http_client(
                 base_url=self.base_url,
                 auth=self.auth,
                 verify=True,  # Development: TWS often uses self-signed certs
-                timeout=httpx.Timeout(
-                    connect=getattr(settings, "TWS_CONNECT_TIMEOUT", 10.0),
-                    read=getattr(settings, "TWS_READ_TIMEOUT", 30.0),
-                    write=getattr(settings, "TWS_WRITE_TIMEOUT", 30.0),
-                    pool=getattr(settings, "TWS_POOL_TIMEOUT", 5.0),
-                ),
-                limits=httpx.Limits(
-                    max_connections=getattr(settings, "TWS_MAX_CONNECTIONS", 100),
-                    max_keepalive_connections=getattr(
-                        settings, "TWS_MAX_KEEPALIVE", 20
-                    ),
-                ),
             )
 
         # Caching layer to reduce redundant API calls - using a direct Redis cache
@@ -106,24 +117,10 @@ class OptimizedTWSClient:
                 )
                 # Fallback to direct client if pool not available
                 if not hasattr(self, "client"):
-                    self.client = httpx.AsyncClient(
+                    self.client = create_async_http_client(
                         base_url=self.base_url,
                         auth=self.auth,
                         verify=True,
-                        timeout=httpx.Timeout(
-                            connect=getattr(settings, "TWS_CONNECT_TIMEOUT", 10.0),
-                            read=getattr(settings, "TWS_READ_TIMEOUT", 30.0),
-                            write=getattr(settings, "TWS_WRITE_TIMEOUT", 30.0),
-                            pool=getattr(settings, "TWS_POOL_TIMEOUT", 5.0),
-                        ),
-                        limits=httpx.Limits(
-                            max_connections=getattr(
-                                settings, "TWS_MAX_CONNECTIONS", 100
-                            ),
-                            max_keepalive_connections=getattr(
-                                settings, "TWS_MAX_KEEPALIVE", 20
-                            ),
-                        ),
                     )
                 return self.client
         else:
@@ -220,7 +217,7 @@ class OptimizedTWSClient:
             raise TWSConnectionError("TWS server ping timed out", original_exception=e)
         except httpx.RequestError as e:
             logger.error(f"TWS server ping failed: {e}")
-            raise TWSConnectionError(f"TWS server unreachable", original_exception=e)
+            raise TWSConnectionError("TWS server unreachable", original_exception=e)
         except Exception as e:
             logger.error(f"Unexpected error during TWS ping: {e}")
             raise TWSConnectionError(
@@ -246,7 +243,7 @@ class OptimizedTWSClient:
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
     @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
-    async def get_workstations_status(self) -> List[WorkstationStatus]:
+    async def get_workstations_status(self) -> list[WorkstationStatus]:
         """Retrieves the status of all workstations, utilizing the cache."""
         cache_key = "workstations_status"
         cached_data = await self.cache.get(cache_key)
@@ -272,7 +269,7 @@ class OptimizedTWSClient:
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
     @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
-    async def get_jobs_status(self) -> List[JobStatus]:
+    async def get_jobs_status(self) -> list[JobStatus]:
         """Retrieves the status of all jobs, utilizing the cache."""
         cache_key = "jobs_status"
         cached_data = await self.cache.get(cache_key)
@@ -287,7 +284,7 @@ class OptimizedTWSClient:
             )  # ttl not supported in current cache implementation
             return jobs
 
-    async def get_critical_path_status(self) -> List[CriticalJob]:
+    async def get_critical_path_status(self) -> list[CriticalJob]:
         """Retrieves the status of jobs in the critical path, utilizing the cache."""
         cache_key = "critical_path_status"
         cached_data = await self.cache.get(cache_key)
@@ -321,9 +318,9 @@ class OptimizedTWSClient:
         jobs_task = asyncio.create_task(self.get_jobs_status())
         critical_jobs_task = asyncio.create_task(self.get_critical_path_status())
 
-        workstations: List[WorkstationStatus] | Exception
-        jobs: List[JobStatus] | Exception
-        critical_jobs: List[CriticalJob] | Exception
+        workstations: list[WorkstationStatus] | Exception
+        jobs: list[JobStatus] | Exception
+        critical_jobs: list[CriticalJob] | Exception
         workstations, jobs, critical_jobs = await asyncio.gather(
             workstations_task, jobs_task, critical_jobs_task, return_exceptions=True
         )
@@ -345,7 +342,384 @@ class OptimizedTWSClient:
             workstations=workstations, jobs=jobs, critical_jobs=critical_jobs
         )
 
-    async def get_job_status_batch(self, job_ids: List[str]) -> dict[str, JobStatus]:
+    @circuit_breaker(  # type: ignore
+        failure_threshold=3, recovery_timeout=30, name="tws_job_details"
+    )
+    @retry_with_backoff(  # type: ignore
+        max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
+    )
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    async def get_job_details(self, job_id: str) -> JobDetails:
+        """Retrieves detailed information about a specific job."""
+        cache_key = f"job_details:{job_id}"
+        cached_data = await self.cache.get(cache_key)
+        if cached_data:
+            return (
+                cached_data
+                if isinstance(cached_data, dict)
+                else JobDetails(**cached_data)
+            )
+
+        # Validate job_id format
+        if not SAFE_JOB_ID_PATTERN.match(job_id):
+            logger.warning(f"Invalid job_id format: {job_id}")
+            raise ValueError(f"Invalid job_id format: {job_id}")
+
+        url = f"/model/jobdefinition/{job_id}?engineName={self.engine_name}&engineOwner={self.engine_owner}"
+        async with self._api_request("GET", url) as data:
+            if isinstance(data, dict):
+                # Get job history for execution details
+                try:
+                    history = await self.get_job_history(job_id)
+                except Exception as e:
+                    logger.warning(f"Failed to get job history for {job_id}: {e}")
+                    history = []
+
+                # Get dependencies
+                try:
+                    dependencies = await self.get_job_dependencies(job_id)
+                except Exception as e:
+                    logger.warning(f"Failed to get dependencies for {job_id}: {e}")
+                    dependencies = []
+
+                job_details = JobDetails(
+                    job_id=job_id,
+                    name=data.get("name", job_id),
+                    workstation=data.get("workstation", ""),
+                    status=data.get("status", "UNKNOWN"),
+                    job_stream=data.get("job_stream", ""),
+                    full_definition=data,
+                    dependencies=dependencies.dependencies,
+                    resource_requirements=data.get("resource_requirements", {}),
+                    execution_history=history[:10],  # Limit to last 10 executions
+                )
+
+                await self.cache.set(cache_key, job_details.dict())
+                return job_details
+            else:
+                raise ValueError(f"Unexpected data format for job {job_id}")
+
+    @circuit_breaker(  # type: ignore
+        failure_threshold=3, recovery_timeout=30, name="tws_job_history"
+    )
+    @retry_with_backoff(  # type: ignore
+        max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
+    )
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    async def get_job_history(self, job_name: str) -> list[JobExecution]:
+        """Retrieves the execution history for a specific job."""
+        cache_key = f"job_history:{job_name}"
+        cached_data = await self.cache.get(cache_key)
+        if cached_data:
+            return (
+                [JobExecution(**execution) for execution in cached_data]
+                if isinstance(cached_data, list)
+                else []
+            )
+
+        # Validate job_name format
+        if not SAFE_JOB_ID_PATTERN.match(job_name):
+            logger.warning(f"Invalid job_name format: {job_name}")
+            raise ValueError(f"Invalid job_name format: {job_name}")
+
+        url = f"/model/jobdefinition/{job_name}/history?engineName={self.engine_name}&engineOwner={self.engine_owner}"
+        async with self._api_request("GET", url) as data:
+            executions = []
+            if isinstance(data, list):
+                for execution_data in data:
+                    if isinstance(execution_data, dict):
+                        try:
+                            # Convert timestamps to datetime objects
+                            start_time = execution_data.get("start_time")
+                            end_time = execution_data.get("end_time")
+
+                            if start_time and isinstance(start_time, str):
+                                # Try to parse ISO format
+                                try:
+                                    start_time = parser.parse(start_time)
+                                except:
+                                    start_time = None
+
+                            if end_time and isinstance(end_time, str):
+                                try:
+                                    end_time = parser.parse(end_time)
+                                except:
+                                    end_time = None
+
+                            execution = JobExecution(
+                                job_id=execution_data.get("job_id", job_name),
+                                status=execution_data.get("status", "UNKNOWN"),
+                                start_time=start_time or None,
+                                end_time=end_time,
+                                duration=execution_data.get("duration"),
+                                error_message=execution_data.get("error_message"),
+                            )
+                            executions.append(execution)
+                        except Exception as e:
+                            logger.warning(f"Failed to parse execution data: {e}")
+
+            await self.cache.set(cache_key, [e.dict() for e in executions])
+            return executions
+
+    @circuit_breaker(  # type: ignore
+        failure_threshold=3, recovery_timeout=30, name="tws_job_log"
+    )
+    @retry_with_backoff(  # type: ignore
+        max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
+    )
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    async def get_job_log(self, job_id: str) -> str:
+        """Retrieves the log content for a specific job execution."""
+        cache_key = f"job_log:{job_id}"
+        cached_data = await self.cache.get(cache_key)
+        if cached_data:
+            return str(cached_data)
+
+        # Validate job_id format
+        if not SAFE_JOB_ID_PATTERN.match(job_id):
+            logger.warning(f"Invalid job_id format: {job_id}")
+            raise ValueError(f"Invalid job_id format: {job_id}")
+
+        url = f"/model/jobdefinition/{job_id}/log?engineName={self.engine_name}&engineOwner={self.engine_owner}"
+        async with self._api_request("GET", url) as data:
+            log_content = ""
+            if isinstance(data, dict):
+                log_content = data.get("log_content", "")
+            elif isinstance(data, str):
+                log_content = data
+
+            await self.cache.set(cache_key, log_content)
+            return log_content
+
+    @circuit_breaker(  # type: ignore
+        failure_threshold=3, recovery_timeout=30, name="tws_plan_details"
+    )
+    @retry_with_backoff(  # type: ignore
+        max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
+    )
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    async def get_plan_details(self) -> PlanDetails:
+        """Retrieves details about the current TWS plan."""
+        cache_key = "plan_details"
+        cached_data = await self.cache.get(cache_key)
+        if cached_data:
+            return (
+                PlanDetails(**cached_data)
+                if isinstance(cached_data, dict)
+                else PlanDetails(**cached_data)
+            )
+
+        url = "/plan/current"
+        async with self._api_request("GET", url) as data:
+            if isinstance(data, dict):
+                # Parse timestamps
+                creation_date = data.get("creation_date")
+                estimated_completion = data.get("estimated_completion")
+
+                if creation_date and isinstance(creation_date, str):
+                    try:
+                        creation_date = parser.parse(creation_date)
+                    except:
+                        creation_date = None
+
+                if estimated_completion and isinstance(estimated_completion, str):
+                    try:
+                        estimated_completion = parser.parse(estimated_completion)
+                    except:
+                        estimated_completion = None
+
+                plan_details = PlanDetails(
+                    plan_id=data.get("plan_id", "current"),
+                    creation_date=creation_date or None,
+                    jobs_count=data.get("jobs_count", 0),
+                    estimated_completion=estimated_completion,
+                    status=data.get("status", "UNKNOWN"),
+                )
+
+                await self.cache.set(cache_key, plan_details.dict())
+                return plan_details
+            else:
+                raise ValueError("Unexpected data format for plan details")
+
+    @circuit_breaker(  # type: ignore
+        failure_threshold=3, recovery_timeout=30, name="tws_job_dependencies"
+    )
+    @retry_with_backoff(  # type: ignore
+        max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
+    )
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    async def get_job_dependencies(self, job_id: str) -> DependencyTree:
+        """Retrieves the dependency tree for a specific job."""
+        cache_key = f"job_dependencies:{job_id}"
+        cached_data = await self.cache.get(cache_key)
+        if cached_data:
+            return (
+                DependencyTree(**cached_data)
+                if isinstance(cached_data, dict)
+                else DependencyTree(**cached_data)
+            )
+
+        # Validate job_id format
+        if not SAFE_JOB_ID_PATTERN.match(job_id):
+            logger.warning(f"Invalid job_id format: {job_id}")
+            raise ValueError(f"Invalid job_id format: {job_id}")
+
+        url = f"/model/jobdefinition/{job_id}/dependencies?engineName={self.engine_name}&engineOwner={self.engine_owner}"
+        async with self._api_request("GET", url) as data:
+            if isinstance(data, dict):
+                dependency_tree = DependencyTree(
+                    job_id=job_id,
+                    dependencies=data.get("dependencies", []),
+                    dependents=data.get("dependents", []),
+                    dependency_graph=data.get("dependency_graph", {}),
+                )
+
+                await self.cache.set(cache_key, dependency_tree.dict())
+                return dependency_tree
+            else:
+                raise ValueError(
+                    f"Unexpected data format for job dependencies {job_id}"
+                )
+
+    @circuit_breaker(  # type: ignore
+        failure_threshold=3, recovery_timeout=30, name="tws_resource_usage"
+    )
+    @retry_with_backoff(  # type: ignore
+        max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
+    )
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    async def get_resource_usage(self) -> list[ResourceStatus]:
+        """Retrieves resource usage information."""
+        cache_key = "resource_usage"
+        cached_data = await self.cache.get(cache_key)
+        if cached_data:
+            return (
+                [ResourceStatus(**resource) for resource in cached_data]
+                if isinstance(cached_data, list)
+                else []
+            )
+
+        url = f"/model/resource?engineName={self.engine_name}&engineOwner={self.engine_owner}"
+        async with self._api_request("GET", url) as data:
+            resources = []
+            if isinstance(data, list):
+                for resource_data in data:
+                    if isinstance(resource_data, dict):
+                        try:
+                            resource = ResourceStatus(
+                                resource_name=resource_data.get("resource_name", ""),
+                                resource_type=resource_data.get("resource_type", ""),
+                                total_capacity=resource_data.get("total_capacity"),
+                                used_capacity=resource_data.get("used_capacity"),
+                                available_capacity=resource_data.get(
+                                    "available_capacity"
+                                ),
+                                utilization_percentage=resource_data.get(
+                                    "utilization_percentage"
+                                ),
+                            )
+                            resources.append(resource)
+                        except Exception as e:
+                            logger.warning(f"Failed to parse resource data: {e}")
+
+            await self.cache.set(cache_key, [r.dict() for r in resources])
+            return resources
+
+    @circuit_breaker(  # type: ignore
+        failure_threshold=3, recovery_timeout=30, name="tws_event_log"
+    )
+    @retry_with_backoff(  # type: ignore
+        max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
+    )
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    async def get_event_log(self, last_hours: int = 24) -> list[Event]:
+        """Retrieves TWS event log entries."""
+        cache_key = f"event_log:{last_hours}h"
+        cached_data = await self.cache.get(cache_key)
+        if cached_data:
+            return (
+                [Event(**event) for event in cached_data]
+                if isinstance(cached_data, list)
+                else []
+            )
+
+        url = f"/events?since={last_hours}h&engineName={self.engine_name}&engineOwner={self.engine_owner}"
+        async with self._api_request("GET", url) as data:
+            events = []
+            if isinstance(data, list):
+                for event_data in data:
+                    if isinstance(event_data, dict):
+                        try:
+                            # Parse timestamp
+                            timestamp = event_data.get("timestamp")
+                            if timestamp and isinstance(timestamp, str):
+                                try:
+                                    timestamp = parser.parse(timestamp)
+                                except:
+                                    timestamp = None
+
+                            event = Event(
+                                event_id=event_data.get("event_id", ""),
+                                timestamp=timestamp or None,
+                                event_type=event_data.get("event_type", ""),
+                                severity=event_data.get("severity", "INFO"),
+                                source=event_data.get("source", ""),
+                                message=event_data.get("message", ""),
+                                job_id=event_data.get("job_id"),
+                                workstation=event_data.get("workstation"),
+                            )
+                            events.append(event)
+                        except Exception as e:
+                            logger.warning(f"Failed to parse event data: {e}")
+
+            await self.cache.set(cache_key, [e.dict() for e in events])
+            return events
+
+    @circuit_breaker(  # type: ignore
+        failure_threshold=2, recovery_timeout=60, name="tws_performance_metrics"
+    )
+    @retry_with_backoff(  # type: ignore
+        max_retries=3, base_delay=1.0, max_delay=8.0, jitter=True
+    )
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    async def get_performance_metrics(self) -> PerformanceData:
+        """Retrieves TWS performance metrics."""
+        cache_key = "performance_metrics"
+        cached_data = await self.cache.get(cache_key)
+        if cached_data:
+            return (
+                PerformanceData(**cached_data)
+                if isinstance(cached_data, dict)
+                else PerformanceData(**cached_data)
+            )
+
+        url = f"/metrics?engineName={self.engine_name}&engineOwner={self.engine_owner}"
+        async with self._api_request("GET", url) as data:
+            if isinstance(data, dict):
+                # Parse timestamp
+                timestamp = data.get("timestamp")
+                if timestamp and isinstance(timestamp, str):
+                    try:
+                        timestamp = parser.parse(timestamp)
+                    except:
+                        timestamp = None
+
+                performance_data = PerformanceData(
+                    timestamp=timestamp or None,
+                    api_response_times=data.get("api_response_times", {}),
+                    cache_hit_rate=data.get("cache_hit_rate", 0.0),
+                    memory_usage_mb=data.get("memory_usage_mb", 0.0),
+                    cpu_usage_percentage=data.get("cpu_usage_percentage", 0.0),
+                    active_connections=data.get("active_connections", 0),
+                    jobs_per_minute=data.get("jobs_per_minute", 0.0),
+                )
+
+                await self.cache.set(cache_key, performance_data.dict())
+                return performance_data
+            else:
+                raise ValueError("Unexpected data format for performance metrics")
+
+    async def get_job_status_batch(self, job_ids: list[str]) -> dict[str, JobStatus]:
         """
         Batch multiple job status queries using parallel execution.
 

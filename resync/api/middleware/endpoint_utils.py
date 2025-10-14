@@ -8,13 +8,12 @@ import logging
 import time
 from functools import wraps
 from typing import Callable
-from fastapi import Request
-from resync.core.metrics import runtime_metrics
-from resync.core.logger import log_with_correlation
-from resync.core.utils.error_utils import (
-    create_error_response_from_exception,
-)
 
+from fastapi import Request
+
+from resync.core.logger import log_with_correlation
+from resync.core.metrics import runtime_metrics
+from resync.core.utils.error_utils import create_error_response_from_exception
 
 logger = logging.getLogger(__name__)
 

@@ -12,13 +12,13 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.pool import QueuePool
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
-    create_async_engine,
     async_sessionmaker,
+    create_async_engine,
 )
+from sqlalchemy.pool import QueuePool
 
 from resync.core.exceptions import DatabaseError
 from resync.core.pools.base_pool import ConnectionPool, ConnectionPoolConfig
@@ -80,15 +80,15 @@ class DatabaseConnectionPool(ConnectionPool[AsyncEngine]):
             # Record pool request
             await self.increment_stat("pool_hits")
 
-            # Ensure sessionmaker is available
-            if not self._async_sessionmaker:
-                raise DatabaseError("Database sessionmaker not available")
-
             # Add timeout enforcement
             try:
                 async with asyncio.timeout(self.config.connection_timeout):
                     # Get async session from sessionmaker
                     async with self._async_sessionmaker() as session:
+                        # Increment active connections and creations only when session is acquired
+                        await self.increment_stat("active_connections")
+                        await self.increment_stat("connection_creations")
+
                         try:
                             yield session
                             await session.commit()
@@ -122,6 +122,10 @@ class DatabaseConnectionPool(ConnectionPool[AsyncEngine]):
             logger.error(f"Failed to get database connection: {e}")
             raise DatabaseError(f"Failed to acquire database connection: {e}") from e
         finally:
+            # Decrement active connections only if the session was acquired (i.e., if active_connections was incremented)
+            if success:
+                await self.increment_stat("active_connections", -1)
+
             # Record connection metrics
             wait_time = time.time() - start_time
             await self.update_wait_time(wait_time)

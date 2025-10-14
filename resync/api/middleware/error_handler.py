@@ -219,6 +219,7 @@ async def http_exception_handler(request: Request, exc: Any) -> JSONResponse:
 def register_exception_handlers(app: Any) -> None:
     """Register all exception handlers with the FastAPI application."""
     from fastapi import HTTPException
+
     from resync.core.exceptions_enhanced import ResyncException
 
     # Add the global exception handler middleware

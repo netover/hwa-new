@@ -3,10 +3,11 @@ CORS configuration module for Resync application.
 """
 
 import logging
+from typing import List, Optional, Union
 from urllib.parse import urlparse
-from typing import List, Union, Optional
 
 from fastapi import FastAPI
+
 from resync.api.middleware.cors_config import CORSPolicy, Environment
 from resync.api.middleware.cors_middleware import add_cors_middleware
 from resync.settings import settings

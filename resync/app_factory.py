@@ -12,18 +12,19 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator, Optional
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
-from starlette.responses import HTMLResponse
-
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from starlette.responses import HTMLResponse
 from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 
-
-from resync.settings import settings
 from resync.core.structured_logger import get_logger
+from resync.settings import settings
+
+# Configure app factory logger
+app_logger = get_logger("resync.app_factory")
 
 logger = get_logger(__name__)
 
@@ -89,23 +90,23 @@ class ApplicationFactory:
 
         try:
             # Import here to avoid circular dependencies
+            from resync.api_gateway.container import setup_dependencies
             from resync.core.container import app_container
+            from resync.core.exceptions import (
+                ConfigurationError,
+                RedisAuthError,
+                RedisConnectionError,
+                RedisInitializationError,
+                RedisTimeoutError,
+            )
             from resync.core.interfaces import (
-                ITWSClient,
                 IAgentManager,
                 IKnowledgeGraph,
+                ITWSClient,
             )
             from resync.core.tws_monitor import get_tws_monitor, shutdown_tws_monitor
             from resync.cqrs.dispatcher import initialize_dispatcher
-            from resync.api_gateway.container import setup_dependencies
             from resync.lifespan import initialize_redis_with_retry
-            from resync.core.exceptions import (
-                RedisConnectionError,
-                RedisAuthError,
-                RedisTimeoutError,
-                RedisInitializationError,
-                ConfigurationError,
-            )
 
             # Store container reference
             app.state.container = app_container
@@ -134,12 +135,14 @@ class ApplicationFactory:
                 max_backoff=settings.redis_startup_backoff_max,
             )
 
-            print("\n🚀 Iniciando Resync HWA Dashboard...")
+            app_logger.info(
+                "application_startup_initiated", component="resync_hwa_dashboard"
+            )
 
             # Initialize Redis
-            print("🔌 Conectando ao Redis...")
+            app_logger.info("redis_connection_attempt")
             await initialize_redis_with_retry()
-            print("✅ Redis conectado com sucesso!\n")
+            app_logger.info("redis_connection_successful")
 
             # Outras inicializações...
 
@@ -148,51 +151,55 @@ class ApplicationFactory:
             yield  # Application runs here
 
         except ConfigurationError as e:
-            print("\n❌ ERRO DE CONFIGURAÇÃO:")
-            print(f"   {str(e)}")
-            if e.details.get("hint"):
-                print(f"   💡 Dica: {e.details['hint']}")
-            print()
+            app_logger.error(
+                "configuration_error",
+                error_message=str(e),
+                error_details=e.details,
+                hint=e.details.get("hint"),
+            )
             sys.exit(2)
 
         except RedisAuthError as e:
-            print("\n❌ ERRO DE AUTENTICAÇÃO REDIS:")
-            print(f"   {str(e)}")
-            if e.details.get("hint"):
-                print(f"   💡 Dica: {e.details['hint']}")
-            print("\n   Exemplo de .env correto:")
-            print("   REDIS_URL=redis://:suasenha@localhost:6379")
-            print()
+            app_logger.error(
+                "redis_authentication_error",
+                error_message=str(e),
+                error_details=e.details,
+                hint=e.details.get("hint"),
+                example_redis_url="redis://:suasenha@localhost:6379",
+            )
             sys.exit(3)
 
         except RedisConnectionError as e:
-            print("\n❌ ERRO DE CONEXÃO REDIS:")
-            print(f"   {str(e)}")
-            if e.details.get("hint"):
-                print(f"   💡 Dica: {e.details['hint']}")
-            print("\n   Como iniciar Redis localmente:")
-            print(
-                "   1. Instalar: brew install redis (macOS) ou apt install redis (Linux)"
+            app_logger.error(
+                "redis_connection_error",
+                error_message=str(e),
+                error_details=e.details,
+                hint=e.details.get("hint"),
+                installation_guide={
+                    "macos": "brew install redis",
+                    "linux": "apt install redis",
+                    "start_command": "redis-server",
+                    "test_command": "redis-cli ping (should return 'PONG')",
+                },
             )
-            print("   2. Iniciar: redis-server")
-            print("   3. Testar: redis-cli ping (deve retornar 'PONG')")
-            print()
             sys.exit(4)
 
         except RedisTimeoutError as e:
-            print("\n❌ TIMEOUT REDIS:")
-            print(f"   {str(e)}")
-            if e.details.get("hint"):
-                print(f"   💡 Dica: {e.details['hint']}")
-            print()
+            app_logger.error(
+                "redis_timeout_error",
+                error_message=str(e),
+                error_details=e.details,
+                hint=e.details.get("hint"),
+            )
             sys.exit(5)
 
         except RedisInitializationError as e:
-            print("\n❌ ERRO AO INICIALIZAR REDIS:")
-            print(f"   {str(e)}")
-            if e.details.get("hint"):
-                print(f"   💡 Dica: {e.details['hint']}")
-            print()
+            app_logger.error(
+                "redis_initialization_error",
+                error_message=str(e),
+                error_details=e.details,
+                hint=e.details.get("hint"),
+            )
             sys.exit(6)
 
         except Exception as e:
@@ -200,13 +207,12 @@ class ApplicationFactory:
             raise
         finally:
             # Shutdown
-            print("\n🛑 Encerrando Resync...")
-            logger.info("application_shutdown_initiated")
+            app_logger.info("application_shutdown_initiated")
 
             try:
                 await shutdown_tws_monitor()
                 logger.info("application_shutdown_completed")
-                print("✅ Encerrado com sucesso!\n")
+                app_logger.info("application_shutdown_successful")
             except Exception as e:
                 logger.error("application_shutdown_error", error=str(e), exc_info=True)
 
@@ -312,9 +318,9 @@ class ApplicationFactory:
     def _configure_middleware(self) -> None:
         """Configure all middleware in the correct order."""
         from resync.api.middleware.correlation_id import CorrelationIdMiddleware
-        from resync.api.middleware.error_handler import GlobalExceptionHandlerMiddleware
-        from resync.api.middleware.csp_middleware import CSPMiddleware
         from resync.api.middleware.cors_config import CORSConfig
+        from resync.api.middleware.csp_middleware import CSPMiddleware
+        from resync.api.middleware.error_handler import GlobalExceptionHandlerMiddleware
 
         # 1. Correlation ID (must be first)
         self.app.add_middleware(CorrelationIdMiddleware)
@@ -362,14 +368,14 @@ class ApplicationFactory:
     def _register_routers(self) -> None:
         """Register all API routers."""
         # Import routers
-        from resync.api.health import router as health_router
-        from resync.api.agents import agents_router
-        from resync.api.chat import chat_router
-        from resync.api.cache import cache_router
-        from resync.api.audit import router as audit_router
-        from resync.api.cors_monitoring import cors_monitor_router
-        from resync.api.performance import performance_router
         from resync.api.admin import admin_router
+        from resync.api.agents import agents_router
+        from resync.api.audit import router as audit_router
+        from resync.api.cache import cache_router
+        from resync.api.chat import chat_router
+        from resync.api.cors_monitoring import cors_monitor_router
+        from resync.api.health import router as health_router
+        from resync.api.performance import performance_router
 
         # Additional routers from main_improved
         try:

@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            items.forEach((item, index) => {
+            items.forEach((item) => {
                 const reviewItem = document.createElement('div');
                 reviewItem.className = 'review-item';
                 reviewItem.id = `item-${item.memory_id}`;

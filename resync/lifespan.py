@@ -1,3 +1,15 @@
+"""Application lifespan management.
+
+This module handles FastAPI application startup and shutdown events,
+managing the lifecycle of critical application components including:
+
+- Database connections and pools
+- Redis connections and health monitoring
+- Background task schedulers
+- Health check services
+- Resource cleanup and graceful shutdown
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,22 +26,21 @@ from redis.exceptions import (
     TimeoutError,
 )
 
-from resync.settings import settings
+from resync.api_gateway.container import setup_dependencies
 from resync.core.container import app_container
-from resync.core.interfaces import ITWSClient, IAgentManager, IKnowledgeGraph
+from resync.core.exceptions import (
+    ConfigurationError,
+    RedisAuthError,
+    RedisConnectionError,
+    RedisInitializationError,
+    RedisTimeoutError,
+)
+from resync.core.interfaces import IAgentManager, IKnowledgeGraph, ITWSClient
+from resync.core.redis_init import RedisInitializer
+from resync.core.structured_logger import get_logger
 from resync.core.tws_monitor import get_tws_monitor, shutdown_tws_monitor
 from resync.cqrs.dispatcher import initialize_dispatcher
-from resync.api_gateway.container import setup_dependencies
-from resync.core.redis_init import RedisInitializer
-
-from resync.core.structured_logger import get_logger
-from resync.core.exceptions import (
-    RedisConnectionError,
-    RedisAuthError,
-    RedisTimeoutError,
-    RedisInitializationError,
-    ConfigurationError,
-)
+from resync.settings import settings
 
 logger = get_logger(__name__)
 

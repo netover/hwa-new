@@ -1,7 +1,8 @@
-from fastapi import Request, HTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
-import secrets
 import hmac
+import secrets
+
+from fastapi import HTTPException, Request
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from resync.core.structured_logger import get_logger
 

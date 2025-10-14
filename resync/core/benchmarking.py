@@ -3,15 +3,15 @@ Performance benchmarking for Resync system
 """
 
 import asyncio
-import time
+import logging
 import statistics
-from typing import Dict, List, Callable, Any
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import logging
+from typing import Any, Callable, Dict, List
 
-from resync.core.metrics import runtime_metrics
 from resync.core.interfaces import IAgentManager, ITWSClient
+from resync.core.metrics import runtime_metrics
 
 
 @dataclass

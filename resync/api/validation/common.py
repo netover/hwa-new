@@ -5,9 +5,9 @@ import re
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Pattern, Union
+from typing import Any, Pattern
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, validator
 from pydantic.types import constr
 
 
@@ -16,12 +16,12 @@ class ValidationErrorResponse(BaseModel):
 
     error: str = "Validation failed"
     message: str = "Request validation failed. Please check the provided data."
-    details: List[Dict[str, Any]] = []
+    details: list[dict[str, Any]] = []
     severity: str = "error"
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    request_id: Optional[str] = None
-    path: Optional[str] = None
-    method: Optional[str] = None
+    request_id: str | None = None
+    path: str | None = None
+    method: str | None = None
     error_code: str = "VALIDATION_ERROR"
 
     def add_error(
@@ -58,13 +58,12 @@ class ValidationErrorResponse(BaseModel):
 class BaseValidatedModel(BaseModel):
     """Base model with common validation methods and sanitization."""
 
-    class Config:
-        """Pydantic configuration."""
-
-        validate_assignment = True  # Validate on assignment
-        use_enum_values = True  # Use enum values in serialization
-        extra = "forbid"  # Forbid extra fields
-        validate_by_name = True  # Allow population by field name (Pydantic v2)
+    model_config = ConfigDict(
+        validate_assignment=True,  # Validate on assignment
+        use_enum_values=True,  # Use enum values in serialization
+        extra="forbid",  # Forbid extra fields
+        validate_by_name=True,  # Allow population by field name (Pydantic v2)
+    )
 
     def sanitize_string_fields(self) -> None:
         """Sanitize all string fields in the model."""

@@ -8,10 +8,10 @@ rate limit exceeded responses.
 
 from __future__ import annotations
 
-import structlog
 from datetime import datetime, timedelta
 from typing import Callable, Optional
 
+import structlog
 from fastapi import Request, Response
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded

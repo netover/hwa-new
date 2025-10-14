@@ -38,10 +38,7 @@ except ImportError:
 
 from pydantic import BaseModel, Field
 
-from resync.api.validation.common import (
-    SanitizationLevel,
-    sanitize_input,
-)
+from resync.api.validation.common import SanitizationLevel, sanitize_input
 from resync.settings import settings
 
 # Type aliases for better readability

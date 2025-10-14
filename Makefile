@@ -77,6 +77,46 @@ test:
 	@echo "--- Running pytest test suite ---"
 	$(PYTHON) -m pytest
 
+.PHONY: test-specific
+test-specific:
+	@echo "--- Running specific test with full diagnostics ---"
+	$(PYTHON) -m pytest -v -s --tb=long \
+		--log-cli-level=DEBUG \
+		--capture=no \
+		--durations=10 \
+		tests/core/test_connection_pool_monitoring.py::TestConnectionPoolMetrics::test_pool_statistics_accuracy
+
+.PHONY: test-env
+test-env:
+	@echo "--- Checking test environment health ---"
+	@$(PYTHON) -c "import aiofiles; import pytest_asyncio; import structlog; print('✅ Core dependencies OK')" || (echo "❌ Missing dependencies" && exit 1)
+	@$(PYTHON) -m pytest --collect-only tests/ > /dev/null && echo "✅ Test discovery OK" || (echo "❌ Test discovery failed" && exit 1)
+	@echo "--- Environment health check complete ---"
+
+.PHONY: test-isolated
+test-isolated:
+	@echo "--- Running test in isolated container ---"
+	@if docker build -f Dockerfile.test -t pool-test . 2>/dev/null; then \
+		docker run --rm pool-test make test-specific; \
+		docker rmi pool-test 2>/dev/null; \
+	else \
+		echo "❌ Failed to build/run container test - trying alternative..."; \
+		uv run pytest tests/core/test_connection_pool_monitoring.py::TestConnectionPoolMetrics::test_pool_statistics_accuracy -v; \
+	fi
+
+.PHONY: migrate-to-uv
+migrate-to-uv:
+	@echo "--- Migrating from Poetry to uv ---"
+	@if [ -f "pyproject.toml" ] && [ -f "poetry.lock" ]; then \
+		echo "Found Poetry configuration, migrating..."; \
+		uvx migrate-to-uv --dependency-groups-strategy set-default-groups --keep-current-data; \
+		uv sync --all-extras --dev; \
+		echo "✅ Migration complete!"; \
+	else \
+		echo "No Poetry configuration found, ensuring uv setup..."; \
+		uv sync --all-extras --dev; \
+	fi
+
 # --- Housekeeping ---
 .PHONY: clean
 clean:

@@ -1,22 +1,24 @@
+"""Audit logging API endpoints.
+
+This module provides REST API endpoints for audit logging functionality,
+including retrieving audit logs, audit statistics, and audit queue management.
+It handles audit data retrieval with proper pagination, filtering, and access control.
+"""
+
 # resync/api/audit.py
 import logging
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-)
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import field_validator, BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from resync.api.dependencies import get_idempotency_manager, require_idempotency_key
 from resync.core.fastapi_di import get_audit_queue, get_knowledge_graph
+from resync.core.idempotency.manager import IdempotencyManager
 from resync.core.interfaces import IAuditQueue, IKnowledgeGraph
 from resync.core.logger import log_audit_event, log_with_correlation
-from resync.api.dependencies import require_idempotency_key, get_idempotency_manager
-from resync.core.idempotency import IdempotencyManager
 
 logger = logging.getLogger(__name__)
 

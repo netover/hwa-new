@@ -572,7 +572,7 @@ class ChaosEngineer:
                             side_effect=Exception("Simulated DB failure"),
                         ):
                             try:
-                                from resync.core.audit_db import get_audit_metrics
+                                pass
 
                                 audit_manager = get_audit_log_manager()
                                 metrics = audit_manager.get_audit_metrics()

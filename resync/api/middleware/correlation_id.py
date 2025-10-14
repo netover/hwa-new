@@ -10,9 +10,10 @@ O Correlation ID é:
 - Incluído em logs e respostas de erro
 """
 
-import uuid
 import logging
+import uuid
 from typing import Callable, Optional
+
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp

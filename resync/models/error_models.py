@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ErrorCategory(str, Enum):
@@ -56,11 +56,10 @@ class BaseErrorResponse(BaseModel):
         None, description="Stack trace for debugging (production disabled)"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        use_enum_values = True
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(
+        use_enum_values=True,
+        json_encoders={datetime: lambda v: v.isoformat()},
+    )
 
 
 class ValidationErrorDetail(BaseModel):
@@ -413,7 +412,7 @@ class SystemErrorResponse(BaseErrorResponse):
             method=method,
             user_friendly_message=f"The {service} service is currently unavailable. Please try again later.",
             troubleshooting_hints=[
-                f"Try again in a few minutes",
+                "Try again in a few minutes",
                 "Check service status",
             ],
             error_details={"service": service},
@@ -453,7 +452,7 @@ class ExternalServiceErrorResponse(BaseErrorResponse):
             severity=ErrorSeverity.MEDIUM,
             user_friendly_message=f"An error occurred while communicating with {service_name}. Please try again later.",
             troubleshooting_hints=[
-                f"Try again in a few minutes",
+                "Try again in a few minutes",
                 "Check if {service_name} is operational",
             ],
             service_name=service_name,

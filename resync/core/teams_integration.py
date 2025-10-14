@@ -5,12 +5,12 @@ job status monitoring, and conversational AI capabilities.
 """
 
 import asyncio
-import structlog
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import aiohttp
+import structlog
 
 from resync.core.exceptions import NotificationError
 from resync.settings import settings

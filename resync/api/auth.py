@@ -1,18 +1,26 @@
+"""Authentication and authorization API endpoints.
+
+This module provides JWT-based authentication endpoints and utilities,
+including token generation, validation, and user session management.
+It implements secure authentication flows with proper error handling
+and integrates with the application's security middleware.
+"""
+
 from __future__ import annotations
 
 import asyncio
-import secrets
 import hashlib
 import hmac
+import secrets
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from resync.settings import settings
 from resync.core.structured_logger import get_logger
+from resync.settings import settings
 
 logger = get_logger(__name__)
 

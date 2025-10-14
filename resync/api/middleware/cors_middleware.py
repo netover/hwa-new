@@ -103,7 +103,8 @@ class LoggingCORSMiddleware(BaseHTTPMiddleware):
 
         # Check if this is a preflight request
         is_preflight = bool(
-            method == "OPTIONS" and (
+            method == "OPTIONS"
+            and (
                 request.headers.get("access-control-request-method")
                 or request.headers.get("access-control-request-headers")
             )
