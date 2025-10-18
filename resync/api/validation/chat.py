@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import Field, validator
+from pydantic import Field, validator, ConfigDict
 from pydantic.types import constr
 
 from .common import (

@@ -423,7 +423,7 @@ def create_json_response_from_error(error_response: BaseErrorResponse) -> JSONRe
     return JSONResponse(status_code=status_code, content=content)
 
 
-def register_exception_handlers(app):  # type: ignore
+def register_exception_handlers(app):  
     """Register standardized exception handlers for the FastAPI application."""
     from fastapi.exceptions import RequestValidationError
     from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -434,23 +434,23 @@ def register_exception_handlers(app):  # type: ignore
     )
 
     # Register handler for validation errors
-    @app.exception_handler(RequestValidationError)  # type: ignore
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):  # type: ignore
+    @app.exception_handler(RequestValidationError)  
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):  
         correlation_id = generate_correlation_id()
         error_response = (
             ErrorResponseBuilder()
             .with_correlation_id(correlation_id)
             .with_request_context(request)
             .build_validation_error(extract_validation_errors(exc))
-        )  # type: ignore
+        )  
 
         log_error_response(error_response, exc)
 
         return create_json_response_from_error(error_response)
 
     # Register handler for standard HTTP exceptions
-    @app.exception_handler(StarletteHTTPException)  # type: ignore
-    async def http_exception_handler(request: Request, exc: StarletteHTTPException):  # type: ignore
+    @app.exception_handler(StarletteHTTPException)  
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):  
         correlation_id = generate_correlation_id()
         builder = (
             ErrorResponseBuilder()
@@ -462,17 +462,17 @@ def register_exception_handlers(app):  # type: ignore
         if exc.status_code == 404:
             error_response = builder.build_business_logic_error(
                 "resource_not_found", resource="Resource"
-            )  # type: ignore[assignment]
+            )  [assignment]
         elif exc.status_code == 401:
-            error_response = builder.build_authentication_error("unauthorized")  # type: ignore[assignment]
+            error_response = builder.build_authentication_error("unauthorized")  [assignment]
         elif exc.status_code == 403:
-            error_response = builder.build_authorization_error("forbidden")  # type: ignore[assignment]
+            error_response = builder.build_authorization_error("forbidden")  [assignment]
         elif exc.status_code == 429:
             error_response = builder.build_rate_limit_error(
                 limit=getattr(request.state, "rate_limit", {}).get("limit", 0)
-            )  # type: ignore[assignment]
+            )  [assignment]
         else:
-            error_response = builder.build_system_error("internal_server_error")  # type: ignore[assignment]
+            error_response = builder.build_system_error("internal_server_error")  [assignment]
 
         error_response.error_code = f"HTTP_{exc.status_code}"
         error_response.message = (
@@ -484,20 +484,20 @@ def register_exception_handlers(app):  # type: ignore
         return create_json_response_from_error(error_response)
 
     # Register handler for enhanced Resync custom exceptions first
-    @app.exception_handler(EnhancedResyncException)  # type: ignore
-    async def enhanced_resync_exception_handler(request: Request, exc: EnhancedResyncException):  # type: ignore
+    @app.exception_handler(EnhancedResyncException)  
+    async def enhanced_resync_exception_handler(request: Request, exc: EnhancedResyncException):  
         correlation_id = generate_correlation_id()
-        error_response = create_error_response_from_exception(exc, request, correlation_id)  # type: ignore[assignment]
+        error_response = create_error_response_from_exception(exc, request, correlation_id)  [assignment]
 
         log_error_response(error_response, exc)
 
         return create_json_response_from_error(error_response)
 
     # Register handler for base Resync custom exceptions
-    @app.exception_handler(BaseResyncException)  # type: ignore
-    async def base_resync_exception_handler(request: Request, exc: BaseResyncException):  # type: ignore
+    @app.exception_handler(BaseResyncException)  
+    async def base_resync_exception_handler(request: Request, exc: BaseResyncException):  
         correlation_id = generate_correlation_id()
-        error_response = create_error_response_from_exception(exc, request, correlation_id)  # type: ignore[assignment]
+        error_response = create_error_response_from_exception(exc, request, correlation_id)  [assignment]
 
         log_error_response(error_response, exc)
 

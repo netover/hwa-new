@@ -93,7 +93,7 @@ class ConnectionPool(ABC, Generic[T]):
 
     @asynccontextmanager
     @abstractmethod
-    async def get_connection(self) -> AsyncIterator[T]:  # type: ignore[misc]
+    async def get_connection(self) -> AsyncIterator[T]:
         """Get a connection from the pool."""
 
     async def close(self) -> None:
@@ -148,7 +148,7 @@ class ConnectionPool(ABC, Generic[T]):
 
         try:
             # Try to get and use a connection briefly
-            async with self.get_connection():  # type: ignore[var-annotated]
+            async with self.get_connection():
                 # The actual health check depends on the connection type
                 # This is a basic check that just tries to acquire a connection
                 pass

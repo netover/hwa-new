@@ -17,18 +17,6 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from resync.core.compliance.report_strategies import (
-    ReportGenerator,
-    ControlComplianceStrategy,
-    CriteriaScoresStrategy,
-    OverallComplianceStrategy,
-    ControlStatusSummaryStrategy,
-    EvidenceSummaryStrategy,
-    AvailabilitySummaryStrategy,
-    ProcessingIntegritySummaryStrategy,
-    ConfidentialityIncidentsSummaryStrategy,
-    RecommendationsStrategy
-)
 from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
@@ -291,7 +279,8 @@ class SOC2ComplianceManager:
         # Initialize standard SOC 2 controls
         self._initialize_soc2_controls()
 
-        # Initialize report generator
+        # Initialize report generator (lazy import to avoid circular dependency)
+        from resync.core.compliance.report_strategies import ReportGenerator
         self.report_generator = ReportGenerator()
 
     async def start(self) -> None:
@@ -668,6 +657,19 @@ class SOC2ComplianceManager:
 
     def generate_compliance_report(self) -> Dict[str, Any]:
         """Generate comprehensive SOC 2 compliance report using Strategy pattern."""
+        # Import strategies locally to avoid circular dependencies
+        from resync.core.compliance.report_strategies import (
+            ControlComplianceStrategy,
+            CriteriaScoresStrategy,
+            OverallComplianceStrategy,
+            ControlStatusSummaryStrategy,
+            EvidenceSummaryStrategy,
+            AvailabilitySummaryStrategy,
+            ProcessingIntegritySummaryStrategy,
+            ConfidentialityIncidentsSummaryStrategy,
+            RecommendationsStrategy
+        )
+
         # Create report structure
         report = {
             "generated_at": self._get_current_timestamp(),
@@ -692,7 +694,7 @@ class SOC2ComplianceManager:
         report["availability_summary"] = AvailabilitySummaryStrategy().execute(self)
         report["processing_integrity_summary"] = ProcessingIntegritySummaryStrategy().execute(self)
         report["confidentiality_incidents"] = ConfidentialityIncidentsSummaryStrategy().execute(self)
-        report["recommendations"] = RecommendationsStrategy().execute(self)
+        report["recommendations"] = RecommendationsStrategy().execute(self, report)
 
         # Store report
         self.compliance_reports.append(report)

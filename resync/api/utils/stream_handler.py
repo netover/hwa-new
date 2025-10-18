@@ -62,7 +62,7 @@ class AgentResponseStreamer:
 
     async def _handle_streaming_response(self, agent: Any, query: str) -> None:
         """Handle streaming response from agent."""
-        stream_result = agent.stream(query)  # type: ignore[attr-defined]
+        stream_result = agent.stream(query)  [attr-defined]
 
         # Check if result is an async iterator
         if self._is_async_iterator(stream_result):

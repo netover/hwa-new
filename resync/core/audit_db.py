@@ -1,14 +1,157 @@
 import logging
+import os
 import sqlite3
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
+import json
 
 from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.settings import settings
+import redis.asyncio as redis
 
 logger = logging.getLogger(__name__)
 
 DATABASE_PATH = settings.BASE_DIR / "audit_queue.db"
+
+# Redis Streams configuration
+AUDIT_STREAM_KEY = "audit_queue:stream"
+AUDIT_CONSUMER_GROUP = "audit_processors"
+AUDIT_CONSUMER_NAME = "processor_1"
+
+
+async def get_redis_client() -> redis.Redis:
+    """Gets a Redis client for audit operations."""
+    return redis.Redis.from_url(settings.REDIS_URL)
+
+
+async def ensure_consumer_group():
+    """Ensures the consumer group exists for audit processing."""
+    try:
+        client = await get_redis_client()
+        await client.xgroup_create(
+            AUDIT_STREAM_KEY,
+            AUDIT_CONSUMER_GROUP,
+            "$",
+            mkstream=True
+        )
+        logger.info("consumer_group_created", group=AUDIT_CONSUMER_GROUP)
+    except redis.ResponseError as e:
+        if "BUSYGROUP" in str(e):
+            logger.debug("consumer_group_already_exists", group=AUDIT_CONSUMER_GROUP)
+        else:
+            logger.error("failed_to_create_consumer_group", error=str(e))
+    except Exception as e:
+        logger.error("unexpected_error_creating_consumer_group", error=str(e))
+
+
+async def add_audit_record_async(memory: Dict[str, Any]) -> Optional[str]:
+    """
+    Adds a new memory to the audit queue using Redis Streams.
+    Returns the message ID or None if failed.
+    """
+    try:
+        # Validate input
+        validated_memory = _validate_audit_record(memory)
+
+        client = await get_redis_client()
+
+        # Prepare data for Redis Stream
+        stream_data = {
+            "memory_id": validated_memory["id"],
+            "user_query": validated_memory["user_query"],
+            "agent_response": validated_memory["agent_response"],
+            "status": "pending",
+            "created_at": validated_memory.get("created_at", "*")
+        }
+
+        if validated_memory.get("ia_audit_reason"):
+            stream_data["ia_audit_reason"] = validated_memory["ia_audit_reason"]
+        if validated_memory.get("ia_audit_confidence") is not None:
+            stream_data["ia_audit_confidence"] = str(validated_memory["ia_audit_confidence"])
+
+        # Add to Redis Stream
+        message_id = await client.xadd(AUDIT_STREAM_KEY, stream_data)
+
+        logger.debug("added_memory_to_redis_stream", memory_id=validated_memory["id"], message_id=message_id)
+        return message_id
+
+    except Exception as e:
+        logger.error("failed_to_add_audit_record_to_redis", error=str(e), memory_id=memory.get("id"))
+        # Fallback to SQLite
+        return add_audit_record(memory)
+
+
+async def get_pending_audits_async() -> List[Dict[str, Any]]:
+    """
+    Retrieves pending audit records from Redis Streams.
+    Falls back to SQLite if Redis is unavailable.
+    """
+    try:
+        client = await get_redis_client()
+
+        # Read pending messages from stream
+        messages = await client.xreadgroup(
+            AUDIT_CONSUMER_GROUP,
+            AUDIT_CONSUMER_NAME,
+            {AUDIT_STREAM_KEY: ">"},
+            count=100
+        )
+
+        audits = []
+        for stream_name, message_list in messages:
+            for message_id, message_data in message_list:
+                if message_data.get("status") == "pending":
+                    audit_record = {
+                        "id": message_id,
+                        "memory_id": message_data.get("memory_id"),
+                        "user_query": message_data.get("user_query"),
+                        "agent_response": message_data.get("agent_response"),
+                        "ia_audit_reason": message_data.get("ia_audit_reason"),
+                        "ia_audit_confidence": float(message_data.get("ia_audit_confidence", 0)),
+                        "status": message_data.get("status"),
+                        "created_at": message_data.get("created_at")
+                    }
+                    audits.append(audit_record)
+
+        logger.debug("retrieved_pending_audits_from_redis", count=len(audits))
+        return audits
+
+    except Exception as e:
+        logger.error("failed_to_get_pending_audits_from_redis", error=str(e))
+        # Fallback to SQLite
+        return get_pending_audits()
+
+
+async def update_audit_status_async(memory_id: str, status: str) -> bool:
+    """
+    Updates audit status in Redis Streams.
+    Falls back to SQLite if Redis is unavailable.
+    """
+    try:
+        client = await get_redis_client()
+
+        # Find and update the message
+        messages = await client.xread({AUDIT_STREAM_KEY: "0"}, count=1000)
+
+        for stream_name, message_list in messages:
+            for message_id, message_data in message_list:
+                if message_data.get("memory_id") == memory_id:
+                    # Update the message (Redis Streams are immutable, so we add a new message)
+                    updated_data = message_data.copy()
+                    updated_data["status"] = status
+                    updated_data["reviewed_at"] = "*"
+
+                    await client.xadd(AUDIT_STREAM_KEY, updated_data)
+                    logger.info("updated_audit_status_in_redis", memory_id=memory_id, status=status)
+                    return True
+
+        logger.warning("audit_record_not_found_in_redis", memory_id=memory_id)
+        return False
+
+    except Exception as e:
+        logger.error("failed_to_update_audit_status_in_redis", error=str(e))
+        # Fallback to SQLite
+        return update_audit_status(memory_id, status)
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -310,6 +453,7 @@ def delete_audit_record(memory_id: str) -> bool:
 def is_memory_approved(memory_id: str) -> bool:
     """
     Checks if a memory has been approved by an admin.
+    Now supports Redis Streams as primary source with SQLite fallback.
 
     Args:
         memory_id: The ID of the memory to check.
@@ -317,6 +461,29 @@ def is_memory_approved(memory_id: str) -> bool:
     Returns:
         True if the memory is approved, False otherwise.
     """
+    if USE_REDIS_STREAMS:
+        try:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            async def check_approval():
+                client = await get_redis_client()
+                messages = await client.xread({AUDIT_STREAM_KEY: "0"}, count=1000)
+                for stream_name, message_list in messages:
+                    for message_id, message_data in message_list:
+                        if message_data.get("memory_id") == memory_id:
+                            return message_data.get("status") == "approved"
+                return False
+
+            result = loop.run_until_complete(check_approval())
+            loop.close()
+            return result
+
+        except Exception as e:
+            logger.error("failed_to_check_approval_in_redis", error=str(e))
+
+    # SQLite fallback
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -326,5 +493,182 @@ def is_memory_approved(memory_id: str) -> bool:
         return row is not None and row["status"] == "approved"
 
 
-# Initialize the database on module import
+async def initialize_redis_streams():
+    """Initialize Redis Streams for audit processing."""
+    try:
+        import asyncio
+        await ensure_consumer_group()
+        logger.info("redis_streams_initialized_for_audit")
+    except Exception as e:
+        logger.error("failed_to_initialize_redis_streams", error=str(e))
+
+
+def add_audit_record_redis(memory: Dict[str, Any]) -> Optional[str]:
+    """
+    Synchronous wrapper for Redis Streams audit record addition.
+    Falls back to SQLite if async operation fails.
+    """
+    try:
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(add_audit_record_async(memory))
+        loop.close()
+        return result
+    except Exception as e:
+        logger.error("failed_to_add_audit_record_via_redis_wrapper", error=str(e))
+        return add_audit_record(memory)
+
+
+def get_pending_audits_redis() -> List[Dict[str, Any]]:
+    """
+    Synchronous wrapper for Redis Streams pending audits retrieval.
+    Falls back to SQLite if async operation fails.
+    """
+    try:
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(get_pending_audits_async())
+        loop.close()
+        return result
+    except Exception as e:
+        logger.error("failed_to_get_pending_audits_via_redis_wrapper", error=str(e))
+        return get_pending_audits()
+
+
+def update_audit_status_redis(memory_id: str, status: str) -> bool:
+    """
+    Synchronous wrapper for Redis Streams status updates.
+    Falls back to SQLite if async operation fails.
+    """
+    try:
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(update_audit_status_async(memory_id, status))
+        loop.close()
+        return result
+    except Exception as e:
+        logger.error("failed_to_update_audit_status_via_redis_wrapper", error=str(e))
+        return update_audit_status(memory_id, status)
+
+
+# Configuration flag to enable Redis Streams
+USE_REDIS_STREAMS = os.environ.get("USE_REDIS_AUDIT_STREAMS", "false").lower() == "true"
+
+
+def add_audit_record(memory: Dict[str, Any]) -> Optional[int]:
+    """
+    Adds a new memory to the audit queue for review with input validation.
+    Returns the ID of the new record or None if already exists.
+    Now supports Redis Streams as primary storage with SQLite fallback.
+    """
+    if USE_REDIS_STREAMS:
+        # Try Redis Streams first
+        redis_result = add_audit_record_redis(memory)
+        if redis_result:
+            return int(redis_result.split('-')[0]) if '-' in redis_result else 1
+        # Fallback to SQLite if Redis fails
+        logger.warning("falling_back_to_sqlite_after_redis_failure")
+
+    # SQLite implementation (existing code)
+    validated_memory = _validate_audit_record(memory)
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                INSERT INTO audit_queue (
+                    memory_id, user_query, agent_response,
+                    ia_audit_reason, ia_audit_confidence, status
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    validated_memory["id"],
+                    validated_memory["user_query"],
+                    validated_memory["agent_response"],
+                    validated_memory.get("ia_audit_reason"),
+                    validated_memory.get("ia_audit_confidence"),
+                    "pending",
+                ),
+            )
+            conn.commit()
+            logger.debug("Added memory %s to audit queue.", validated_memory["id"])
+            return cursor.lastrowid
+        except sqlite3.IntegrityError:
+            logger.debug(
+                "Memory %s already exists in audit queue. Skipping.",
+                validated_memory["id"],
+            )
+            return None
+        except Exception as e:
+            logger.error(
+                "Error adding memory %s to audit queue: %s",
+                memory.get("id"),
+                e,
+                exc_info=True,
+            )
+            return None
+
+
+def get_pending_audits() -> List[Dict[str, Any]]:
+    """
+    Retrieves all memories currently pending review.
+    Now supports Redis Streams as primary source with SQLite fallback.
+    """
+    if USE_REDIS_STREAMS:
+        # Try Redis Streams first
+        redis_audits = get_pending_audits_redis()
+        if redis_audits:
+            return redis_audits
+        # Fallback to SQLite if Redis fails
+        logger.warning("falling_back_to_sqlite_after_redis_failure")
+
+    # SQLite implementation (existing code)
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM audit_queue WHERE status = 'pending' ORDER BY created_at DESC"
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+def update_audit_status(memory_id: str, status: str) -> bool:
+    """
+    Updates the status of an audit record.
+    Now supports Redis Streams as primary storage with SQLite fallback.
+    """
+    if USE_REDIS_STREAMS:
+        # Try Redis Streams first
+        if update_audit_status_redis(memory_id, status):
+            return True
+        # Fallback to SQLite if Redis fails
+        logger.warning("falling_back_to_sqlite_after_redis_failure")
+
+    # SQLite implementation (existing code)
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE audit_queue
+            SET status = ?, reviewed_at = CURRENT_TIMESTAMP
+            WHERE memory_id = ?
+        """,
+            (status, memory_id),
+        )
+        conn.commit()
+        if cursor.rowcount > 0:
+            logger.info("Updated memory %s status to %s.", memory_id, status)
+            return True
+        logger.warning("Memory %s not found for status update.", memory_id)
+
+
+# Initialize both systems
 initialize_database()
+
+if USE_REDIS_STREAMS:
+    import asyncio
+    asyncio.run(initialize_redis_streams())

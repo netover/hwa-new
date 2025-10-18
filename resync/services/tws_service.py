@@ -126,13 +126,13 @@ class OptimizedTWSClient:
         else:
             return self.client if hasattr(self, "client") else None
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=3, recovery_timeout=30, name="tws_http_client"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=3, base_delay=1.0, max_delay=10.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def _make_request(
         self, method: str, url: str, **kwargs: Any
     ) -> httpx.Response:
@@ -147,7 +147,7 @@ class OptimizedTWSClient:
         try:
             response = await client.request(method, url, **kwargs)
             response.raise_for_status()
-            return response  # type: ignore[no-any-return]
+            return response
         except Exception as e:
             logger.error(f"HTTP request failed: {method} {url} - {e}")
             raise
@@ -186,13 +186,13 @@ class OptimizedTWSClient:
                 "An unexpected error occurred", original_exception=e
             )
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=5, recovery_timeout=60, name="tws_ping"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=2, base_delay=0.5, max_delay=3.0, jitter=True
     )
-    @with_timeout(5.0)  # type: ignore
+    @with_timeout(5.0)  
     async def ping(self) -> None:
         """
         Performs a lightweight connectivity test to the TWS server.
@@ -224,10 +224,10 @@ class OptimizedTWSClient:
                 "TWS ping failed unexpectedly", original_exception=e
             )
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=3, recovery_timeout=30, name="tws_check_connection"
     )
-    @with_timeout(10.0)  # type: ignore
+    @with_timeout(10.0)  
     async def check_connection(self) -> bool:
         """Verifies the connection to the TWS server is active."""
         try:
@@ -236,13 +236,13 @@ class OptimizedTWSClient:
         except TWSConnectionError:
             return False
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=3, recovery_timeout=30, name="tws_workstations"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def get_workstations_status(self) -> list[WorkstationStatus]:
         """Retrieves the status of all workstations, utilizing the cache."""
         cache_key = "workstations_status"
@@ -262,13 +262,13 @@ class OptimizedTWSClient:
             )  # ttl not supported in current cache implementation
             return workstations
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=3, recovery_timeout=30, name="tws_jobs_status"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def get_jobs_status(self) -> list[JobStatus]:
         """Retrieves the status of all jobs, utilizing the cache."""
         cache_key = "jobs_status"
@@ -304,13 +304,13 @@ class OptimizedTWSClient:
             )  # ttl not supported in current cache implementation
             return critical_jobs
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=2, recovery_timeout=60, name="tws_system_status"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=3, base_delay=1.0, max_delay=8.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def get_system_status(self) -> SystemStatus:
         """Retrieves a comprehensive system status with parallel execution."""
         # Execute all three calls concurrently
@@ -342,13 +342,13 @@ class OptimizedTWSClient:
             workstations=workstations, jobs=jobs, critical_jobs=critical_jobs
         )
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=3, recovery_timeout=30, name="tws_job_details"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def get_job_details(self, job_id: str) -> JobDetails:
         """Retrieves detailed information about a specific job."""
         cache_key = f"job_details:{job_id}"
@@ -399,13 +399,13 @@ class OptimizedTWSClient:
             else:
                 raise ValueError(f"Unexpected data format for job {job_id}")
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=3, recovery_timeout=30, name="tws_job_history"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def get_job_history(self, job_name: str) -> list[JobExecution]:
         """Retrieves the execution history for a specific job."""
         cache_key = f"job_history:{job_name}"
@@ -461,13 +461,13 @@ class OptimizedTWSClient:
             await self.cache.set(cache_key, [e.dict() for e in executions])
             return executions
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=3, recovery_timeout=30, name="tws_job_log"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def get_job_log(self, job_id: str) -> str:
         """Retrieves the log content for a specific job execution."""
         cache_key = f"job_log:{job_id}"
@@ -491,13 +491,13 @@ class OptimizedTWSClient:
             await self.cache.set(cache_key, log_content)
             return log_content
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=3, recovery_timeout=30, name="tws_plan_details"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def get_plan_details(self) -> PlanDetails:
         """Retrieves details about the current TWS plan."""
         cache_key = "plan_details"
@@ -541,13 +541,13 @@ class OptimizedTWSClient:
             else:
                 raise ValueError("Unexpected data format for plan details")
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=3, recovery_timeout=30, name="tws_job_dependencies"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def get_job_dependencies(self, job_id: str) -> DependencyTree:
         """Retrieves the dependency tree for a specific job."""
         cache_key = f"job_dependencies:{job_id}"
@@ -581,13 +581,13 @@ class OptimizedTWSClient:
                     f"Unexpected data format for job dependencies {job_id}"
                 )
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=3, recovery_timeout=30, name="tws_resource_usage"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def get_resource_usage(self) -> list[ResourceStatus]:
         """Retrieves resource usage information."""
         cache_key = "resource_usage"
@@ -625,13 +625,13 @@ class OptimizedTWSClient:
             await self.cache.set(cache_key, [r.dict() for r in resources])
             return resources
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=3, recovery_timeout=30, name="tws_event_log"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=2, base_delay=1.0, max_delay=5.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def get_event_log(self, last_hours: int = 24) -> list[Event]:
         """Retrieves TWS event log entries."""
         cache_key = f"event_log:{last_hours}h"
@@ -675,13 +675,13 @@ class OptimizedTWSClient:
             await self.cache.set(cache_key, [e.dict() for e in events])
             return events
 
-    @circuit_breaker(  # type: ignore
+    @circuit_breaker(  
         failure_threshold=2, recovery_timeout=60, name="tws_performance_metrics"
     )
-    @retry_with_backoff(  # type: ignore
+    @retry_with_backoff(  
         max_retries=3, base_delay=1.0, max_delay=8.0, jitter=True
     )
-    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  # type: ignore
+    @with_timeout(getattr(settings, "TWS_REQUEST_TIMEOUT", 30.0))  
     async def get_performance_metrics(self) -> PerformanceData:
         """Retrieves TWS performance metrics."""
         cache_key = "performance_metrics"

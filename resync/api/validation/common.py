@@ -5,7 +5,7 @@ import re
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any, Pattern
+from typing import Any, Dict, List, Optional, Pattern, Union
 
 from pydantic import BaseModel, ConfigDict, Field, validator
 from pydantic.types import constr

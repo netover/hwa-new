@@ -2,6 +2,7 @@
 Gerenciador principal de idempotency refatorado.
 """
 
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from redis.asyncio import Redis

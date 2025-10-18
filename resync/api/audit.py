@@ -6,7 +6,6 @@ It handles audit data retrieval with proper pagination, filtering, and access co
 """
 
 # resync/api/audit.py
-import logging
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -18,9 +17,7 @@ from resync.api.dependencies import get_idempotency_manager, require_idempotency
 from resync.core.fastapi_di import get_audit_queue, get_knowledge_graph
 from resync.core.idempotency.manager import IdempotencyManager
 from resync.core.interfaces import IAuditQueue, IKnowledgeGraph
-from resync.core.logger import log_audit_event, log_with_correlation
-
-logger = logging.getLogger(__name__)
+from resync.core.logger import log_audit_event
 
 # Module-level dependencies to avoid B008 errors
 audit_queue_dependency = Depends(get_audit_queue)
@@ -61,70 +58,6 @@ class AuditRecordResponse(BaseModel):
     )
 
 
-class AuditLogger:
-    """Handle audit logging with proper structure and correlation."""
-
-    def __init__(self):
-        self.logger = logging.getLogger("audit")
-
-    def generate_audit_log(
-        self,
-        user_id: str,
-        action: AuditAction,
-        details: Dict[str, Any],
-        correlation_id: Optional[str] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-    ) -> AuditRecordResponse:
-        """
-        Generate an audit log entry with proper structure.
-
-        Args:
-            user_id: ID of the user performing the action
-            action: Type of action being audited
-            details: Additional details about the action
-            correlation_id: Correlation ID for tracking requests
-            ip_address: IP address of the requester
-            user_agent: User agent string of the requester
-
-        Returns:
-            AuditRecordResponse with the audit information
-        """
-        timestamp = datetime.utcnow().isoformat()
-        audit_id = f"audit_{timestamp}_{user_id[:8]}_{action}"
-
-        # Create the audit record
-        audit_record = AuditRecordResponse(
-            id=audit_id,
-            timestamp=timestamp,
-            user_id=user_id,
-            action=action,
-            details=details,
-            correlation_id=correlation_id,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        # Log the audit event with correlation
-        log_with_correlation(
-            logging.INFO,
-            f"Audit event: {action} by user {user_id}",
-            audit_id=audit_id,
-            user_id=user_id,
-            action=action,
-            details=details,
-            correlation_id=correlation_id,
-        )
-
-        # Also log to the audit-specific logger
-        self.logger.info(
-            f"AUDIT: {action} by {user_id} at {timestamp}",
-            extra={"audit_record": audit_record.dict()},
-        )
-
-        return audit_record
-
-
 def generate_audit_log(
     user_id: str,
     action: AuditAction,
@@ -147,10 +80,31 @@ def generate_audit_log(
     Returns:
         AuditRecordResponse with the audit information
     """
-    audit_logger = AuditLogger()
-    return audit_logger.generate_audit_log(
-        user_id, action, details, correlation_id, ip_address, user_agent
+    timestamp = datetime.utcnow().isoformat()
+    audit_id = f"audit_{timestamp}_{user_id[:8]}_{action}"
+
+    # Create the audit record
+    audit_record = AuditRecordResponse(
+        id=audit_id,
+        timestamp=timestamp,
+        user_id=user_id,
+        action=action,
+        details=details,
+        correlation_id=correlation_id,
+        ip_address=ip_address,
+        user_agent=user_agent,
     )
+
+    # Log the audit event using structlog
+    log_audit_event(
+        action=action,
+        user_id=user_id,
+        details=details,
+        correlation_id=correlation_id,
+        severity="INFO",
+    )
+
+    return audit_record
 
 
 class ReviewAction(BaseModel):

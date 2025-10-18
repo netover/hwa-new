@@ -196,11 +196,7 @@ def _sanitize_audit_details(details: dict[str, Any]) -> dict[str, Any]:
     }
 
     for key, value in details.items():
-        if isinstance(key, str) and any(
-            sensitive in key.lower() for sensitive in sensitive_fields
-        ):
-            sanitized[key] = "REDACTED"
-        elif isinstance(value, dict):
+        if isinstance(value, dict):
             # Recursively sanitize nested dictionaries
             sanitized[key] = _sanitize_audit_details(value)
         elif isinstance(key, str) and key.lower() in sensitive_fields:

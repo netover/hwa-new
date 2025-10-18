@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import Field, model_validator, validator
+from pydantic import Field, model_validator, validator, ConfigDict
 from pydantic.types import constr
 
 from .common import (

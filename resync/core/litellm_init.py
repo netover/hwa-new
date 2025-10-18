@@ -29,8 +29,8 @@ def initialize_litellm() -> Any:
     """
     try:
         # Import with type ignore for litellm-specific issues
-        from litellm import Router as LiteLLMRouter  # type: ignore
-        from litellm import completion_cost  # type: ignore
+        from litellm import Router as LiteLLMRouter  
+        from litellm import completion_cost  
 
         # Get configuration path
         config_path = Path(__file__).parent / "litellm_config.yaml"
@@ -93,7 +93,7 @@ def calculate_completion_cost(completion_response: Any) -> float:
         float: The cost of the completion in USD, or 0.0 if calculation fails
     """
     try:
-        from litellm import completion_cost  # type: ignore
+        from litellm import completion_cost  
 
         return completion_cost(completion_response=completion_response)
     except Exception as e:

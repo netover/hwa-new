@@ -82,7 +82,7 @@ class ValidationConfigModel(BaseModel):
         description="Paths to skip validation for",
     )
 
-    custom_validators: dict[str, dict[str, Any]] = Field(  # type: ignore[type-arg]
+    custom_validators: dict[str, dict[str, Any]] = Field(  [type-arg]
         default_factory=dict,
         description="Custom validator configurations",
         max_items=50,

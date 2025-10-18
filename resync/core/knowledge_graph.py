@@ -7,9 +7,21 @@ from neo4j import exceptions as neo4j_exceptions
 
 from resync.core.exceptions import KnowledgeGraphError
 from resync.core.structured_logger import get_logger
+from resync.core.circuit_breaker import CircuitBreaker
 from resync.settings import settings
 
 logger = get_logger(__name__)
+
+# Circuit breaker for Neo4j operations
+neo4j_circuit_breaker = CircuitBreaker(
+    failure_threshold=5,  # Open after 5 failures
+    recovery_timeout=120  # Try to recover after 2 minutes
+)
+
+# Circuit breaker statistics function
+def get_neo4j_circuit_breaker_stats():
+    """Get circuit breaker statistics for monitoring."""
+    return neo4j_circuit_breaker.get_stats()
 
 
 class AsyncKnowledgeGraph:

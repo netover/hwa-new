@@ -794,7 +794,7 @@ class EnhancedSecurityValidator:
         if HAS_PASSLIB:
             try:
                 # Try to hash with passlib
-                return pwd_context.hash(truncated_password)  # type: ignore[no-any-return]
+                return pwd_context.hash(truncated_password)  [no-any-return]
             except Exception as e:
                 # If passlib fails, fall back to simple approach
                 logger.warning(
@@ -833,7 +833,7 @@ class EnhancedSecurityValidator:
         # Handle secure hashes with passlib
         if HAS_PASSLIB:
             try:
-                return pwd_context.verify(truncated_password, hashed_password)  # type: ignore[no-any-return]
+                return pwd_context.verify(truncated_password, hashed_password)  [no-any-return]
             except Exception as e:
                 logger.warning(f"Password verification failed: {e}")
                 return False

@@ -86,6 +86,10 @@ class Settings(AgnoSettings):
         default=os.environ.get("REDIS_URL", "redis://localhost:6379"),
         description="Redis connection URL for audit queue and caching.",
     )
+    USE_REDIS_AUDIT_STREAMS: bool = Field(
+        default=os.environ.get("USE_REDIS_AUDIT_STREAMS", "false").lower() == "true",
+        description="Enable Redis Streams for audit queue instead of SQLite.",
+    )
 
     # --- TWS Environment Configuration ---
     TWS_MOCK_MODE: bool = Field(

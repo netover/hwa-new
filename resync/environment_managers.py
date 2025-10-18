@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Type, Dict, Any, Optional, override
 
 from .settings import Settings
-from .settings_validator import Environment
+from .settings_validator import Environment as ValidatedEnvironment
 from .settings_factory import SettingsFactory
 from .settings_observer import settings_monitor
 
@@ -19,7 +19,7 @@ from .settings_observer import settings_monitor
 class EnvironmentManager(ABC):
     """Abstract base class for environment managers."""
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings):  # type: ignore[reportMissingSuperCall]
         self.settings = settings
         self.logger = logging.getLogger(
             f"{self.__class__.__name__}.{settings.environment.value}"
@@ -48,13 +48,17 @@ class EnvironmentManager(ABC):
             "is_production": self.settings.is_production,
             "is_development": self.settings.is_development,
             "log_level": self.settings.log_level,
-            "debug_mode": self.settings.environment == Environment.DEVELOPMENT,
+            "debug_mode": self.settings.environment == ValidatedEnvironment.DEVELOPMENT,
         }
 
 
 class DevelopmentManager(EnvironmentManager):
     """Manager for development environment."""
 
+    def __init__(self, settings: Settings):
+        super().__init__(settings)
+
+    @override
     def setup_logging(self) -> None:
         """Setup development logging with debug level and console output."""
         logging.basicConfig(
@@ -78,6 +82,7 @@ class DevelopmentManager(EnvironmentManager):
 
         self.logger.info("Development logging configured")
 
+    @override
     def get_cache_config(self) -> Dict[str, Any]:
         """Get development-optimized cache configuration."""
         return {
@@ -90,6 +95,7 @@ class DevelopmentManager(EnvironmentManager):
             "enable_detailed_metrics": True,
         }
 
+    @override
     def get_connection_pool_config(self) -> Dict[str, Any]:
         """Get development connection pool configuration."""
         return {
@@ -102,13 +108,12 @@ class DevelopmentManager(EnvironmentManager):
             "enable_pool_metrics": True,
         }
 
+    @override
     def validate_environment_specific_settings(self) -> None:
         """Validate development-specific settings."""
-        # In development, we can be more lenient but still validate basics
-        if not self.settings.tws_mock_mode:
+        if not self.settings.tws_mock_mode:  # In development, we can be more lenient but still validate basics
             self.logger.warning(
-                "TWS mock mode is disabled in development. "
-                "Ensure TWS credentials are properly configured."
+                "TWS mock mode is disabled in development. Ensure TWS credentials are properly configured."
             )
 
         # Check for development-friendly settings
@@ -117,14 +122,17 @@ class DevelopmentManager(EnvironmentManager):
 
         if self.settings.admin_password in ["dev_password_123", "change_me_please"]:
             self.logger.warning(
-                "Using default/weak admin password in development. "
-                "Consider changing for security."
+                "Using default/weak admin password in development. Consider changing for security."
             )
 
 
 class ProductionManager(EnvironmentManager):
     """Manager for production environment."""
 
+    def __init__(self, settings: Settings):
+        super().__init__(settings)
+
+    @override
     def setup_logging(self) -> None:
         """Setup production logging with structured output."""
         # Configure JSON logging for production
@@ -155,6 +163,7 @@ class ProductionManager(EnvironmentManager):
 
         self.logger.info("Production logging configured")
 
+    @override
     def get_cache_config(self) -> Dict[str, Any]:
         """Get production-optimized cache configuration."""
         return {
@@ -169,6 +178,7 @@ class ProductionManager(EnvironmentManager):
             "enable_detailed_metrics": False,  # Reduce overhead in production
         }
 
+    @override
     def get_connection_pool_config(self) -> Dict[str, Any]:
         """Get production connection pool configuration."""
         return {
@@ -207,8 +217,7 @@ class ProductionManager(EnvironmentManager):
         """Validate TWS settings for production."""
         if self.settings.tws_mock_mode:
             self.logger.warning(
-                "TWS is running in mock mode in production. "
-                "Ensure this is intentional."
+                "TWS is running in mock mode in production. Ensure this is intentional."
             )
 
     def _validate_connection_settings(self) -> None:
@@ -225,6 +234,7 @@ class ProductionManager(EnvironmentManager):
         ):
             raise ValueError("Production Neo4j URI must be properly configured")
 
+    @override
     def validate_environment_specific_settings(self) -> None:
         """Validate production-specific settings."""
         # Call specialized validation methods
@@ -238,6 +248,10 @@ class ProductionManager(EnvironmentManager):
 class TestManager(EnvironmentManager):
     """Manager for test environment."""
 
+    def __init__(self, settings: Settings):
+        super().__init__(settings)
+
+    @override
     def setup_logging(self) -> None:
         """Setup test logging with minimal output."""
         logging.basicConfig(
@@ -251,6 +265,7 @@ class TestManager(EnvironmentManager):
 
         self.logger.info("Test logging configured")
 
+    @override
     def get_cache_config(self) -> Dict[str, Any]:
         """Get test-optimized cache configuration."""
         return {
@@ -263,6 +278,7 @@ class TestManager(EnvironmentManager):
             "enable_detailed_metrics": False,
         }
 
+    @override
     def get_connection_pool_config(self) -> Dict[str, Any]:
         """Get test connection pool configuration."""
         return {
@@ -275,6 +291,7 @@ class TestManager(EnvironmentManager):
             "enable_pool_metrics": False,
         }
 
+    @override
     def validate_environment_specific_settings(self) -> None:
         """Validate test-specific settings."""
         # Tests should use mock mode by default
@@ -286,8 +303,7 @@ class TestManager(EnvironmentManager):
             test_db_number = self.settings.redis_url.split("/")[-1]
             if test_db_number == "0":
                 self.logger.warning(
-                    "Tests should use dedicated Redis database (not 0) to "
-                    "avoid conflicts"
+                    "Tests should use dedicated Redis database (not 0) to avoid conflicts"
                 )
 
         if "localhost:7687" in self.settings.neo4j_uri:
@@ -297,22 +313,21 @@ class TestManager(EnvironmentManager):
 class EnvironmentManagerFactory:
     """Factory for creating environment managers."""
 
-    _managers = {
-        Environment.DEVELOPMENT: DevelopmentManager,
-        Environment.PRODUCTION: ProductionManager,
-        Environment.TEST: TestManager,
+    _managers: dict[ValidatedEnvironment, Type[EnvironmentManager]] = {
+        ValidatedEnvironment.DEVELOPMENT: DevelopmentManager,
+        ValidatedEnvironment.PRODUCTION: ProductionManager,
+        ValidatedEnvironment.TEST: TestManager,
     }
 
     @classmethod
     def create_manager(cls, settings: Settings) -> EnvironmentManager:
         """Create appropriate manager for the given settings."""
-        if settings.environment not in cls._managers:
-            raise ValueError(
-                f"Unsupported environment: {
-                    settings.environment}"
-            )
+        # Convert settings environment to validated environment
+        validated_env = ValidatedEnvironment(settings.environment.value)
+        if validated_env not in cls._managers:
+            raise ValueError(f"Unsupported environment: {validated_env.value}")
 
-        manager_class = cls._managers[settings.environment]
+        manager_class = cls._managers[validated_env]
         return manager_class(settings)
 
     @classmethod
@@ -344,7 +359,7 @@ class EnvironmentManagerFactory:
 class EnvironmentService:
     """Service for managing environment-specific operations."""
 
-    def __init__(self, settings: Optional[Settings] = None):
+    def __init__(self, settings: Optional[Settings] = None):  # type: ignore[reportMissingSuperCall]
         self.settings = settings or Settings()
         self.manager = EnvironmentManagerFactory.create_manager(self.settings)
         env_name = self.settings.environment.value
@@ -355,7 +370,7 @@ class EnvironmentService:
 
     def initialize_environment(self) -> None:
         """Initialize environment-specific configurations."""
-        self.logger.info("Initializing %s environment", self.settings.environment.value)
+        self.logger.info(f"Initializing {self.settings.environment.value} environment")
 
         # Setup logging
         self.manager.setup_logging()
@@ -365,7 +380,7 @@ class EnvironmentService:
 
         # Log environment info
         env_info = self.manager.get_environment_info()
-        self.logger.info("Environment info: %s", env_info)
+        self.logger.info(f"Environment info: {env_info}")
 
     def get_cache_config(self) -> Dict[str, Any]:
         """Get cache configuration for current environment."""
@@ -385,7 +400,7 @@ class EnvironmentService:
 
     def is_test(self) -> bool:
         """Check if running in test."""
-        return self.settings.environment == Environment.TEST
+        return self.settings.environment == ValidatedEnvironment.TEST
 
     def reload_settings(self, new_settings: Settings) -> None:
         """Reload settings and reinitialize environment."""

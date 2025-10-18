@@ -11,9 +11,18 @@ import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-from resync.core.security_dashboard import ComplianceReport
-from resync.core.soc2_compliance import SOC2ComplianceManager
 from resync.core.structured_logger import get_logger
+
+# Lazy imports to avoid circular dependency
+def _get_soc2_compliance_manager():
+    """Lazy import to avoid circular dependency."""
+    from resync.core.soc2_compliance_refactored import SOC2ComplianceManager
+    return SOC2ComplianceManager
+
+def _get_compliance_report():
+    """Lazy import to avoid circular dependency."""
+    from resync.core.security_dashboard import ComplianceReport
+    return ComplianceReport
 
 logger = get_logger(__name__)
 
@@ -33,7 +42,7 @@ class ComplianceReportGenerator:
     - Integration with existing compliance monitoring systems
     """
 
-    def __init__(self, soc2_manager: Optional[SOC2ComplianceManager] = None):
+    def __init__(self, soc2_manager=None):
         """
         Initialize the compliance report generator.
 
@@ -41,6 +50,8 @@ class ComplianceReportGenerator:
             soc2_manager: Optional SOC 2 compliance manager instance.
                          If not provided, uses the global instance.
         """
+        SOC2ComplianceManager = _get_soc2_compliance_manager()
+        ComplianceReport = _get_compliance_report()
         self.soc2_manager = soc2_manager or SOC2ComplianceManager()
         self._report_cache: Dict[str, ComplianceReport] = {}
 
@@ -82,6 +93,7 @@ class ComplianceReportGenerator:
         soc2_data = self.soc2_manager.generate_compliance_report()
 
         # Create the compliance report
+        ComplianceReport = _get_compliance_report()
         report = ComplianceReport(
             report_id=report_id,
             report_type="soc2_compliance",
@@ -140,6 +152,7 @@ class ComplianceReportGenerator:
         gdpr_data = self._collect_gdpr_data(start_date, end_date)
 
         # Create the compliance report
+        ComplianceReport = _get_compliance_report()
         report = ComplianceReport(
             report_id=report_id,
             report_type="gdpr_compliance",

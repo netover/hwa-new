@@ -73,6 +73,81 @@ Comprehensive security hardening including:
 - **Cryptography**: Secure password hashing and token generation
 - **Audit Logging**: Complete audit trail for security events
 
+## 📊 Logging & Observability
+
+### Sistema de Logs Estruturados
+
+A aplicação utiliza um sistema avançado de logging estruturado com as seguintes características:
+
+#### 📁 Arquivos de Log Gerados
+
+**Estrutura de Diretórios:**
+```
+logs/
+├── resync.log                    # Log principal (atual)
+├── YYYYMMDD/                     # Diretório com data
+│   └── resync.log               # Arquivo histórico
+```
+
+**Localização Atual:**
+- **Diretório principal:** `logs/` (relativo à raiz do projeto)
+- **Arquivo atual:** `logs/resync.log` (na raiz do diretório logs)
+- **Arquivo histórico:** `logs/YYYYMMDD/resync.log` (diretório com data)
+
+#### 🔄 Sistema de Log Rotate
+
+**Configuração (RotatingFileHandler):**
+```python
+# resync/core/logger.py - linha 58-60
+file_handler = RotatingFileHandler(
+    log_dir / "resync.log",
+    maxBytes=10 * 1024 * 1024,  # 10MB por arquivo
+    backupCount=5               # Máximo 5 arquivos de backup
+)
+```
+
+**Como Funciona:**
+1. **Limite de tamanho:** Cada arquivo de log pode ter no máximo **10MB**
+2. **Número de backups:** Mantém até **5 arquivos de backup**
+3. **Rotação automática:** Quando o arquivo atual atinge 10MB, é automaticamente rotacionado
+4. **Nomenclatura:** Arquivos rotacionados seguem padrão `resync.log.1`, `resync.log.2`, etc.
+5. **Organização por data:** Logs são organizados em diretórios `YYYYMMDD` para fácil localização histórica
+
+#### 📊 Formato dos Logs
+
+**Exemplo de Log Estruturado (JSON):**
+```json
+{
+  "timestamp": "2025-10-15T12:58:38.123456+00:00",
+  "level": "info",
+  "logger": "resync.app_factory",
+  "message": "application_startup_completed",
+  "component": "main",
+  "correlation_id": null,
+  "event": "LOG_EVENT"
+}
+```
+
+#### ⚙️ Configuração de Logging
+
+**Inicialização:**
+- **Setup automático:** O logging é configurado automaticamente quando o módulo `environment_managers.py` é importado
+- **Ambiente específico:** Cada ambiente (development, production, test) pode ter configurações diferentes
+- **Nível configurável:** Via variável de ambiente `LOG_LEVEL` (padrão: INFO)
+
+**Componentes:**
+- **Structlog:** Para logs estruturados em JSON
+- **RotatingFileHandler:** Para rotação automática de arquivos
+- **Console Handler:** Saída simultânea no console/stdout
+
+**Características Técnicas:**
+- ✅ **Formato JSON:** Logs estruturados para fácil análise e monitoramento
+- ✅ **Correlation IDs:** Rastreamento de requests através de IDs únicos
+- ✅ **Rotação automática:** Gerenciamento inteligente de espaço em disco
+- ✅ **Organização temporal:** Logs organizados por data para fácil localização
+- ✅ **Métricas integradas:** Performance e métricas incluídas nos logs
+- ✅ **Sanitização de dados:** Dados sensíveis são automaticamente mascarados
+
 ### Configuration
 
 Performance and security settings are centralized in:

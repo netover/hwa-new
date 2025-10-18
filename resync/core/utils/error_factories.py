@@ -31,7 +31,21 @@ from resync.models.error_models import (
     SystemErrorResponse,
     ValidationErrorResponse,
 )
-from resync.core.utils.error_utils import ErrorResponseBuilder, generate_correlation_id, should_include_stack_trace
+# Lazy imports to avoid circular dependency
+def _get_error_response_builder():
+    """Lazy import to avoid circular dependency."""
+    from resync.core.utils.error_utils import ErrorResponseBuilder
+    return ErrorResponseBuilder
+
+def _get_generate_correlation_id():
+    """Lazy import to avoid circular dependency."""
+    from resync.core.utils.error_utils import generate_correlation_id
+    return generate_correlation_id
+
+def _get_should_include_stack_trace():
+    """Lazy import to avoid circular dependency."""
+    from resync.core.utils.error_utils import should_include_stack_trace
+    return should_include_stack_trace
 
 
 class ErrorFactory:
@@ -44,12 +58,14 @@ class ErrorFactory:
         correlation_id: Optional[str] = None,
     ) -> BaseErrorResponse:
         """Factory method to create appropriate error response based on exception type."""
+        ErrorResponseBuilder = _get_error_response_builder()
         builder = ErrorResponseBuilder()
         
         # Set correlation ID
         if correlation_id:
             builder.with_correlation_id(correlation_id)
         else:
+            generate_correlation_id = _get_generate_correlation_id()
             builder.with_correlation_id(generate_correlation_id())
         
         # Set request context
@@ -58,7 +74,8 @@ class ErrorFactory:
         
         # Enhanced security: only include stack traces in non-production environments
         is_production = getattr(request.state, "app_env", "development") == "production" if request else "production"
-        include_stack_trace = should_include_stack_trace() and not is_production
+        should_include_stack_trace_func = _get_should_include_stack_trace()
+        include_stack_trace = should_include_stack_trace_func() and not is_production
         
         # In production, sanitize error messages to prevent information disclosure
         if is_production:
@@ -88,8 +105,8 @@ class EnhancedResyncExceptionFactory:
     
     @staticmethod
     def create_response(
-        builder: ErrorResponseBuilder, 
-        exception: EnhancedResyncException, 
+        builder, # ErrorResponseBuilder
+        exception: EnhancedResyncException,
         is_production: bool
     ) -> BaseErrorResponse:
         """Create response for enhanced Resync exceptions."""
@@ -160,8 +177,8 @@ class TWSConnectionExceptionFactory:
     
     @staticmethod
     def create_response(
-        builder: ErrorResponseBuilder, 
-        exception: Exception, 
+        builder, # ErrorResponseBuilder
+        exception: Exception,
         is_production: bool
     ) -> BaseErrorResponse:
         """Create response for TWS connection exceptions."""
@@ -173,8 +190,8 @@ class LLMExceptionFactory:
     
     @staticmethod
     def create_response(
-        builder: ErrorResponseBuilder, 
-        exception: Exception, 
+        builder, # ErrorResponseBuilder
+        exception: Exception,
         is_production: bool
     ) -> BaseErrorResponse:
         """Create response for LLM exceptions."""
@@ -186,8 +203,8 @@ class DatabaseExceptionFactory:
     
     @staticmethod
     def create_response(
-        builder: ErrorResponseBuilder, 
-        exception: Exception, 
+        builder, # ErrorResponseBuilder
+        exception: Exception,
         is_production: bool
     ) -> BaseErrorResponse:
         """Create response for database exceptions."""
@@ -199,8 +216,8 @@ class NotFoundExceptionHandler:
     
     @staticmethod
     def create_response(
-        builder: ErrorResponseBuilder, 
-        exception: Exception, 
+        builder, # ErrorResponseBuilder
+        exception: Exception,
         is_production: bool
     ) -> BaseErrorResponse:
         """Create response for not found exceptions."""
@@ -212,8 +229,8 @@ class BaseResyncExceptionFactory:
     
     @staticmethod
     def create_response(
-        builder: ErrorResponseBuilder, 
-        exception: BaseResyncException, 
+        builder, # ErrorResponseBuilder
+        exception: BaseResyncException,
         is_production: bool
     ) -> BaseErrorResponse:
         """Create response for base Resync exceptions."""
@@ -227,8 +244,8 @@ class UnknownExceptionFactory:
     
     @staticmethod
     def create_response(
-        builder: ErrorResponseBuilder, 
-        exception: Exception, 
+        builder, # ErrorResponseBuilder
+        exception: Exception,
         is_production: bool
     ) -> BaseErrorResponse:
         """Create response for unknown exceptions."""
@@ -238,7 +255,7 @@ class UnknownExceptionFactory:
 
 
 def _handle_business_logic_exception(
-    builder: ErrorResponseBuilder,
+    builder, # ErrorResponseBuilder
     exception: Exception,
     message: str,
     user_friendly_message: str,

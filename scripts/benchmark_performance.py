@@ -348,9 +348,9 @@ class PerformanceBenchmark:
                 
                 else:
                     # For .txt files, create plain text
-                content = f"Test content for file {i} of type {file_type}\n" * 1000
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(content)
+                    content = f"Test content for file {i} of type {file_type}\n" * 1000
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(content)
     
     async def benchmark_json_parsing(self) -> Dict[str, Any]:
         """Benchmark JSON parsing performance with orjson."""

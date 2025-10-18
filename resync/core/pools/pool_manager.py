@@ -81,7 +81,7 @@ class ConnectionPoolManager:
     """Central manager for all connection pools."""
 
     def __init__(self) -> None:
-        self.pools: Dict[str, ConnectionPool] = {}  # type: ignore[type-arg]
+        self.pools: Dict[str, ConnectionPool] = {}  [type-arg]
         self._initialized = False
         self._shutdown = False
         self._lock = asyncio.Lock()
@@ -186,7 +186,7 @@ class ConnectionPoolManager:
                     f"Failed to initialize connection pool manager: {e}"
                 ) from e
 
-    async def get_pool(self, pool_name: str) -> Optional[ConnectionPool]:  # type: ignore[type-arg]
+    async def get_pool(self, pool_name: str) -> Optional[ConnectionPool]:
         """Get a specific connection pool by name."""
         return self.pools.get(pool_name)
 

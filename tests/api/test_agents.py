@@ -1,56 +1,61 @@
-from unittest.mock import AsyncMock, patch
+from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-from resync.core.agent_manager import AgentConfig
+from resync.api.models.agents import AgentConfig, AgentType
 from resync.core.fastapi_di import get_agent_manager
 
 # --- Sample Data for Mocking ---
 sample_agent_config_1 = AgentConfig(
     id="test-agent-1",
     name="Test Agent 1",
-    agent_type="chat",
+    agent_type=AgentType.CHAT,
     role="Tester",
     goal="To be tested",
     backstory="Born in a test",
     tools=["tws_status_tool"],
     model_name="test-model",
+    max_rpm=60,
 )
 
 sample_agent_config_2 = AgentConfig(
     id="test-agent-2",
     name="Test Agent 2",
-    agent_type="task",
+    agent_type=AgentType.TASK,
     role="Another Tester",
     goal="To also be tested",
     backstory="Born in another test",
     tools=["tws_troubleshooting_tool"],
     model_name="test-model-2",
+    max_rpm=30,
 )
 
 
 @pytest.fixture
-def client(mock_agent_manager):
+def client(mock_agent_manager: AsyncMock) -> TestClient:
     """Create a TestClient for the FastAPI app."""
     from resync.api.agents import agents_router
+    from resync.api.exception_handlers import register_exception_handlers
     from fastapi import FastAPI
 
     app = FastAPI()
     app.include_router(agents_router, prefix="/api/v1/agents")
     app.dependency_overrides[get_agent_manager] = lambda: mock_agent_manager
+    register_exception_handlers(app)
     return TestClient(app)
 
 
 @pytest.fixture
-def mock_agent_manager():
+def mock_agent_manager() -> AsyncMock:
     """
     Fixture to provide a mock agent manager.
     """
     return AsyncMock()
 
 
-def test_list_all_agents_success(client, mock_agent_manager):
+def test_list_all_agents_success(client: TestClient, mock_agent_manager: AsyncMock) -> None:
     """
     Tests GET /api/v1/agents/ - successful retrieval of all agent configs.
     """
@@ -65,13 +70,13 @@ def test_list_all_agents_success(client, mock_agent_manager):
 
     # Assert: Check the response
     assert response.status_code == 200
-    response_data = response.json()
+    response_data: list[dict[str, Any]] = response.json()
     assert len(response_data) == 2
     assert response_data[0]["id"] == "test-agent-1"
     assert response_data[1]["id"] == "test-agent-2"
 
 
-def test_get_agent_details_success(client, mock_agent_manager):
+def test_get_agent_details_success(client: TestClient, mock_agent_manager: AsyncMock) -> None:
     """
     Tests GET /api/v1/agents/{agent_id} - successful retrieval of a single agent.
     """
@@ -87,7 +92,7 @@ def test_get_agent_details_success(client, mock_agent_manager):
     mock_agent_manager.get_agent_config.assert_called_once_with("test-agent-1")
 
 
-def test_get_agent_details_not_found(client, mock_agent_manager):
+def test_get_agent_details_not_found(client: TestClient, mock_agent_manager: AsyncMock) -> None:
     """
     Tests GET /api/v1/agents/{agent_id} - when the agent is not found.
     Should return 404 with standardized error response format.
@@ -100,18 +105,16 @@ def test_get_agent_details_not_found(client, mock_agent_manager):
 
     # Assert: Should return 404 Not Found with proper error format
     assert response.status_code == 404
-    response_data = response.json()
+    response_data: dict[str, Any] = response.json()
 
-    # Assert the custom error response format
-    assert "error_code" in response_data
-    assert "message" in response_data
-    assert "correlation_id" in response_data
-    assert "timestamp" in response_data
-    assert "severity" in response_data
-    assert "category" in response_data
+    # Assert the problem detail response format (RFC 7807)
+    assert "detail" in response_data
+    assert "status" in response_data
+    assert "title" in response_data
+    assert "instance" in response_data
+    assert "type" in response_data
 
     # Check specific values for the NotFoundError
-    assert response_data["error_code"] == "RESOURCE_NOT_FOUND"
-    assert "not found" in response_data["message"].lower()
-    assert response_data["category"] == "BUSINESS_LOGIC"
-    assert response_data["severity"] == "MEDIUM"
+    assert response_data["status"] == 404
+    assert "not found" in response_data["detail"].lower()
+    assert response_data["title"] == "Not Found Error"

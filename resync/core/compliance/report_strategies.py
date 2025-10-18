@@ -10,7 +10,7 @@ from typing import Dict, Any
 from collections import defaultdict
 from enum import Enum
 
-from resync.core.soc2_compliance import SOC2ComplianceManager, SOC2TrustServiceCriteria
+from resync.core.soc2_compliance_refactored import SOC2ComplianceManager, SOC2TrustServiceCriteria
 
 
 class ReportStrategy:
@@ -179,11 +179,14 @@ class ConfidentialityIncidentsSummaryStrategy(ReportStrategy):
 
 class RecommendationsStrategy(ReportStrategy):
     """Strategy for generating recommendations."""
-    
-    def execute(self, manager: SOC2ComplianceManager) -> list:
+
+    def execute(self, manager: SOC2ComplianceManager, report: Dict[str, Any] = None) -> list:
         """Generate recommendations based on compliance report."""
         # Reuse the existing _generate_recommendations method
-        return manager._generate_recommendations({})  # Will be populated by the main method
+        # If report is provided, use it; otherwise create a basic structure
+        if report is None:
+            report = {"overall_compliance_score": 0.0}
+        return manager._generate_recommendations(report)
 
 
 class ReportGenerator:

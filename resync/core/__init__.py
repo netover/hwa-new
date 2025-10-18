@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 from .async_cache import AsyncTTLCache
 from .config_watcher import handle_config_change
 from .metrics import runtime_metrics
-from .soc2_compliance_refactored import SOC2ComplianceManager, soc2_compliance_manager, get_soc2_compliance_manager
+# SOC2 Compliance - import available but commented to avoid circular imports
+# Use direct import when needed: from resync.core.soc2_compliance_refactored import SOC2ComplianceManager
+# from .soc2_compliance_refactored import SOC2ComplianceManager, soc2_compliance_manager, get_soc2_compliance_manager
 
 
 # --- Core Component Boot Manager ---

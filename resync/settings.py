@@ -1,4 +1,5 @@
-"""Application settings and configuration management.
+"""
+Application settings and configuration management.
 
 This module defines all application settings using Pydantic BaseSettings,
 providing centralized configuration management with environment variable
@@ -85,12 +86,12 @@ class Settings(BaseSettings):
     project_version: str = Field(
         default="1.0.0",
         pattern=r"^\d+\.\d+\.\d+$",
-        description="Versão do projeto (semver)",
+        description="Versão do projeto (semver)"
     )
 
     description: str = Field(
         default="Real-time monitoring dashboard for HCL Workload Automation",
-        description="Descrição do projeto",
+        description="Descrição do projeto"
     )
 
     base_dir: Path = Field(
@@ -106,13 +107,13 @@ class Settings(BaseSettings):
     # ============================================================================
 
     neo4j_uri: str = Field(
-        default="bolt://localhost:7687", description="URI de conexão Neo4j"
+    default="neo4j://127.0.0.1:7687", description="URI de conexão Neo4j"
     )
 
     neo4j_user: str = Field(default="neo4j", min_length=1, description="Usuário Neo4j")
 
     neo4j_password: str = Field(
-        default="password", min_length=1, description="Senha Neo4j"
+    default="12345678", min_length=1, description="Senha Neo4j"
     )
 
     # Connection Pool - Neo4j
@@ -150,7 +151,7 @@ class Settings(BaseSettings):
     redis_startup_lock_timeout: int = Field(
         default=30,
         ge=5,
-        description="Timeout for distributed Redis initialization lock",
+        description="Timeout for distributed Redis initialization lock"
     )
     redis_health_check_interval: int = Field(
         default=5, ge=1, description="Interval for Redis connection health checks"
@@ -182,7 +183,7 @@ class Settings(BaseSettings):
 
     llm_endpoint: str = Field(
         default="https://openrouter.ai/api/v1",
-        description="Endpoint da API LLM (OpenRouter)",
+        description="Endpoint da API LLM (OpenRouter)"
     )
 
     llm_api_key: str = Field(
@@ -190,7 +191,7 @@ class Settings(BaseSettings):
             "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"
         ),
         min_length=1,
-        description="Chave de API do LLM (OpenRouter)",
+        description="Chave de API do LLM (OpenRouter)"
     )
 
     llm_timeout: float = Field(
@@ -235,12 +236,12 @@ class Settings(BaseSettings):
 
     tws_host: str | None = Field(default=None)
     tws_port: int | None = Field(default=None, ge=1, le=65535)
-    tws_user: str | None = Field(  # type: ignore[call-overload]
+    tws_user: str | None = Field(
         default=None,
         env="TWS_USER",
-        description="Usuário do TWS (obrigatório se não estiver em modo mock)",
+        description="Usuário do TWS (obrigatório se não estiver em modo mock)"
     )
-    tws_password: str | None = Field(  # type: ignore[call-overload]
+    tws_password: str | None = Field(
         default=None,
         env="TWS_PASSWORD",
         description="Senha do TWS (obrigatório se não estiver em modo mock)",
@@ -321,15 +322,29 @@ class Settings(BaseSettings):
         description="Protected directories that should not be modified",
     )
 
-    @property
-    def is_production(self) -> bool:
-        """Verifica se está em produção."""
-        return self.environment == Environment.PRODUCTION
+    # ============================================================================
+    # RAG MICROSERVICE CONFIGURATION
+    # ============================================================================
 
-    @property
-    def is_development(self) -> bool:
-        """Verifica se está em desenvolvimento."""
-        return self.environment == Environment.DEVELOPMENT
+    rag_service_url: str = Field(
+    default="http://localhost:8003",
+        description="URL base do microserviço RAG (ex: http://rag-service:8000)"
+    )
+
+    rag_service_timeout: int = Field(
+        default=300,
+        description="Timeout para requisições ao microserviço RAG (segundos)"
+    )
+
+    rag_service_max_retries: int = Field(
+        default=3,
+        description="Número máximo de tentativas para requisições ao microserviço RAG"
+    )
+
+    rag_service_retry_backoff: float = Field(
+        default=1.0,
+        description="Fator de backoff exponencial para tentativas de requisição ao microserviço RAG"
+    )
 
     # ============================================================================
     # BACKWARD COMPATIBILITY PROPERTIES
@@ -696,7 +711,7 @@ class Settings(BaseSettings):
     def validate_tws_credentials(
         cls, v: str | None, info: ValidationInfo
     ) -> str | None:
-        """Valida credenciais TWS quando não está em modo mock."""
+        """Valida credenciais TWS quando não está em mock mode."""
         if info.field_name == "tws_password" and v:
             # Validar força da senha em produção
             env = info.data.get("environment")
@@ -734,4 +749,16 @@ settings = Settings()
 
 def get_settings() -> Settings:
     """Factory para obter settings (útil para dependency injection)."""
+    return settings
+
+
+def load_settings() -> Settings:
+    """Load application settings.
+
+    This function provides backward compatibility for code that expects
+    a load_settings function. It returns the global settings instance.
+
+    Returns:
+        Settings: The global settings instance
+    """
     return settings

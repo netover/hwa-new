@@ -1,3 +1,4 @@
+
 """
 Resync Application Main Entry Point.
 
@@ -25,7 +26,7 @@ import sys
 
 import structlog
 
-from resync.app_factory import create_app
+from resync.api.routes import api
 from resync.core.encoding_utils import symbol
 from resync.core.exceptions import ConfigurationError
 
@@ -110,7 +111,7 @@ if __name__ != "__main__":
         settings = validate_configuration_on_startup()
 
 # Create the FastAPI application
-app = create_app()
+from resync.fastapi_app.main import app
 
 if __name__ == "__main__":
     import uvicorn

@@ -28,6 +28,7 @@ from resync.core.exceptions import (
     ResourceNotFoundError,
     ValidationError,
 )
+from resync.core.exceptions_enhanced import ResyncException
 from resync.core.structured_logger import get_logger
 
 logger = get_logger(__name__)
@@ -41,7 +42,7 @@ logger = get_logger(__name__)
 async def base_app_exception_handler(
     request: Request, exc: BaseAppException
 ) -> JSONResponse:
-    """Handler para exceções da aplicação.
+    """Handler para exceções da aplicação (BaseAppException).
 
     Args:
         request: Requisição HTTP
@@ -62,7 +63,13 @@ async def base_app_exception_handler(
     )
 
     # Criar problem detail
-    problem = create_problem_detail(exception=exc, instance=str(request.url.path))
+    problem = create_problem_detail(
+        type_uri=f"https://api.example.com/errors/{exc.error_code.value.lower()}",
+        title=exc.error_code.name.replace('_', ' ').title(),
+        status=exc.status_code,
+        detail=exc.message,
+        instance=str(request.url.path)
+    )
 
     # Adicionar headers específicos
     headers = {}
@@ -77,6 +84,64 @@ async def base_app_exception_handler(
 
     return JSONResponse(
         status_code=exc.status_code,
+        content=problem.model_dump(exclude_none=True),
+        headers=headers,
+    )
+
+
+async def resync_exception_handler(
+    request: Request, exc: ResyncException
+) -> JSONResponse:
+    """Handler para exceções ResyncException.
+
+    Args:
+        request: Requisição HTTP
+        exc: Exceção ResyncException
+
+    Returns:
+        JSONResponse com problema detalhado
+    """
+    correlation_id = get_correlation_id()
+
+    # Logar exceção
+    logger.error(
+        f"Resync exception: {exc.message}",
+        error_code=exc.error_code,
+        severity=exc.severity,
+        correlation_id=correlation_id,
+        path=request.url.path,
+        method=request.method,
+        exc_info=exc.original_exception is not None,
+    )
+
+    # Mapear severity para status code
+    status_mapping = {
+        "low": 400,
+        "LOW": 400,
+        "medium": 404,
+        "MEDIUM": 404,
+        "high": 422,
+        "HIGH": 422,
+        "critical": 500,
+        "CRITICAL": 500,
+    }
+    status_code = status_mapping.get(exc.severity, 500)
+
+    # Criar problem detail
+    problem = create_problem_detail(
+        type_uri=f"https://api.example.com/errors/{exc.error_code.lower()}",
+        title=exc.error_code.replace('_', ' ').title(),
+        status=status_code,
+        detail=exc.user_friendly_message or exc.message,
+        instance=str(request.url.path)
+    )
+
+    headers = {}
+    if correlation_id:
+        headers["X-Correlation-ID"] = correlation_id
+
+    return JSONResponse(
+        status_code=status_code,
         content=problem.model_dump(exclude_none=True),
         headers=headers,
     )
@@ -188,7 +253,13 @@ async def http_exception_handler(
         )
 
     # Criar problem detail
-    problem = create_problem_detail(exception=app_exc, instance=str(request.url.path))
+    problem = create_problem_detail(
+        type_uri=f"https://httpstatuses.com/{exc.status_code}",
+        title="HTTP Exception",
+        status=exc.status_code,
+        detail=str(exc.detail),
+        instance=str(request.url.path)
+    )
 
     headers = {}
     if correlation_id:
@@ -201,7 +272,9 @@ async def http_exception_handler(
     )
 
 
-async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+async def unhandled_exception_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
     """Handler para exceções não tratadas.
 
     Args:
@@ -231,8 +304,14 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         original_exception=exc,
     )
 
-    # Criar problem detail
-    problem = create_problem_detail(exception=app_exc, instance=str(request.url.path))
+    # Criar problem detail - CORRIGIDO: Não usar exc.status_code ou exc.detail pois Exception não tem esses atributos
+    problem = create_problem_detail(
+        type_uri="https://httpstatuses.com/500",
+        title="Internal Server Error",
+        status=500,
+        detail="An unexpected error occurred",
+        instance=str(request.url.path)
+    )
 
     headers = {}
     if correlation_id:
@@ -256,8 +335,11 @@ def register_exception_handlers(app) -> None:
     Args:
         app: Instância da aplicação FastAPI
     """
-    # Exceções da aplicação
+    # Exceções da aplicação (BaseAppException)
     app.add_exception_handler(BaseAppException, base_app_exception_handler)
+
+    # Exceções ResyncException (enhanced exceptions)
+    app.add_exception_handler(ResyncException, resync_exception_handler)
 
     # Exceções de validação
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
@@ -274,6 +356,7 @@ def register_exception_handlers(app) -> None:
 
 __all__ = [
     "base_app_exception_handler",
+    "resync_exception_handler",
     "validation_exception_handler",
     "http_exception_handler",
     "unhandled_exception_handler",

@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import EmailStr, Field, validator
+from pydantic import EmailStr, Field, validator, ConfigDict
 from pydantic.types import constr
 
 from .common import BaseValidatedModel

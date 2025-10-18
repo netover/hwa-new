@@ -1,24 +1,24 @@
 """
-API Gateway core components - routing, authentication, and cross-cutting concerns.  # type: ignore
+API Gateway core components - routing, authentication, and cross-cutting concerns.  
 """
 
-from __future__ import annotations  # type: ignore
+from __future__ import annotations  
 
-import logging  # type: ignore
-from typing import Any, Awaitable, Callable, Optional  # type: ignore
+import logging  
+from typing import Any, Awaitable, Callable, Optional  
 
-from fastapi import HTTPException, Request, Response  # type: ignore
-from fastapi.responses import JSONResponse  # type: ignore
+from fastapi import HTTPException, Request, Response  
+from fastapi.responses import JSONResponse  
 
-from resync.core.audit_log import get_audit_log_manager  # type: ignore[attr-defined]
-from resync.core.logger import log_with_correlation  # type: ignore[attr-defined]
-from resync.core.metrics import runtime_metrics  # type: ignore[attr-defined]
-from resync.core.rate_limiter import (  # type: ignore[attr-defined]
+from resync.core.audit_log import get_audit_log_manager  [attr-defined]
+from resync.core.logger import log_with_correlation  [attr-defined]
+from resync.core.metrics import runtime_metrics  [attr-defined]
+from resync.core.rate_limiter import (  [attr-defined]
     authenticated_rate_limit,
     public_rate_limit,
 )
 
-# from resync.core.security import validate_api_key  # type: ignore[attr-defined]
+# from resync.core.security import validate_api_key  [attr-defined]
 
 
 # Get audit log manager instance
@@ -47,234 +47,234 @@ def validate_api_key(token: str) -> bool:
     return token.startswith("sk-") or token.startswith("pk-")
 
 
-logger = logging.getLogger(__name__)  # type: ignore
+logger = logging.getLogger(__name__)  
 
 
-class APIRouter:  # type: ignore
+class APIRouter:  
     """
-    Enhanced API router that handles routing with built-in cross-cutting concerns.  # type: ignore
+    Enhanced API router that handles routing with built-in cross-cutting concerns.  
     """
 
-    def __init__(self) -> None:  # type: ignore
-        self.routes: dict[str, Any] = {}  # type: ignore
-        self.middlewares: list[Any] = []  # type: ignore
+    def __init__(self) -> None:  
+        self.routes: dict[str, Any] = {}  
+        self.middlewares: list[Any] = []  
 
     def add_route(
         self,
         path: str,
         handler: Callable,
-        methods: list[str] = ["GET"],  # type: ignore
+        methods: list[str] = ["GET"],  
         auth_required: bool = False,
         rate_limit: bool = True,
-    ) -> None:  # type: ignore
-        """Add a route with associated metadata."""  # type: ignore
-        self.routes[path] = {  # type: ignore
-            "handler": handler,  # type: ignore
-            "methods": methods,  # type: ignore
-            "auth_required": auth_required,  # type: ignore
-            "rate_limit": rate_limit,  # type: ignore
+    ) -> None:  
+        """Add a route with associated metadata."""  
+        self.routes[path] = {  
+            "handler": handler,  
+            "methods": methods,  
+            "auth_required": auth_required,  
+            "rate_limit": rate_limit,  
         }
 
-    async def handle_request(self, request: Request) -> Response:  # type: ignore
-        """Handle an incoming request, applying cross-cutting concerns."""  # type: ignore
-        path = request.url.path  # type: ignore
-        method = request.method  # type: ignore
+    async def handle_request(self, request: Request) -> Response:  
+        """Handle an incoming request, applying cross-cutting concerns."""  
+        path = request.url.path  
+        method = request.method  
 
         # Log incoming request
-        log_with_correlation(  # type: ignore
-            logging.INFO,  # type: ignore
+        log_with_correlation(  
+            logging.INFO,  
             f"Processing {method} request to {path}",
-            component="api_gateway",  # type: ignore
-            request_id=request.headers.get("x-request-id", "unknown"),  # type: ignore
+            component="api_gateway",  
+            request_id=request.headers.get("x-request-id", "unknown"),  
         )
 
         # Find matching route
-        if path not in self.routes:  # type: ignore
-            raise HTTPException(status_code=404, detail="Route not found")  # type: ignore
+        if path not in self.routes:  
+            raise HTTPException(status_code=404, detail="Route not found")  
 
-        route_info = self.routes[path]  # type: ignore
-        if method not in route_info["methods"]:  # type: ignore
-            raise HTTPException(status_code=405, detail="Method not allowed")  # type: ignore
+        route_info = self.routes[path]  
+        if method not in route_info["methods"]:  
+            raise HTTPException(status_code=405, detail="Method not allowed")  
 
         # Apply authentication if required
-        if route_info["auth_required"]:  # type: ignore
-            auth_header = request.headers.get("Authorization")  # type: ignore
-            if not auth_header or not auth_header.startswith("Bearer "):  # type: ignore
-                raise HTTPException(  # type: ignore
-                    status_code=401,  # type: ignore
-                    detail="Authorization token required",  # type: ignore
+        if route_info["auth_required"]:  
+            auth_header = request.headers.get("Authorization")  
+            if not auth_header or not auth_header.startswith("Bearer "):  
+                raise HTTPException(  
+                    status_code=401,  
+                    detail="Authorization token required",  
                 )
 
-            token = auth_header.split(" ")[1]  # type: ignore
-            if not validate_api_key(token):  # type: ignore
-                raise HTTPException(  # type: ignore
-                    status_code=401,  # type: ignore
-                    detail="Invalid or expired token",  # type: ignore
+            token = auth_header.split(" ")[1]  
+            if not validate_api_key(token):  
+                raise HTTPException(  
+                    status_code=401,  
+                    detail="Invalid or expired token",  
                 )
 
         # Apply rate limiting if required
-        if route_info["rate_limit"]:  # type: ignore
+        if route_info["rate_limit"]:  
             # In a real implementation, this would use the actual rate limiter
             # For now, we're just adding a placeholder
             pass
 
         # Execute the route handler
-        try:  # type: ignore
-            result = await route_info["handler"](request)  # type: ignore
-            return JSONResponse(content=result)  # type: ignore
-        except Exception as e:  # type: ignore
+        try:  
+            result = await route_info["handler"](request)  
+            return JSONResponse(content=result)  
+        except Exception as e:  
             # Log the error
-            log_with_correlation(  # type: ignore
-                logging.ERROR,  # type: ignore
-                f"Error processing request to {path}: {str(e)}",  # type: ignore
-                component="api_gateway",  # type: ignore
-                request_id=request.headers.get("x-request-id", "unknown"),  # type: ignore
+            log_with_correlation(  
+                logging.ERROR,  
+                f"Error processing request to {path}: {str(e)}",  
+                component="api_gateway",  
+                request_id=request.headers.get("x-request-id", "unknown"),  
             )
 
             # Increment error counter
-            runtime_metrics.api_errors_total.increment()  # type: ignore
+            runtime_metrics.api_errors_total.increment()  
 
             # Re-raise the exception to be handled by FastAPI
             raise
 
 
-class AuthenticationMiddleware:  # type: ignore
-    """Middleware to handle authentication uniformly."""  # type: ignore
+class AuthenticationMiddleware:  
+    """Middleware to handle authentication uniformly."""  
 
-    def __init__(self, auth_required_paths: Optional[dict[str, bool]] = None) -> None:  # type: ignore
-        self.auth_required_paths = auth_required_paths or {}  # type: ignore
+    def __init__(self, auth_required_paths: Optional[dict[str, bool]] = None) -> None:  
+        self.auth_required_paths = auth_required_paths or {}  
 
-    async def __call__(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:  # type: ignore
+    async def __call__(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:  
         # Check if the path requires authentication
-        path = request.url.path  # type: ignore
-        if self.auth_required_paths.get(path, False):  # type: ignore
-            auth_header = request.headers.get("Authorization")  # type: ignore
-            if not auth_header or not auth_header.startswith("Bearer "):  # type: ignore
-                return JSONResponse(  # type: ignore
-                    status_code=401,  # type: ignore
-                    content={"detail": "Authorization token required"},  # type: ignore
+        path = request.url.path  
+        if self.auth_required_paths.get(path, False):  
+            auth_header = request.headers.get("Authorization")  
+            if not auth_header or not auth_header.startswith("Bearer "):  
+                return JSONResponse(  
+                    status_code=401,  
+                    content={"detail": "Authorization token required"},  
                 )
 
-            token = auth_header.split(" ")[1]  # type: ignore
-            if not validate_api_key(token):  # type: ignore
-                return JSONResponse(  # type: ignore
-                    status_code=401,  # type: ignore
-                    content={"detail": "Invalid or expired token"},  # type: ignore
+            token = auth_header.split(" ")[1]  
+            if not validate_api_key(token):  
+                return JSONResponse(  
+                    status_code=401,  
+                    content={"detail": "Invalid or expired token"},  
                 )
 
-        response = await call_next(request)  # type: ignore
+        response = await call_next(request)  
         return response
 
 
-class RateLimitingMiddleware:  # type: ignore
-    """Middleware to handle rate limiting uniformly."""  # type: ignore
+class RateLimitingMiddleware:  
+    """Middleware to handle rate limiting uniformly."""  
 
-    async def __call__(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:  # type: ignore
+    async def __call__(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:  
         # In a real implementation, this would apply rate limiting
         # For now, we're just adding a placeholder
-        response = await call_next(request)  # type: ignore
+        response = await call_next(request)  
         return response
 
 
-class LoggingMiddleware:  # type: ignore
-    """Middleware to handle logging uniformly."""  # type: ignore
+class LoggingMiddleware:  
+    """Middleware to handle logging uniformly."""  
 
-    async def __call__(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:  # type: ignore
-        request_id = request.headers.get("x-request-id", "unknown")  # type: ignore
+    async def __call__(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:  
+        request_id = request.headers.get("x-request-id", "unknown")  
 
-        log_with_correlation(  # type: ignore
-            logging.INFO,  # type: ignore
-            f"Processing {request.method} request to {request.url.path}",  # type: ignore
-            component="api_gateway",  # type: ignore
-            request_id=request_id,  # type: ignore
+        log_with_correlation(  
+            logging.INFO,  
+            f"Processing {request.method} request to {request.url.path}",  
+            component="api_gateway",  
+            request_id=request_id,  
         )
 
-        try:  # type: ignore
-            response = await call_next(request)  # type: ignore
-        except Exception as e:  # type: ignore
-            log_with_correlation(  # type: ignore
-                logging.ERROR,  # type: ignore
-                f"Error processing request: {str(e)}",  # type: ignore
-                component="api_gateway",  # type: ignore
-                request_id=request_id,  # type: ignore
+        try:  
+            response = await call_next(request)  
+        except Exception as e:  
+            log_with_correlation(  
+                logging.ERROR,  
+                f"Error processing request: {str(e)}",  
+                component="api_gateway",  
+                request_id=request_id,  
             )
-            runtime_metrics.api_errors_total.increment()  # type: ignore
+            runtime_metrics.api_errors_total.increment()  
             raise
 
-        log_with_correlation(  # type: ignore
-            logging.INFO,  # type: ignore
-            f"Completed request to {request.url.path} with status {response.status_code}",  # type: ignore
-            component="api_gateway",  # type: ignore
-            request_id=request_id,  # type: ignore
+        log_with_correlation(  
+            logging.INFO,  
+            f"Completed request to {request.url.path} with status {response.status_code}",  
+            component="api_gateway",  
+            request_id=request_id,  
         )
 
         return response
 
 
-class MetricsMiddleware:  # type: ignore
-    """Middleware to collect metrics uniformly."""  # type: ignore
+class MetricsMiddleware:  
+    """Middleware to collect metrics uniformly."""  
 
-    async def __call__(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:  # type: ignore
+    async def __call__(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:  
         # Increment request counter
-        runtime_metrics.api_requests_total.increment()  # type: ignore
+        runtime_metrics.api_requests_total.increment()  
 
         # Record start time for latency measurement
-        import time  # type: ignore
+        import time  
 
-        start_time = time.time()  # type: ignore
+        start_time = time.time()  
 
-        try:  # type: ignore
-            response = await call_next(request)  # type: ignore
+        try:  
+            response = await call_next(request)  
             # Record successful request metrics
-            runtime_metrics.api_requests_success.increment()  # type: ignore
-            runtime_metrics.api_request_duration_histogram.observe(  # type: ignore
-                time.time() - start_time  # type: ignore
+            runtime_metrics.api_requests_success.increment()  
+            runtime_metrics.api_request_duration_histogram.observe(  
+                time.time() - start_time  
             )
             return response
-        except Exception as e:  # type: ignore
+        except Exception as e:  
             # Record error metrics
-            runtime_metrics.api_requests_failed.increment()  # type: ignore
-            runtime_metrics.api_request_duration_histogram.observe(  # type: ignore
-                time.time() - start_time  # type: ignore
+            runtime_metrics.api_requests_failed.increment()  
+            runtime_metrics.api_request_duration_histogram.observe(  
+                time.time() - start_time  
             )
             raise
 
 
-class AuditMiddleware:  # type: ignore
-    """Middleware to handle audit logging uniformly."""  # type: ignore
+class AuditMiddleware:  
+    """Middleware to handle audit logging uniformly."""  
 
-    async def __call__(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:  # type: ignore
-        request_id = request.headers.get("x-request-id", "unknown")  # type: ignore
-        user_id = request.headers.get("x-user-id", "unknown")  # type: ignore
+    async def __call__(self, request: Request, call_next: Callable[..., Awaitable[Response]]) -> Response:  
+        request_id = request.headers.get("x-request-id", "unknown")  
+        user_id = request.headers.get("x-user-id", "unknown")  
 
         # Log the request
-        audit_log.log_event(  # type: ignore
-            event_type="api_request",  # type: ignore
-            user_id=user_id,  # type: ignore
-            resource=request.url.path,  # type: ignore
-            action=request.method,  # type: ignore
-            details={  # type: ignore
-                "request_id": request_id,  # type: ignore
-                "user_agent": request.headers.get("user-agent"),  # type: ignore
-                "ip_address": request.client.host,  # type: ignore
+        audit_log.log_event(  
+            event_type="api_request",  
+            user_id=user_id,  
+            resource=request.url.path,  
+            action=request.method,  
+            details={  
+                "request_id": request_id,  
+                "user_agent": request.headers.get("user-agent"),  
+                "ip_address": request.client.host,  
             },
         )
 
-        response = await call_next(request)  # type: ignore
+        response = await call_next(request)  
 
         # Log the response
-        audit_log.log_event(  # type: ignore
-            event_type="api_response",  # type: ignore
-            user_id=user_id,  # type: ignore
-            resource=request.url.path,  # type: ignore
-            action=request.method,  # type: ignore
-            details={  # type: ignore
-                "request_id": request_id,  # type: ignore
-                "status_code": response.status_code,  # type: ignore
+        audit_log.log_event(  
+            event_type="api_response",  
+            user_id=user_id,  
+            resource=request.url.path,  
+            action=request.method,  
+            details={  
+                "request_id": request_id,  
+                "status_code": response.status_code,  
             },
         )
 
         return response
 
 
-# type: ignore
+
