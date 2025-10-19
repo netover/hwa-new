@@ -1,5 +1,3 @@
 """
-RAG Microservice Tests
-
-This package contains unit and integration tests for the RAG microservice.
+Unit tests for the Qdrant-only RAG microservice.
 """

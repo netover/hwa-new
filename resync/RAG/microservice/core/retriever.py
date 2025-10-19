@@ -1,10 +1,3 @@
-"""
-Retriever for Qdrant-based vector search with dynamic ef_search and optional re-ranking.
-
-Performs semantic search using embeddings and supports cosine similarity re-ranking.
-Integrates Prometheus metrics for latency tracking.
-"""
-
 from __future__ import annotations
 
 import math
@@ -21,37 +14,13 @@ from .monitoring import query_seconds
 
 
 class RagRetriever(Retriever):
-    """
-    Retrieves relevant documents from Qdrant using vector similarity search.
-
-    Supports dynamic ef_search based on top_k and optional cosine similarity re-ranking.
-    """
-
     def __init__(self, embedder: Embedder, store: VectorStore):
-        """
-        Initialize the retriever with embedding and vector store services.
-
-        Args:
-            embedder: Service to generate query embeddings.
-            store: Vector store to perform similarity search.
-        """
         self.embedder = embedder
         self.store = store
 
     async def retrieve(
         self, query: str, top_k: int = 10, filters: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
-        """
-        Retrieve top-k relevant documents for a query.
-
-        Args:
-            query: Input query string.
-            top_k: Number of results to return (capped by CFG.max_top_k).
-            filters: Optional metadata filters to apply.
-
-        Returns:
-            List[Dict[str, Any]]: List of retrieved documents with scores and payloads.
-        """
         top_k = min(top_k, CFG.max_top_k)
         vec = await self.embedder.embed(query)
         ef = CFG.ef_search_base + int(math.log2(max(10, top_k)) * 8)

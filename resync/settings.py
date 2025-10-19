@@ -45,6 +45,7 @@ class CacheHierarchyConfig:
         enable_encryption: bool = False,
         key_prefix: str = "cache:",
     ):
+
         self.L1_MAX_SIZE = l1_max_size
         self.L2_TTL_SECONDS = l2_ttl_seconds
         self.L2_CLEANUP_INTERVAL = l2_cleanup_interval
@@ -68,8 +69,9 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="allow",
         env_prefix="APP_",
-        validate_default=True,
+        validate_default=True
     )
+
 
     # ============================================================================
     # APLICAÇÃO
@@ -79,9 +81,11 @@ class Settings(BaseSettings):
         default=Environment.DEVELOPMENT, description="Ambiente de execução"
     )
 
+
     project_name: str = Field(
         default="Resync", min_length=1, description="Nome do projeto"
     )
+
 
     project_version: str = Field(
         default="1.0.0",
@@ -89,18 +93,22 @@ class Settings(BaseSettings):
         description="Versão do projeto (semver)"
     )
 
+
     description: str = Field(
         default="Real-time monitoring dashboard for HCL Workload Automation",
         description="Descrição do projeto"
     )
 
+
     base_dir: Path = Field(
         default_factory=Path.cwd, description="Diretório base da aplicação"
     )
 
+
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO", description="Nível de logging"
     )
+
 
     # ============================================================================
     # BANCO DE DADOS - NEO4J
@@ -110,11 +118,13 @@ class Settings(BaseSettings):
     default="neo4j://127.0.0.1:7687", description="URI de conexão Neo4j"
     )
 
+
     neo4j_user: str = Field(default="neo4j", min_length=1, description="Usuário Neo4j")
 
     neo4j_password: str = Field(
     default="12345678", min_length=1, description="Senha Neo4j"
     )
+
 
     # Connection Pool - Neo4j
     db_pool_min_size: int = Field(default=20, ge=1, le=100)
@@ -131,6 +141,7 @@ class Settings(BaseSettings):
     redis_url: str = Field(
         default="redis://localhost:6379/0", description="URL de conexão Redis"
     )
+
 
     redis_min_connections: int = Field(default=1, ge=1, le=100)
     redis_max_connections: int = Field(default=10, ge=1, le=1000)
@@ -153,29 +164,37 @@ class Settings(BaseSettings):
         ge=5,
         description="Timeout for distributed Redis initialization lock"
     )
+
     redis_health_check_interval: int = Field(
         default=5, ge=1, description="Interval for Redis connection health checks"
     )
+
 
     # Robust Cache Configuration
     robust_cache_max_items: int = Field(
         default=100_000, ge=100, description="Maximum number of items in robust cache"
     )
+
     robust_cache_max_memory_mb: int = Field(
         default=100, ge=10, description="Maximum memory usage for robust cache"
     )
+
     robust_cache_eviction_batch_size: int = Field(
         default=100, ge=1, description="Number of items to evict in one batch"
     )
+
     robust_cache_enable_weak_refs: bool = Field(
         default=True, description="Enable weak references for large objects"
     )
+
     robust_cache_enable_wal: bool = Field(
         default=False, description="Enable Write-Ahead Logging for cache"
     )
+
     robust_cache_wal_path: str | None = Field(
         default=None, description="Path for cache Write-Ahead Log"
     )
+
 
     # ============================================================================
     # LLM
@@ -186,6 +205,7 @@ class Settings(BaseSettings):
         description="Endpoint da API LLM (OpenRouter)"
     )
 
+
     llm_api_key: str = Field(
         default=(
             "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"
@@ -194,9 +214,11 @@ class Settings(BaseSettings):
         description="Chave de API do LLM (OpenRouter)"
     )
 
+
     llm_timeout: float = Field(
         default=60.0, gt=0, description="Timeout para chamadas LLM em segundos"
     )
+
 
     auditor_model_name: str = Field(default="gpt-3.5-turbo")
     agent_model_name: str = Field(default="gpt-4o")
@@ -207,24 +229,29 @@ class Settings(BaseSettings):
     # Cache Hierarchy Configuration
     cache_hierarchy_l1_max_size: int = Field(
         default=5000,
-        description="Maximum number of entries in L1 cache",
+        description="Maximum number of entries in L1 cache"
     )
+
     cache_hierarchy_l2_ttl: int = Field(
         default=600,
-        description="Time-To-Live for L2 cache entries in seconds",
+        description="Time-To-Live for L2 cache entries in seconds"
     )
+
     cache_hierarchy_l2_cleanup_interval: int = Field(
         default=60,
-        description="Cleanup interval for L2 cache in seconds",
+        description="Cleanup interval for L2 cache in seconds"
     )
+
     cache_hierarchy_num_shards: int = Field(
         default=8,
-        description="Number of shards for cache",
+        description="Number of shards for cache"
     )
+
     cache_hierarchy_max_workers: int = Field(
         default=4,
-        description="Max workers for cache operations",
+        description="Max workers for cache operations"
     )
+
 
     # ============================================================================
     # TWS (Workload Automation)
@@ -234,6 +261,7 @@ class Settings(BaseSettings):
         default=True, description="Usar modo mock para TWS (desenvolvimento)"
     )
 
+
     tws_host: str | None = Field(default=None)
     tws_port: int | None = Field(default=None, ge=1, le=65535)
     tws_user: str | None = Field(
@@ -241,16 +269,23 @@ class Settings(BaseSettings):
         env="TWS_USER",
         description="Usuário do TWS (obrigatório se não estiver em modo mock)"
     )
+
     tws_password: str | None = Field(
         default=None,
         env="TWS_PASSWORD",
         description="Senha do TWS (obrigatório se não estiver em modo mock)",
-        exclude=True,  # Não incluir em logs ou serializações
+        exclude=True  # Não incluir em logs ou serializações
     )
+
     tws_base_url: str = Field(default="http://localhost:31111")
     tws_request_timeout: float = Field(
-        default=30.0, gt=0, description="Timeout para requisições TWS"
+        default=30.0, description="Timeout for TWS requests in seconds"
     )
+
+    tws_ca_bundle: str | None = Field(
+        default=None, description="CA bundle for TWS TLS verification (ignored if tws_verify=False)"
+    )
+
 
     # Connection Pool - HTTP
     http_pool_min_size: int = Field(default=10, ge=1)
@@ -268,9 +303,11 @@ class Settings(BaseSettings):
         default="admin", min_length=3, description="Nome de usuário do administrador"
     )
 
+
     admin_password: str = Field(
         default="change_me_please", min_length=8, description="Senha do administrador"
     )
+
 
     # CORS
     cors_allowed_origins: list[str] = Field(default=["*"])
@@ -293,6 +330,7 @@ class Settings(BaseSettings):
         default=8000, ge=1024, le=65535, description="Porta do servidor"
     )
 
+
     # ============================================================================
     # RATE LIMITING
     # ============================================================================
@@ -314,20 +352,21 @@ class Settings(BaseSettings):
     # File Ingestion Settings
     knowledge_base_dirs: list[Path] = Field(
         default_factory=lambda: [Path.cwd() / "resync/RAG"],
-        description="Directories included in the knowledge base",
+        description="Directories included in the knowledge base"
     )
 
     protected_directories: list[Path] = Field(
         default_factory=lambda: [Path.cwd() / "resync/RAG/BASE"],
-        description="Protected directories that should not be modified",
+        description="Protected directories that should not be modified"
     )
+
 
     # ============================================================================
     # RAG MICROSERVICE CONFIGURATION
     # ============================================================================
 
     rag_service_url: str = Field(
-    default="http://localhost:8003",
+        default="http://localhost:8003",
         description="URL base do microserviço RAG (ex: http://rag-service:8000)"
     )
 
@@ -345,6 +384,7 @@ class Settings(BaseSettings):
         default=1.0,
         description="Fator de backoff exponencial para tentativas de requisição ao microserviço RAG"
     )
+
 
     # ============================================================================
     # BACKWARD COMPATIBILITY PROPERTIES
@@ -510,7 +550,7 @@ class Settings(BaseSettings):
             l2_cleanup_interval=self.cache_hierarchy_l2_cleanup_interval,
             num_shards=self.cache_hierarchy_num_shards,
             max_workers=self.cache_hierarchy_max_workers,
-        )
+
 
     # Connection pool properties
     @property
@@ -586,7 +626,7 @@ class Settings(BaseSettings):
         return self.http_pool_max_lifetime
 
     # ============================================================================
-    # MIGRAÇÃO GRADUAL - FEATURE FLAGS
+    # MIGRATION GRADUAL - FEATURE FLAGS
     # ============================================================================
 
     # Controle de migração para novos componentes
@@ -596,17 +636,18 @@ class Settings(BaseSettings):
 
     MIGRATION_USE_NEW_TWS: bool = Field(
         default=False,
-        description="Usar TWSClientFactory ao invés de implementação direta",
+        description="Usar TWSClientFactory ao invés de implementação direta"
     )
 
     MIGRATION_USE_NEW_RATE_LIMIT: bool = Field(
         default=False,
-        description="Usar RateLimiterManager ao invés de implementação básica",
+        description="Usar RateLimiterManager ao invés de implementação básica"
     )
 
     MIGRATION_ENABLE_METRICS: bool = Field(
         default=True, description="Habilitar métricas de migração e monitoramento"
     )
+
 
     # ============================================================================
     # VALIDADORES
@@ -636,7 +677,7 @@ class Settings(BaseSettings):
         if v < min_size:
             raise ValueError(
                 f"db_pool_max_size ({v}) must be >= db_pool_min_size ({min_size})"
-            )
+
         return v
 
     @field_validator("redis_pool_max_size")
@@ -647,7 +688,7 @@ class Settings(BaseSettings):
         if v < min_size:
             raise ValueError(
                 f"redis_pool_max_size ({v}) must be >= redis_pool_min_size ({min_size})"
-            )
+
         return v
 
     @field_validator("redis_url")
@@ -658,7 +699,7 @@ class Settings(BaseSettings):
             raise ValueError(
                 "REDIS_URL deve começar com 'redis://'. "
                 "Exemplo: redis://localhost:6379 ou redis://:senha@localhost:6379"
-            )
+
         return v
 
     @field_validator("admin_password")
@@ -710,7 +751,7 @@ class Settings(BaseSettings):
     @classmethod
     def validate_tws_credentials(
         cls, v: str | None, info: ValidationInfo
-    ) -> str | None:
+ -> str | None:
         """Valida credenciais TWS quando não está em mock mode."""
         if info.field_name == "tws_password" and v:
             # Validar força da senha em produção
@@ -719,7 +760,7 @@ class Settings(BaseSettings):
                 if len(v) < 12:
                     raise ValueError(
                         "TWS_PASSWORD must be at least 12 characters in production"
-                    )
+
                 # Verificar se não é uma senha padrão
                 common_passwords = {"password", "twsuser", "tws_password", "change_me"}
                 if v.lower() in common_passwords:
@@ -740,7 +781,12 @@ class Settings(BaseSettings):
             if missing:
                 raise ValueError(
                     f"TWS credentials required when not in mock mode: {missing}"
-                )
+
+
+    # SSL/TLS
+    # >>> Explicitly disable certificate validation <<<
+    TWS_VERIFY: bool | str = False  # Global disable for TWS
+    TWS_CA_BUNDLE: str | None = None
 
 
 # Instância global singleton
