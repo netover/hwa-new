@@ -13,6 +13,7 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from datetime import timedelta
 
 from resync.core.circuit_breakers import redis_breaker, tws_breaker, llm_breaker
+from resync.core.exceptions import AuthenticationError
 from resync.core.structured_logger import get_logger
 from resync.core.metrics import runtime_metrics
 from resync.core.async_cache import get_redis_client

@@ -44,7 +44,7 @@ class CacheHierarchyConfig:
         max_workers: int = 4,
         enable_encryption: bool = False,
         key_prefix: str = "cache:",
-    ):
+    ) -> None:
 
         self.L1_MAX_SIZE = l1_max_size
         self.L2_TTL_SECONDS = l2_ttl_seconds
@@ -385,6 +385,15 @@ class Settings(BaseSettings):
         description="Fator de backoff exponencial para tentativas de requisição ao microserviço RAG"
     )
 
+    # ============================================================================
+    # BACKWARD COMPATIBILITY PROPERTIES
+    # ============================================================================
+
+    @property
+    def RAG_SERVICE_URL(self) -> str:
+        """Backward compatibility property for RAG_SERVICE_URL."""
+        return self.rag_service_url
+
 
     # ============================================================================
     # BACKWARD COMPATIBILITY PROPERTIES
@@ -549,12 +558,14 @@ class Settings(BaseSettings):
             l2_ttl_seconds=self.cache_hierarchy_l2_ttl,
             l2_cleanup_interval=self.cache_hierarchy_l2_cleanup_interval,
             num_shards=self.cache_hierarchy_num_shards,
-            max_workers=self.cache_hierarchy_max_workers,
+            max_workers=self.cache_hierarchy_max_workers
+        )
 
 
     # Connection pool properties
     @property
     def DB_POOL_MIN_SIZE(self) -> int:
+        """Backward compatibility property for DB_POOL_MIN_SIZE."""
         return self.db_pool_min_size
 
     @property
@@ -677,6 +688,7 @@ class Settings(BaseSettings):
         if v < min_size:
             raise ValueError(
                 f"db_pool_max_size ({v}) must be >= db_pool_min_size ({min_size})"
+            )
 
         return v
 
@@ -688,6 +700,7 @@ class Settings(BaseSettings):
         if v < min_size:
             raise ValueError(
                 f"redis_pool_max_size ({v}) must be >= redis_pool_min_size ({min_size})"
+            )
 
         return v
 
@@ -699,6 +712,7 @@ class Settings(BaseSettings):
             raise ValueError(
                 "REDIS_URL deve começar com 'redis://'. "
                 "Exemplo: redis://localhost:6379 ou redis://:senha@localhost:6379"
+            )
 
         return v
 
@@ -751,7 +765,7 @@ class Settings(BaseSettings):
     @classmethod
     def validate_tws_credentials(
         cls, v: str | None, info: ValidationInfo
- -> str | None:
+    ) -> str | None:
         """Valida credenciais TWS quando não está em mock mode."""
         if info.field_name == "tws_password" and v:
             # Validar força da senha em produção
@@ -760,6 +774,7 @@ class Settings(BaseSettings):
                 if len(v) < 12:
                     raise ValueError(
                         "TWS_PASSWORD must be at least 12 characters in production"
+                    )
 
                 # Verificar se não é uma senha padrão
                 common_passwords = {"password", "twsuser", "tws_password", "change_me"}
@@ -781,6 +796,7 @@ class Settings(BaseSettings):
             if missing:
                 raise ValueError(
                     f"TWS credentials required when not in mock mode: {missing}"
+                )
 
 
     # SSL/TLS

@@ -266,6 +266,81 @@ async def _cleanup_locks() -> None:
 # Old functions removed - replaced by refactored versions above
 
 
+async def _analyze_memories_concurrently(memories: list[dict[str, Any]]) -> list[tuple[str, Any]]:
+    """
+    Analyze multiple memories concurrently using analyze_memory function.
+
+    Args:
+        memories: List of memory dictionaries to analyze
+
+    Returns:
+        List of tuples containing (action, result) for each memory
+    """
+    import asyncio
+
+    # Create tasks for concurrent analysis
+    tasks = [analyze_memory(mem) for mem in memories]
+
+    # Execute all tasks concurrently and get results
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Process results, converting exceptions to None
+    processed_results = []
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(
+                "memory_analysis_failed",
+                error=str(result),
+                exc_info=True
+            )
+            processed_results.append(None)
+        else:
+            processed_results.append(result)
+
+    return processed_results
+
+
+async def _process_analysis_results(results: list[tuple[str, Any] | None]) -> tuple[list[str], list[dict[str, Any]]]:
+    """
+    Process analysis results, separating memories to delete and flag.
+
+    Args:
+        results: List of analysis results (action, result) or None for failures
+
+    Returns:
+        Tuple of (memories_to_delete, memories_to_flag)
+    """
+    memories_to_delete = []
+    memories_to_flag = []
+
+    for result in results:
+        if result is None:
+            continue
+
+        action, data = result
+
+        if action == "delete" and isinstance(data, str):
+            memories_to_delete.append(data)
+            await audit_queue.add_audit_record(
+                action="memory_deleted_by_ia",
+                resource_type="memory",
+                resource_id=data,
+                details={"reason": "IA audit flagged for deletion"},
+                severity="info"
+            )
+        elif action == "flag" and isinstance(data, dict):
+            memories_to_flag.append(data)
+            await audit_queue.add_audit_record(
+                action="memory_flagged_by_ia",
+                resource_type="memory",
+                resource_id=str(data.get("id", "unknown")),
+                details={"reason": "IA audit flagged for review"},
+                severity="warning"
+            )
+
+    return memories_to_delete, memories_to_flag
+
+
 async def analyze_and_flag_memories() -> dict[str, int | str]:
     """
     Orchestrates the memory analysis workflow.

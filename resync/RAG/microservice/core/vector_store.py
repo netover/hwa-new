@@ -19,12 +19,15 @@ from .interfaces import VectorStore
 
 logger = logging.getLogger(__name__)
 
-# Optional imports
+# Optional imports - defer error until actual usage
 try:
     from qdrant_client import QdrantClient
     from qdrant_client.http import models as qm
+    QDRANT_AVAILABLE = True
 except ImportError:
-    raise RuntimeError("qdrant-client is required. pip install qdrant-client")
+    QdrantClient = None
+    qm = None
+    QDRANT_AVAILABLE = False
 
 
 def _to_thread(fn, *args, **kwargs):
@@ -46,6 +49,9 @@ class QdrantVectorStore(VectorStore):
         collection: Optional[str] = None,
         dim: int = CFG.embed_dim,
     ):
+        if not QDRANT_AVAILABLE:
+            raise RuntimeError("qdrant-client is required. pip install qdrant-client")
+
         self._client = QdrantClient(
             url or CFG.qdrant_url, api_key=api_key or CFG.qdrant_api_key, timeout=60.0
         )

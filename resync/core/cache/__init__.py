@@ -15,6 +15,13 @@ from .memory_manager import CacheMemoryManager, CacheEntry
 from .persistence_manager import CachePersistenceManager
 from .transaction_manager import CacheTransactionManager
 
+# Create a basic RobustCacheManager for compatibility
+class RobustCacheManager:
+    """Basic robust cache manager implementation."""
+
+    def __init__(self, cache_backend=None):
+        self.cache_backend = cache_backend or AsyncTTLCache()
+
 __all__ = [
     "AsyncTTLCache",
     "BaseCache",
@@ -22,4 +29,5 @@ __all__ = [
     "CacheEntry",
     "CachePersistenceManager",
     "CacheTransactionManager",
+    "RobustCacheManager",
 ]

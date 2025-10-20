@@ -4,22 +4,37 @@ import json
 import logging
 from typing import cast
 
-from resync.core.di_container import container
-from resync.core.interfaces import IAgentManager, IConnectionManager
-
 logger = logging.getLogger(__name__)
+
+# Lazy imports to avoid circular dependencies
+def _get_container():
+    """Lazy import of container."""
+    from resync.core.di_container import container
+    return container
+
+def _get_interfaces():
+    """Lazy import of interfaces."""
+    from resync.core.interfaces import IAgentManager, IConnectionManager
+    return IAgentManager, IConnectionManager
 
 
 async def handle_config_change() -> None:
     """
     Handles the reloading of agent configurations and notifies clients.
     """
-    # Resolve dependencies from the DI container
-    from resync.core.agent_manager import AgentManager
-    from resync.core.connection_manager import ConnectionManager
+    try:
+        # Resolve dependencies from the DI container (lazy imports)
+        from resync.core.agent_manager import AgentManager
+        from resync.core.connection_manager import ConnectionManager
 
-    agent_manager = cast(AgentManager, container.get(IAgentManager))
-    connection_manager = cast(ConnectionManager, container.get(IConnectionManager))
+        container = _get_container()
+        IAgentManager, IConnectionManager = _get_interfaces()
+
+        agent_manager = cast(AgentManager, container.get(IAgentManager))
+        connection_manager = cast(ConnectionManager, container.get(IConnectionManager))
+    except Exception as e:
+        logger.error("Failed to resolve dependencies from DI container", error=str(e), exc_info=True)
+        return
 
     logger.info("Configuration change detected. Reloading agents...")
     try:

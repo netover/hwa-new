@@ -17,9 +17,14 @@ from resync.core.health_service import (
     get_health_check_service,
     shutdown_health_check_service,
 )
-from resync.core.metrics import runtime_metrics
 
 logger = logging.getLogger(__name__)
+
+# Lazy import of runtime_metrics to avoid circular dependencies
+def _get_runtime_metrics():
+    """Lazy import of runtime_metrics."""
+    from resync.core.metrics import runtime_metrics
+    return runtime_metrics
 
 # Main health router
 router = APIRouter(prefix="/health", tags=["health"])
@@ -121,7 +126,7 @@ async def get_health_summary(
             auto_enable and health_result.overall_status != HealthStatus.UNHEALTHY
         )
 
-        runtime_metrics.health_check_with_auto_enable.increment()
+        _get_runtime_metrics().health_check_with_auto_enable.increment()
 
         return HealthSummaryResponse(
             status=health_result.overall_status.value,
@@ -138,7 +143,7 @@ async def get_health_summary(
         logger.error(f"Health check failed: {original_exception}")
         # Increment counter for health check failures if we can
         try:
-            runtime_metrics.health_check_with_auto_enable.increment()
+            _get_runtime_metrics().health_check_with_auto_enable.increment()
         except (AttributeError, ImportError, Exception) as metrics_e:
             # Log metrics failure but don't fail the health check
             logger.warning(

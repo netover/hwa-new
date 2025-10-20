@@ -18,7 +18,7 @@ Date: October 2025
 import asyncio
 import random
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from functools import wraps
 from typing import Any, Awaitable, Callable, Dict, Optional, TypeVar, Iterable
@@ -77,6 +77,11 @@ class CircuitBreaker:
         self.metrics = CircuitBreakerMetrics()
         self._lock = asyncio.Lock()
 
+        # Properties for compatibility with tests
+        self.fail_max = config.failure_threshold
+        self.timeout_duration = timedelta(seconds=config.recovery_timeout)
+        self.exclude = config.expected_exception
+
         logger.info(
             "Circuit breaker initialized",
             name=config.name,
@@ -131,7 +136,19 @@ class CircuitBreaker:
 
         except self.config.expected_exception as e:
             async with self._lock:
+                logger.debug(
+                    "Circuit breaker failure caught",
+                    name=self.config.name,
+                    exception_type=type(e).__name__,
+                    consecutive_failures_before=self.metrics.consecutive_failures
+                )
                 await self._on_failure()
+                logger.debug(
+                    "Circuit breaker failure processed",
+                    name=self.config.name,
+                    consecutive_failures_after=self.metrics.consecutive_failures,
+                    state=self.state.value
+                )
 
             raise e
 
@@ -143,7 +160,7 @@ class CircuitBreaker:
         elapsed = (datetime.utcnow() - self.metrics.last_failure_time).total_seconds()
         return elapsed >= self.config.recovery_timeout
 
-    async def _on_success(self):
+    async def _on_success(self) -> None:
         """Callback para sucesso"""
         self.metrics.successful_calls += 1
         self.metrics.consecutive_failures = 0
@@ -157,7 +174,7 @@ class CircuitBreaker:
                 name=self.config.name,
             )
 
-    async def _on_failure(self):
+    async def _on_failure(self) -> None:
         """Callback para falha"""
         self.metrics.failed_calls += 1
         self.metrics.consecutive_failures += 1
@@ -516,7 +533,7 @@ class CircuitBreakerManager:
     Registry-based Circuit Breaker manager (client-side), inspired by Resilience4j's registry.
     """
     def __init__(self) -> None:
-        self._breakers: Dict[str, pybreaker.CircuitBreaker] = {}
+        self._breakers: Dict[str, CircuitBreaker] = {}
 
     def register(
         self,
@@ -525,17 +542,18 @@ class CircuitBreakerManager:
         fail_max: int = 5,
         reset_timeout: int = 60,
         exclude: tuple[type[BaseException], ...] = (),
-    ) -> pybreaker.CircuitBreaker:
+    ) -> CircuitBreaker:
         if name not in self._breakers:
-            self._breakers[name] = pybreaker.CircuitBreaker(
-                fail_max=fail_max,
-                reset_timeout=reset_timeout,
-                exclude=exclude,
+            config = CircuitBreakerConfig(
+                failure_threshold=fail_max,
+                recovery_timeout=reset_timeout,
+                expected_exception=Exception,
                 name=name,
             )
+            self._breakers[name] = CircuitBreaker(config)
         return self._breakers[name]
 
-    def get(self, name: str) -> pybreaker.CircuitBreaker:
+    def get(self, name: str) -> CircuitBreaker:
         br = self._breakers.get(name)
         if not br:
             raise KeyError(f"Circuit breaker '{name}' not registered")
@@ -543,16 +561,17 @@ class CircuitBreakerManager:
 
     async def call(self, name: str, func: Callable[..., Awaitable[T]], *args, **kwargs) -> T:
         br = self.get(name)
-        return await br.async_call(func, *args, **kwargs)
+        return await br.call(func, *args, **kwargs)
 
     def state(self, name: str) -> str:
-        return self.get(name).current_state  # "closed" | "open" | "half-open"
+        state = self.get(name).state
+        return state.value  # "closed" | "open" | "half-open"
 
 class CircuitBreakerError(pybreaker.CircuitBreakerError):  # re-export for app
     pass
 
 
-async def retry_with_backoff(
+async def retry_with_backoff_async(
     op: Callable[[], Awaitable[T]],
     *,
     retries: int = 3,

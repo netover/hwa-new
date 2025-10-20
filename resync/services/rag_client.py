@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx
 from pydantic import BaseModel
 
-from resync.core.resilience import CircuitBreakerManager, CircuitBreakerError, retry_with_backoff
+from resync.core.resilience import CircuitBreakerManager, CircuitBreakerError, retry_with_backoff_async
 from resync.core.structured_logger import get_logger
 from resync.settings import settings
 
@@ -93,13 +93,13 @@ class RAGServiceClient:
             resp.raise_for_status()
             return resp
 
-        resp = await retry_with_backoff(
+        resp = await retry_with_backoff_async(
             _call,
             retries=self.max_retries,
             base_delay=self.retry_backoff,
             cap=5.0,
             jitter=True,
-            retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError)
+            retry_on=(httpx.RequestError, httpx.TimeoutException)
         )
         data = resp.json()
         return data["job_id"]
@@ -135,13 +135,13 @@ class RAGServiceClient:
             resp.raise_for_status()
             return RAGJobStatus(**resp.json())
 
-        job_status = await retry_with_backoff(
+        job_status = await retry_with_backoff_async(
             _call,
             retries=self.max_retries,
             base_delay=self.retry_backoff,
             cap=5.0,
             jitter=True,
-            retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError)
+            retry_on=(httpx.RequestError, httpx.TimeoutException)
         )
         return job_status
 

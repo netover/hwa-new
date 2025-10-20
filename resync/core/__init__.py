@@ -20,6 +20,66 @@ logger = logging.getLogger(__name__)
 from .async_cache import AsyncTTLCache
 from .config_watcher import handle_config_change
 from .metrics import runtime_metrics
+
+# Lazy import exceptions for easy access to avoid circular dependencies
+def _get_exceptions():
+    """Lazy import of exceptions."""
+    from .exceptions import (
+        AuditError,
+        DatabaseError,
+        PoolExhaustedError,
+        ToolProcessingError,
+        BaseAppException,
+        InvalidConfigError,
+        AgentExecutionError,
+        AuthenticationError,
+        LLMError,
+        RedisConnectionError,
+    )
+    return {
+        'AuditError': AuditError,
+        'DatabaseError': DatabaseError,
+        'PoolExhaustedError': PoolExhaustedError,
+        'ToolProcessingError': ToolProcessingError,
+        'BaseAppException': BaseAppException,
+        'InvalidConfigError': InvalidConfigError,
+        'AgentExecutionError': AgentExecutionError,
+        'AuthenticationError': AuthenticationError,
+        'LLMError': LLMError,
+        'RedisConnectionError': RedisConnectionError,
+    }
+
+# Create lazy exception classes
+class _LazyException:
+    """Lazy exception class that imports on first access."""
+    _exceptions = None
+
+    def __init__(self, name):
+        self._name = name
+
+    def __call__(self, *args, **kwargs):
+        if _LazyException._exceptions is None:
+            _LazyException._exceptions = _get_exceptions()
+        exc_class = _LazyException._exceptions[self._name]
+        return exc_class(*args, **kwargs)
+
+    def __getattr__(self, name):
+        if _LazyException._exceptions is None:
+            _LazyException._exceptions = _get_exceptions()
+        exc_class = _LazyException._exceptions[self._name]
+        return getattr(exc_class, name)
+
+# Create lazy exception instances
+AuditError = _LazyException('AuditError')
+DatabaseError = _LazyException('DatabaseError')
+PoolExhaustedError = _LazyException('PoolExhaustedError')
+ToolProcessingError = _LazyException('ToolProcessingError')
+BaseAppException = _LazyException('BaseAppException')
+InvalidConfigError = _LazyException('InvalidConfigError')
+AgentExecutionError = _LazyException('AgentExecutionError')
+AuthenticationError = _LazyException('AuthenticationError')
+LLMError = _LazyException('LLMError')
+RedisConnectionError = _LazyException('RedisConnectionError')
 # SOC2 Compliance - import available but commented to avoid circular imports
 # Use direct import when needed: from resync.core.soc2_compliance_refactored import SOC2ComplianceManager
 # from .soc2_compliance_refactored import SOC2ComplianceManager, soc2_compliance_manager, get_soc2_compliance_manager
@@ -146,27 +206,29 @@ class EnvironmentDetector:
             return False
 
 
-# --- Initialize Core Components ---
-try:
-    # Initialize environment detector
-    env_detector = EnvironmentDetector()
+# --- Lazy Initialize Core Components ---
+# Defer initialization to avoid circular imports during test collection
+def _initialize_core_components():
+    """Initialize core components lazily."""
+    global env_detector, boot_manager
 
-    # Initialize boot manager
-    boot_manager = CoreBootManager()
+    if 'boot_manager' not in globals():
+        try:
+            env_detector = EnvironmentDetector()
+            boot_manager = CoreBootManager()
 
-    # Set environment info in boot manager
-    boot_manager._global_correlation_context["environment"] = (
-        env_detector.detect_environment()
-    )
+            # Set environment info in boot manager
+            boot_manager._global_correlation_context["environment"] = (
+                env_detector.detect_environment()
+            )
 
-    # Set boot manager reference in global_utils
-    from . import global_utils
+            # Set boot manager reference in global_utils
+            from . import global_utils
+            global_utils.set_boot_manager(boot_manager)
 
-    global_utils.set_boot_manager(boot_manager)
-
-except Exception as e:
-    logger.critical(f"Failed to initialize core components: {e}")
-    raise
+        except Exception as e:
+            logger.critical(f"Failed to initialize core components: {e}")
+            raise
 
 
 # --- Global Access Functions ---
@@ -175,24 +237,33 @@ except Exception as e:
 
 def get_global_correlation_id() -> str:
     """Get the global correlation ID for distributed tracing."""
+    _initialize_core_components()
     return boot_manager.get_global_correlation_id()
 
 
 def get_environment_tags() -> Dict[str, Any]:
     """Get environment tags for mock detection and debugging."""
+    _initialize_core_components()
     return boot_manager.get_environment_tags()
 
 
 # Validate environment on import
 def add_global_trace_event(event: str, data: Optional[Dict[str, Any]] = None) -> None:
     """Add a trace event to the global correlation context."""
+    _initialize_core_components()
     boot_manager.add_global_event(event, data)
 
 
-# Validate environment on import
-if not env_detector.validate_environment():
-    logger.error(
-        "Environment validation failed - system may not be secure",
-        extra={"correlation_id": boot_manager._correlation_id},
-    )
-    # Don't raise exception here to avoid import failures, but log critically
+# Validate environment on import (lazy)
+def _validate_environment():
+    """Validate environment lazily."""
+    _initialize_core_components()
+    if not env_detector.validate_environment():
+        logger.error(
+            "Environment validation failed - system may not be secure",
+            extra={"correlation_id": boot_manager._correlation_id},
+        )
+        # Don't raise exception here to avoid import failures, but log critically
+
+# Initialize validation on first access
+_validate_environment()

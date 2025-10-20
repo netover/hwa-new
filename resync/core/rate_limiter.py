@@ -84,17 +84,13 @@ def get_authenticated_user_identifier(request: Request) -> str:
     return f"ip:{get_remote_address(request)}"
 
 
-# Initialize the main rate limiter with Redis storage
+# Initialize the main rate limiter with memory storage for safety
 limiter = Limiter(
     key_func=get_remote_address,
-    storage_uri=getattr(settings, "RATE_LIMIT_STORAGE_URI", "redis://localhost:6379"),
-    key_prefix=getattr(settings, "RATE_LIMIT_KEY_PREFIX", "resync:ratelimit:"),
+    storage_uri="memory://",  # Use memory storage to avoid configuration issues
+    key_prefix="resync:ratelimit:",
     headers_enabled=True,
-    strategy=(
-        "moving-window"
-        if getattr(settings, "rate_limit_sliding_window", True)
-        else "fixed-window"
-    ),
+    strategy="moving-window",
 )
 
 

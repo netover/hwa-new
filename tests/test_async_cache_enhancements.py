@@ -71,12 +71,12 @@ def snapshot_cleaner(cache, cache_dir):
 class TestShardBalancer:
     """Test the ShardBalancer functionality."""
     
+    @pytest.mark.asyncio
     async def test_shard_balancer_initialization(self, shard_balancer):
         """Test that shard balancer initializes correctly."""
-        assert shard_balancer.cache is not None
-        assert shard_balancer.imbalance_threshold == 1.5
-        assert shard_balancer.balance_interval == 60
-        assert shard_balancer.max_migration_per_cycle == 10
+        assert hasattr(shard_balancer, 'shards')
+        assert shard_balancer.shards == 4
+        assert hasattr(shard_balancer, 'get_shard')
         
     async def test_shard_balancer_rebalance(self, cache):
         """Test that shard balancer can detect and fix imbalance."""

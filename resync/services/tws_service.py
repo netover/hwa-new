@@ -19,7 +19,7 @@ from dateutil import parser
 from resync.core.cache_hierarchy import get_cache_hierarchy
 from resync.core.connection_pool_manager import get_connection_pool_manager
 from resync.core.exceptions import TWSConnectionError
-from resync.core.resilience import CircuitBreakerManager, CircuitBreakerError, retry_with_backoff, with_timeout
+from resync.core.resilience import CircuitBreakerManager, CircuitBreakerError, retry_with_backoff_async, with_timeout
 from resync.models.tws import (
     CriticalJob,
     DependencyTree,
@@ -162,7 +162,7 @@ class OptimizedTWSClient:
             resp = await self.cbm.call("tws_http_client", _once)
             return resp
 
-        resp = await retry_with_backoff(_call, retries=3, base_delay=1.0, cap=10.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        resp = await retry_with_backoff_async_async(_call, retries=3, base_delay=1.0, cap=10.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         return resp
 
     @asynccontextmanager
@@ -225,7 +225,7 @@ class OptimizedTWSClient:
                 resp = await self.cbm.call("tws_ping", _once)
                 return resp
 
-            resp = await retry_with_backoff(_call, retries=2, base_delay=0.5, cap=3.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+            resp = await retry_with_backoff_async_async(_call, retries=2, base_delay=0.5, cap=3.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         except httpx.TimeoutException as e:
             logger.warning("TWS server ping timed out")
             raise TWSConnectionError("TWS server ping timed out", original_exception=e)
@@ -249,7 +249,7 @@ class OptimizedTWSClient:
                 result = await self.cbm.call("tws_check_connection", _once)
                 return result
 
-            result = await retry_with_backoff(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+            result = await retry_with_backoff_async_async(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
             return result
         except TWSConnectionError:
             return False
@@ -272,7 +272,7 @@ class OptimizedTWSClient:
             result = await self.cbm.call("tws_workstations", _once)
             return result
 
-        workstations = await retry_with_backoff(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        workstations = await retry_with_backoff_async(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         await self.cache.set(
             cache_key, workstations
         )  # ttl not supported in current cache implementation
@@ -294,7 +294,7 @@ class OptimizedTWSClient:
             result = await self.cbm.call("tws_jobs_status", _once)
             return result
 
-        jobs = await retry_with_backoff(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        jobs = await retry_with_backoff_async(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         await self.cache.set(
             cache_key, jobs
         )  # ttl not supported in current cache implementation
@@ -319,7 +319,7 @@ class OptimizedTWSClient:
             result = await self.cbm.call("tws_critical_path", _once)
             return result
 
-        critical_jobs = await retry_with_backoff(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        critical_jobs = await retry_with_backoff_async(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         await self.cache.set(
             cache_key, critical_jobs
         )  # ttl not supported in current cache implementation
@@ -409,7 +409,7 @@ class OptimizedTWSClient:
             result = await self.cbm.call("tws_job_details", _once)
             return result
 
-        job_details = await retry_with_backoff(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        job_details = await retry_with_backoff_async(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         await self.cache.set(cache_key, job_details.dict())
         return job_details
 
@@ -472,7 +472,7 @@ class OptimizedTWSClient:
             result = await self.cbm.call("tws_job_history", _once)
             return result
 
-        executions = await retry_with_backoff(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        executions = await retry_with_backoff_async(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         await self.cache.set(cache_key, [e.dict() for e in executions])
         return executions
 
@@ -502,7 +502,7 @@ class OptimizedTWSClient:
             result = await self.cbm.call("tws_job_log", _once)
             return result
 
-        log_content = await retry_with_backoff(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        log_content = await retry_with_backoff_async(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         await self.cache.set(cache_key, log_content)
         return log_content
 
@@ -552,7 +552,7 @@ class OptimizedTWSClient:
             result = await self.cbm.call("tws_plan_details", _once)
             return result
 
-        plan_details = await retry_with_backoff(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        plan_details = await retry_with_backoff_async(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         await self.cache.set(cache_key, plan_details.dict())
         return plan_details
 
@@ -592,7 +592,7 @@ class OptimizedTWSClient:
             result = await self.cbm.call("tws_job_dependencies", _once)
             return result
 
-        dependency_tree = await retry_with_backoff(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        dependency_tree = await retry_with_backoff_async(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         await self.cache.set(cache_key, dependency_tree.dict())
         return dependency_tree
 
@@ -637,7 +637,7 @@ class OptimizedTWSClient:
             result = await self.cbm.call("tws_resource_usage", _once)
             return result
 
-        resources = await retry_with_backoff(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        resources = await retry_with_backoff_async(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         await self.cache.set(cache_key, [r.dict() for r in resources])
         return resources
 
@@ -688,7 +688,7 @@ class OptimizedTWSClient:
             result = await self.cbm.call("tws_event_log", _once)
             return result
 
-        events = await retry_with_backoff(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        events = await retry_with_backoff_async(_call, retries=2, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         await self.cache.set(cache_key, [e.dict() for e in events])
         return events
 
@@ -732,7 +732,7 @@ class OptimizedTWSClient:
             result = await self.cbm.call("tws_performance_metrics", _once)
             return result
 
-        performance_data = await retry_with_backoff(_call, retries=3, base_delay=1.0, cap=8.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        performance_data = await retry_with_backoff_async(_call, retries=3, base_delay=1.0, cap=8.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
         await self.cache.set(cache_key, performance_data.dict())
         return performance_data
 

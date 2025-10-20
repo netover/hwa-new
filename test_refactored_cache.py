@@ -11,10 +11,12 @@ import logging
 import sys
 import time
 from typing import Dict, Any
+import pytest
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+@pytest.mark.asyncio
 async def test_basic_functionality():
     """Test basic cache operations."""
     print("🧪 Testing basic cache functionality...")
@@ -56,6 +58,7 @@ async def test_basic_functionality():
         print(f"❌ Basic functionality test failed: {e}")
         raise
 
+@pytest.mark.asyncio
 async def test_memory_management():
     """Test memory management and bounds checking."""
     print("\n🧪 Testing memory management...")
@@ -89,6 +92,7 @@ async def test_memory_management():
         print(f"❌ Memory management test failed: {e}")
         raise
 
+@pytest.mark.asyncio
 async def test_rollback_functionality():
     """Test transaction rollback functionality."""
     print("\n🧪 Testing rollback functionality...")
@@ -143,6 +147,7 @@ async def test_rollback_functionality():
         print(f"❌ Rollback functionality test failed: {e}")
         raise
 
+@pytest.mark.asyncio
 async def test_snapshot_functionality():
     """Test snapshot and restore functionality."""
     print("\n🧪 Testing snapshot functionality...")
@@ -260,7 +265,7 @@ async def test_concurrent_access():
         await asyncio.gather(*tasks)
         end_time = time.time()
 
-        print(f"✅ Concurrent test completed in {end_time - start_time".2f"}s")
+        print(f"✅ Concurrent test completed in {end_time - start_time:.2f}s")
         print(f"✅ Final cache size: {cache.size()}")
 
         # Verify cache is still in good state

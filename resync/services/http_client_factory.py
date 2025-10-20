@@ -8,6 +8,7 @@ consistent configuration, timeouts, and limits across the application.
 from typing import Optional
 
 import httpx
+from httpx import AsyncClient
 
 from resync.core.constants import (
     DEFAULT_CONNECT_TIMEOUT,

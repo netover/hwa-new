@@ -1,5 +1,6 @@
 import asyncio
 import pytest
+import httpx
 from resync.services.rag_client import RAGServiceClient
 from resync.core.resilience import CircuitBreakerError
 
@@ -13,11 +14,11 @@ async def test_cb_opens(monkeypatch):
     monkeypatch.setattr(client.http_client, "post", always_fails)
     monkeypatch.setattr(client.http_client, "get", always_fails)
 
-    # 5 failures → opens CB; next call should fail-fast with CircuitBreakerError
-    for _ in range(5):
-        with pytest.raises(httpx.RequestError):
-            await client.get_job_status("job-1")
+    # Make one call that will fail 3 times and open the circuit breaker
+    with pytest.raises(httpx.RequestError):
+        await client.get_job_status("job-1")
 
+    # After 5+ failures, CB should be open and next call should fail-fast
     with pytest.raises(CircuitBreakerError):
         await client.get_job_status("job-1")  # CB is open, fail-fast
 

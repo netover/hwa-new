@@ -51,6 +51,9 @@ except ImportError:
         def __init__(self, **kwargs):
             pass
 
+        def shutdown(self, **kwargs):
+            pass
+
 
 try:
     from opentelemetry.sdk.trace.export import ConsoleSpanProcessor
@@ -98,6 +101,14 @@ class IntelligentSampler(Sampler):
 
         # Sampling decisions cache
         self._decisions: Dict[str, SamplingResult] = {}
+
+    def get_description(self) -> str:
+        """Return a description of the sampling strategy."""
+        return (
+            f"IntelligentSampler(base_rate={self.base_sample_rate}, "
+            f"max_rate={self.max_sample_rate}, "
+            f"errors={self.error_count}/{self.total_requests})"
+        )
 
     def should_sample(
         self,
@@ -274,17 +285,23 @@ class DistributedTracingManager:
         # Add span processors
         span_processor = BatchSpanProcessor(
             self.jaeger_exporter,
-            max_batch_size=self.config.max_batch_size,
+            max_export_batch_size=self.config.max_batch_size,
             export_timeout_millis=self.config.export_timeout_seconds * 1000,
-            max_queue_size=self.config.max_queue_size,
+            schedule_delay_millis=5000,
         )
 
         self.tracer_provider.add_span_processor(span_processor)
 
         # Add console processor for development
-        if logger.level <= 10 and CONSOLE_AVAILABLE:  # DEBUG level
-            console_processor = ConsoleSpanProcessor()
-            self.tracer_provider.add_span_processor(console_processor)
+        try:
+            logger_level = getattr(logger, 'level', 20)  # Default to INFO if no level attribute
+            if logger_level <= 10 and CONSOLE_AVAILABLE:  # DEBUG level
+                console_processor = ConsoleSpanProcessor()
+                self.tracer_provider.add_span_processor(console_processor)
+        except AttributeError:
+            if CONSOLE_AVAILABLE:  # Default to adding console processor if we can't check level
+                console_processor = ConsoleSpanProcessor()
+                self.tracer_provider.add_span_processor(console_processor)
 
         # Add custom span processors
         for processor in self.config.custom_span_processors:
@@ -295,7 +312,7 @@ class DistributedTracingManager:
 
         # Create tracer
         self.tracer = trace.get_tracer(
-            __name__, version="1.0.0", attributes=self.config.jaeger_tags
+            __name__
         )
 
         logger.info("Distributed tracing initialized")
@@ -630,6 +647,50 @@ def get_current_trace_id() -> Optional[str]:
 def add_span_attribute(key: str, value: Any) -> None:
     """Add attribute to current span."""
     distributed_tracing_manager.add_span_attribute(key, value)
+
+
+async def setup_tracing(config: Optional[TraceConfiguration] = None) -> DistributedTracingManager:
+    """
+    Initialize and setup distributed tracing.
+
+    Args:
+        config: Optional trace configuration
+
+    Returns:
+        DistributedTracingManager instance
+    """
+    manager = DistributedTracingManager(config)
+    await manager.start()
+    return manager
+
+
+def traced(operation_name: str, **attributes):
+    """
+    Decorator to trace function calls.
+
+    Args:
+        operation_name: Name of the operation
+        **attributes: Additional attributes to add to the span
+
+    Returns:
+        Decorator function
+    """
+    def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                manager = await get_distributed_tracing_manager()
+                with manager.trace_context(operation_name, **attributes):
+                    return await func(*args, **kwargs)
+            return async_wrapper
+        else:
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                # For sync functions, we'll use a simplified approach
+                return func(*args, **kwargs)
+            return sync_wrapper
+
+    return decorator
 
 
 def record_exception(exception: Exception) -> None:

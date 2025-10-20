@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from litellm.exceptions import APIError, ConnectionError
+from litellm.exceptions import APIError, APIConnectionError
 
 from ..exceptions import LLMError
 from .llm import call_llm
@@ -61,7 +61,7 @@ async def test_call_llm_raises_llmerror_after_retries_on_network_error(mocker):
     This tests the handling of connection-related issues.
     """
     # Patch the LiteLLM acompletion function to consistently raise a connection error
-    mock_acompletion = AsyncMock(side_effect=ConnectionError("Network error"))
+    mock_acompletion = AsyncMock(side_effect=APIConnectionError("Network error"))
     mocker.patch("resync.core.utils.llm.acompletion", mock_acompletion)
 
     # Call the function and assert that it raises our custom LLMError
@@ -72,6 +72,6 @@ async def test_call_llm_raises_llmerror_after_retries_on_network_error(mocker):
 
     # Assertions
     assert "Connection error" in str(excinfo.value)
-    assert isinstance(excinfo.value.__cause__, ConnectionError)
+    assert isinstance(excinfo.value.__cause__, APIConnectionError)
     # max_retries=1 means 1 initial call + 1 retry = 2 calls
     assert mock_acompletion.call_count == 2
