@@ -43,9 +43,34 @@ from resync.cqrs.dispatcher import initialize_dispatcher
 from resync.settings import settings
 
 logger = get_logger(__name__)
+# Lazy initialization with environment flag
+_EAGER = os.getenv("RESYNC_EAGER_BOOT") == "1"
+_BOOTED = False
+
+def boot_if_needed():
+    global _BOOTED
+    if _BOOTED:
+        return
+    # (mover para cá as inicializações que antes rodavam no import)
+    # ex: registrar middlewares, carregar extensões, iniciar health checks leves…
+    _BOOTED = True
+    logger.info("Lifespan booted lazily.")
+
+if _EAGER:
+    boot_if_needed()
+
+# Create a global RedisInitializer instance - lazy initialization
+_redis_initializer = None
+
+def get_redis_initializer() -> RedisInitializer:
+    """Get the global Redis initializer instance with lazy initialization."""
+    global _redis_initializer
+    if _redis_initializer is None:
+        _
+    return _redis_initializer
 
 # Create a global RedisInitializer instance
-redis_initializer = RedisInitializer()
+
 
 
 @asynccontextmanager

@@ -7,7 +7,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import aiofiles
+# Soft import for aiofiles (optional dependency)
+try:
+    import aiofiles  # type: ignore
+except ImportError:
+    aiofiles = None  # type: ignore
 import psutil
 
 from resync.core.app_context import AppContext
@@ -353,10 +357,13 @@ class HealthCheckService:
                     try:
                         # Test write access
                         test_file = dir_path / ".health_check_test"
-                        async with aiofiles.open(test_file, "w") as f:
-                            await f.write("health check test")
-                        await aiofiles.os.remove(test_file)
-                        dir_statuses[str(dir_path)] = "accessible"
+                        if aiofiles is None:
+                            dir_statuses[str(dir_path)] = "skipped (aiofiles not available)"
+                        else:
+                            async with aiofiles.open(test_file, "w") as f:
+                                await f.write("health check test")
+                            await aiofiles.os.remove(test_file)
+                            dir_statuses[str(dir_path)] = "accessible"
                     except Exception as e:
                         dir_statuses[str(dir_path)] = f"error: {str(e)}"
                 else:

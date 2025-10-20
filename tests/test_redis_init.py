@@ -6,10 +6,17 @@ import pytest
 from unittest.mock import AsyncMock, patch
 from resync.core.redis_init import RedisInitializer
 from resync.settings import settings
-import redis.asyncio as redis
-import redis.exceptions
+
+# Soft import for redis (optional dependency for testing)
+try:
+    import redis.asyncio as redis
+    import redis.exceptions
+except ImportError:
+    redis = None
+    redis.exceptions = None
 
 
+@pytest.mark.skipif(redis is None, reason="redis not available")
 @pytest.mark.asyncio
 async def test_redis_initializer_basic():
     """

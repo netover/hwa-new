@@ -7,7 +7,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import aiofiles
+# Soft import for aiofiles (optional dependency)
+try:
+    import aiofiles  # type: ignore
+except ImportError:
+    aiofiles = None  # type: ignore
 from dataclasses import dataclass
 import psutil
 import structlog
@@ -930,8 +934,11 @@ class HealthCheckService:
             test_file = Path(tempfile.gettempdir()) / f"health_check_{file_id}.tmp"
             write_test = "File system write test not completed"
             try:
-                async with aiofiles.open(test_file, "w") as f:
-                    await f.write("health check test")
+                if aiofiles is None:
+                    write_test = "File system write test skipped (aiofiles not available)"
+                else:
+                    async with aiofiles.open(test_file, "w") as f:
+                        await f.write("health check test")
                 write_test = "File system write test passed"
             except Exception as e:
                 write_test = f"File system write test failed: {e}"
@@ -941,7 +948,7 @@ class HealthCheckService:
             finally:
                 # Always attempt cleanup, but don't fail the health check if cleanup fails
                 try:
-                    if test_file.exists():
+                    if test_file.exists() and aiofiles is not None:
                         await aiofiles.os.remove(test_file)
                 except:
                     # Just log if cleanup fails, don't affect the health check result

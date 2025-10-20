@@ -17,9 +17,29 @@ from typing import Any, Dict, Optional, Set
 logger = logging.getLogger(__name__)
 
 # Import from local modules
-from .async_cache import AsyncTTLCache
 from .config_watcher import handle_config_change
 from .metrics import runtime_metrics
+
+# Lazy loading for heavy imports to avoid collection issues
+_LAZY_EXPORTS = {
+    "AsyncTTLCache": ("resync.core.async_cache", "AsyncTTLCache"),
+}
+_LOADED_EXPORTS = {}
+
+def __getattr__(name: str):
+    """PEP 562 lazy loading for heavy imports."""
+    if name in _LAZY_EXPORTS:
+        mod, attr = _LAZY_EXPORTS[name]
+        if name not in _LOADED_EXPORTS:
+            module = __import__(mod, fromlist=[attr])
+            _LOADED_EXPORTS[name] = getattr(module, attr)
+        return _LOADED_EXPORTS[name]
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+def get_async_ttl_cache_class():
+    """Explicit accessor to avoid import-time side effects."""
+    from .async_cache import AsyncTTLCache
+    return AsyncTTLCache
 
 # Direct imports of exceptions for stability and simplicity
 from .exceptions import (
