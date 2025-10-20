@@ -207,14 +207,6 @@ class RedisInitializer:
         idempotency_manager = IdempotencyManager(redis_client)
         app_container.register_instance(IdempotencyManager, idempotency_manager)
 
-        return idempotency_manager</search>
-</search_and_replace>
-        from resync.core.idempotency.manager import IdempotencyManager
-
-        # Ensure idempotency manager gets the validated client
-        idempotency_manager = IdempotencyManager(redis_client)
-        app_container.register_instance(IdempotencyManager, idempotency_manager)
-
         return idempotency_manager
 
     async def _health_check_loop(self, interval: int):
