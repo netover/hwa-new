@@ -4,7 +4,7 @@ Modelos de dados para o sistema de idempotency.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -43,3 +43,31 @@ class IdempotencyRecord:
             expires_at=datetime.fromisoformat(data["expires_at"]),
             request_metadata=data.get("request_metadata", {}),
         )
+
+
+@dataclass
+class RequestContext:
+    """Contexto de uma requisição para idempotency"""
+
+    method: str
+    url: str
+    headers: Dict[str, str] = field(default_factory=dict)
+    body: Optional[bytes] = None
+    idempotency_key: Optional[str] = None
+
+    def get_request_hash(self) -> str:
+        """Gera hash único da requisição"""
+        import hashlib
+        import json
+
+        # Criar representação canônica da requisição
+        request_data = {
+            "method": self.method,
+            "url": self.url,
+            "headers": dict(sorted(self.headers.items())),
+            "body": self.body.decode('utf-8') if self.body else None
+        }
+
+        # Gerar hash
+        request_json = json.dumps(request_data, sort_keys=True)
+        return hashlib.sha256(request_json.encode()).hexdigest()

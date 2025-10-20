@@ -169,7 +169,7 @@ logger = structlog.get_logger(__name__)
 
 
 # --- Pydantic Models for Agent Configuration ---
-from resync.api.models.agents import AgentConfig, AgentType
+from resync.models.agents import AgentConfig, AgentType
 from pydantic import BaseModel
 from typing import List
 

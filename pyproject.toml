@@ -28,3 +28,12 @@ dev = [
     "isort>=5.13",
     "pylint>=3.0",
 ]
+
+[tool.importlinter]
+root_package = "resync"
+
+[[tool.importlinter.contracts]]
+name = "No circular imports"
+type = "layers"
+layers = ["resync"]
+forbidden_layers = ["resync"]

@@ -22,16 +22,8 @@ from resync.core.structured_logger import get_logger
 logger = get_logger(__name__)
 
 
-class SOC2TrustServiceCriteria(Enum):
-    """SOC 2 Trust Service Criteria."""
-
-    SECURITY = "security"  # Protects against unauthorized access
-    AVAILABILITY = "availability"  # Systems available for operation
-    PROCESSING_INTEGRITY = (
-        "processing_integrity"  # System processing complete, accurate, timely
-    )
-    CONFIDENTIALITY = "confidentiality"  # Information designated confidential protected
-    PRIVACY = "privacy"  # Personal information collected, used, retained appropriately
+# Import shared types to avoid circular dependency
+from resync.core.compliance.types import SOC2TrustServiceCriteria, SOC2ComplianceManager as BaseSOC2ComplianceManager
 
 
 class ControlCategory(Enum):
@@ -236,7 +228,7 @@ class SOC2ComplianceConfig:
     critical_control_monitoring: bool = True
 
 
-class SOC2ComplianceManager:
+class SOC2ComplianceManager(BaseSOC2ComplianceManager):
     """
     Main SOC 2 Type II compliance management system.
 

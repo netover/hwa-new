@@ -26,7 +26,9 @@ class StrategyValidationError(ValueError):
 # Lazy import to avoid circular dependency
 def _get_soc2_classes():
     """Lazy import to avoid circular dependency."""
-    from resync.core.soc2_compliance_refactored import SOC2ComplianceManager, SOC2TrustServiceCriteria
+    from resync.core.compliance.types import SOC2ComplianceManager as BaseSOC2ComplianceManager, SOC2TrustServiceCriteria
+    # Get the actual implementation from soc2_compliance_refactored
+    from resync.core.soc2_compliance_refactored import SOC2ComplianceManager
     return SOC2ComplianceManager, SOC2TrustServiceCriteria
 
 

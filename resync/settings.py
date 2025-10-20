@@ -824,3 +824,21 @@ def load_settings() -> Settings:
         Settings: The global settings instance
     """
     return settings
+
+
+# --- PEP 562 Lazy Imports ---
+_LAZY_IMPORTS = {}
+_LOADED_IMPORTS = {}
+
+def __getattr__(name):
+    """PEP 562 __getattr__ for lazy imports to avoid circular dependencies."""
+    if name in _LAZY_IMPORTS:
+        if name not in _LOADED_IMPORTS:
+            try:
+                module_name, attr = _LAZY_IMPORTS[name]
+                module = __import__(module_name, fromlist=[attr])
+                _LOADED_IMPORTS[name] = getattr(module, attr)
+            except ImportError:
+                _LOADED_IMPORTS[name] = None
+        return _LOADED_IMPORTS[name]
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

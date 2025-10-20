@@ -3,6 +3,7 @@ Validação de chaves de idempotency.
 """
 
 import re
+import uuid
 from typing import Optional
 
 
@@ -27,3 +28,13 @@ class IdempotencyKeyValidator:
         if not cls.is_valid(key):
             raise ValueError(f"Invalid idempotency key format: {key}")
         return key
+
+
+def generate_idempotency_key() -> str:
+    """Gera uma nova chave de idempotency (UUID v4)"""
+    return str(uuid.uuid4())
+
+
+def validate_idempotency_key(key: str) -> str:
+    """Função de conveniência para validar chaves de idempotency"""
+    return IdempotencyKeyValidator.validate(key)
