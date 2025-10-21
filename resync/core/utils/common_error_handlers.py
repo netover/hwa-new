@@ -127,13 +127,18 @@ def retry_on_exception(
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
                 logger_instance = logger or logging.getLogger(func.__module__)
-                current_delay = delay
 
-                for attempt in range(max_retries + 1):
+                # Extract retry-specific arguments from kwargs
+                current_max_retries = kwargs.pop("max_retries", max_retries)
+                current_delay = kwargs.pop("initial_backoff", delay)
+
+                cleaned_kwargs = kwargs
+
+                for attempt in range(current_max_retries + 1):
                     try:
-                        return await func(*args, **kwargs)
+                        return await func(*args, **cleaned_kwargs)
                     except exceptions as e:
-                        if attempt < max_retries:
+                        if attempt < current_max_retries:
                             logger_instance.info(
                                 f"Attempt {attempt + 1} failed: {e}. "
                                 f"Retrying in {current_delay:.2f} seconds..."
