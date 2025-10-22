@@ -1126,6 +1126,17 @@ class IncidentResponseEngine:
 incident_response_engine = IncidentResponseEngine()
 
 
+class IncidentResponse:
+    """Basic incident response class for compatibility."""
+
+    def __init__(self):
+        self.engine = incident_response_engine
+
+    async def log_incident(self, incident_type: str, details: dict):
+        """Log an incident."""
+        return await self.engine.process_security_event(details)
+
+
 async def get_incident_response_engine() -> IncidentResponseEngine:
     """Get the global incident response engine instance."""
     if not incident_response_engine._running:

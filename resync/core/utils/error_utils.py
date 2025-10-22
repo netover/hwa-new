@@ -26,8 +26,6 @@ from resync.models.error_models import (
 )
 from resync.settings import settings
 
-from .error_factories import ErrorFactory
-
 logger = logging.getLogger(__name__)
 
 
@@ -512,4 +510,6 @@ def create_error_response_from_exception(
     correlation_id: Optional[str] = None,
 ) -> BaseErrorResponse:
     """Create standardized error response from any exception with security considerations."""
+    # Lazy import to avoid circular dependency
+    from .error_factories import ErrorFactory
     return ErrorFactory.create_error_response(exception, request, correlation_id)

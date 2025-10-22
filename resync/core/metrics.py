@@ -32,6 +32,11 @@ class MetricCounter:
             self.value = 0
             return value
 
+    def set(self, value: int) -> None:
+        """Set the counter value."""
+        with self._lock:
+            self.value = value
+
 
 @dataclass
 class MetricGauge:
@@ -319,14 +324,40 @@ class RuntimeMetrics:
 
 
 # Global singleton instance
-runtime_metrics = RuntimeMetrics()
+# Lazy initialization of runtime_metrics
+_runtime_metrics: Optional[RuntimeMetrics] = None
+
+def _get_runtime_metrics() -> RuntimeMetrics:
+    """Lazy initialization of runtime metrics."""
+    global _runtime_metrics
+    if _runtime_metrics is None:
+        _runtime_metrics = RuntimeMetrics()
+    return _runtime_metrics
+
+# Backward compatibility - runtime_metrics now uses lazy initialization
+# Create a proxy object that behaves like RuntimeMetrics
+class _RuntimeMetricsProxy:
+    """Proxy object for lazy initialization of RuntimeMetrics."""
+
+    def __init__(self):
+        self._instance = None
+
+    def _get_instance(self):
+        if self._instance is None:
+            self._instance = RuntimeMetrics()
+        return self._instance
+
+    def __getattr__(self, name):
+        return getattr(self._get_instance(), name)
+
+runtime_metrics = _RuntimeMetricsProxy()
 
 
 def get_correlation_context() -> str:
     """Get or create correlation ID for current context."""
     # In a real async context, this would use contextvars
     # For now, we'll create a new one if none exists
-    return runtime_metrics.create_correlation_id()
+    return _get_runtime_metrics().create_correlation_id()
 
 
 def track_llm_metrics(func):

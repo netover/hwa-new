@@ -17,7 +17,7 @@ dynaconf>=3.2.4
 tenacity>=8.2.3
 prometheus-client>=0.20.0
 apscheduler>=3.10.4
-pybreaker>=1.1.0
+pybreaker>=0.7.0
 jinja2>=3.1.0
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
@@ -37,6 +37,11 @@ aiohttp>=3.8.0
 python-dotenv>=1.0.0
 agno>=0.1.0
 websockets>=12.0  # For WebSocket support in FastAPI
+
+# Additional dependencies found in codebase
+python-dateutil>=2.8.0  # Used in TWS service
+numpy>=1.24.0  # Used in anomaly detection and ML
+scikit-learn>=1.3.0  # Used in anomaly detection
 
 # Flask-SocketIO dependencies for WebSocket support
 Flask-SocketIO>=5.3.6
@@ -60,3 +65,5 @@ authlib>=1.3.0
 autoflake==2.3.1
 vulture==2.10
 pyflakes==3.1.0
+# Logging dependencies
+structlog>=23.2.0

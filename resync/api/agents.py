@@ -1,3 +1,4 @@
+from typing import Any, List
 import logging
 
 from fastapi import APIRouter, Depends, Request
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @agents_router.get("/all")
-async def list_all_agents(request: Request, agent_manager=agent_manager_dependency):
+async def list_all_agents(request: Request, agent_manager=agent_manager_dependency) -> List[Dict[str, Any]]:
     """
     Lists the configuration of all available agents.
     """

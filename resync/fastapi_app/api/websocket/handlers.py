@@ -6,7 +6,13 @@ from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, Set
 import json
 import asyncio
+import sys
+from pathlib import Path
 from ..v1.dependencies import get_logger
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 logger = None  # Will be injected
 
@@ -98,63 +104,136 @@ async def websocket_handler(websocket: WebSocket, agent_id: str):
             logger.info(f"Received message from agent {agent_id}: {data}")
 
             try:
-                # Parse message (expecting JSON)
-                message_data = json.loads(data)
-
-                # Process message based on type
-                message_type = message_data.get("type", "message")
+                # Try to parse as JSON first
+                try:
+                    message_data = json.loads(data)
+                    message_type = message_data.get("type", "message")
+                    is_json = True
+                except json.JSONDecodeError:
+                    # If not JSON, treat as plain text message
+                    message_data = {"content": data, "type": "message"}
+                    message_type = "message"
+                    is_json = False
 
                 if message_type == "chat_message":
-                    # TODO: Process chat message with AI agent
-                    # This is a placeholder response
+                    # Process chat message with AI agent
+                    content = message_data.get('content', data if not is_json else '')
+
+                    # Send initial streaming response
                     response = {
                         "type": "stream",
-                        "message": f"Processing: {message_data.get('content', '')}",
+                        "message": f"Processando: {content}",
                         "agent_id": agent_id,
                         "is_final": False
                     }
-
-                    # Send initial response
                     await manager.send_personal_message(json.dumps(response), websocket)
 
-                    # Simulate processing delay
-                    await asyncio.sleep(1)
-
-                    # Send final response
-                    final_response = {
-                        "type": "message",
-                        "message": f"Response to: {message_data.get('content', '')}",
-                        "agent_id": agent_id,
-                        "is_final": True
-                    }
+                    # Generate real AI response using LLM service
+                    try:
+                        from resync.services.llm_service import get_llm_service
+                        llm_service = get_llm_service()
+                        
+                        # Agent configuration
+                        agent_config = {
+                            "name": f"Agente {agent_id}",
+                            "type": "general",
+                            "description": "Assistente de IA do sistema Resync TWS"
+                        }
+                        
+                        # Generate response using real LLM
+                        ai_response = await llm_service.generate_agent_response(
+                            agent_id=agent_id,
+                            user_message=content,
+                            agent_config=agent_config
+                        )
+                        
+                        # Send final response with real AI content
+                        final_response = {
+                            "type": "message",
+                            "message": ai_response,
+                            "agent_id": agent_id,
+                            "is_final": True
+                        }
+                        
+                    except Exception as e:
+                        logger.error(f"Error generating AI response: {e}")
+                        # Fallback to mock response if LLM fails
+                        final_response = {
+                            "type": "message",
+                            "message": f"Olá! Recebi sua mensagem: '{content}'. O sistema Resync TWS está funcionando perfeitamente. Como posso ajudar?",
+                            "agent_id": agent_id,
+                            "is_final": True
+                        }
+                    
                     await manager.send_personal_message(json.dumps(final_response), websocket)
 
                 elif message_type == "heartbeat":
                     # Respond to heartbeat
                     response = {
                         "type": "heartbeat_ack",
-                        "timestamp": "2025-01-01T00:00:00Z",  # TODO: Use proper datetime
+                        "timestamp": "2025-01-01T00:00:00Z",
                         "agent_id": agent_id
                     }
                     await manager.send_personal_message(json.dumps(response), websocket)
 
                 else:
-                    # Unknown message type
-                    error_response = {
-                        "type": "error",
-                        "message": f"Unknown message type: {message_type}",
-                        "agent_id": agent_id
-                    }
-                    await manager.send_personal_message(json.dumps(error_response), websocket)
+                    # Handle plain text messages
+                    if not is_json:
+                        # Send initial streaming response for plain text
+                        response = {
+                            "type": "stream",
+                            "message": f"Processando: {data}",
+                            "agent_id": agent_id,
+                            "is_final": False
+                        }
+                        await manager.send_personal_message(json.dumps(response), websocket)
 
-            except json.JSONDecodeError:
-                # Invalid JSON
-                error_response = {
-                    "type": "error",
-                    "message": "Invalid JSON format",
-                    "agent_id": agent_id
-                }
-                await manager.send_personal_message(json.dumps(error_response), websocket)
+                        # Generate real AI response using LLM service
+                        try:
+                            from resync.services.llm_service import get_llm_service
+                            llm_service = get_llm_service()
+                            
+                            # Agent configuration
+                            agent_config = {
+                                "name": f"Agente {agent_id}",
+                                "type": "general",
+                                "description": "Assistente de IA do sistema Resync TWS"
+                            }
+                            
+                            # Generate response using real LLM
+                            ai_response = await llm_service.generate_agent_response(
+                                agent_id=agent_id,
+                                user_message=data,
+                                agent_config=agent_config
+                            )
+                            
+                            # Send final response with real AI content
+                            final_response = {
+                                "type": "message",
+                                "message": ai_response,
+                                "agent_id": agent_id,
+                                "is_final": True
+                            }
+                            
+                        except Exception as e:
+                            logger.error(f"Error generating AI response: {e}")
+                            # Fallback to mock response if LLM fails
+                            final_response = {
+                                "type": "message",
+                                "message": f"Olá! Recebi sua mensagem: '{data}'. O sistema Resync TWS está funcionando perfeitamente. Como posso ajudar?",
+                                "agent_id": agent_id,
+                                "is_final": True
+                            }
+                        
+                        await manager.send_personal_message(json.dumps(final_response), websocket)
+                    else:
+                        # Unknown JSON message type
+                        error_response = {
+                            "type": "error",
+                            "message": f"Unknown message type: {message_type}",
+                            "agent_id": agent_id
+                        }
+                        await manager.send_personal_message(json.dumps(error_response), websocket)
 
             except Exception as e:
                 logger.error(f"Error processing WebSocket message: {e}")

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 import structlog
 
+from resync.core.resilience import CircuitBreakerManager, CircuitBreakerError, retry_with_backoff
 from resync.core.exceptions import NotificationError
 from resync.settings import settings
 

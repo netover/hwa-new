@@ -1,29 +1,25 @@
 """
-RAG Microservice Core Processing Logic
+Core components of the Qdrant-only RAG microservice.
 
-This package contains the core processing logic for the RAG microservice.
+Exports all public interfaces and implementations for easy import.
 """
 
-from .file_ingestor import FileIngestor, create_file_ingestor
-
-from .process_rag import process_rag_job, get_rag_job_status, enqueue_rag_job
-from .init_rag_service import init_rag_service
-from .knowledge_graph_circuit_breaker import CircuitBreakerAsyncKnowledgeGraph
-from .sqlite_job_queue import SQLiteJobQueue
-from .vector_store import VectorStore, FAISSVectorStore, ChromaVectorStore
-from .processor import RAGServiceProcessor
+from .embedding_service import EmbeddingService
+from .ingest import IngestService
+from .interfaces import Embedder
+from .interfaces import Retriever
+from .interfaces import VectorStore
+from .retriever import RagRetriever
+from .vector_store import QdrantVectorStore
+from .vector_store import get_default_store
 
 __all__ = [
-    "FileIngestor",
-    "create_file_ingestor",
-    "process_rag_job",
-    "get_rag_job_status",
-    "enqueue_rag_job",
-    "init_rag_service",
-    "CircuitBreakerAsyncKnowledgeGraph",
-    "SQLiteJobQueue",
+    "Embedder",
     "VectorStore",
-    "FAISSVectorStore",
-    "ChromaVectorStore",
-    "RAGServiceProcessor"
+    "Retriever",
+    "EmbeddingService",
+    "QdrantVectorStore",
+    "get_default_store",
+    "RagRetriever",
+    "IngestService",
 ]

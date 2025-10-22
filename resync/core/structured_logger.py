@@ -23,9 +23,13 @@ import structlog
 from fastapi import Request
 from structlog.types import EventDict, WrappedLogger
 
-from resync.settings import settings
-
 from .encoding_utils import can_encode
+
+# Lazy import of settings to avoid circular dependencies
+def _get_settings():
+    """Lazy import of settings to avoid circular dependencies."""
+    from resync.settings import settings
+    return settings
 
 # ============================================================================
 # CONTEXT VARIABLES
@@ -118,6 +122,7 @@ def add_service_context(
     Returns:
         Event dict com service_name e environment
     """
+    settings = _get_settings()
     event_dict["service_name"] = settings.PROJECT_NAME
     event_dict["environment"] = settings.environment.value
     event_dict["version"] = settings.PROJECT_VERSION

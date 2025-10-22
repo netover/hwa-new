@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 
-from resync.api.models.agents import AgentConfig, AgentType
+from resync.models.agents import AgentConfig, AgentType
 from resync.core.fastapi_di import get_agent_manager
 
 # --- Sample Data for Mocking ---

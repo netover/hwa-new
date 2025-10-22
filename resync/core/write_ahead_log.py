@@ -16,7 +16,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-import aiofiles
+# Soft import for aiofiles (optional dependency)
+try:
+    import aiofiles  # type: ignore
+except ImportError:
+    aiofiles = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +141,9 @@ class WriteAheadLog:
                     logger.warning(f"Error closing WAL file handle: {e}")
 
             # Open or create the log file in append mode using aiofiles
-            self._file_handle = await aiofiles.open(
-                self.current_log_file_path, "a", encoding="utf-8"
-            )
+            if aiofiles is None:
+                raise RuntimeError("aiofiles is required for async WAL operations but is not installed.")
+            self._file_handle = await aiofiles.open(self.file_path, mode="a", encoding="utf-8")
             self._current_file_path = self.current_log_file_path
             # Get current file size
             if self.current_log_file_path.exists():
@@ -226,6 +230,8 @@ class WriteAheadLog:
         entries = []
 
         try:
+            if aiofiles is None:
+                raise RuntimeError("aiofiles is required for async WAL operations but is not installed.")
             async with aiofiles.open(log_file_path, "r", encoding="utf-8") as f:
                 content = await f.read()
                 for line_num, line in enumerate(content.splitlines(), 1):

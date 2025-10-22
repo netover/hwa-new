@@ -14,15 +14,15 @@ from typing import Any, Optional, Protocol, Union
 
 from resync.core.cache_hierarchy import (
     get_cache_hierarchy,
-)  [attr-defined]
-from resync.core.interfaces import (  [attr-defined]
+)
+from resync.core.interfaces import (
     IAgentManager,
     IKnowledgeGraph,
     ITWSClient,
 )
-from resync.core.logger import log_with_correlation  [attr-defined]
+from resync.core.logger import log_with_correlation
 from resync.models.tws import (
-    CriticalJob,  [attr-defined]
+    CriticalJob,
     JobStatus,
     SystemStatus,
     WorkstationStatus,

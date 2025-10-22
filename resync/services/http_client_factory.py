@@ -8,6 +8,7 @@ consistent configuration, timeouts, and limits across the application.
 from typing import Optional
 
 import httpx
+from httpx import AsyncClient
 
 from resync.core.constants import (
     DEFAULT_CONNECT_TIMEOUT,
@@ -85,31 +86,24 @@ def create_async_http_client(
     )
 
 
-def create_tws_http_client(
-    hostname: str,
-    port: int,
-    username: str,
-    password: str,
-    verify_ssl: bool = True,
-    **kwargs,
-) -> httpx.AsyncClient:
-    """
-    Creates an HTTP client specifically configured for TWS API calls.
+import logging
 
-    Args:
-        hostname: TWS server hostname
-        port: TWS server port
-        username: TWS username
-        password: TWS password
-        verify_ssl: Whether to verify SSL certificates
-        **kwargs: Additional arguments passed to create_async_http_client
+logger = logging.getLogger(__name__)
 
-    Returns:
-        Configured httpx.AsyncClient for TWS operations
-    """
-    base_url = f"https://{hostname}:{port}"
-    auth = httpx.BasicAuth(username, password)
+def create_tws_http_client(*, base_url: str | None = None, auth=None, verify: bool | str | None = None, **kwargs) -> AsyncClient:
+    scheme = settings.TWS_SCHEME
+    host = settings.TWS_HOST
+    port = settings.TWS_PORT
+    final_base = base_url or f"{scheme}://{host}:{port}"
+    # Enforce TWS-specific verification setting
+    verify_param = settings.TWS_VERIFY if verify is None else verify
 
-    return create_async_http_client(
-        base_url=base_url, auth=auth, verify=verify_ssl, **kwargs
+    # ... timeout and limits config ...
+    return AsyncClient(
+        base_url=final_base,
+        auth=auth,
+        timeout=timeout,
+        limits=limits,
+        verify=verify_param,  # Apply TWS verification setting
+        **kwargs
     )

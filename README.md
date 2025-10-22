@@ -73,6 +73,31 @@ Comprehensive security hardening including:
 - **Cryptography**: Secure password hashing and token generation
 - **Audit Logging**: Complete audit trail for security events
 
+### ✅ Centralized Resilience Pattern
+
+Resync now implements a **unified, production-grade resilience pattern** for all HTTP client operations:
+
+- **CircuitBreakerManager**: Centralized registry-based circuit breaker using `pybreaker` (inspired by Resilience4j)
+- **retry_with_backoff**: AWS-style exponential backoff with full jitter
+- **Consistent Configuration**: All services use the same patterns, names, and parameters
+- **Observability**: Circuit breaker states and metrics exposed for monitoring
+
+**Implementation Examples:**
+- `resync/services/rag_client.py`
+- `resync/services/tws_service.py`
+
+**New Service Requirement:**
+> 🔒 **All new HTTP client services MUST use `CircuitBreakerManager` and `retry_with_backoff` from `resync/core/resilience.py`.**
+> Custom circuit breaker or retry implementations are prohibited.
+
+**CI/CD Enforcement:**
+> A new quality gate has been added to the CI/CD pipeline to automatically fail builds that:
+> - Use `@circuit_breaker` or `@retry_with_backoff` decorators directly
+> - Implement custom retry or circuit breaker logic
+> - Fail to register circuit breakers with `CircuitBreakerManager`
+
+This ensures consistent, observable, and production-ready resilience across the entire codebase.
+
 ## 📊 Logging & Observability
 
 ### Sistema de Logs Estruturados
@@ -829,9 +854,10 @@ We welcome contributions to improve Resync! Please follow these guidelines:
 4. Run the test suite (`pytest`)
 5. Format code (`black .`)
 6. Check types (`mypy .`)
-7. Commit your changes (`git commit -m 'Add amazing feature'`)
-8. Push to the branch (`git push origin feature/amazing-feature`)
-9. Submit a pull request with a clear description
+7. Run linters (`pylint resync/`, `flake8 resync/`)
+8. Commit your changes (`git commit -m 'Add amazing feature'`)
+9. Push to the branch (`git push origin feature/amazing-feature`)
+10. Submit a pull request with a clear description
 
 ### Development Setup
 

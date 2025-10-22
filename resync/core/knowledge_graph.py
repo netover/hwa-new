@@ -19,7 +19,7 @@ neo4j_circuit_breaker = CircuitBreaker(
 )
 
 # Circuit breaker statistics function
-def get_neo4j_circuit_breaker_stats():
+def get_neo4j_circuit_breaker_stats() -> dict[str, Any]:
     """Get circuit breaker statistics for monitoring."""
     return neo4j_circuit_breaker.get_stats()
 
@@ -48,7 +48,7 @@ class AsyncKnowledgeGraph:
         """Gets the underlying Neo4j driver client."""
         return self.driver
 
-    async def close(self):
+    async def close(self) -> None:
         """Fecha a conexão com o driver do Neo4j."""
         if self.driver:
             await self.driver.close()
@@ -419,7 +419,7 @@ class AsyncKnowledgeGraph:
         """Gets the underlying Neo4j driver client."""
         return self.driver
 
-    async def close(self):
+    async def close(self) -> None:
         """Fecha a conexão com o driver do Neo4j."""
         if self.driver:
             await self.driver.close()

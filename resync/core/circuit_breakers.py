@@ -8,10 +8,15 @@ import asyncio
 from aiobreaker import CircuitBreaker, CircuitBreakerListener
 
 from resync.core.structured_logger import get_logger
-from resync.core.metrics import runtime_metrics
 from resync.core.exceptions import AuthenticationError, LLMError, RedisConnectionError
 
 logger = get_logger(__name__)
+
+# Lazy import of runtime_metrics to avoid circular dependencies
+def _get_runtime_metrics():
+    """Lazy import of runtime_metrics."""
+    from resync.core.metrics import runtime_metrics
+    return runtime_metrics
 
 # Type variable for generic decorator typing
 F = TypeVar('F', bound=Callable[..., Any])
@@ -37,7 +42,7 @@ class RedisBreakerListener(CircuitBreakerListener):
         )
         
         if new_state == "OPEN":
-            runtime_metrics.record_health_check(
+            _get_runtime_metrics().record_health_check(
                 "redis_circuit_breaker",
                 "opened",
                 {
@@ -64,7 +69,7 @@ class TWSBreakerListener(CircuitBreakerListener):
         )
         
         if new_state == "OPEN":
-            runtime_metrics.record_health_check(
+            _get_runtime_metrics().record_health_check(
                 "tws_circuit_breaker",
                 "opened",
                 {
@@ -91,7 +96,7 @@ class LLMBreakerListener(CircuitBreakerListener):
         )
         
         if new_state == "OPEN":
-            runtime_metrics.record_health_check(
+            _get_runtime_metrics().record_health_check(
                 "llm_circuit_breaker",
                 "opened",
                 {
@@ -112,6 +117,8 @@ redis_breaker: CircuitBreaker = CircuitBreaker(
     exclude=[ValueError, TypeError],
     name="redis_operations"
 )
+# Add compatibility attributes
+redis_breaker.exclude = [ValueError, TypeError]
 redis_breaker.add_listener(RedisBreakerListener())
 
 # TWS Circuit Breaker
@@ -121,6 +128,8 @@ tws_breaker: CircuitBreaker = CircuitBreaker(
     exclude=[AuthenticationError],
     name="tws_operations"
 )
+# Add compatibility attributes
+tws_breaker.exclude = [AuthenticationError]
 tws_breaker.add_listener(TWSBreakerListener())
 
 # LLM Circuit Breaker

@@ -1,10 +1,7 @@
 """Interfaces for Resync components."""
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Protocol, runtime_checkable
-
-if TYPE_CHECKING:
-    from resync.core.agent_manager import AgentConfig
+from typing import Any, Optional, Protocol, runtime_checkable
 
 
 @runtime_checkable

@@ -19,7 +19,6 @@ from resync.core.exceptions import (
     LLMError,
     ParsingError,
 )
-from resync.core.knowledge_graph import AsyncKnowledgeGraph
 from resync.core.structured_logger import get_logger
 from resync.core.utils.json_parser import parse_llm_json_response
 from resync.core.utils.llm import call_llm
@@ -27,8 +26,15 @@ from resync.settings import settings
 
 logger = get_logger(__name__)
 
-# Initialize singleton instances
-knowledge_graph = AsyncKnowledgeGraph()
+# Lazy initialization of knowledge graph
+_knowledge_graph = None
+
+def _get_knowledge_graph():
+    global _knowledge_graph
+    if _knowledge_graph is None:
+        from resync.core.knowledge_graph import AsyncKnowledgeGraph
+        _knowledge_graph = AsyncKnowledgeGraph()
+    return _knowledge_graph
 audit_lock = DistributedAuditLock()
 audit_queue = AsyncAuditQueue()
 
@@ -36,7 +42,7 @@ audit_queue = AsyncAuditQueue()
 async def _validate_memory_for_analysis(mem: dict[str, Any]) -> bool:
     """Checks if a memory is valid for analysis."""
     memory_id = str(mem.get("id", ""))
-    if await knowledge_graph.is_memory_already_processed(memory_id):
+    if await _get_knowledge_graph().is_memory_already_processed(memory_id):
         logger.debug("memory_already_processed", memory_id=memory_id)
         return False
 
@@ -54,7 +60,7 @@ async def _validate_memory_for_analysis(mem: dict[str, Any]) -> bool:
         return False
 
     # Skip if memory is already approved by human
-    if await knowledge_graph.is_memory_approved(memory_id):
+    if await _get_knowledge_graph().is_memory_approved(memory_id):
         logger.debug("memory_already_approved_by_human", memory_id=memory_id)
         return False
 
@@ -123,7 +129,7 @@ async def _perform_action_on_memory(
             confidence=confidence,
             reason=analysis.get("reason", "N/A"),
         )
-        success = await knowledge_graph.atomic_check_and_delete(memory_id)
+        success = await _get_knowledge_graph().atomic_check_and_delete(memory_id)
         return ("delete", memory_id) if success else None
 
     elif (
@@ -134,7 +140,7 @@ async def _perform_action_on_memory(
         logger.warning(
             "flagging_memory", memory_id=memory_id, confidence=confidence, reason=reason
         )
-        success = await knowledge_graph.atomic_check_and_flag(
+        success = await _get_knowledge_graph().atomic_check_and_flag(
             memory_id, reason, confidence
         )
         if success:
@@ -148,7 +154,7 @@ async def _perform_action_on_memory(
 async def _fetch_recent_memories() -> list[dict[str, Any]]:
     """Fetches recent memories from knowledge graph."""
     try:
-        memories = await knowledge_graph.get_memories(limit=RECENT_MEMORIES_FETCH_LIMIT)
+        memories = await _get_knowledge_graph().get_memories(limit=RECENT_MEMORIES_FETCH_LIMIT)
         return memories or []
     except KnowledgeGraphError as e:
         logger.error("failed_to_fetch_memories", error=str(e), exc_info=True)
@@ -218,11 +224,11 @@ async def analyze_memory(
                 return None
 
             # Check if memory is already flagged or approved before LLM analysis
-            if await knowledge_graph.is_memory_flagged(memory_id):
+            if await _get_knowledge_graph().is_memory_flagged(memory_id):
                 logger.debug("memory_already_flagged_by_ia", memory_id=memory_id)
                 return None
 
-            if await knowledge_graph.is_memory_approved(memory_id):
+            if await _get_knowledge_graph().is_memory_approved(memory_id):
                 logger.debug("memory_already_approved_by_human", memory_id=memory_id)
                 return None
 
@@ -264,6 +270,81 @@ async def _cleanup_locks() -> None:
 
 
 # Old functions removed - replaced by refactored versions above
+
+
+async def _analyze_memories_concurrently(memories: list[dict[str, Any]]) -> list[tuple[str, Any]]:
+    """
+    Analyze multiple memories concurrently using analyze_memory function.
+
+    Args:
+        memories: List of memory dictionaries to analyze
+
+    Returns:
+        List of tuples containing (action, result) for each memory
+    """
+    import asyncio
+
+    # Create tasks for concurrent analysis
+    tasks = [analyze_memory(mem) for mem in memories]
+
+    # Execute all tasks concurrently and get results
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Process results, converting exceptions to None
+    processed_results = []
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(
+                "memory_analysis_failed",
+                error=str(result),
+                exc_info=True
+            )
+            processed_results.append(None)
+        else:
+            processed_results.append(result)
+
+    return processed_results
+
+
+async def _process_analysis_results(results: list[tuple[str, Any] | None]) -> tuple[list[str], list[dict[str, Any]]]:
+    """
+    Process analysis results, separating memories to delete and flag.
+
+    Args:
+        results: List of analysis results (action, result) or None for failures
+
+    Returns:
+        Tuple of (memories_to_delete, memories_to_flag)
+    """
+    memories_to_delete = []
+    memories_to_flag = []
+
+    for result in results:
+        if result is None:
+            continue
+
+        action, data = result
+
+        if action == "delete" and isinstance(data, str):
+            memories_to_delete.append(data)
+            await audit_queue.add_audit_record(
+                action="memory_deleted_by_ia",
+                resource_type="memory",
+                resource_id=data,
+                details={"reason": "IA audit flagged for deletion"},
+                severity="info"
+            )
+        elif action == "flag" and isinstance(data, dict):
+            memories_to_flag.append(data)
+            await audit_queue.add_audit_record(
+                action="memory_flagged_by_ia",
+                resource_type="memory",
+                resource_id=str(data.get("id", "unknown")),
+                details={"reason": "IA audit flagged for review"},
+                severity="warning"
+            )
+
+    return memories_to_delete, memories_to_flag
 
 
 async def analyze_and_flag_memories() -> dict[str, int | str]:

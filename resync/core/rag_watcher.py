@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 RAG_DIRECTORY = settings.BASE_DIR / "rag"
 
 
-async def watch_rag_directory(file_ingestor: IFileIngestor):
+async def watch_rag_directory(file_ingestor: IFileIngestor) -> None:
     """Watches the rag/ directory for new files and triggers ingestion."""
     # Ensure the directory exists
     RAG_DIRECTORY.mkdir(exist_ok=True)

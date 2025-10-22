@@ -12,8 +12,17 @@ import asyncio
 import logging
 from typing import Any
 
-from agno.agent import Agent
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+
+# Lazy import of agno.agent to avoid import errors during test collection
+def _get_agno_agent():
+    """Lazy import of agno Agent."""
+    try:
+        from agno.agent import Agent
+        return Agent
+    except ImportError:
+        # Fallback for when agno is not available
+        return None
 
 from resync.api.utils.stream_handler import AgentResponseStreamer
 from resync.core.exceptions import (
@@ -138,7 +147,7 @@ async def _get_optimized_response(
 async def _finalize_and_store_interaction(
     websocket: WebSocket,
     knowledge_graph: IKnowledgeGraph,
-    agent: Agent,
+    agent: Any,  # Type hint removed for lazy import compatibility
     agent_id: SafeAgentID,
     sanitized_query: str,
     full_response: str,
@@ -179,7 +188,7 @@ async def _finalize_and_store_interaction(
 
 async def _handle_agent_interaction(
     websocket: WebSocket,
-    agent: Agent,
+    agent: Any,  # Type hint removed for lazy import compatibility
     agent_id: SafeAgentID,
     knowledge_graph: IKnowledgeGraph,
     data: str,
@@ -299,7 +308,7 @@ async def _setup_websocket_session(
 
 async def _message_processing_loop(
     websocket: WebSocket,
-    agent: Agent,
+    agent: Any,  # Type hint removed for lazy import compatibility
     agent_id: SafeAgentID,
     knowledge_graph: IKnowledgeGraph,
 ) -> None:

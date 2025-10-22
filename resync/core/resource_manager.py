@@ -186,7 +186,14 @@ async def managed_file(file_path: str, mode: str = "r") -> AsyncIterator[Any]:
             content = await f.read()
         # File automatically closed
     """
-    import aiofiles
+    # Soft import for aiofiles (optional dependency)
+    try:
+        import aiofiles  # type: ignore
+    except ImportError:
+        aiofiles = None  # type: ignore
+
+    if aiofiles is None:
+        raise RuntimeError("aiofiles is required for async file operations but is not installed.")
 
     file_handle = None
     try:

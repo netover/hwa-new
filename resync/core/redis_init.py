@@ -6,14 +6,37 @@ import socket
 import sys
 from typing import Optional
 
-import redis.asyncio as redis
-from redis.exceptions import (
-    AuthenticationError,
-    BusyLoadingError,
-    ConnectionError,
-    RedisError,
-    TimeoutError,
-)
+try:  # pragma: no cover
+    import redis.asyncio as redis  # type: ignore
+except Exception:
+    redis = None  # type: ignore
+
+from typing import Optional
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+_REDIS_CLIENT: Optional["redis.Redis"] = None  # type: ignore
+
+def is_redis_available() -> bool:
+    return redis is not None
+
+def get_redis_client() -> "redis.Redis":  # type: ignore
+    """
+    Late-accessor. Evita conectar durante a coleta do pytest.
+    Respeita RESYNC_DISABLE_REDIS=1 para cenários de teste/coleta.
+    """
+    if os.getenv("RESYNC_DISABLE_REDIS") == "1":
+        raise RuntimeError("Redis disabled by RESYNC_DISABLE_REDIS=1")
+    if redis is None:
+        raise RuntimeError("redis-py not installed (redis.asyncio).")
+    global _REDIS_CLIENT
+    if _REDIS_CLIENT is None:
+        url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        _REDIS_CLIENT = redis.from_url(url, encoding="utf-8", decode_responses=True)
+        logger.info("Initialized Redis client (lazy).")
+    return _REDIS_CLIENT
 
 from resync.settings import settings
 
@@ -150,6 +173,10 @@ class RedisInitializer:
 
     async def _create_client_with_pool(self) -> redis.Redis:
         """Create Redis client with optimized connection pool."""
+        if redis is None:
+            raise RuntimeError("redis is required for Redis operations but is not installed.")
+        if not hasattr(redis, 'Redis'):
+            raise RuntimeError("redis.Redis is not available - redis module is None")
         return redis.Redis.from_url(
             settings.redis_url,
             encoding="utf-8",
@@ -169,6 +196,10 @@ class RedisInitializer:
 
     async def _initialize_idempotency(self, redis_client: redis.Redis):
         """Initialize idempotency manager atomically."""
+        if redis is None:
+            raise RuntimeError("redis is required for Redis operations but is not installed.")
+        if not hasattr(redis, 'Redis'):
+            raise RuntimeError("redis.Redis is not available - redis module is None")
         from resync.core.container import app_container
         from resync.core.idempotency.manager import IdempotencyManager
 
@@ -204,10 +235,13 @@ class RedisInitializer:
             await self._client.connection_pool.disconnect()
 
 
-# Global Redis initializer instance
-_redis_initializer = RedisInitializer()
+# Global Redis initializer instance - lazy initialization
+_redis_initializer = None
 
 
 async def get_redis_initializer() -> RedisInitializer:
     """Get the global Redis initializer instance."""
+    global _redis_initializer
+    if _redis_initializer is None:
+        _redis_initializer = RedisInitializer()
     return _redis_initializer

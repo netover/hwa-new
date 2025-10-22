@@ -11,6 +11,18 @@ from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+try:
+    from redis import Redis
+    from redis.exceptions import ConnectionError, TimeoutError
+except ImportError:
+    # Handle case where redis is not available (e.g., in test environments)
+    Redis = None
+    ConnectionError = None
+    TimeoutError = None
+
+# Original imports (now wrapped in try/except)
+# from redis import Redis
+# from redis.exceptions import ConnectionError, TimeoutError
 from pydantic import BaseModel
 from redis import Redis
 from redis.exceptions import ConnectionError, TimeoutError

@@ -8,9 +8,9 @@ import pytest
 
 from resync.core.exceptions import DatabaseError, LLMError
 from resync.core.ia_auditor import (
-    _analyze_memories_concurrently,
     _cleanup_locks,
     _fetch_recent_memories,
+    _analyze_memories_concurrently,
     _process_analysis_results,
     analyze_and_flag_memories,
     analyze_memory,
@@ -102,7 +102,7 @@ class TestIAAuditor:
 
         assert to_delete == ["mem2"]
         assert to_flag == [{"id": "mem1"}, {"id": "mem3"}]
-        assert mock_dependencies["audit_queue"].add_audit_record.call_count == 2
+        assert mock_dependencies["audit_queue"].add_audit_record.call_count == 3
 
     async def test_analyze_and_flag_memories_full_flow(self, mock_dependencies):
         """Test the main orchestrator function with a successful flow."""

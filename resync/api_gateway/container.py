@@ -18,7 +18,7 @@ from resync.api_gateway.services import (
     ITWSService,
     ServiceFactory,
 )
-from resync.core.interfaces import (  [attr-defined]
+from resync.core.interfaces import (
     IAgentManager,
     IKnowledgeGraph,
     ITWSClient,

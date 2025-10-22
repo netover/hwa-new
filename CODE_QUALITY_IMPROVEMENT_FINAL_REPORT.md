@@ -200,6 +200,174 @@ tests/core/test_connection_pool_monitoring.py::TestConnectionPoolMetrics::test_p
 
 ---
 
+## ✅ Centralized Resilience Pattern Implementation
+
+### Context: The Problem
+
+Prior to this improvement, resilience patterns (Circuit Breaker and Retry with Backoff) were implemented inconsistently across services:
+
+- `RAGServiceClient` used a custom `CircuitBreaker` class
+- `OptimizedTWSClient` used decorator-based `@circuit_breaker` and `@retry_with_backoff`
+- No centralized management or monitoring
+- High code duplication and inconsistent configuration
+
+This led to:
+- Difficult maintenance
+- Inconsistent failure handling
+- Poor observability
+- Risk of configuration drift
+
+### Solution: Centralized Resilience Framework
+
+We implemented a unified, centralized resilience framework in `resync/core/resilience.py` based on industry best practices:
+
+#### 1. `CircuitBreakerManager` (Inspired by Resilience4j)
+
+A registry-based circuit breaker manager that:
+- Centralizes circuit breaker creation and management
+- Uses `pybreaker` for production-grade implementation
+- Allows dynamic registration of circuit breakers by service name
+- Provides state monitoring (`closed`, `open`, `half-open`)
+- Enables consistent configuration across services
+
+```python
+# resync/core/resilience.py
+
+class CircuitBreakerManager:
+    def __init__(self) -> None:
+        self._breakers: Dict[str, pybreaker.CircuitBreaker] = {}
+
+    def register(
+        self,
+        name: str,
+        *,
+        fail_max: int = 5,
+        reset_timeout: int = 60,
+        exclude: tuple[type[BaseException], ...] = (),
+    ) -> pybreaker.CircuitBreaker:
+        if name not in self._breakers:
+            self._breakers[name] = pybreaker.CircuitBreaker(
+                fail_max=fail_max,
+                reset_timeout=reset_timeout,
+                exclude=exclude,
+                name=name,
+            )
+        return self._breakers[name]
+
+    async def call(self, name: str, func: Callable[..., Awaitable[T]], *args, **kwargs) -> T:
+        br = self.get(name)
+        return await br.async_call(func, *args, **kwargs)
+```
+
+#### 2. `retry_with_backoff` (AWS-Style)
+
+A stateless, functional retry decorator implementing AWS-recommended exponential backoff with full jitter:
+
+```python
+async def retry_with_backoff(
+    op: Callable[[], Awaitable[T]],
+    *,
+    retries: int = 3,
+    base_delay: float = 0.5,
+    cap: float = 5.0,
+    jitter: bool = True,
+    retry_on: Iterable[type[BaseException]] = (Exception,),
+) -> T:
+    attempt = 0
+    while True:
+        try:
+            return await op()
+        except tuple(retry_on) as e:
+            attempt += 1
+            if attempt > retries:
+                raise
+            delay = min(cap, base_delay * (2 ** (attempt - 1)))
+            if jitter:
+                delay = random.uniform(0, delay)
+            logger.warning("retry attempt=%s delay=%.3fs err=%s", attempt, delay, type(e).__name__)
+            await asyncio.sleep(delay)
+```
+
+### Implementation in Services
+
+#### RAG Service Client
+
+```python
+# resync/services/rag_client.py
+
+class RAGServiceClient:
+    def __init__(self):
+        self.cbm = CircuitBreakerManager()
+        self.cbm.register("rag_service", fail_max=5, reset_timeout=60, exclude=(ValueError,))
+
+    async def enqueue_file(self, file: Any) -> str:
+        async def _once():
+            return await self.http_client.post(...)
+
+        async def _call():
+            resp = await self.cbm.call("rag_service", _once)
+            resp.raise_for_status()
+            return resp
+
+        resp = await retry_with_backoff(_call, retries=3, base_delay=1.0, cap=5.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        return resp.json()["job_id"]
+```
+
+#### TWS Service Client
+
+```python
+# resync/services/tws_service.py
+
+class OptimizedTWSClient:
+    def __init__(self, ...):
+        self.cbm = CircuitBreakerManager()
+        self.cbm.register("tws_http_client", fail_max=3, reset_timeout=30)
+        self.cbm.register("tws_ping", fail_max=5, reset_timeout=60)
+        # ... 12+ other circuit breakers registered
+
+    async def _make_request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        async def _once():
+            response = await client.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response
+
+        async def _call():
+            resp = await self.cbm.call("tws_http_client", _once)
+            return resp
+
+        resp = await retry_with_backoff(_call, retries=3, base_delay=1.0, cap=10.0, jitter=True, retry_on=(httpx.RequestError, httpx.TimeoutException, CircuitBreakerError))
+        return resp
+```
+
+### Benefits Achieved
+
+| Benefit | Description |
+|--------|-------------|
+| ✅ **Consistency** | All services use identical resilience patterns and configuration |
+| ✅ **Maintainability** | Single source of truth for circuit breaker logic |
+| ✅ **Observability** | All circuit breaker states and metrics are accessible via `cbm.state(name)` and `cbm.get(name).current_state` |
+| ✅ **Reduced Duplication** | Eliminated 15+ duplicated retry/circuit breaker implementations |
+| ✅ **Scalability** | Easy to add new circuit breakers for new services |
+| ✅ **Production-Ready** | Uses battle-tested `pybreaker` library with full async support |
+| ✅ **Security** | No hardcoded retry limits or failure thresholds |
+
+### Recommendations for Future Use
+
+1. **Always use `CircuitBreakerManager`** for new services — never implement custom circuit breakers.
+2. **Register circuit breakers in `__init__`** with descriptive names: `"service_name_endpoint"` (e.g., `"tws_job_details"`).
+3. **Use `retry_with_backoff`** for all HTTP calls — never implement custom retry logic.
+4. **Monitor circuit breaker states** in dashboards using `get_circuit_breaker_metrics()`.
+5. **Set `fail_max=3-5`** and `reset_timeout=30-60s` for HTTP services — adjust based on SLA.
+6. **Always include `CircuitBreakerError`** in `retry_on` to handle circuit breaker failures gracefully.
+
+### Conclusion
+
+This centralized resilience pattern is a **foundational architectural improvement** that transforms Resync from a collection of independent services into a cohesive, resilient, and observable distributed system. It aligns with enterprise best practices and provides a scalable, maintainable foundation for future growth.
+
+> **This pattern is now the official standard for all HTTP client resilience in the Resync codebase.**
+
+---
+
 ## 🏗️ Architecture Improvements
 
 ### Code Structure

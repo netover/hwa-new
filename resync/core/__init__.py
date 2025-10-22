@@ -17,9 +17,43 @@ from typing import Any, Dict, Optional, Set
 logger = logging.getLogger(__name__)
 
 # Import from local modules
-from .async_cache import AsyncTTLCache
 from .config_watcher import handle_config_change
 from .metrics import runtime_metrics
+
+# Lazy loading for heavy imports to avoid collection issues
+_LAZY_EXPORTS = {
+    "AsyncTTLCache": ("resync.core.async_cache", "AsyncTTLCache"),
+}
+_LOADED_EXPORTS = {}
+
+def __getattr__(name: str):
+    """PEP 562 lazy loading for heavy imports."""
+    if name in _LAZY_EXPORTS:
+        mod, attr = _LAZY_EXPORTS[name]
+        if name not in _LOADED_EXPORTS:
+            module = __import__(mod, fromlist=[attr])
+            _LOADED_EXPORTS[name] = getattr(module, attr)
+        return _LOADED_EXPORTS[name]
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+def get_async_ttl_cache_class():
+    """Explicit accessor to avoid import-time side effects."""
+    from .async_cache import AsyncTTLCache
+    return AsyncTTLCache
+
+# Direct imports of exceptions for stability and simplicity
+from .exceptions import (
+    AuditError,
+    DatabaseError,
+    PoolExhaustedError,
+    ToolProcessingError,
+    BaseAppException,
+    InvalidConfigError,
+    AgentExecutionError,
+    AuthenticationError,
+    LLMError,
+    RedisConnectionError,
+)
 # SOC2 Compliance - import available but commented to avoid circular imports
 # Use direct import when needed: from resync.core.soc2_compliance_refactored import SOC2ComplianceManager
 # from .soc2_compliance_refactored import SOC2ComplianceManager, soc2_compliance_manager, get_soc2_compliance_manager
@@ -146,27 +180,56 @@ class EnvironmentDetector:
             return False
 
 
-# --- Initialize Core Components ---
-try:
-    # Initialize environment detector
-    env_detector = EnvironmentDetector()
+# --- Lazy Import Functions ---
+# Use explicit lazy import functions instead of __getattr__ to avoid initialization issues
 
-    # Initialize boot manager
-    boot_manager = CoreBootManager()
+def _get_env_detector():
+    """Lazy import of EnvironmentDetector."""
+    from resync.core.environment_detector import EnvironmentDetector
+    return EnvironmentDetector()
 
-    # Set environment info in boot manager
-    boot_manager._global_correlation_context["environment"] = (
-        env_detector.detect_environment()
-    )
+def _get_boot_manager():
+    """Lazy import of CoreBootManager."""
+    from resync.core.lifecycle import CoreBootManager
+    return CoreBootManager()
 
-    # Set boot manager reference in global_utils
-    from . import global_utils
+def _get_settings():
+    """Lazy import of settings."""
+    from resync.settings import settings
+    return settings
 
-    global_utils.set_boot_manager(boot_manager)
+def _get_logger():
+    """Lazy import of logger."""
+    from resync.core.structured_logger import get_logger
+    return get_logger
 
-except Exception as e:
-    logger.critical(f"Failed to initialize core components: {e}")
-    raise
+def _get_metrics():
+    """Lazy import of runtime metrics."""
+    from resync.core.metrics import runtime_metrics
+    return runtime_metrics
+
+def _get_cache_hierarchy():
+    """Lazy import of cache hierarchy."""
+    from resync.core.cache_hierarchy import get_cache_hierarchy
+    return get_cache_hierarchy
+
+def _get_container():
+    """Lazy import of DI container."""
+    from resync.core.di_container import container
+    return container
+
+def _get_config_watcher():
+    """Lazy import of config watcher."""
+    from resync.core.config_watcher import handle_config_change
+    return handle_config_change
+
+
+# --- Backward Compatibility ---
+# Keep old lazy initialization for compatibility
+def _initialize_core_components():
+    """Legacy initialization - now using __getattr__."""
+    # Components are now loaded lazily via __getattr__
+    pass
 
 
 # --- Global Access Functions ---
@@ -175,24 +238,46 @@ except Exception as e:
 
 def get_global_correlation_id() -> str:
     """Get the global correlation ID for distributed tracing."""
+    _initialize_core_components()
     return boot_manager.get_global_correlation_id()
 
 
 def get_environment_tags() -> Dict[str, Any]:
     """Get environment tags for mock detection and debugging."""
+    _initialize_core_components()
     return boot_manager.get_environment_tags()
 
 
 # Validate environment on import
 def add_global_trace_event(event: str, data: Optional[Dict[str, Any]] = None) -> None:
     """Add a trace event to the global correlation context."""
+    _initialize_core_components()
     boot_manager.add_global_event(event, data)
 
 
-# Validate environment on import
-if not env_detector.validate_environment():
-    logger.error(
-        "Environment validation failed - system may not be secure",
-        extra={"correlation_id": boot_manager._correlation_id},
-    )
-    # Don't raise exception here to avoid import failures, but log critically
+# Validate environment on import (lazy)
+def _validate_environment():
+    """Validate environment lazily."""
+    try:
+        env_detector = _get_env_detector()
+        boot_manager = _get_boot_manager()
+        lazy_logger = _get_logger()
+        logger = lazy_logger(__name__)
+
+        if not env_detector.validate_environment():
+            logger.error(
+                "Environment validation failed - system may not be secure",
+                extra={"correlation_id": boot_manager._correlation_id},
+            )
+            # Don't raise exception here to avoid import failures, but log critically
+    except Exception as e:
+        # If validation fails, log but don't crash
+        try:
+            lazy_logger = _get_logger()
+            logger = lazy_logger(__name__)
+            logger.warning(f"Environment validation failed: {e}")
+        except:
+            pass  # Avoid circular import issues
+
+# Validation is now optional and lazy - call _validate_environment() explicitly when needed
+# _validate_environment()  # Commented out to avoid import-time execution

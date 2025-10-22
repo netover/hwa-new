@@ -1,5 +1,3 @@
 """
-RAG Microservice Package
-
-This package contains the standalone RAG microservice implementation.
+Microservice core components for Qdrant-based RAG.
 """

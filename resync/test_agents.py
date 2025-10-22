@@ -1,3 +1,4 @@
+from typing import Generator
 from unittest.mock import AsyncMock
 
 import pytest
@@ -14,6 +15,7 @@ client = TestClient(app)
 sample_agent_config_1 = AgentConfig(
     id="test-agent-1",
     name="Test Agent 1",
+    agent_type="chat",
     role="Tester",
     goal="To be tested",
     backstory="Born in a test",
@@ -24,6 +26,7 @@ sample_agent_config_1 = AgentConfig(
 sample_agent_config_2 = AgentConfig(
     id="test-agent-2",
     name="Test Agent 2",
+    agent_type="task",
     role="Another Tester",
     goal="To also be tested",
     backstory="Born in another test",
@@ -46,7 +49,7 @@ def mock_agent_manager():
     del app.dependency_overrides[get_agent_manager]
 
 
-def test_list_all_agents_success(mock_agent_manager):
+def test_list_all_agents_success(mock_agent_manager: AsyncMock) -> None:
     """
     Tests GET /api/v1/agents/ - successful retrieval of all agent configs.
     """
@@ -67,7 +70,7 @@ def test_list_all_agents_success(mock_agent_manager):
     assert response_data[1]["id"] == "test-agent-2"
 
 
-def test_get_agent_details_success(mock_agent_manager):
+def test_get_agent_details_success(mock_agent_manager: AsyncMock) -> None:
     """
     Tests GET /api/v1/agents/{agent_id} - successful retrieval of a single agent.
     """
@@ -83,7 +86,7 @@ def test_get_agent_details_success(mock_agent_manager):
     mock_agent_manager.get_agent_config.assert_called_once_with("test-agent-1")
 
 
-def test_get_agent_details_not_found(mock_agent_manager):
+def test_get_agent_details_not_found(mock_agent_manager: AsyncMock) -> None:
     """
     Tests GET /api/v1/agents/{agent_id} - when the agent is not found.
     """

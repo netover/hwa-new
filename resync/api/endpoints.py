@@ -25,8 +25,13 @@ from starlette.responses import HTMLResponse
 
 from resync.api.utils.error_handlers import handle_api_error
 from resync.core.agent_manager import AgentConfig
-from resync.core.alerting import alerting_system
 from resync.core.fastapi_di import get_agent_manager, get_tws_client
+
+# Lazy import of alerting_system to avoid circular dependencies
+def _get_alerting_system():
+    """Lazy import of alerting_system."""
+    from resync.core.alerting import alerting_system
+    return alerting_system
 from resync.core.interfaces import IAgentManager, ITWSClient
 from resync.core.llm_wrapper import optimized_llm  # type: ignore[attr-defined]
 from resync.core.metrics import runtime_metrics  # type: ignore[attr-defined]
@@ -1045,7 +1050,7 @@ async def get_active_alerts(request: Request) -> list[dict[str, Any]]:
     """
     Returns a list of currently active (non-acknowledged) alerts.
     """
-    alerts = alerting_system.get_active_alerts()
+    alerts = _get_alerting_system().get_active_alerts()
     return [alert.__dict__ for alert in alerts]
 
 
@@ -1055,7 +1060,7 @@ async def acknowledge_alert(request: Request, alert_id: str) -> dict[str, bool]:
     """
     Acknowledges an active alert by ID.
     """
-    success = alerting_system.acknowledge_alert(
+    success = _get_alerting_system().acknowledge_alert(
         alert_id, request.headers.get("x-forwarded-for", "unknown")
     )
     return {"success": success}
@@ -1101,7 +1106,7 @@ async def add_alert_rule(
         severity=severity_map[rule_data.severity],
     )
 
-    alerting_system.add_rule(rule)
+    _get_alerting_system().add_rule(rule)
     return {
         "status": "success",
         "message": f"Alert rule '{rule_data.name}' added successfully",
