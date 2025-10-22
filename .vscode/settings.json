@@ -7,5 +7,6 @@
         "**/Thumbs.db": true,
         ".yoyo": true
     },
-    "codium.codeCompletion.enable": false
+    "codium.codeCompletion.enable": false,
+    "terminal.integrated.enableVisualBell": true
 }

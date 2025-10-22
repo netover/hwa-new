@@ -4,7 +4,9 @@ Main Application Routes
 This module defines the main application routes and initializes the Flask app.
 """
 
-from flask import Flask, request, abort
+from flask import Flask, request, abort, g
+import time
+import uuid
 from .api import api
 from .websocket import socketio
 
@@ -13,6 +15,12 @@ from config.structured_logging_basic import (
     logger, LoggingContext, log_request_start, log_request_end,
     log_error, log_debug, log_info, log_warning
 )
+
+app = Flask(__name__)
+app.register_blueprint(api)
+
+# Initialize SocketIO with the app
+socketio.init_app(app)
 
 # Request ID middleware (must be after app initialization)
 @app.before_request
@@ -49,11 +57,6 @@ def handle_exception(e):
         duration=duration
     )
     return "Internal Server Error", 500
-app = Flask(__name__)
-app.register_blueprint(api)
-
-# Initialize SocketIO with the app
-socketio.init_app(app)
 
 @app.route('/login')
 def login() -> str:

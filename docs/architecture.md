@@ -2,7 +2,9 @@
 
 ## 1. Visão Geral
 
-O Resync é uma plataforma de inteligência operacional construída sobre uma arquitetura moderna, modular e orientada a serviços. O objetivo é fornecer uma interface de conversação robusta e em tempo real para o HCL Workload Automation (TWS), enriquecida com uma base de conhecimento auto-aperfeiçoável através de RAG (Retrieval-Augmented Generation).
+O projeto **Resync** é um assistente de IA projetado para atuar no ecossistema de desenvolvimento de software, com foco em depuração, correção de más práticas e melhoria da estabilidade geral do código. A aplicação é construída utilizando o framework **FastAPI**, o que a torna uma solução moderna e de alta performance para a criação de APIs.
+
+A arquitetura do projeto é modular, separando as responsabilidades em diretórios bem definidos, como `api`, `core`, e `services`. O sistema utiliza injeção de dependências para gerenciar os serviços e garantir um baixo acoplamento entre os componentes. Além disso, a aplicação conta com um robusto processo de inicialização, que inclui validação de configurações, checagem de dependências (como a conexão com o Redis) e health checks de serviços críticos.
 
 A arquitetura foi projetada com os seguintes princípios em mente:
 - **Desacoplamento:** Os componentes são independentes e se comunicam através de interfaces bem definidas.
@@ -95,9 +97,36 @@ graph TD
 - **`resync/settings.py`**: Carrega e valida as configurações da aplicação a partir de variáveis de ambiente e arquivos `.env`.
 - **`agents.json`**: Arquivo de configuração que define a personalidade, ferramentas e modelos para cada agente de IA.
 
-## 3. Fluxo de Dados Principais
+### 2.5. Padrões Arquiteturais Avançados
 
-### 3.1. Fluxo de Chat do Usuário
+#### CQRS (Command Query Responsibility Segregation)
+A aplicação utiliza o padrão CQRS para separar as operações de leitura (Queries) das de escrita (Commands), otimizando cada tipo de operação:
+
+- **Commands** (`resync/cqrs/commands.py`): Operações de escrita como criação, atualização e exclusão
+- **Queries** (`resync/cqrs/queries.py`): Operações de leitura otimizadas
+- **Handlers** (`resync/cqrs/command_handlers.py`, `resync/cqrs/query_handlers.py`): Implementações específicas
+
+#### Injeção de Dependências Avançada
+O sistema utiliza um container de DI sofisticado que gerencia:
+- Ciclo de vida dos serviços (Singleton, Transient, Scoped)
+- Resolução automática de dependências
+- Configuração condicional baseada no ambiente
+
+## 3. Tecnologias Utilizadas
+
+- **Framework:** FastAPI
+- **Servidor ASGI:** Uvicorn
+- **Gerenciamento de Configuração:** Dynaconf
+- **Cache:** Redis
+- **Banco de Dados Vetorial:** Neo4j
+- **Análise de Código:**
+  - `pydeps` para análise de dependências
+  - `mypy` para checagem de tipos
+  - `pylint` para análise de qualidade de código
+
+## 4. Fluxo de Dados Principais
+
+### 4.1. Fluxo de Chat do Usuário
 
 1.  O usuário se conecta ao endpoint WebSocket (`/ws/{agent_id}`).
 2.  O `ConnectionManager` aceita e armazena a conexão.
@@ -111,7 +140,7 @@ graph TD
 10. A conversa completa (pergunta, resposta, contexto) é salva no `KnowledgeGraph` através do método `add_conversation`.
 11. Uma tarefa em background (`run_auditor_safely`) é disparada para invocar o `IAAuditor`.
 
-### 3.2. Fluxo do IA Auditor
+### 4.2. Fluxo do IA Auditor
 
 Este fluxo é crucial para a auto-melhoria do sistema. Ele é executado em background após as interações do usuário.
 
@@ -176,7 +205,54 @@ sequenceDiagram
     -   Se for incorreta com confiança média, é adicionada à lista `to_flag` e enviada para a `AuditQueue` (Redis) para revisão humana.
 6.  **Ações Finais**: As memórias na lista `to_delete` são removidas do `KnowledgeGraph`.
 
-## 4. Padrões de Design Utilizados
+### 4.3. Fluxo de Inicialização
+
+```mermaid
+flowchart TD
+    A[main.py] --> B[startup_validation]
+    B --> C[validate_settings]
+    C --> D[check_redis_connection]
+    D --> E[initialize_di_container]
+    E --> F[setup_logging]
+    F --> G[create_fastapi_app]
+    G --> H[register_middlewares]
+    H --> I[register_routers]
+    I --> J[start_server]
+```
+
+## 5. Análise de Qualidade e Melhorias
+
+### 5.1. Resultados das Ferramentas de Análise
+
+#### pydeps (Análise de Dependências)
+O grafo de dependências revelou uma arquitetura densamente conectada, com acoplamento significativo entre módulos. A complexidade sugere desafios na manutenção e evolução do código.
+
+#### mypy (Checagem de Tipos)
+Foram identificados **1962 erros em 242 arquivos**, indicando baixa adesão à tipagem estática. Problemas incluem ausência de anotações de tipo e uso incorreto de tipos.
+
+#### pylint (Análise de Qualidade)
+Nota obtida: **8.26/10**. Principais problemas:
+- **Complexidade Elevada:** Módulos como `app_factory.py` e `tws_service.py` com alta complexidade ciclomática
+- **Falta de Documentação:** Ausência generalizada de docstrings
+- **Má Práticas:** Captura de exceções genéricas, variáveis não utilizadas
+- **Problemas Arquiteturais:** Importações cíclicas detectadas
+
+### 5.2. Pontos Fortes
+
+- **Arquitetura Moderna:** Uso de FastAPI e design modular
+- **Robustez na Inicialização:** Processo "fail-fast" garante estado consistente
+- **Injeção de Dependências:** Facilita testes e manutenção
+- **Padrões Arquiteturais:** Implementação adequada de CQRS e DI
+
+### 5.3. Áreas de Melhoria
+
+- **Redução de Complexidade:** Refatorar módulos de alta complexidade
+- **Adoção de Tipagem Estática:** Corrigir erros reportados pelo mypy
+- **Documentação:** Adicionar docstrings em todas as funções públicas
+- **Resolução de Importações Cíclicas:** Refatorar módulos para eliminar dependências circulares
+- **Tratamento de Exceções:** Substituir exceções genéricas por tipos específicos
+
+## 6. Padrões de Design Utilizados
 
 - **Injeção de Dependência (DI):** Centralizado no `DIContainer`, desacopla os componentes.
 - **Princípio da Responsabilidade Única (SRP):** Funções como `analyze_and_flag_memories` foram refatoradas em funções menores e focadas.
@@ -184,4 +260,4 @@ sequenceDiagram
 - **Factory Pattern:** Usado para criar instâncias de serviços e configurações.
 - **Cache Hierárquico (L1/L2):** Combina um cache em memória (`L1Cache`) com um cache distribuído (`Redis`) para otimizar a performance.
 - **Circuit Breaker:** Implementado no cliente TWS para evitar falhas em cascata.
-- **Singleton (Controlado):** Embora o padrão Singleton global tenha sido removido, o container de DI gerencia serviços com escopo `SINGLETON`, garantindo uma única instância quando necessário.
+- **Singleton (Controlado):** O container de DI gerencia serviços com escopo `SINGLETON`, garantindo uma única instância quando necessário.

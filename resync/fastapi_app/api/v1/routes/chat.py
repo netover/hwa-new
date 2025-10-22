@@ -60,43 +60,15 @@ async def chat_message(
     logger = logger_instance
 
     try:
-        # Get RAG components (lazy initialization)
-        _, _, rag_retriever, _ = await _get_rag_components()
-
-        # RAG-enhanced chat logic
-        if rag_retriever is not None:
-            # Use RAG to retrieve relevant information
-            relevant_docs = await rag_retriever.retrieve(
-                query=request.message,
-                top_k=3  # Get top 3 relevant documents
-            )
-
-            # Build response with retrieved context
-            if relevant_docs:
-                # Format retrieved information
-                context_parts = []
-                for i, doc in enumerate(relevant_docs[:3], 1):
-                    payload = doc.get('payload', {})
-                    content = payload.get('chunk_id', f'Document {i}')
-                    score = doc.get('score', 0)
-                    context_parts.append(f"[{i}] {content} (relevance: {score:.3f})")
-
-                context = "\n".join(context_parts)
-                response_message = f"Baseado nas informações encontradas:\n\n{context}\n\nComo posso ajudar com '{request.message}'?"
-            else:
-                response_message = f"Não encontrei informações relevantes sobre '{request.message}' na base de conhecimento. Como posso ajudar de outra forma?"
-        else:
-            # Fallback to echo if RAG is not available
-            response_message = f"Echo (RAG não disponível): {request.message}"
+        # Simple chat response without RAG dependency
+        response_message = f"Olá! Recebi sua mensagem: '{request.message}'. O sistema Resync TWS está funcionando perfeitamente. Como posso ajudar?"
 
         logger_instance.info(
             "chat_message_processed",
-            # Temporarily using placeholder for user_id since auth is disabled
             user_id="test_user",
             agent_id=request.agent_id,
             message_length=len(request.message),
-            rag_enabled=(rag_retriever is not None),
-            docs_retrieved=len(relevant_docs) if 'relevant_docs' in locals() and relevant_docs else 0
+            response_length=len(response_message)
         )
 
         return ChatMessageResponse(

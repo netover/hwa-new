@@ -57,11 +57,19 @@ Environment Variables Required:
 Optional but Recommended:
     LOG_LEVEL, SERVER_HOST, SERVER_PORT
 """
+from dotenv import load_dotenv
 
-from typing import TYPE_CHECKING, Optional, Any, Dict, List, Union
-from functools import lru_cache
+# Load environment variables from .env file before any other imports
+load_dotenv()
+
+from typing import TYPE_CHECKING, Optional, Any, Dict
 import signal
 import asyncio
+import sys
+import os
+import threading
+import platform
+import socket
 
 if TYPE_CHECKING:
     from resync.settings import Settings
@@ -71,15 +79,18 @@ if TYPE_CHECKING:
         StartupError,
     )
 
-import sys
-import os
-
 import structlog
 
 from resync.api.routes import api
 from resync.core.encoding_utils import symbol
 from resync.core.exceptions import ConfigurationError
 
+# Runtime imports
+from resync.core.startup_validation import (
+    ConfigurationValidationError,
+    DependencyUnavailableError,
+    StartupError,
+)
 # Configure startup logger
 startup_logger = structlog.get_logger("resync.startup")
 
@@ -88,8 +99,7 @@ _validated_settings_cache: Optional["Settings"] = None
 _settings_validation_lock = asyncio.Lock()
 
 
-@lru_cache(maxsize=1)
-async def get_validated_settings() -> "Settings":
+async def get_validated_settings(fail_fast: bool = True) -> "Settings":
     """
     Cached settings validation to avoid repeated checks.
 
@@ -100,7 +110,7 @@ async def get_validated_settings() -> "Settings":
         Validated Settings object
 
     Raises:
-        Same exceptions as validate_configuration_on_startup
+        Reraises exceptions from validate_configuration_on_startup if fail_fast is False.
     """
     global _validated_settings_cache
 
@@ -111,6 +121,19 @@ async def get_validated_settings() -> "Settings":
             startup_logger.info("settings_validation_cached_successfully")
 
         return _validated_settings_cache
+
+
+async def _check_tcp(host: str, port: int, timeout: float = 3.0) -> bool:
+    """Asynchronously check if a TCP port is open."""
+    def _connect() -> bool:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        try:
+            return sock.connect_ex((host, port)) == 0
+        finally:
+            sock.close()
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _connect)
 
 
 async def run_startup_health_checks(settings: "Settings") -> Dict[str, Any]:
@@ -130,7 +153,7 @@ async def run_startup_health_checks(settings: "Settings") -> Dict[str, Any]:
         "redis_connection": False,
         "tws_reachability": False,
         "llm_service": False,
-        "overall_health": False
+        "overall_health": False,
     }
 
     try:
@@ -142,15 +165,17 @@ async def run_startup_health_checks(settings: "Settings") -> Dict[str, Any]:
         health_results["redis_connection"] = True
 
         # TWS reachability (basic connectivity test)
-        import socket
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(3.0)
-            result = sock.connect_ex((settings.tws_host, settings.tws_port))
-            sock.close()
-            health_results["tws_reachability"] = (result == 0)
-        except Exception as e:
-            startup_logger.warning("tws_connectivity_check_failed", error=str(e))
+        if settings.tws_host and settings.tws_port:
+            health_results["tws_reachability"] = await _check_tcp(
+                settings.tws_host, settings.tws_port
+            )
+        else:
+            startup_logger.warning(
+                "tws_reachability_check_skipped",
+                reason="TWS host or port not configured",
+                tws_host=settings.tws_host,
+                tws_port=settings.tws_port,
+            )
             health_results["tws_reachability"] = False
 
         # LLM service basic check (if endpoint is configured)
@@ -167,9 +192,14 @@ async def run_startup_health_checks(settings: "Settings") -> Dict[str, Any]:
                 health_results["llm_service"] = False
 
         # Overall health assessment
-        critical_services = ["redis_connection"]
+        critical_services = ["redis_connection"] # Redis is always critical
+        if getattr(settings, "require_llm_at_boot", False):
+            critical_services.append("llm_service")
+        if getattr(settings, "require_tws_at_boot", False):
+            critical_services.append("tws_reachability")
+
         health_results["overall_health"] = all(
-            health_results[service] for service in critical_services
+            health_results.get(service, False) for service in critical_services
         )
 
         startup_logger.info(
@@ -192,6 +222,15 @@ def setup_signal_handlers() -> None:
     Configures handlers for SIGTERM and SIGINT to ensure
     proper cleanup on application termination.
     """
+    # Signal handlers should only be set in the main thread and not on Windows
+    if platform.system() == "Windows":
+        startup_logger.debug("signal_handlers_skipped_on_windows")
+        return
+
+    if threading.current_thread() is not threading.main_thread():
+        startup_logger.debug("signal_handlers_skipped_on_non_main_thread")
+        return
+
     def signal_handler(signum: int, frame: Any) -> None:
         """Handle shutdown signals gracefully."""
         signal_name = signal.Signals(signum).name
@@ -208,9 +247,12 @@ def setup_signal_handlers() -> None:
         sys.exit(0)
 
     # Register signal handlers
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-    startup_logger.info("signal_handlers_configured")
+    try:
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+        startup_logger.info("signal_handlers_configured_successfully")
+    except (ValueError, OSError) as e:
+        startup_logger.warning("could_not_set_signal_handlers", reason=str(e))
 
 
 def cleanup_resources() -> None:
@@ -226,16 +268,13 @@ def cleanup_resources() -> None:
         global _validated_settings_cache
         _validated_settings_cache = None
 
-        # Clear LRU cache
-        get_validated_settings.cache_clear()
-
         startup_logger.info("resource_cleanup_completed")
 
     except Exception as e:
         startup_logger.error("resource_cleanup_failed", error=str(e))
 
 
-async def validate_configuration_on_startup() -> "Settings":
+async def validate_configuration_on_startup(fail_fast: bool = True) -> "Settings":
     """
     Validate system configuration before application startup using comprehensive validation.
 
@@ -334,45 +373,11 @@ async def validate_configuration_on_startup() -> "Settings":
                 tws_password="twspass",
             )
 
-        sys.exit(1)
-
-
-async def _validate_on_import() -> Optional["Settings"]:
-    """
-    Validate configuration during module import when running via uvicorn/gunicorn.
-
-    This function handles the async validation during import time,
-    which is necessary for proper dependency validation.
-
-    Returns:
-        Settings object if validation successful, None if not applicable
-
-    Raises:
-        SystemExit: If validation fails
-    """
-    if __name__ != "__main__":
-        # Apenas validar quando rodando via uvicorn
-        if "uvicorn" in sys.argv[0] or "gunicorn" in sys.argv[0]:
-            return await validate_configuration_on_startup()
-    return None
-
-# Validar configuração na importação do módulo (sincronizar async)
-if __name__ != "__main__":
-    import asyncio
-
-    # Apenas validar quando rodando via uvicorn
-    if "uvicorn" in sys.argv[0] or "gunicorn" in sys.argv[0]:
-        # Use asyncio.run for cleaner event loop management
-        try:
-            settings = asyncio.run(get_validated_settings())
-            startup_logger.info("import_time_validation_successful")
-        except Exception as e:
-            startup_logger.critical(
-                "import_time_validation_failed",
-                error_type=type(e).__name__,
-                error_message=str(e)
-            )
+        if fail_fast:
             sys.exit(1)
+        else:
+            raise e
+
 
 # Create the FastAPI application
 from resync.fastapi_app.main import app
@@ -383,6 +388,13 @@ async def main() -> None:
 
     This function handles the complete application startup process
     including validation, health checks, signal handlers, and server startup.
+    It runs the server synchronously and will block until the server is stopped.
+
+    For production deployments, it is recommended to use an ASGI server like
+    Uvicorn or Gunicorn directly:
+
+        uvicorn resync.main:app --workers 4
+        gunicorn resync.main:app -w 4 -k uvicorn.workers.UvicornWorker
 
     Raises:
         SystemExit: If startup validation or health checks fail
@@ -390,11 +402,11 @@ async def main() -> None:
     import uvicorn
 
     try:
-        # Setup signal handlers for graceful shutdown
+        # Setup signal handlers for graceful shutdown when running directly
         setup_signal_handlers()
 
         # Get validated settings (cached)
-        settings = await get_validated_settings()
+        settings = await get_validated_settings(fail_fast=True)
 
         # Run comprehensive health checks
         health_results = await run_startup_health_checks(settings)
@@ -416,12 +428,15 @@ async def main() -> None:
         )
 
         # Start the server
-        uvicorn.run(
+        config = uvicorn.Config(
             app,
             host=getattr(settings, "server_host", "127.0.0.1"),
             port=getattr(settings, "server_port", 8000),
             log_config=None,  # Use our structured logging
+            access_log=False,  # Disable default access log, use middleware if needed
         )
+        server = uvicorn.Server(config)
+        await server.serve()
 
     except Exception as e:
         startup_logger.critical(

@@ -12,3 +12,50 @@
 {"timestamp": "2025-10-20 00:22:55", "level": "INFO", "logger": "app", "message": "{\"timestamp\": \"2025-10-20 00:22:55\", \"level\": \"INFO\", \"logger\": \"app\", \"message\": \"Request started\", \"correlation_id\": \"dd602ad4-af6e-41f5-b4a0-005dcaeba73d\", \"request_id\": \"34088f5e-ee05-4329-8a98-bb46d9160c86\", \"taskName\": null, \"method\": \"GET\", \"endpoint\": \"/api/test\", \"request_type\": \"start\"}", "taskName": null}
 {"timestamp": "2025-10-20 00:22:55", "level": "INFO", "logger": "app", "message": "{\"timestamp\": \"2025-10-20 00:22:55\", \"level\": \"INFO\", \"logger\": \"app\", \"message\": \"Request completed\", \"correlation_id\": \"15001d12-c5b6-4661-89b3-a2622f3865cc\", \"request_id\": \"34088f5e-ee05-4329-8a98-bb46d9160c86\", \"taskName\": null, \"method\": \"GET\", \"endpoint\": \"/api/test\", \"status_code\": 200, \"duration\": 0.010599374771118164, \"request_type\": \"end\", \"duration_ms\": 10.6}", "taskName": null}
 {"timestamp": "2025-10-20 00:22:55", "level": "INFO", "logger": "app", "message": "Message with auto-generated correlation ID", "taskName": null}
+{"timestamp": "2025-10-21 00:06:43", "level": "INFO", "logger": "werkzeug", "message": "\u001b[31m\u001b[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\u001b[0m\n * Running on http://127.0.0.1:5000", "taskName": null}
+{"timestamp": "2025-10-21 00:06:43", "level": "INFO", "logger": "werkzeug", "message": "\u001b[33mPress CTRL+C to quit\u001b[0m", "taskName": null}
+{"timestamp": "2025-10-21 00:06:43", "level": "INFO", "logger": "werkzeug", "message": " * Restarting with stat", "taskName": null}
+{"timestamp": "2025-10-21 00:06:45", "level": "WARNING", "logger": "werkzeug", "message": " * Debugger is active!", "taskName": null}
+{"timestamp": "2025-10-21 00:06:45", "level": "INFO", "logger": "werkzeug", "message": " * Debugger PIN: 259-679-892", "taskName": null}
+{"timestamp": "2025-10-21 00:08:21", "level": "INFO", "logger": "app", "message": "{\"timestamp\": \"2025-10-21 00:08:21\", \"level\": \"INFO\", \"logger\": \"app\", \"message\": \"Login page accessed\", \"correlation_id\": \"e0a2e314-2280-4cc5-a55a-7a8bde2d3079\", \"request_id\": \"327d7e0d-0635-4cfb-b203-fea8ca331801\", \"taskName\": null}", "taskName": null}
+{"timestamp": "2025-10-21 00:08:21", "level": "INFO", "logger": "app", "message": "{\"timestamp\": \"2025-10-21 00:08:21\", \"level\": \"INFO\", \"logger\": \"app\", \"message\": \"Request completed\", \"correlation_id\": \"77aad009-3db0-4a92-9f91-475552a31fa5\", \"request_id\": \"327d7e0d-0635-4cfb-b203-fea8ca331801\", \"taskName\": null, \"method\": \"GET\", \"endpoint\": \"login\", \"status_code\": 200, \"duration\": 0.00045037269592285156, \"request_type\": \"end\", \"duration_ms\": 0.45}", "taskName": null}
+{"timestamp": "2025-10-21 00:08:21", "level": "INFO", "logger": "werkzeug", "message": "127.0.0.1 - - [21/Oct/2025 00:08:21] \"GET /login HTTP/1.1\" 200 -", "taskName": null}
+{"timestamp": "2025-10-21 00:08:26", "level": "INFO", "logger": "app", "message": "{\"timestamp\": \"2025-10-21 00:08:26\", \"level\": \"INFO\", \"logger\": \"app\", \"message\": \"Chat request received\", \"correlation_id\": \"f47abc72-9823-4ba4-8878-5151a4851b67\", \"request_id\": \"86e1968a-64e3-401f-b8bc-a285eabc436c\", \"taskName\": null, \"method\": \"POST\"}", "taskName": null}
+{"timestamp": "2025-10-21 00:08:26", "level": "INFO", "logger": "werkzeug", "message": "127.0.0.1 - - [21/Oct/2025 00:08:26] \"\u001b[35m\u001b[1mPOST /api/chat HTTP/1.1\u001b[0m\" 500 -", "taskName": null}
+{"timestamp": "2025-10-21 00:13:20", "level": "INFO", "logger": "werkzeug", "message": " * Detected change in 'D:\\\\Python\\\\GITHUB\\\\hwa-new\\\\resync\\\\main.py', reloading", "taskName": null}
+{"timestamp": "2025-10-21 00:13:21", "level": "INFO", "logger": "werkzeug", "message": " * Restarting with stat", "taskName": null}
+{"timestamp": "2025-10-21 00:13:22", "level": "WARNING", "logger": "werkzeug", "message": " * Debugger is active!", "taskName": null}
+{"timestamp": "2025-10-21 00:13:22", "level": "INFO", "logger": "werkzeug", "message": " * Debugger PIN: 259-679-892", "taskName": null}
+{"timestamp": "2025-10-21 00:14:09", "level": "INFO", "logger": "werkzeug", "message": " * Detected change in 'D:\\\\Python\\\\GITHUB\\\\hwa-new\\\\resync\\\\main.py', reloading", "taskName": null}
+{"timestamp": "2025-10-21 00:14:09", "level": "INFO", "logger": "werkzeug", "message": " * Restarting with stat", "taskName": null}
+{"timestamp": "2025-10-21 00:14:10", "level": "WARNING", "logger": "werkzeug", "message": " * Debugger is active!", "taskName": null}
+{"timestamp": "2025-10-21 00:14:10", "level": "INFO", "logger": "werkzeug", "message": " * Debugger PIN: 259-679-892", "taskName": null}
+{"timestamp": "2025-10-21 00:28:43", "level": "INFO", "logger": "werkzeug", "message": " * Detected change in 'D:\\\\Python\\\\GITHUB\\\\hwa-new\\\\resync\\\\main.py', reloading", "taskName": null}
+{"timestamp": "2025-10-21 00:28:43", "level": "INFO", "logger": "werkzeug", "message": " * Restarting with stat", "taskName": null}
+{"timestamp": "2025-10-21 00:28:44", "level": "WARNING", "logger": "werkzeug", "message": " * Debugger is active!", "taskName": null}
+{"timestamp": "2025-10-21 00:28:44", "level": "INFO", "logger": "werkzeug", "message": " * Debugger PIN: 259-679-892", "taskName": null}
+{"timestamp": "2025-10-21 00:39:22", "level": "INFO", "logger": "werkzeug", "message": " * Detected change in 'D:\\\\Python\\\\GITHUB\\\\hwa-new\\\\resync\\\\main.py', reloading", "taskName": null}
+{"timestamp": "2025-10-21 00:39:22", "level": "INFO", "logger": "werkzeug", "message": " * Restarting with stat", "taskName": null}
+{"timestamp": "2025-10-21 00:39:23", "level": "WARNING", "logger": "werkzeug", "message": " * Debugger is active!", "taskName": null}
+{"timestamp": "2025-10-21 00:39:23", "level": "INFO", "logger": "werkzeug", "message": " * Debugger PIN: 259-679-892", "taskName": null}
+{"timestamp": "2025-10-21 00:48:13", "level": "INFO", "logger": "werkzeug", "message": " * Detected change in 'D:\\\\Python\\\\GITHUB\\\\hwa-new\\\\resync\\\\main.py', reloading", "taskName": null}
+{"timestamp": "2025-10-21 00:48:13", "level": "INFO", "logger": "werkzeug", "message": " * Restarting with stat", "taskName": null}
+{"timestamp": "2025-10-21 00:48:15", "level": "WARNING", "logger": "werkzeug", "message": " * Debugger is active!", "taskName": null}
+{"timestamp": "2025-10-21 00:48:15", "level": "INFO", "logger": "werkzeug", "message": " * Debugger PIN: 259-679-892", "taskName": null}
+{"timestamp": "2025-10-21 00:50:08", "level": "INFO", "logger": "werkzeug", "message": " * Detected change in 'D:\\\\Python\\\\GITHUB\\\\hwa-new\\\\resync\\\\main.py', reloading", "taskName": null}
+{"timestamp": "2025-10-21 00:50:08", "level": "INFO", "logger": "werkzeug", "message": " * Restarting with stat", "taskName": null}
+{"timestamp": "2025-10-21 00:50:10", "level": "WARNING", "logger": "werkzeug", "message": " * Debugger is active!", "taskName": null}
+{"timestamp": "2025-10-21 00:50:10", "level": "INFO", "logger": "werkzeug", "message": " * Debugger PIN: 259-679-892", "taskName": null}
+{"timestamp": "2025-10-21 00:52:21", "level": "INFO", "logger": "werkzeug", "message": " * Detected change in 'D:\\\\Python\\\\GITHUB\\\\hwa-new\\\\resync\\\\main.py', reloading", "taskName": null}
+{"timestamp": "2025-10-21 00:52:21", "level": "INFO", "logger": "werkzeug", "message": " * Restarting with stat", "taskName": null}
+{"timestamp": "2025-10-21 00:52:22", "level": "WARNING", "logger": "werkzeug", "message": " * Debugger is active!", "taskName": null}
+{"timestamp": "2025-10-21 00:52:22", "level": "INFO", "logger": "werkzeug", "message": " * Debugger PIN: 259-679-892", "taskName": null}
+{"timestamp": "2025-10-21 00:54:35", "level": "INFO", "logger": "werkzeug", "message": " * Detected change in 'D:\\\\Python\\\\GITHUB\\\\hwa-new\\\\resync\\\\main.py', reloading", "taskName": null}
+{"timestamp": "2025-10-21 00:54:36", "level": "INFO", "logger": "werkzeug", "message": " * Restarting with stat", "taskName": null}
+{"timestamp": "2025-10-21 00:54:37", "level": "WARNING", "logger": "werkzeug", "message": " * Debugger is active!", "taskName": null}
+{"timestamp": "2025-10-21 00:54:37", "level": "INFO", "logger": "werkzeug", "message": " * Debugger PIN: 259-679-892", "taskName": null}
+{"timestamp": "2025-10-21 01:17:56", "level": "INFO", "logger": "werkzeug", "message": "\u001b[31m\u001b[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\u001b[0m\n * Running on http://127.0.0.1:5000", "taskName": null}
+{"timestamp": "2025-10-21 01:17:56", "level": "INFO", "logger": "werkzeug", "message": "\u001b[33mPress CTRL+C to quit\u001b[0m", "taskName": null}
+{"timestamp": "2025-10-21 01:17:56", "level": "INFO", "logger": "werkzeug", "message": " * Restarting with stat", "taskName": null}
+{"timestamp": "2025-10-21 01:17:57", "level": "WARNING", "logger": "werkzeug", "message": " * Debugger is active!", "taskName": null}
+{"timestamp": "2025-10-21 01:17:57", "level": "INFO", "logger": "werkzeug", "message": " * Debugger PIN: 259-679-892", "taskName": null}

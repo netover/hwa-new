@@ -201,17 +201,15 @@ class Settings(BaseSettings):
     # ============================================================================
 
     llm_endpoint: str = Field(
-        default="https://openrouter.ai/api/v1",
-        description="Endpoint da API LLM (OpenRouter)"
+        default="https://integrate.api.nvidia.com/v1",
+        description="Endpoint da API LLM (NVIDIA)"
     )
 
 
     llm_api_key: str = Field(
-        default=(
-            "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"
-        ),
+        default="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",
         min_length=1,
-        description="Chave de API do LLM (OpenRouter)"
+        description="Chave de API do LLM (NVIDIA)"
     )
 
 
